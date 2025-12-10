@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:WayfarerMobile.ViewModels"
+             x:Class="WayfarerMobile.Views.AboutPage"
+             x:DataType="vm:AboutViewModel"
+             Title="About"
+             Shell.PresentationMode="ModalAnimated">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="20">
+
+            <!-- App Header -->
+            <VerticalStackLayout Spacing="10" HorizontalOptions="Center">
+                <Image Source="appicon.png"
+                       HeightRequest="80"
+                       WidthRequest="80"
+                       Aspect="AspectFit" />
+                <Label Text="WayfarerMobile"
+                       FontSize="24"
+                       FontAttributes="Bold"
+                       HorizontalOptions="Center" />
+                <Label Text="{Binding AppVersion}"
+                       FontSize="14"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
+                       HorizontalOptions="Center" />
+            </VerticalStackLayout>
+
+            <!-- Description -->
+            <Frame Padding="15"
+                   BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}"
+                   BorderColor="Transparent"
+                   CornerRadius="8">
+                <Label Text="A location tracking app for timeline recording and trip navigation. Track your adventures, navigate with offline maps, and share your location with groups."
+                       FontSize="14"
+                       LineHeight="1.4" />
+            </Frame>
+
+            <!-- Open Source Libraries -->
+            <VerticalStackLayout Spacing="10">
+                <Label Text="Open Source Libraries"
+                       FontSize="18"
+                       FontAttributes="Bold" />
+
+                <Frame Padding="15"
+                       BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}"
+                       BorderColor="Transparent"
+                       CornerRadius="8">
+                    <VerticalStackLayout Spacing="12">
+                        <!-- Mapsui -->
+                        <VerticalStackLayout>
+                            <Label Text="Mapsui"
+                                   FontSize="14"
+                                   FontAttributes="Bold" />
+                            <Label Text="MIT License - Map rendering library"
+                                   FontSize="12"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        </VerticalStackLayout>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray700}}" />
+
+                        <!-- CommunityToolkit.Mvvm -->
+                        <VerticalStackLayout>
+                            <Label Text="CommunityToolkit.Mvvm"
+                                   FontSize="14"
+                                   FontAttributes="Bold" />
+                            <Label Text="MIT License - MVVM framework"
+                                   FontSize="12"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        </VerticalStackLayout>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray700}}" />
+
+                        <!-- Syncfusion -->
+                        <VerticalStackLayout>
+                            <Label Text="Syncfusion.Maui.Toolkit"
+                                   FontSize="14"
+                                   FontAttributes="Bold" />
+                            <Label Text="MIT License - UI components"
+                                   FontSize="12"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        </VerticalStackLayout>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray700}}" />
+
+                        <!-- SQLite -->
+                        <VerticalStackLayout>
+                            <Label Text="sqlite-net-pcl"
+                                   FontSize="14"
+                                   FontAttributes="Bold" />
+                            <Label Text="MIT License - Local database"
+                                   FontSize="12"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        </VerticalStackLayout>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray700}}" />
+
+                        <!-- ZXing -->
+                        <VerticalStackLayout>
+                            <Label Text="ZXing.Net.MAUI"
+                                   FontSize="14"
+                                   FontAttributes="Bold" />
+                            <Label Text="Apache 2.0 License - QR code scanning"
+                                   FontSize="12"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        </VerticalStackLayout>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray700}}" />
+
+                        <!-- Serilog -->
+                        <VerticalStackLayout>
+                            <Label Text="Serilog"
+                                   FontSize="14"
+                                   FontAttributes="Bold" />
+                            <Label Text="Apache 2.0 License - Structured logging"
+                                   FontSize="12"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        </VerticalStackLayout>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray700}}" />
+
+                        <!-- Polly -->
+                        <VerticalStackLayout>
+                            <Label Text="Polly"
+                                   FontSize="14"
+                                   FontAttributes="Bold" />
+                            <Label Text="BSD-3-Clause License - Retry policies"
+                                   FontSize="12"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Frame>
+            </VerticalStackLayout>
+
+            <!-- Map Data Attribution -->
+            <VerticalStackLayout Spacing="10">
+                <Label Text="Map Data"
+                       FontSize="18"
+                       FontAttributes="Bold" />
+                <Frame Padding="15"
+                       BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}"
+                       BorderColor="Transparent"
+                       CornerRadius="8">
+                    <Label Text="© OpenStreetMap contributors. Map tiles are provided under the Open Database License (ODbL)."
+                           FontSize="12"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                </Frame>
+            </VerticalStackLayout>
+
+            <!-- Close Button -->
+            <Button Text="Close"
+                    Command="{Binding CloseCommand}"
+                    Style="{StaticResource DarkButton}"
+                    HeightRequest="44"
+                    Margin="0,10,0,0" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>

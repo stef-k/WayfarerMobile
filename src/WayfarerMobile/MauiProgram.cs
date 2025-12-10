@@ -153,6 +153,7 @@ public static class MauiProgram
         services.AddTransient<QrScannerViewModel>();
         services.AddTransient<PublicTripsViewModel>();
         services.AddTransient<LockScreenViewModel>();
+        services.AddTransient<AboutViewModel>();
 
         // Pages
         services.AddTransient<MainPage>();
@@ -165,6 +166,7 @@ public static class MauiProgram
         services.AddTransient<QrScannerPage>();
         services.AddTransient<PublicTripsPage>();
         services.AddTransient<LockScreenPage>();
+        services.AddTransient<AboutPage>();
 
         // Route Registration
         Routing.RegisterRoute("checkin", typeof(CheckInPage));
@@ -172,5 +174,6 @@ public static class MauiProgram
         Routing.RegisterRoute("QrScanner", typeof(QrScannerPage));
         Routing.RegisterRoute("publictrips", typeof(PublicTripsPage));
         Routing.RegisterRoute("lockscreen", typeof(LockScreenPage));
+        Routing.RegisterRoute("about", typeof(AboutPage));
     }
 }

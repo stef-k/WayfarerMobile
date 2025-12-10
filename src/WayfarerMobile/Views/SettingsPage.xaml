@@ -98,6 +98,94 @@
                 </sfExpander:SfExpander.Content>
             </sfExpander:SfExpander>
 
+            <!-- Navigation Section -->
+            <sfExpander:SfExpander IsExpanded="False">
+                <sfExpander:SfExpander.Header>
+                    <Grid HeightRequest="48" Padding="10,0">
+                        <Label Text="Navigation"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               VerticalOptions="Center" />
+                    </Grid>
+                </sfExpander:SfExpander.Header>
+                <sfExpander:SfExpander.Content>
+                    <VerticalStackLayout Padding="15" Spacing="15">
+                        <!-- Audio Announcements Toggle -->
+                        <Grid ColumnDefinitions="*,Auto">
+                            <VerticalStackLayout Grid.Column="0">
+                                <Label Text="Audio Announcements"
+                                       FontSize="14" />
+                                <Label Text="Speak turn-by-turn directions"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            </VerticalStackLayout>
+                            <sfSwitch:SfSwitch Grid.Column="1"
+                                               IsOn="{Binding NavigationAudioEnabled}"
+                                               VisualType="Cupertino" />
+                        </Grid>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+
+                        <!-- Vibration Toggle -->
+                        <Grid ColumnDefinitions="*,Auto">
+                            <VerticalStackLayout Grid.Column="0">
+                                <Label Text="Vibration"
+                                       FontSize="14" />
+                                <Label Text="Haptic feedback at waypoints"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            </VerticalStackLayout>
+                            <sfSwitch:SfSwitch Grid.Column="1"
+                                               IsOn="{Binding NavigationVibrationEnabled}"
+                                               VisualType="Cupertino" />
+                        </Grid>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+
+                        <!-- Auto Reroute Toggle -->
+                        <Grid ColumnDefinitions="*,Auto">
+                            <VerticalStackLayout Grid.Column="0">
+                                <Label Text="Auto Reroute"
+                                       FontSize="14" />
+                                <Label Text="Recalculate route when off-track"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            </VerticalStackLayout>
+                            <sfSwitch:SfSwitch Grid.Column="1"
+                                               IsOn="{Binding AutoRerouteEnabled}"
+                                               VisualType="Cupertino" />
+                        </Grid>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+
+                        <!-- Distance Units -->
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="Distance Units"
+                                   FontSize="14" />
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                                <Button Grid.Column="0"
+                                        Text="Kilometers"
+                                        Command="{Binding SetDistanceUnitsCommand}"
+                                        CommandParameter="kilometers"
+                                        Style="{StaticResource DarkButton}"
+                                        Opacity="{Binding IsKilometers, Converter={StaticResource BoolToOpacityConverter}}"
+                                        HeightRequest="36" />
+                                <Button Grid.Column="1"
+                                        Text="Miles"
+                                        Command="{Binding SetDistanceUnitsCommand}"
+                                        CommandParameter="miles"
+                                        Style="{StaticResource DarkButton}"
+                                        Opacity="{Binding IsMiles, Converter={StaticResource BoolToOpacityConverter}}"
+                                        HeightRequest="36" />
+                            </Grid>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </sfExpander:SfExpander.Content>
+            </sfExpander:SfExpander>
+
             <!-- Map Section -->
             <sfExpander:SfExpander IsExpanded="False">
                 <sfExpander:SfExpander.Header>

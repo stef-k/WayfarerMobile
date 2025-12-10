@@ -26,6 +26,7 @@
             <converters:BoolToExpandIconConverter x:Key="BoolToExpandIconConverter" />
             <converters:PercentToProgressConverter x:Key="PercentToProgressConverter" />
             <converters:BoolToMuteIconConverter x:Key="BoolToMuteIconConverter" />
+            <converters:BoolToOpacityConverter x:Key="BoolToOpacityConverter" />
 
             <!-- QR Scanner Options -->
             <zxing:BarcodeReaderOptions x:Key="QrScannerOptions"

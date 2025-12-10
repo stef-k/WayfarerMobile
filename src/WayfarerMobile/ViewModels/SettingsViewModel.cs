@@ -61,6 +61,42 @@ public partial class SettingsViewModel : BaseViewModel
     private bool _mapOfflineCacheEnabled;
 
     /// <summary>
+    /// Gets or sets whether navigation audio is enabled.
+    /// </summary>
+    [ObservableProperty]
+    private bool _navigationAudioEnabled;
+
+    /// <summary>
+    /// Gets or sets whether navigation vibration is enabled.
+    /// </summary>
+    [ObservableProperty]
+    private bool _navigationVibrationEnabled;
+
+    /// <summary>
+    /// Gets or sets whether auto-reroute is enabled.
+    /// </summary>
+    [ObservableProperty]
+    private bool _autoRerouteEnabled;
+
+    /// <summary>
+    /// Gets or sets the distance units (kilometers or miles).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsKilometers))]
+    [NotifyPropertyChangedFor(nameof(IsMiles))]
+    private string _distanceUnits = "kilometers";
+
+    /// <summary>
+    /// Gets whether kilometers is selected.
+    /// </summary>
+    public bool IsKilometers => DistanceUnits == "kilometers";
+
+    /// <summary>
+    /// Gets whether miles is selected.
+    /// </summary>
+    public bool IsMiles => DistanceUnits == "miles";
+
+    /// <summary>
     /// Gets or sets the user email.
     /// </summary>
     [ObservableProperty]
@@ -116,6 +152,13 @@ public partial class SettingsViewModel : BaseViewModel
         LocationDistanceThreshold = _settingsService.LocationDistanceThresholdMeters;
         DarkModeEnabled = _settingsService.DarkModeEnabled;
         MapOfflineCacheEnabled = _settingsService.MapOfflineCacheEnabled;
+
+        // Navigation settings
+        NavigationAudioEnabled = _settingsService.NavigationAudioEnabled;
+        NavigationVibrationEnabled = _settingsService.NavigationVibrationEnabled;
+        AutoRerouteEnabled = _settingsService.AutoRerouteEnabled;
+        DistanceUnits = _settingsService.DistanceUnits;
+
         UserEmail = _settingsService.UserEmail ?? string.Empty;
         IsLoggedIn = _settingsService.IsConfigured;
 
@@ -148,6 +191,38 @@ public partial class SettingsViewModel : BaseViewModel
     partial void OnMapOfflineCacheEnabledChanged(bool value)
     {
         _settingsService.MapOfflineCacheEnabled = value;
+    }
+
+    /// <summary>
+    /// Saves navigation audio setting.
+    /// </summary>
+    partial void OnNavigationAudioEnabledChanged(bool value)
+    {
+        _settingsService.NavigationAudioEnabled = value;
+    }
+
+    /// <summary>
+    /// Saves navigation vibration setting.
+    /// </summary>
+    partial void OnNavigationVibrationEnabledChanged(bool value)
+    {
+        _settingsService.NavigationVibrationEnabled = value;
+    }
+
+    /// <summary>
+    /// Saves auto-reroute setting.
+    /// </summary>
+    partial void OnAutoRerouteEnabledChanged(bool value)
+    {
+        _settingsService.AutoRerouteEnabled = value;
+    }
+
+    /// <summary>
+    /// Saves distance units setting.
+    /// </summary>
+    partial void OnDistanceUnitsChanged(string value)
+    {
+        _settingsService.DistanceUnits = value;
     }
 
     /// <summary>
@@ -217,15 +292,21 @@ public partial class SettingsViewModel : BaseViewModel
     }
 
     /// <summary>
+    /// Sets the distance units.
+    /// </summary>
+    [RelayCommand]
+    private void SetDistanceUnits(string units)
+    {
+        DistanceUnits = units;
+    }
+
+    /// <summary>
     /// Opens the about page or shows app info.
     /// </summary>
     [RelayCommand]
     private async Task ShowAboutAsync()
     {
-        await Shell.Current.DisplayAlertAsync(
-            "WayfarerMobile",
-            $"{AppVersion}\n\nA location tracking app for timeline recording.",
-            "OK");
+        await Shell.Current.GoToAsync("about");
     }
 
     #endregion
