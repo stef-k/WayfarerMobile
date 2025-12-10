@@ -127,6 +127,10 @@ public static class MauiProgram
         // Exception Handling
         services.AddSingleton<IExceptionHandlerService, ExceptionHandlerService>();
 
+        // UI Services
+        services.AddSingleton<IToastService, ToastService>();
+        services.AddSingleton<IDialogService, DialogService>();
+
         // Tile Cache Services
         services.AddSingleton<LiveTileCacheService>();
         services.AddSingleton<UnifiedTileCacheService>();
