@@ -29,6 +29,7 @@ public class MapService : IDisposable
     private const string TripPlacesLayerName = "TripPlaces";
     private const string NavigationRouteLayerName = "NavigationRoute";
     private const string NavigationRouteCompletedLayerName = "NavigationRouteCompleted";
+    private const string TripSegmentsLayerName = "TripSegments";
 
     /// <summary>
     /// Animation frame interval in milliseconds (~60 FPS).
@@ -46,6 +47,7 @@ public class MapService : IDisposable
     private WritableLayer? _tripPlacesLayer;
     private WritableLayer? _navigationRouteLayer;
     private WritableLayer? _navigationRouteCompletedLayer;
+    private WritableLayer? _tripSegmentsLayer;
     private readonly List<MPoint> _trackPoints = new();
     private List<NavigationWaypoint>? _currentRouteWaypoints;
     private readonly Dictionary<string, string> _iconImageCache = new();
@@ -132,6 +134,14 @@ public class MapService : IDisposable
             Style = null // Style is set per feature
         };
         map.Layers.Add(_groupMembersLayer);
+
+        // Add trip segments layer (below place markers)
+        _tripSegmentsLayer = new WritableLayer
+        {
+            Name = TripSegmentsLayerName,
+            Style = null // Style is set per feature based on transport mode
+        };
+        map.Layers.Add(_tripSegmentsLayer);
 
         // Add trip places layer
         _tripPlacesLayer = new WritableLayer
@@ -1032,6 +1042,129 @@ public class MapService : IDisposable
             .ToList();
 
         ZoomToPoints(points);
+    }
+
+    #endregion
+
+    #region Trip Segments
+
+    /// <summary>
+    /// Updates the trip segments on the map.
+    /// Segments are drawn as polylines between places, with different styles per transport mode.
+    /// </summary>
+    /// <param name="segments">The list of trip segments with geometry.</param>
+    public void UpdateTripSegments(IEnumerable<TripSegment> segments)
+    {
+        if (_tripSegmentsLayer == null || _map == null)
+            return;
+
+        _tripSegmentsLayer.Clear();
+
+        foreach (var segment in segments)
+        {
+            if (string.IsNullOrEmpty(segment.Geometry))
+                continue;
+
+            try
+            {
+                // Decode polyline to coordinates
+                var points = PolylineDecoder.Decode(segment.Geometry);
+                if (points.Count < 2)
+                    continue;
+
+                // Convert to map coordinates
+                var coordinates = points
+                    .Select(p =>
+                    {
+                        var (x, y) = SphericalMercator.FromLonLat(p.Longitude, p.Latitude);
+                        return new Coordinate(x, y);
+                    })
+                    .ToArray();
+
+                // Create line feature with transport mode style
+                var lineString = new LineString(coordinates);
+                var style = CreateSegmentStyle(segment.TransportMode);
+
+                _tripSegmentsLayer.Add(new GeometryFeature(lineString)
+                {
+                    Styles = new[] { style }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Failed to decode segment geometry for segment {SegmentId}", segment.Id);
+            }
+        }
+
+        _tripSegmentsLayer.DataHasChanged();
+        _logger?.LogDebug("Displayed {SegmentCount} trip segments", segments.Count());
+    }
+
+    /// <summary>
+    /// Clears all trip segments from the map.
+    /// </summary>
+    public void ClearTripSegments()
+    {
+        _tripSegmentsLayer?.Clear();
+        _tripSegmentsLayer?.DataHasChanged();
+    }
+
+    /// <summary>
+    /// Creates a style for a segment based on transport mode.
+    /// </summary>
+    /// <param name="transportMode">The transport mode (driving, walking, cycling, transit, etc.).</param>
+    private static IStyle CreateSegmentStyle(string? transportMode)
+    {
+        // Define colors per transport mode
+        var (color, width, dashPattern) = GetSegmentStyleParameters(transportMode?.ToLowerInvariant());
+
+        var pen = new Pen(color, width)
+        {
+            PenStrokeCap = PenStrokeCap.Round,
+            StrokeJoin = StrokeJoin.Round
+        };
+
+        // Apply dash pattern for certain modes
+        if (dashPattern != null)
+        {
+            pen.PenStyle = PenStyle.UserDefined;
+            pen.DashArray = dashPattern;
+        }
+
+        return new VectorStyle
+        {
+            Line = pen
+        };
+    }
+
+    /// <summary>
+    /// Gets style parameters for a given transport mode.
+    /// </summary>
+    private static (Color color, double width, float[]? dashPattern) GetSegmentStyleParameters(string? mode)
+    {
+        return mode switch
+        {
+            // Driving - blue solid line
+            "driving" or "car" => (Color.FromArgb(220, 66, 133, 244), 4, null),
+
+            // Walking - green dashed line
+            "walking" or "walk" or "foot" => (Color.FromArgb(220, 76, 175, 80), 3, new float[] { 8, 4 }),
+
+            // Cycling - orange solid line
+            "cycling" or "bicycle" or "bike" => (Color.FromArgb(220, 255, 152, 0), 3, null),
+
+            // Transit/Public transport - purple solid line
+            "transit" or "bus" or "train" or "subway" => (Color.FromArgb(220, 156, 39, 176), 4, null),
+
+            // Ferry/Boat - teal dashed line
+            "ferry" or "boat" => (Color.FromArgb(220, 0, 150, 136), 3, new float[] { 12, 6 }),
+
+            // Flight - light blue dotted line
+            "flight" or "plane" or "air" => (Color.FromArgb(180, 3, 169, 244), 2, new float[] { 4, 4 }),
+
+            // Default - gray solid line
+            _ => (Color.FromArgb(200, 158, 158, 158), 3, null)
+        };
     }
 
     #endregion

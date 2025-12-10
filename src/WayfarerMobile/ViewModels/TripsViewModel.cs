@@ -301,6 +301,7 @@ public partial class TripsViewModel : BaseViewModel
         SelectedPlace = null;
         IsSidebarOpen = false;
         _mapService.ClearTripPlaces();
+        _mapService.ClearTripSegments();
     }
 
     /// <summary>
@@ -556,10 +557,16 @@ public partial class TripsViewModel : BaseViewModel
     #region Private Methods
 
     /// <summary>
-    /// Displays trip places on the map with custom icons.
+    /// Displays trip places and segments on the map.
     /// </summary>
     private async Task DisplayTripOnMapAsync(TripDetails trip)
     {
+        // Display segments first (so they appear below place markers)
+        if (trip.Segments.Any())
+        {
+            _mapService.UpdateTripSegments(trip.Segments);
+        }
+
         // Use the dedicated trip places layer with custom icons
         await _mapService.UpdateTripPlacesAsync(trip.AllPlaces);
 
@@ -686,10 +693,11 @@ public partial class TripsViewModel : BaseViewModel
             await StopNavigationAsync();
         }
 
-        // Clear map markers when leaving
+        // Clear map markers and segments when leaving
         if (!ShowingDetails)
         {
             _mapService.ClearTripPlaces();
+            _mapService.ClearTripSegments();
         }
         await base.OnDisappearingAsync();
     }
