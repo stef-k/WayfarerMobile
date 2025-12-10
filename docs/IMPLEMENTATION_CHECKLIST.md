@@ -30,24 +30,26 @@ Step-by-step guide for implementing WayfarerMobile from scratch.
 | 1. Foundation | Complete | 100% |
 | 2. Location Service (Android) | Complete | 100% |
 | 3. Onboarding Flow | Complete | 100% |
-| 4. Settings | Complete | 100% |
-| 5. Main Map | Partial | ~90% |
-| 6. Database & API | Partial | ~90% |
+| 4. Settings | Partial | ~85% (navigation settings missing) |
+| 5. Main Map | Complete | 100% |
+| 6. Database & API | Complete | 100% |
 | 7. Timeline | Complete | 100% |
 | 8. Trips | Complete | 100% |
-| 9. Navigation | Partial | ~95% |
-| 10. Groups | Complete | 100% |
+| 9. Navigation | Partial | ~95% (settings integration needed) |
+| 10. Groups | Partial | ~95% (state persistence needed) |
 | 11. Check-In | Complete | 100% |
-| 12. Polish | Partial | ~50% (logging, error handling, lifecycle done) |
+| 12. Polish | Partial | ~75% |
 
-**Overall: ~94% Complete (Backend/MVVM)**
+**Overall: ~94% Complete (Core Features)**
 
-**Remaining UI Work:**
+**Remaining Work (see docs/REMAINING_TASKS.md):**
 
-- Offline banner
-- Loading states (`SfBusyIndicator`)
-- Trip sidebar sliding animation
-- Segment visualization on map
+- Code quality fixes (P0)
+- Navigation settings UI (P1)
+- About page with licenses (P1)
+- Background notifications (P1)
+- Toast notification system (P2)
+- Diagnostic tools (P2)
 
 ---
 
@@ -408,8 +410,9 @@ Reference: `C:\Users\stef\source\repos\Wayfarer.Mobile\Controls\TripSidebar\`
 
 - [x] Trip details view with places list
 - [x] Place markers on map via `MapService`
-- [ ] Sliding panel animation
-- [ ] Segment visualization
+- [x] Sliding panel animation (SfNavigationDrawer - commit 79c24c7)
+- [x] Segment visualization on map (PolylineDecoder + MapService - commit fbd45bd)
+- [ ] Segment list UI in sidebar (show transport mode, distance)
 - [x] Navigate to place command (via NavigationService)
 
 ### 8.3 Create Tile Cache
@@ -560,8 +563,8 @@ Reference: `docs/reference/GROUPS_FEATURE.md`
 
 ### 12.2 Offline Support
 
-- [ ] Detect connectivity changes
-- [ ] Show offline banner
+- [x] Detect connectivity changes (OfflineBanner monitors Connectivity.ConnectivityChanged)
+- [x] Show offline banner (OfflineBanner control on MainPage, TripsPage, TimelinePage)
 - [x] Queue operations for sync (LocationSyncService queues to SQLite)
 
 ### 12.3 Logging
@@ -584,10 +587,10 @@ Reference: `docs/reference/GROUPS_FEATURE.md`
 
 ### 12.6 Final Polish
 
-- [ ] Loading states (SfBusyIndicator)
-- [ ] Animations/transitions
-- [ ] App icon and splash screen
-- [ ] Performance optimization
+- [x] Loading states (LoadingOverlay control with ActivityIndicator - deployed on major pages)
+- [ ] Animations/transitions (sidebar needs fade animation, toast system needed)
+- [x] App icon and splash screen (copied from old app, color #E55A4E)
+- [ ] Performance optimization (profiling needed)
 
 ---
 

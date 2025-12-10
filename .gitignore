@@ -18,6 +18,7 @@ out/
 *.svclog
 *.scc
 nul
+.claude/
 
 # Rider
 .idea/

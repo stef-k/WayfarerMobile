@@ -2,12 +2,28 @@
 
 ## Current Status
 
-**Progress:** ~99% Complete (Core Features Done, Ready for Testing)
+**Progress:** ~94% Complete (Core Features Done, Polish & Settings Remaining)
 
-**Next Tasks (Priority Order):**
+**Next Tasks (Priority Order):** See `docs/REMAINING_TASKS.md` for full details
 
-1. **Testing** - End-to-end testing on devices
-2. **Bug Fixes** - Address any issues found during testing
+**P0 - Code Quality (before any testing):**
+1. Extract classes from TripNavigationService → Core/Models/, Core/Enums/
+2. Remove duplicate PolylineDecoder (use Helpers/PolylineDecoder.cs)
+3. Fix duplicate ApiClient DI registration in MauiProgram.cs
+4. Add logging to exception handlers in ViewModels
+5. Commit untracked PolylineDecoder.cs
+
+**P1 - Feature Implementation:**
+1. Navigation settings UI (audio, volume, vibration, language, units)
+2. About page with version and open source licenses
+3. Background notifications (tracking state, download progress)
+4. Trip segment list UI in sidebar
+5. Groups state persistence
+
+**P2 - Polish:**
+1. Toast notification system
+2. User-friendly error dialogs
+3. Sidebar fade animations
 
 **Completed Features:**
 - ✅ Lock Screen Overlay (PIN entry on app resume)
@@ -23,9 +39,9 @@
 
 **Key Files for Next Session:**
 
-- `docs/IMPLEMENTATION_PLAN.md` - Detailed UI task specs with Syncfusion components
+- `docs/REMAINING_TASKS.md` - **Detailed task list with priorities and effort estimates**
+- `docs/REWRITE_ASSESSMENT_REPORT.md` - Comprehensive codebase analysis
 - `docs/IMPLEMENTATION_CHECKLIST.md` - Phase-by-phase progress tracking
-- `docs/reference/NAVIGATION_SYSTEM.md` - Navigation architecture documentation
 
 ---
 
@@ -86,11 +102,13 @@ The previous implementation is at: `C:\Users\stef\source\repos\Wayfarer.Mobile`
 
 ### Code to Port Directly (copy and adapt)
 
-- `GeoMath.cs` - Distance/bearing calculations
-- `GpsAccuracyFilter.cs` - Transportation mode detection, filtering
-- `ThresholdFilter.cs` - Time/distance threshold logic
-- `BearingCalculator.cs` - Heading calculations
-- DTOs from `Models/Dto/` - Server communication models
+- `GeoMath.cs` - Distance/bearing calculations ✅ DONE
+- `ThresholdFilter.cs` - Time/distance threshold logic ✅ DONE
+- DTOs from `Models/Dto/` - Server communication models ✅ DONE
+
+**NOT NEEDED (native providers are better):**
+- `GpsAccuracyFilter.cs` - Native FusedLocationProvider handles filtering
+- `BearingStabilityTracker.cs` - Speed-based check is more reliable than accelerometer
 
 ## Technology Stack
 
