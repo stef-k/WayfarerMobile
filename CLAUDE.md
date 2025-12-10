@@ -5,6 +5,7 @@
 **Progress:** ~92% Complete (Business Logic Done, UI Remaining)
 
 **Next Tasks (Priority Order):**
+
 1. **P0 - Lock Screen Overlay** - PIN entry on app resume (`Views/LockScreenPage.xaml`)
 2. **P0 - Route Polyline** - Navigation route visualization on map
 3. **P1 - Trip Sidebar** - Sliding panel with `SfNavigationDrawer`
@@ -12,6 +13,7 @@
 5. **P2 - Loading States** - `SfBusyIndicator` on all pages
 
 **Key Files for Next Session:**
+
 - `docs/IMPLEMENTATION_PLAN.md` - Detailed UI task specs with Syncfusion components
 - `docs/IMPLEMENTATION_CHECKLIST.md` - Phase-by-phase progress tracking
 
@@ -114,6 +116,7 @@ Two independent concerns:
 - Use CommunityToolkit.Mvvm attributes (`[ObservableProperty]`, `[RelayCommand]`)
 - Use Syncfusion components where applicable
 - Single Responsibility classes
+- Do not create `nul` files or if cannot be avoided by the tools you use, delete them afterwards.
 
 ## Git Commit Messages
 
