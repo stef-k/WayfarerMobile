@@ -126,7 +126,7 @@ Two independent concerns:
 
 ## Project Structure
 
-```
+```bash
 WayfarerMobile/
 ├── src/
 │   └── WayfarerMobile/              # MAUI project
