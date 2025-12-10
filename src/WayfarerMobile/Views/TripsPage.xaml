@@ -6,6 +6,7 @@
              xmlns:mapsui="clr-namespace:Mapsui.UI.Maui;assembly=Mapsui.UI.Maui"
              xmlns:navDrawer="clr-namespace:Syncfusion.Maui.Toolkit.NavigationDrawer;assembly=Syncfusion.Maui.Toolkit"
              xmlns:controls="clr-namespace:WayfarerMobile.Shared.Controls"
+             xmlns:offlineBanner="clr-namespace:WayfarerMobile.Views.Controls"
              x:Class="WayfarerMobile.Views.TripsPage"
              x:DataType="viewmodels:TripsViewModel"
              Title="Trips"
@@ -17,9 +18,14 @@
                      Order="Primary" />
     </ContentPage.ToolbarItems>
 
-    <Grid>
-        <!-- Not Configured Message -->
-        <VerticalStackLayout IsVisible="{Binding IsConfigured, Converter={StaticResource InvertedBoolConverter}}"
+    <Grid RowDefinitions="Auto,*">
+        <!-- Offline Banner -->
+        <offlineBanner:OfflineBanner Grid.Row="0" />
+
+        <!-- Main Content -->
+        <Grid Grid.Row="1">
+            <!-- Not Configured Message -->
+            <VerticalStackLayout IsVisible="{Binding IsConfigured, Converter={StaticResource InvertedBoolConverter}}"
                             VerticalOptions="Center"
                             HorizontalOptions="Center"
                             Spacing="16"
@@ -359,18 +365,19 @@
                 </navDrawer:SfNavigationDrawer.ContentView>
 
             </navDrawer:SfNavigationDrawer>
-        </Grid>
 
-        <!-- Error Message -->
-        <Border VerticalOptions="End"
-                Margin="8"
-                Padding="12"
-                BackgroundColor="#FFEBEE"
-                StrokeThickness="0"
-                IsVisible="{Binding ErrorMessage, Converter={StaticResource IsNotNullConverter}}">
-            <Label Text="{Binding ErrorMessage}"
-                   TextColor="#C62828"
-                   FontSize="14" />
-        </Border>
+            <!-- Error Message -->
+            <Border VerticalOptions="End"
+                    Margin="8"
+                    Padding="12"
+                    BackgroundColor="#FFEBEE"
+                    StrokeThickness="0"
+                    IsVisible="{Binding ErrorMessage, Converter={StaticResource IsNotNullConverter}}">
+                <Label Text="{Binding ErrorMessage}"
+                       TextColor="#C62828"
+                       FontSize="14" />
+            </Border>
+        </Grid>
+        </Grid>
     </Grid>
 </ContentPage>
