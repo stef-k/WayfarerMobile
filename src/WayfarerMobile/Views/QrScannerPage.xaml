@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:WayfarerMobile.ViewModels"
+             xmlns:zxing="clr-namespace:ZXing.Net.Maui.Controls;assembly=ZXing.Net.MAUI.Controls"
+             x:Class="WayfarerMobile.Views.QrScannerPage"
+             x:DataType="vm:QrScannerViewModel"
+             Title="{Binding Title}"
+             Shell.NavBarIsVisible="True">
+
+    <Grid>
+        <!-- Camera Preview -->
+        <zxing:CameraBarcodeReaderView
+            x:Name="BarcodeReader"
+            IsDetecting="{Binding IsScannerActive}"
+            Options="{StaticResource QrScannerOptions}" />
+
+        <!-- Scanning Overlay -->
+        <Grid BackgroundColor="#80000000"
+              IsVisible="{Binding IsProcessing, Converter={StaticResource InvertedBoolConverter}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="250" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="250" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Transparent cutout for scanner -->
+            <BoxView Grid.Row="1" Grid.Column="1" BackgroundColor="Transparent" />
+
+            <!-- Scanner frame -->
+            <Frame Grid.Row="1" Grid.Column="1"
+                   BackgroundColor="Transparent"
+                   BorderColor="{StaticResource Primary}"
+                   CornerRadius="10"
+                   Padding="0"
+                   HasShadow="False" />
+        </Grid>
+
+        <!-- Status Panel at Bottom -->
+        <Frame VerticalOptions="End"
+               Margin="20"
+               Padding="20"
+               CornerRadius="16"
+               BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}"
+               HasShadow="True">
+            <VerticalStackLayout Spacing="15">
+
+                <!-- Status Icon -->
+                <Label HorizontalOptions="Center"
+                       FontSize="32"
+                       IsVisible="{Binding IsProcessing, Converter={StaticResource InvertedBoolConverter}}">
+                    <Label.Style>
+                        <Style TargetType="Label">
+                            <Setter Property="Text" Value="" />
+                        </Style>
+                    </Label.Style>
+                </Label>
+
+                <!-- Processing indicator -->
+                <ActivityIndicator IsRunning="{Binding IsProcessing}"
+                                   IsVisible="{Binding IsProcessing}"
+                                   Color="{StaticResource Primary}"
+                                   HeightRequest="32"
+                                   WidthRequest="32"
+                                   HorizontalOptions="Center" />
+
+                <!-- Success icon -->
+                <Label Text="&#x2713;"
+                       IsVisible="{Binding IsSuccess}"
+                       FontSize="40"
+                       TextColor="#4CAF50"
+                       HorizontalOptions="Center" />
+
+                <!-- Error icon -->
+                <Label Text="&#x2717;"
+                       IsVisible="{Binding IsError}"
+                       FontSize="40"
+                       TextColor="#F44336"
+                       HorizontalOptions="Center" />
+
+                <!-- Status Message -->
+                <Label Text="{Binding StatusMessage}"
+                       FontSize="16"
+                       HorizontalOptions="Center"
+                       HorizontalTextAlignment="Center"
+                       MaxLines="3"
+                       LineBreakMode="WordWrap" />
+
+                <!-- Retry button (visible on error) -->
+                <Button Text="Try Again"
+                        Command="{Binding RetryScanningCommand}"
+                        IsVisible="{Binding IsError}"
+                        HeightRequest="44"
+                        CornerRadius="22" />
+
+                <!-- Cancel button -->
+                <Button Text="Cancel"
+                        Command="{Binding CancelCommand}"
+                        IsVisible="{Binding IsProcessing, Converter={StaticResource InvertedBoolConverter}}"
+                        Style="{StaticResource DarkButton}"
+                        HeightRequest="44"
+                        CornerRadius="22" />
+
+            </VerticalStackLayout>
+        </Frame>
+
+        <!-- Instructions at Top -->
+        <Frame VerticalOptions="Start"
+               HorizontalOptions="Center"
+               Margin="20,60,20,0"
+               Padding="15,10"
+               CornerRadius="12"
+               BackgroundColor="{AppThemeBinding Light=#E0FFFFFF, Dark=#E0000000}"
+               HasShadow="False"
+               IsVisible="{Binding IsProcessing, Converter={StaticResource InvertedBoolConverter}}">
+            <Label Text="Scan the QR code from your server settings"
+                   FontSize="14"
+                   HorizontalTextAlignment="Center"
+                   TextColor="{AppThemeBinding Light={StaticResource Gray700}, Dark={StaticResource Gray300}}" />
+        </Frame>
+
+    </Grid>
+
+</ContentPage>

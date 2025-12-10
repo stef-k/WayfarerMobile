@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:WayfarerMobile.ViewModels"
+             x:Class="WayfarerMobile.Views.Controls.NavigationHud"
+             x:DataType="vm:NavigationHudViewModel"
+             IsVisible="{Binding IsNavigating}">
+
+    <Frame Padding="0"
+           CornerRadius="16"
+           BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}"
+           HasShadow="True"
+           Margin="10">
+
+        <Grid RowDefinitions="Auto,Auto,Auto" Padding="15">
+
+            <!-- Header: Status and Toggle -->
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto">
+
+                <!-- Status indicator -->
+                <Frame Grid.Column="0"
+                       Padding="8,4"
+                       CornerRadius="10"
+                       BackgroundColor="{Binding StatusColor}"
+                       HasShadow="False">
+                    <Label Text="{Binding StatusText}"
+                           TextColor="White"
+                           FontSize="11"
+                           FontAttributes="Bold" />
+                </Frame>
+
+                <!-- Destination name -->
+                <Label Grid.Column="1"
+                       Text="{Binding DestinationName}"
+                       FontSize="14"
+                       FontAttributes="Bold"
+                       VerticalOptions="Center"
+                       HorizontalOptions="Center"
+                       LineBreakMode="TailTruncation"
+                       MaxLines="1" />
+
+                <!-- Mute/Unmute button -->
+                <Button Grid.Column="2"
+                        Text="{Binding IsMuted, Converter={StaticResource BoolToMuteIconConverter}}"
+                        Command="{Binding ToggleMuteCommand}"
+                        BackgroundColor="Transparent"
+                        TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}"
+                        FontSize="16"
+                        WidthRequest="36"
+                        HeightRequest="36"
+                        Padding="0" />
+
+                <!-- Expand/Collapse button -->
+                <Button Grid.Column="3"
+                        Text="{Binding IsExpanded, Converter={StaticResource BoolToExpandIconConverter}}"
+                        Command="{Binding ToggleExpandedCommand}"
+                        BackgroundColor="Transparent"
+                        TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}"
+                        FontSize="16"
+                        WidthRequest="36"
+                        HeightRequest="36"
+                        Padding="0" />
+            </Grid>
+
+            <!-- Main Content (when expanded) -->
+            <VerticalStackLayout Grid.Row="1"
+                                 IsVisible="{Binding IsExpanded}"
+                                 Spacing="12"
+                                 Margin="0,12,0,0">
+
+                <!-- Distance and ETA row -->
+                <Grid ColumnDefinitions="*,Auto,*">
+
+                    <!-- Distance to destination -->
+                    <VerticalStackLayout Grid.Column="0" HorizontalOptions="Start">
+                        <Label Text="Distance"
+                               FontSize="11"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        <Label Text="{Binding DistanceText}"
+                               FontSize="22"
+                               FontAttributes="Bold" />
+                    </VerticalStackLayout>
+
+                    <!-- Direction arrow -->
+                    <Frame Grid.Column="1"
+                           WidthRequest="50"
+                           HeightRequest="50"
+                           CornerRadius="25"
+                           Padding="0"
+                           BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}"
+                           HasShadow="False">
+                        <Label Text="↑"
+                               FontSize="28"
+                               HorizontalOptions="Center"
+                               VerticalOptions="Center"
+                               Rotation="{Binding BearingDegrees}" />
+                    </Frame>
+
+                    <!-- ETA -->
+                    <VerticalStackLayout Grid.Column="2" HorizontalOptions="End">
+                        <Label Text="ETA"
+                               FontSize="11"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
+                               HorizontalOptions="End" />
+                        <Label Text="{Binding EtaText}"
+                               FontSize="22"
+                               FontAttributes="Bold"
+                               HorizontalOptions="End" />
+                    </VerticalStackLayout>
+                </Grid>
+
+                <!-- Current instruction -->
+                <Frame Padding="12,10"
+                       CornerRadius="10"
+                       BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}"
+                       HasShadow="False">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <Label Grid.Column="0"
+                               Text="➤"
+                               FontSize="16"
+                               VerticalOptions="Center"
+                               Margin="0,0,10,0" />
+                        <Label Grid.Column="1"
+                               Text="{Binding InstructionText}"
+                               FontSize="14"
+                               VerticalOptions="Center"
+                               LineBreakMode="TailTruncation"
+                               MaxLines="2" />
+                    </Grid>
+                </Frame>
+
+                <!-- Progress bar -->
+                <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto">
+                    <ProgressBar Grid.Row="0"
+                                 Grid.Column="0"
+                                 Progress="{Binding ProgressPercent, Converter={StaticResource PercentToProgressConverter}}"
+                                 ProgressColor="{StaticResource Primary}"
+                                 HeightRequest="6" />
+                    <Label Grid.Row="0"
+                           Grid.Column="1"
+                           Text="{Binding ProgressPercent, StringFormat='{0:F0}%'}"
+                           FontSize="11"
+                           VerticalOptions="Center"
+                           Margin="8,0,0,0"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                </Grid>
+
+            </VerticalStackLayout>
+
+            <!-- Minimized Content -->
+            <Grid Grid.Row="1"
+                  IsVisible="{Binding IsExpanded, Converter={StaticResource InvertedBoolConverter}}"
+                  ColumnDefinitions="Auto,*,Auto"
+                  Margin="0,8,0,0">
+
+                <Label Grid.Column="0"
+                       Text="{Binding DistanceText}"
+                       FontSize="16"
+                       FontAttributes="Bold"
+                       VerticalOptions="Center" />
+
+                <Label Grid.Column="1"
+                       Text="{Binding NextWaypointName}"
+                       FontSize="12"
+                       HorizontalOptions="Center"
+                       VerticalOptions="Center"
+                       LineBreakMode="TailTruncation"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+
+                <Label Grid.Column="2"
+                       Text="{Binding EtaText}"
+                       FontSize="14"
+                       VerticalOptions="Center"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+            </Grid>
+
+            <!-- Stop Navigation Button -->
+            <Button Grid.Row="2"
+                    Text="Stop Navigation"
+                    Command="{Binding StopNavigationCommand}"
+                    IsVisible="{Binding IsExpanded}"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                    TextColor="{AppThemeBinding Light={StaticResource Gray700}, Dark={StaticResource Gray200}}"
+                    FontSize="14"
+                    HeightRequest="40"
+                    CornerRadius="20"
+                    Margin="0,12,0,0" />
+
+        </Grid>
+    </Frame>
+
+</ContentView>

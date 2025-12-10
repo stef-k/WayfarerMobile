@@ -1,0 +1,90 @@
+# .NET MAUI / .NET Build outputs
+bin/
+obj/
+out/
+
+# Visual Studio
+.vs/
+*.user
+*.userosscache
+*.suo
+*.cache
+*.dbmdl
+*.jfm
+*.vspscc
+*.vssscc
+.builds
+*.pidb
+*.svclog
+*.scc
+nul
+
+# Rider
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode/
+
+# NuGet
+*.nupkg
+**/packages/*
+!**/packages/build/
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.fragment.lock.json
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# MAUI specific
+*.ipa
+*.apk
+*.aab
+*.dSYM/
+*.xcarchive/
+
+# Android
+local.properties
+*.keystore
+!debug.keystore
+
+# iOS
+*.mobileprovision
+*.p12
+Pods/
+
+# Secrets (never commit)
+*.secrets.json
+appsettings.*.json
+!appsettings.json
+
+# Logs
+logs/
+*.log
+
+# Test results
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# Build artifacts
+publish/
+artifacts/
+
+# JetBrains Rider
+*.DotSettings.user
+
+# Resharper
+_ReSharper*/
+*.[Rr]e[Ss]harper

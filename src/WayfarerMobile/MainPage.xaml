@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:WayfarerMobile.ViewModels"
+             xmlns:mapsui="clr-namespace:Mapsui.UI.Maui;assembly=Mapsui.UI.Maui"
+             xmlns:controls="clr-namespace:WayfarerMobile.Views.Controls"
+             x:Class="WayfarerMobile.MainPage"
+             x:DataType="vm:MainViewModel"
+             Title="{Binding Title}"
+             Shell.NavBarIsVisible="False">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- Offline Banner (auto-shows when no network) -->
+        <controls:OfflineBanner Grid.Row="0" />
+
+        <!-- Map takes full screen -->
+        <mapsui:MapControl x:Name="MapControl"
+                           Grid.Row="1"
+                           Map="{Binding Map}" />
+
+        <!-- Floating status overlay at top -->
+        <Frame Grid.Row="1"
+               VerticalOptions="Start"
+               HorizontalOptions="Center"
+               Margin="0,20,0,0"
+               Padding="15,10"
+               CornerRadius="20"
+               BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}"
+               Opacity="0.95">
+            <HorizontalStackLayout Spacing="15">
+                <VerticalStackLayout>
+                    <Label Text="{Binding StatusText}"
+                           FontSize="14"
+                           FontAttributes="Bold" />
+                    <Label Text="{Binding LocationText}"
+                           FontSize="12"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                </VerticalStackLayout>
+                <Label Text="{Binding LocationCount, StringFormat='{0} pts'}"
+                       FontSize="12"
+                       VerticalOptions="Center"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+            </HorizontalStackLayout>
+        </Frame>
+
+        <!-- Floating map controls on right side -->
+        <VerticalStackLayout Grid.Row="1"
+                             VerticalOptions="Center"
+                             HorizontalOptions="End"
+                             Margin="0,0,15,0"
+                             Spacing="10">
+            <Button Text="📍"
+                    Command="{Binding CenterOnLocationCommand}"
+                    WidthRequest="50"
+                    HeightRequest="50"
+                    CornerRadius="25"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}"
+                    TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource Gray100}}"
+                    FontSize="20" />
+            <Button Text="🗺️"
+                    Command="{Binding ZoomToTrackCommand}"
+                    WidthRequest="50"
+                    HeightRequest="50"
+                    CornerRadius="25"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}"
+                    TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource Gray100}}"
+                    FontSize="20" />
+            <Button Text="📋"
+                    Command="{Binding ToggleTripSidebarCommand}"
+                    WidthRequest="50"
+                    HeightRequest="50"
+                    CornerRadius="25"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}"
+                    TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource Gray100}}"
+                    FontSize="20"
+                    ToolTipProperties.Text="Trip Sidebar" />
+        </VerticalStackLayout>
+
+        <!-- Check-in FAB at bottom right (hidden during navigation) -->
+        <Button Grid.Row="1"
+                Text="✓"
+                Command="{Binding CheckInCommand}"
+                IsVisible="{Binding IsNavigating, Converter={StaticResource InvertedBoolConverter}}"
+                WidthRequest="56"
+                HeightRequest="56"
+                CornerRadius="28"
+                BackgroundColor="{StaticResource Primary}"
+                TextColor="White"
+                FontSize="24"
+                FontAttributes="Bold"
+                VerticalOptions="End"
+                HorizontalOptions="End"
+                Margin="0,0,15,15"
+                ToolTipProperties.Text="Check In" />
+
+        <!-- Navigation HUD (shown during navigation) -->
+        <controls:NavigationHud Grid.Row="1"
+                                BindingContext="{Binding NavigationHud}"
+                                VerticalOptions="End"
+                                HorizontalOptions="Fill"
+                                Margin="10,0,10,10" />
+
+        <!-- Bottom control panel -->
+        <Frame Grid.Row="2"
+               Padding="20,15"
+               CornerRadius="0"
+               BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
+            <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto" RowSpacing="10">
+
+                <!-- Main tracking button -->
+                <Button Grid.Row="0"
+                        Grid.ColumnSpan="2"
+                        Text="{Binding TrackingButtonText}"
+                        Command="{Binding ToggleTrackingCommand}"
+                        BackgroundColor="{StaticResource Primary}"
+                        TextColor="White"
+                        FontSize="18"
+                        HeightRequest="50"
+                        CornerRadius="25" />
+
+                <!-- Performance mode buttons -->
+                <HorizontalStackLayout Grid.Row="1"
+                                       Grid.Column="0"
+                                       Spacing="10">
+                    <Button Text="Normal"
+                            Command="{Binding SetPerformanceModeCommand}"
+                            CommandParameter="Normal"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                            TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource Gray100}}"
+                            HeightRequest="36"
+                            CornerRadius="18"
+                            FontSize="12" />
+                    <Button Text="High Perf"
+                            Command="{Binding SetPerformanceModeCommand}"
+                            CommandParameter="HighPerformance"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                            TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource Gray100}}"
+                            HeightRequest="36"
+                            CornerRadius="18"
+                            FontSize="12" />
+                </HorizontalStackLayout>
+
+                <!-- Pause button -->
+                <Button Grid.Row="1"
+                        Grid.Column="1"
+                        Text="Pause"
+                        Command="{Binding PauseTrackingCommand}"
+                        IsVisible="{Binding IsTracking}"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray600}}"
+                        TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource Gray100}}"
+                        HeightRequest="36"
+                        CornerRadius="18"
+                        FontSize="12" />
+
+            </Grid>
+        </Frame>
+
+    </Grid>
+
+</ContentPage>

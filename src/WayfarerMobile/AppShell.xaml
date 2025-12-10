@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Shell
+    x:Class="WayfarerMobile.AppShell"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:views="clr-namespace:WayfarerMobile.Views"
+    xmlns:onboarding="clr-namespace:WayfarerMobile.Views.Onboarding"
+    xmlns:local="clr-namespace:WayfarerMobile"
+    Title="WayfarerMobile">
+
+    <!-- Onboarding (shown on first run) -->
+    <ShellContent
+        x:Name="OnboardingContent"
+        Route="onboarding"
+        Shell.TabBarIsVisible="False"
+        Shell.NavBarIsVisible="False" />
+
+    <!-- Main app tabs -->
+    <TabBar x:Name="MainTabBar" Route="main">
+        <!-- Map Tab -->
+        <ShellContent
+            x:Name="MainContent"
+            Title="Map"
+            Icon="{OnPlatform Android=map, iOS=map}"
+            Route="MainPage" />
+
+        <!-- Timeline Tab -->
+        <ShellContent
+            x:Name="TimelineContent"
+            Title="Timeline"
+            Icon="{OnPlatform Android=timeline, iOS=timeline}"
+            Route="TimelinePage" />
+
+        <!-- Trips Tab -->
+        <ShellContent
+            x:Name="TripsContent"
+            Title="Trips"
+            Icon="{OnPlatform Android=trips, iOS=trips}"
+            Route="TripsPage" />
+
+        <!-- Groups Tab -->
+        <ShellContent
+            x:Name="GroupsContent"
+            Title="Groups"
+            Icon="{OnPlatform Android=people, iOS=people}"
+            Route="GroupsPage" />
+
+        <!-- Settings Tab -->
+        <ShellContent
+            x:Name="SettingsContent"
+            Title="Settings"
+            Icon="{OnPlatform Android=settings, iOS=settings}"
+            Route="SettingsPage" />
+    </TabBar>
+
+</Shell>

@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:WayfarerMobile.ViewModels"
+             xmlns:models="clr-namespace:WayfarerMobile.Core.Models"
+             x:Class="WayfarerMobile.Views.PublicTripsPage"
+             x:DataType="vm:PublicTripsViewModel"
+             Title="{Binding Title}">
+
+    <Grid RowDefinitions="Auto,Auto,*">
+
+        <!-- Search Bar -->
+        <SearchBar Grid.Row="0"
+                   Placeholder="Search public trips..."
+                   Text="{Binding SearchQuery}"
+                   Margin="15,10"
+                   BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}" />
+
+        <!-- Sort Options -->
+        <HorizontalStackLayout Grid.Row="1"
+                               Margin="15,0,15,10"
+                               Spacing="10">
+            <Label Text="Sort by:"
+                   VerticalOptions="Center"
+                   FontSize="13"
+                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+            <Picker ItemsSource="{Binding SortOptions}"
+                    SelectedItem="{Binding SelectedSort}"
+                    WidthRequest="140"
+                    HeightRequest="36"
+                    FontSize="13" />
+        </HorizontalStackLayout>
+
+        <!-- Trips List -->
+        <RefreshView Grid.Row="2"
+                     IsRefreshing="{Binding IsBusy}"
+                     Command="{Binding RefreshCommand}">
+            <CollectionView ItemsSource="{Binding Trips}"
+                            RemainingItemsThreshold="5"
+                            RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}">
+
+                <!-- Empty View -->
+                <CollectionView.EmptyView>
+                    <VerticalStackLayout VerticalOptions="Center"
+                                         HorizontalOptions="Center"
+                                         Padding="30"
+                                         IsVisible="{Binding IsEmpty}">
+                        <Label Text="No trips found"
+                               FontSize="18"
+                               HorizontalOptions="Center"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        <Label Text="Try a different search or check back later"
+                               FontSize="14"
+                               HorizontalOptions="Center"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray400}, Dark={StaticResource Gray500}}"
+                               Margin="0,10,0,0" />
+                    </VerticalStackLayout>
+                </CollectionView.EmptyView>
+
+                <!-- Item Template -->
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="models:PublicTripSummary">
+                        <Frame Margin="15,5"
+                               Padding="15"
+                               CornerRadius="12"
+                               BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}"
+                               HasShadow="True">
+                            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto">
+
+                                <!-- Trip Name -->
+                                <Label Grid.Row="0"
+                                       Grid.Column="0"
+                                       Text="{Binding Name}"
+                                       FontSize="16"
+                                       FontAttributes="Bold"
+                                       LineBreakMode="TailTruncation"
+                                       MaxLines="1" />
+
+                                <!-- Clone Button -->
+                                <Button Grid.Row="0"
+                                        Grid.RowSpan="4"
+                                        Grid.Column="1"
+                                        Text="Clone"
+                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:PublicTripsViewModel}}, Path=CloneTripCommand}"
+                                        CommandParameter="{Binding .}"
+                                        VerticalOptions="Center"
+                                        HeightRequest="36"
+                                        CornerRadius="18"
+                                        FontSize="12"
+                                        Padding="15,0" />
+
+                                <!-- Description -->
+                                <Label Grid.Row="1"
+                                       Grid.Column="0"
+                                       Text="{Binding Description}"
+                                       FontSize="13"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}"
+                                       LineBreakMode="TailTruncation"
+                                       MaxLines="2"
+                                       Margin="0,5,10,0"
+                                       IsVisible="{Binding Description, Converter={StaticResource IsNotNullConverter}}" />
+
+                                <!-- Stats Row -->
+                                <HorizontalStackLayout Grid.Row="2"
+                                                       Grid.Column="0"
+                                                       Spacing="15"
+                                                       Margin="0,8,0,0">
+                                    <HorizontalStackLayout Spacing="4">
+                                        <Label Text="&#x1F4CD;"
+                                               FontSize="12" />
+                                        <Label Text="{Binding PlaceCount, StringFormat='{0} places'}"
+                                               FontSize="12"
+                                               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                    </HorizontalStackLayout>
+                                    <HorizontalStackLayout Spacing="4">
+                                        <Label Text="&#x1F5FA;"
+                                               FontSize="12" />
+                                        <Label Text="{Binding RegionCount, StringFormat='{0} regions'}"
+                                               FontSize="12"
+                                               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                    </HorizontalStackLayout>
+                                </HorizontalStackLayout>
+
+                                <!-- Author and Date -->
+                                <HorizontalStackLayout Grid.Row="3"
+                                                       Grid.Column="0"
+                                                       Spacing="10"
+                                                       Margin="0,5,0,0">
+                                    <Label Text="{Binding AuthorName, StringFormat='by {0}'}"
+                                           FontSize="11"
+                                           TextColor="{AppThemeBinding Light={StaticResource Gray400}, Dark={StaticResource Gray500}}"
+                                           IsVisible="{Binding AuthorName, Converter={StaticResource IsNotNullConverter}}" />
+                                    <Label Text="{Binding UpdatedAt, StringFormat='Updated {0:MMM d, yyyy}'}"
+                                           FontSize="11"
+                                           TextColor="{AppThemeBinding Light={StaticResource Gray400}, Dark={StaticResource Gray500}}" />
+                                </HorizontalStackLayout>
+
+                            </Grid>
+                        </Frame>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+
+                <!-- Footer (loading more indicator) -->
+                <CollectionView.Footer>
+                    <ActivityIndicator IsRunning="{Binding IsLoadingMore}"
+                                       IsVisible="{Binding IsLoadingMore}"
+                                       Color="{StaticResource Primary}"
+                                       HeightRequest="40"
+                                       Margin="0,10" />
+                </CollectionView.Footer>
+
+            </CollectionView>
+        </RefreshView>
+
+        <!-- Cloning Overlay -->
+        <Grid Grid.RowSpan="3"
+              IsVisible="{Binding IsCloning}"
+              BackgroundColor="#80000000">
+            <Frame VerticalOptions="Center"
+                   HorizontalOptions="Center"
+                   Padding="30"
+                   CornerRadius="16"
+                   BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
+                <VerticalStackLayout Spacing="15">
+                    <ActivityIndicator IsRunning="True"
+                                       Color="{StaticResource Primary}" />
+                    <Label Text="Cloning trip..."
+                           HorizontalOptions="Center"
+                           FontSize="14" />
+                </VerticalStackLayout>
+            </Frame>
+        </Grid>
+
+    </Grid>
+
+</ContentPage>

@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:WayfarerMobile.ViewModels"
+             xmlns:sfProgress="clr-namespace:Syncfusion.Maui.Toolkit.ProgressBar;assembly=Syncfusion.Maui.Toolkit"
+             xmlns:sfBusy="clr-namespace:Syncfusion.Maui.Toolkit.BusyIndicator;assembly=Syncfusion.Maui.Toolkit"
+             x:Class="WayfarerMobile.Views.Onboarding.OnboardingPage"
+             x:DataType="vm:OnboardingViewModel"
+             Shell.NavBarIsVisible="False"
+             BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
+
+    <Grid RowDefinitions="Auto,*,Auto" Padding="20">
+
+        <!-- Progress indicator at top -->
+        <VerticalStackLayout Grid.Row="0" Spacing="10" Margin="0,20,0,20">
+            <sfProgress:SfLinearProgressBar Progress="{Binding StepProgress}"
+                                            ProgressHeight="6"
+                                            TrackHeight="6"
+                                            ProgressFill="{StaticResource Primary}"
+                                            TrackFill="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+            <Label Text="{Binding CurrentStep, StringFormat='Step {0:N0} of 6'}"
+                   FontSize="12"
+                   HorizontalOptions="Center"
+                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+        </VerticalStackLayout>
+
+        <!-- Main content area -->
+        <ScrollView Grid.Row="1">
+            <VerticalStackLayout Spacing="30" VerticalOptions="Center" Padding="0,20">
+
+                <!-- Step icon -->
+                <Label Text="{Binding CurrentStepIcon}"
+                       FontSize="80"
+                       HorizontalOptions="Center" />
+
+                <!-- Step title -->
+                <Label Text="{Binding CurrentStepTitle}"
+                       FontSize="24"
+                       FontAttributes="Bold"
+                       HorizontalOptions="Center"
+                       HorizontalTextAlignment="Center" />
+
+                <!-- Step description -->
+                <Label Text="{Binding CurrentStepDescription}"
+                       FontSize="16"
+                       HorizontalOptions="Center"
+                       HorizontalTextAlignment="Center"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}"
+                       Margin="20,0" />
+
+                <!-- Permission request button (for permission steps) -->
+                <Button Text="{Binding RequestButtonText}"
+                        Command="{Binding RequestPermissionCommand}"
+                        IsVisible="{Binding ShowRequestButton}"
+                        IsEnabled="{Binding CurrentPermissionGranted, Converter={StaticResource InvertedBoolConverter}}"
+                        BackgroundColor="{Binding CurrentPermissionGranted, Converter={StaticResource BoolToColorConverter}}"
+                        TextColor="White"
+                        FontSize="16"
+                        HeightRequest="50"
+                        CornerRadius="25"
+                        Margin="40,10" />
+
+                <!-- Server setup section (for last step) -->
+                <VerticalStackLayout IsVisible="{Binding IsLastStep}" Spacing="15" Margin="20,0">
+
+                    <Button Text="Scan QR Code"
+                            Command="{Binding ScanQrCodeCommand}"
+                            BackgroundColor="{StaticResource Primary}"
+                            TextColor="White"
+                            FontSize="16"
+                            HeightRequest="50"
+                            CornerRadius="25" />
+
+                    <Label Text="- or -"
+                           HorizontalOptions="Center"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+
+                    <Entry Placeholder="https://your-server.com"
+                           Text="{Binding ServerUrl}"
+                           Keyboard="Url"
+                           HeightRequest="50" />
+
+                    <Button Text="Save Server URL"
+                            Command="{Binding SaveServerUrlCommand}"
+                            Style="{StaticResource DarkButton}"
+                            HeightRequest="44"
+                            CornerRadius="22" />
+
+                    <Label Text="Server configured"
+                           IsVisible="{Binding ServerConfigured}"
+                           TextColor="{StaticResource Primary}"
+                           HorizontalOptions="Center"
+                           FontAttributes="Bold" />
+                </VerticalStackLayout>
+
+                <!-- Open settings link -->
+                <Label IsVisible="{Binding ShowRequestButton}">
+                    <Label.FormattedText>
+                        <FormattedString>
+                            <Span Text="Having trouble? "
+                                  TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            <Span Text="Open Settings"
+                                  TextColor="{StaticResource Primary}"
+                                  TextDecorations="Underline">
+                                <Span.GestureRecognizers>
+                                    <TapGestureRecognizer Command="{Binding OpenSettingsCommand}" />
+                                </Span.GestureRecognizers>
+                            </Span>
+                        </FormattedString>
+                    </Label.FormattedText>
+                    <Label.HorizontalOptions>Center</Label.HorizontalOptions>
+                </Label>
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- Bottom navigation buttons -->
+        <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" Margin="0,20,0,0">
+
+            <!-- Back button -->
+            <Button Grid.Column="0"
+                    Text="Back"
+                    Command="{Binding PreviousCommand}"
+                    IsVisible="{Binding IsFirstStep, Converter={StaticResource InvertedBoolConverter}}"
+                    Style="{StaticResource DarkButton}"
+                    WidthRequest="100"
+                    HeightRequest="44"
+                    CornerRadius="22" />
+
+            <!-- Skip button (center) -->
+            <Button Grid.Column="1"
+                    Text="Skip"
+                    Command="{Binding SkipCommand}"
+                    IsVisible="{Binding ShowSkipButton}"
+                    BackgroundColor="Transparent"
+                    TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
+                    HorizontalOptions="Center"
+                    HeightRequest="44" />
+
+            <!-- Next/Finish button -->
+            <Button Grid.Column="2"
+                    Text="{Binding NextButtonText}"
+                    Command="{Binding NextCommand}"
+                    BackgroundColor="{StaticResource Primary}"
+                    TextColor="White"
+                    WidthRequest="120"
+                    HeightRequest="44"
+                    CornerRadius="22" />
+
+        </Grid>
+
+        <!-- Loading overlay -->
+        <sfBusy:SfBusyIndicator Grid.RowSpan="3"
+                                IsRunning="{Binding IsBusy}"
+                                IsVisible="{Binding IsBusy}"
+                                AnimationType="CircularMaterial"
+                                IndicatorColor="{StaticResource Primary}"
+                                OverlayFill="{AppThemeBinding Light=#80FFFFFF, Dark=#80000000}" />
+
+    </Grid>
+
+</ContentPage>

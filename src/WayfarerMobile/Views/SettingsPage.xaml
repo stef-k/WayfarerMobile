@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:WayfarerMobile.ViewModels"
+             xmlns:sfExpander="clr-namespace:Syncfusion.Maui.Toolkit.Expander;assembly=Syncfusion.Maui.Toolkit"
+             xmlns:sfSwitch="clr-namespace:Syncfusion.Maui.Toolkit.Switch;assembly=Syncfusion.Maui.Toolkit"
+             x:Class="WayfarerMobile.Views.SettingsPage"
+             x:DataType="vm:SettingsViewModel"
+             Title="{Binding Title}">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="15" Spacing="10">
+
+            <!-- Account Section -->
+            <sfExpander:SfExpander IsExpanded="True">
+                <sfExpander:SfExpander.Header>
+                    <Grid HeightRequest="48" Padding="10,0">
+                        <Label Text="Account"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               VerticalOptions="Center" />
+                    </Grid>
+                </sfExpander:SfExpander.Header>
+                <sfExpander:SfExpander.Content>
+                    <VerticalStackLayout Padding="15" Spacing="10">
+                        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsLoggedIn}">
+                            <VerticalStackLayout Grid.Column="0">
+                                <Label Text="{Binding UserEmail}"
+                                       FontSize="14" />
+                                <Label Text="{Binding LastSyncText, StringFormat='Last sync: {0}'}"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            </VerticalStackLayout>
+                            <Button Grid.Column="1"
+                                    Text="Logout"
+                                    Command="{Binding LogoutCommand}"
+                                    Style="{StaticResource DarkButton}"
+                                    HeightRequest="36" />
+                        </Grid>
+
+                        <VerticalStackLayout IsVisible="{Binding IsLoggedIn, Converter={StaticResource InvertedBoolConverter}}"
+                                             Spacing="10">
+                            <Label Text="Not connected to server"
+                                   FontSize="14"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            <Button Text="Scan QR Code to Connect"
+                                    Command="{Binding ScanQrCodeCommand}"
+                                    HeightRequest="44" />
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </sfExpander:SfExpander.Content>
+            </sfExpander:SfExpander>
+
+            <!-- Timeline Tracking Section -->
+            <sfExpander:SfExpander IsExpanded="True">
+                <sfExpander:SfExpander.Header>
+                    <Grid HeightRequest="48" Padding="10,0">
+                        <Label Text="Timeline Tracking"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               VerticalOptions="Center" />
+                    </Grid>
+                </sfExpander:SfExpander.Header>
+                <sfExpander:SfExpander.Content>
+                    <VerticalStackLayout Padding="15" Spacing="15">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <VerticalStackLayout Grid.Column="0">
+                                <Label Text="Enable Timeline Tracking"
+                                       FontSize="14" />
+                                <Label Text="Log locations to server for timeline history"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            </VerticalStackLayout>
+                            <sfSwitch:SfSwitch Grid.Column="1"
+                                               IsOn="{Binding TimelineTrackingEnabled}"
+                                               VisualType="Cupertino" />
+                        </Grid>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+
+                        <VerticalStackLayout Spacing="5">
+                            <Label Text="{Binding LocationTimeThreshold, StringFormat='Time threshold: {0} min'}"
+                                   FontSize="14" />
+                            <Label Text="Minimum time between logged locations"
+                                   FontSize="12"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout Spacing="5">
+                            <Label Text="{Binding LocationDistanceThreshold, StringFormat='Distance threshold: {0} m'}"
+                                   FontSize="14" />
+                            <Label Text="Minimum distance between logged locations"
+                                   FontSize="12"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </sfExpander:SfExpander.Content>
+            </sfExpander:SfExpander>
+
+            <!-- Map Section -->
+            <sfExpander:SfExpander IsExpanded="False">
+                <sfExpander:SfExpander.Header>
+                    <Grid HeightRequest="48" Padding="10,0">
+                        <Label Text="Map"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               VerticalOptions="Center" />
+                    </Grid>
+                </sfExpander:SfExpander.Header>
+                <sfExpander:SfExpander.Content>
+                    <VerticalStackLayout Padding="15" Spacing="15">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <VerticalStackLayout Grid.Column="0">
+                                <Label Text="Offline Map Cache"
+                                       FontSize="14" />
+                                <Label Text="Cache map tiles for offline use"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            </VerticalStackLayout>
+                            <sfSwitch:SfSwitch Grid.Column="1"
+                                               IsOn="{Binding MapOfflineCacheEnabled}"
+                                               VisualType="Cupertino" />
+                        </Grid>
+                    </VerticalStackLayout>
+                </sfExpander:SfExpander.Content>
+            </sfExpander:SfExpander>
+
+            <!-- Appearance Section -->
+            <sfExpander:SfExpander IsExpanded="False">
+                <sfExpander:SfExpander.Header>
+                    <Grid HeightRequest="48" Padding="10,0">
+                        <Label Text="Appearance"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               VerticalOptions="Center" />
+                    </Grid>
+                </sfExpander:SfExpander.Header>
+                <sfExpander:SfExpander.Content>
+                    <VerticalStackLayout Padding="15" Spacing="15">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <VerticalStackLayout Grid.Column="0">
+                                <Label Text="Dark Mode"
+                                       FontSize="14" />
+                                <Label Text="Use dark theme"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            </VerticalStackLayout>
+                            <sfSwitch:SfSwitch Grid.Column="1"
+                                               IsOn="{Binding DarkModeEnabled}"
+                                               VisualType="Cupertino" />
+                        </Grid>
+                    </VerticalStackLayout>
+                </sfExpander:SfExpander.Content>
+            </sfExpander:SfExpander>
+
+            <!-- Security Section -->
+            <sfExpander:SfExpander IsExpanded="False">
+                <sfExpander:SfExpander.Header>
+                    <Grid HeightRequest="48" Padding="10,0">
+                        <Label Text="Security"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               VerticalOptions="Center" />
+                    </Grid>
+                </sfExpander:SfExpander.Header>
+                <sfExpander:SfExpander.Content>
+                    <VerticalStackLayout Padding="15" Spacing="15">
+                        <!-- PIN Lock Toggle -->
+                        <Grid ColumnDefinitions="*,Auto">
+                            <VerticalStackLayout Grid.Column="0">
+                                <Label Text="PIN Lock"
+                                       FontSize="14" />
+                                <Label Text="Require PIN to access menu"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            </VerticalStackLayout>
+                            <sfSwitch:SfSwitch Grid.Column="1"
+                                               IsOn="{Binding PinSecurity.IsPinLockEnabled}"
+                                               IsEnabled="{Binding PinSecurity.IsBusy, Converter={StaticResource InvertedBoolConverter}}"
+                                               VisualType="Cupertino" />
+                        </Grid>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+
+                        <!-- Set/Change PIN Button -->
+                        <Button Text="{Binding PinSecurity.SetPinButtonText}"
+                                Command="{Binding PinSecurity.SetOrChangePinCommand}"
+                                IsEnabled="{Binding PinSecurity.IsBusy, Converter={StaticResource InvertedBoolConverter}}"
+                                Style="{StaticResource DarkButton}"
+                                HeightRequest="44" />
+
+                        <!-- Remove PIN Button (only when PIN configured) -->
+                        <Button Text="Remove PIN Code"
+                                Command="{Binding PinSecurity.RemovePinCommand}"
+                                IsVisible="{Binding PinSecurity.IsPinConfigured}"
+                                IsEnabled="{Binding PinSecurity.IsBusy, Converter={StaticResource InvertedBoolConverter}}"
+                                Style="{StaticResource DangerButton}"
+                                HeightRequest="44" />
+                    </VerticalStackLayout>
+                </sfExpander:SfExpander.Content>
+            </sfExpander:SfExpander>
+
+            <!-- Data Section -->
+            <sfExpander:SfExpander IsExpanded="False">
+                <sfExpander:SfExpander.Header>
+                    <Grid HeightRequest="48" Padding="10,0">
+                        <Label Text="Data"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               VerticalOptions="Center" />
+                    </Grid>
+                </sfExpander:SfExpander.Header>
+                <sfExpander:SfExpander.Content>
+                    <VerticalStackLayout Padding="15" Spacing="15">
+                        <Button Text="Clear All Data"
+                                Command="{Binding ClearDataCommand}"
+                                Style="{StaticResource DangerButton}"
+                                HeightRequest="44" />
+                    </VerticalStackLayout>
+                </sfExpander:SfExpander.Content>
+            </sfExpander:SfExpander>
+
+            <!-- About Section -->
+            <sfExpander:SfExpander IsExpanded="False">
+                <sfExpander:SfExpander.Header>
+                    <Grid HeightRequest="48" Padding="10,0">
+                        <Label Text="About"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               VerticalOptions="Center" />
+                    </Grid>
+                </sfExpander:SfExpander.Header>
+                <sfExpander:SfExpander.Content>
+                    <VerticalStackLayout Padding="15" Spacing="10">
+                        <Label Text="{Binding AppVersion}"
+                               FontSize="14"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+
+                        <Button Text="About WayfarerMobile"
+                                Command="{Binding ShowAboutCommand}"
+                                Style="{StaticResource DarkButton}"
+                                HeightRequest="44" />
+                    </VerticalStackLayout>
+                </sfExpander:SfExpander.Content>
+            </sfExpander:SfExpander>
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>

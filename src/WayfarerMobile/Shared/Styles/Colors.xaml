@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<?xaml-comp compile="true" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+
+    <!-- Primary Colors (Wayfarer Purple Theme) -->
+    <Color x:Key="Primary">#512BD4</Color>
+    <Color x:Key="PrimaryDark">#3B1F9E</Color>
+    <Color x:Key="PrimaryLight">#7B5EDC</Color>
+
+    <!-- Secondary Colors -->
+    <Color x:Key="Secondary">#DFD8F7</Color>
+    <Color x:Key="SecondaryDark">#A69BD1</Color>
+
+    <!-- Accent Colors -->
+    <Color x:Key="Accent">#2B0B98</Color>
+
+    <!-- Status Colors -->
+    <Color x:Key="Success">#4CAF50</Color>
+    <Color x:Key="Warning">#FF9800</Color>
+    <Color x:Key="Error">#F44336</Color>
+    <Color x:Key="Info">#2196F3</Color>
+
+    <!-- Tracking Status Colors -->
+    <Color x:Key="TrackingActive">#4CAF50</Color>
+    <Color x:Key="TrackingPaused">#FF9800</Color>
+    <Color x:Key="TrackingOff">#9E9E9E</Color>
+
+    <!-- Neutral Colors -->
+    <Color x:Key="White">#FFFFFF</Color>
+    <Color x:Key="Black">#000000</Color>
+    <Color x:Key="Gray100">#F5F5F5</Color>
+    <Color x:Key="Gray200">#EEEEEE</Color>
+    <Color x:Key="Gray300">#E0E0E0</Color>
+    <Color x:Key="Gray400">#BDBDBD</Color>
+    <Color x:Key="Gray500">#9E9E9E</Color>
+    <Color x:Key="Gray600">#757575</Color>
+    <Color x:Key="Gray700">#616161</Color>
+    <Color x:Key="Gray800">#424242</Color>
+    <Color x:Key="Gray900">#212121</Color>
+
+    <!-- Light Theme -->
+    <Color x:Key="LightBackground">#FFFFFF</Color>
+    <Color x:Key="LightSurface">#F5F5F5</Color>
+    <Color x:Key="LightOnBackground">#212121</Color>
+    <Color x:Key="LightOnSurface">#424242</Color>
+
+    <!-- Dark Theme -->
+    <Color x:Key="DarkBackground">#121212</Color>
+    <Color x:Key="DarkSurface">#1E1E1E</Color>
+    <Color x:Key="DarkOnBackground">#FFFFFF</Color>
+    <Color x:Key="DarkOnSurface">#E0E0E0</Color>
+
+    <!-- Map Colors -->
+    <Color x:Key="LocationIndicator">#2196F3</Color>
+    <Color x:Key="LocationAccuracyCircle">#332196F3</Color>
+    <Color x:Key="TripRoute">#512BD4</Color>
+    <Color x:Key="TripPlace">#4CAF50</Color>
+
+</ResourceDictionary>

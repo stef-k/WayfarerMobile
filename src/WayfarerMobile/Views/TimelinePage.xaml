@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+             xmlns:viewmodels="clr-namespace:WayfarerMobile.ViewModels"
+             x:Class="WayfarerMobile.Views.TimelinePage"
+             x:DataType="viewmodels:TimelineViewModel"
+             Title="Timeline"
+             BackgroundColor="{StaticResource Background}">
+
+    <Grid RowDefinitions="Auto,*">
+        <!-- Date Navigation Header -->
+        <Border Grid.Row="0"
+                BackgroundColor="{StaticResource Surface}"
+                Padding="16"
+                StrokeThickness="0">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <!-- Previous Day Button -->
+                <Button Grid.Column="0"
+                        Text="◀"
+                        Command="{Binding PreviousDayCommand}"
+                        BackgroundColor="Transparent"
+                        TextColor="{StaticResource Primary}"
+                        FontSize="20"
+                        WidthRequest="44"
+                        HeightRequest="44" />
+
+                <!-- Current Date -->
+                <VerticalStackLayout Grid.Column="1"
+                                     HorizontalOptions="Center"
+                                     VerticalOptions="Center"
+                                     Spacing="4">
+                    <Label Text="{Binding SelectedDateText}"
+                           Style="{StaticResource Headline}"
+                           HorizontalOptions="Center" />
+                    <Label Text="{Binding TotalCount, StringFormat='{0} locations'}"
+                           Style="{StaticResource Caption}"
+                           HorizontalOptions="Center"
+                           TextColor="{StaticResource TextSecondary}" />
+                </VerticalStackLayout>
+
+                <!-- Next Day / Today Button -->
+                <HorizontalStackLayout Grid.Column="2" Spacing="4">
+                    <Button Text="Today"
+                            Command="{Binding TodayCommand}"
+                            BackgroundColor="{StaticResource Primary}"
+                            TextColor="White"
+                            FontSize="12"
+                            Padding="12,8"
+                            CornerRadius="16"
+                            HeightRequest="32" />
+                    <Button Text="▶"
+                            Command="{Binding NextDayCommand}"
+                            BackgroundColor="Transparent"
+                            TextColor="{StaticResource Primary}"
+                            FontSize="20"
+                            WidthRequest="44"
+                            HeightRequest="44" />
+                </HorizontalStackLayout>
+            </Grid>
+        </Border>
+
+        <!-- Timeline Content -->
+        <RefreshView Grid.Row="1"
+                     IsRefreshing="{Binding IsRefreshing}"
+                     Command="{Binding RefreshCommand}">
+            <Grid>
+                <!-- Empty State -->
+                <VerticalStackLayout IsVisible="{Binding IsEmpty}"
+                                     VerticalOptions="Center"
+                                     HorizontalOptions="Center"
+                                     Spacing="16"
+                                     Padding="32">
+                    <Label Text="📍"
+                           FontSize="64"
+                           HorizontalOptions="Center" />
+                    <Label Text="No locations recorded"
+                           Style="{StaticResource Headline}"
+                           HorizontalOptions="Center" />
+                    <Label Text="Location data for this day will appear here once tracking is active."
+                           Style="{StaticResource Body}"
+                           HorizontalOptions="Center"
+                           HorizontalTextAlignment="Center"
+                           TextColor="{StaticResource TextSecondary}" />
+                </VerticalStackLayout>
+
+                <!-- Timeline List with Grouping -->
+                <CollectionView x:Name="TimelineCollectionView"
+                                ItemsSource="{Binding TimelineGroups}"
+                                IsVisible="{Binding IsEmpty, Converter={StaticResource InvertedBoolConverter}}"
+                                IsGrouped="True"
+                                SelectionMode="None">
+
+                    <!-- Group Header Template -->
+                    <CollectionView.GroupHeaderTemplate>
+                        <DataTemplate x:DataType="viewmodels:TimelineGroup">
+                            <Border BackgroundColor="{StaticResource SurfaceVariant}"
+                                    Padding="16,12"
+                                    StrokeThickness="0">
+                                <HorizontalStackLayout Spacing="8">
+                                    <Label Text="🕐"
+                                           FontSize="16"
+                                           VerticalOptions="Center" />
+                                    <Label Text="{Binding Header}"
+                                           Style="{StaticResource SubHeadline}"
+                                           VerticalOptions="Center" />
+                                    <Label Text="{Binding Count, StringFormat='({0})'}"
+                                           Style="{StaticResource Caption}"
+                                           TextColor="{StaticResource TextSecondary}"
+                                           VerticalOptions="Center" />
+                                </HorizontalStackLayout>
+                            </Border>
+                        </DataTemplate>
+                    </CollectionView.GroupHeaderTemplate>
+
+                    <!-- Item Template -->
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="viewmodels:TimelineItem">
+                            <Border BackgroundColor="{StaticResource Surface}"
+                                    Padding="16,12"
+                                    Margin="0,0,0,1"
+                                    StrokeThickness="0">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                    <!-- Time Column -->
+                                    <VerticalStackLayout Grid.Column="0"
+                                                         VerticalOptions="Center"
+                                                         WidthRequest="70">
+                                        <Label Text="{Binding TimeText}"
+                                               Style="{StaticResource SubHeadline}"
+                                               FontAttributes="Bold" />
+                                        <Label Text="{Binding ProviderText}"
+                                               Style="{StaticResource Caption}"
+                                               TextColor="{StaticResource TextSecondary}" />
+                                    </VerticalStackLayout>
+
+                                    <!-- Location Details -->
+                                    <VerticalStackLayout Grid.Column="1"
+                                                         VerticalOptions="Center"
+                                                         Spacing="2">
+                                        <Label Text="{Binding CoordinatesText}"
+                                               Style="{StaticResource Body}" />
+                                        <HorizontalStackLayout Spacing="8">
+                                            <HorizontalStackLayout Spacing="4">
+                                                <Ellipse WidthRequest="8"
+                                                         HeightRequest="8"
+                                                         Fill="{Binding AccuracyColor}"
+                                                         VerticalOptions="Center" />
+                                                <Label Text="{Binding AccuracyText}"
+                                                       Style="{StaticResource Caption}"
+                                                       TextColor="{StaticResource TextSecondary}" />
+                                            </HorizontalStackLayout>
+                                            <Label Text="{Binding SpeedText}"
+                                                   Style="{StaticResource Caption}"
+                                                   TextColor="{StaticResource TextSecondary}"
+                                                   IsVisible="{Binding SpeedText, Converter={StaticResource IsNotNullConverter}}" />
+                                        </HorizontalStackLayout>
+                                    </VerticalStackLayout>
+
+                                    <!-- Sync Status -->
+                                    <Label Grid.Column="2"
+                                           Text="{Binding SyncStatusIcon}"
+                                           FontSize="18"
+                                           VerticalOptions="Center"
+                                           HorizontalOptions="End" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+            </Grid>
+        </RefreshView>
+
+        <!-- Loading Overlay -->
+        <Border Grid.RowSpan="2"
+                IsVisible="{Binding IsBusy}"
+                BackgroundColor="#80000000">
+            <ActivityIndicator IsRunning="{Binding IsBusy}"
+                               Color="{StaticResource Primary}"
+                               VerticalOptions="Center"
+                               HorizontalOptions="Center" />
+        </Border>
+    </Grid>
+</ContentPage>

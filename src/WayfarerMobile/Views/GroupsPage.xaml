@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:viewmodels="clr-namespace:WayfarerMobile.ViewModels"
+             xmlns:models="clr-namespace:WayfarerMobile.Core.Models"
+             xmlns:mapsui="clr-namespace:Mapsui.UI.Maui;assembly=Mapsui.UI.Maui"
+             x:Class="WayfarerMobile.Views.GroupsPage"
+             x:DataType="viewmodels:GroupsViewModel"
+             Title="{Binding Title}">
+
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- Not Configured Message -->
+        <VerticalStackLayout Grid.Row="0" Grid.RowSpan="2"
+                            IsVisible="{Binding IsConfigured, Converter={StaticResource InvertedBoolConverter}}"
+                            VerticalOptions="Center"
+                            HorizontalOptions="Center"
+                            Spacing="16"
+                            Padding="24">
+            <Label Text="Not Configured"
+                   FontSize="24"
+                   FontAttributes="Bold"
+                   HorizontalTextAlignment="Center" />
+            <Label Text="Please configure your server URL and API token in Settings to view your groups."
+                   FontSize="14"
+                   HorizontalTextAlignment="Center"
+                   TextColor="{StaticResource Gray500}" />
+        </VerticalStackLayout>
+
+        <!-- Main Content (when configured) -->
+        <Grid Grid.Row="0" Grid.RowSpan="2"
+              IsVisible="{Binding IsConfigured}"
+              RowDefinitions="Auto,Auto,*">
+
+            <!-- Group Selector -->
+            <Frame Grid.Row="0"
+                   Padding="12"
+                   Margin="8"
+                   CornerRadius="8"
+                   BorderColor="{StaticResource Gray200}">
+                <Grid ColumnDefinitions="*,Auto">
+                    <Picker Title="Select Group"
+                            ItemsSource="{Binding Groups}"
+                            SelectedItem="{Binding SelectedGroup}"
+                            ItemDisplayBinding="{Binding Name}"
+                            IsEnabled="{Binding IsLoadingGroups, Converter={StaticResource InvertedBoolConverter}}" />
+
+                    <ActivityIndicator Grid.Column="1"
+                                      IsRunning="{Binding IsLoadingGroups}"
+                                      IsVisible="{Binding IsLoadingGroups}"
+                                      WidthRequest="24"
+                                      HeightRequest="24"
+                                      Color="{StaticResource Primary}" />
+
+                    <Button Grid.Column="1"
+                            Text="↻"
+                            FontSize="18"
+                            WidthRequest="44"
+                            HeightRequest="44"
+                            Padding="0"
+                            Command="{Binding LoadGroupsCommand}"
+                            IsVisible="{Binding IsLoadingGroups, Converter={StaticResource InvertedBoolConverter}}"
+                            BackgroundColor="Transparent"
+                            TextColor="{StaticResource Primary}" />
+                </Grid>
+            </Frame>
+
+            <!-- View Toggle -->
+            <HorizontalStackLayout Grid.Row="1"
+                                   HorizontalOptions="Center"
+                                   Spacing="8"
+                                   Margin="8,0">
+                <Button Text="📋 List"
+                        Command="{Binding ToggleViewCommand}"
+                        BackgroundColor="{Binding IsListView, Converter={StaticResource BoolToColorConverter}, ConverterParameter='Primary|Gray200'}"
+                        TextColor="{Binding IsListView, Converter={StaticResource BoolToColorConverter}, ConverterParameter='White|Gray600'}"
+                        Padding="16,8"
+                        CornerRadius="16"
+                        FontSize="14" />
+                <Button Text="🗺️ Map"
+                        Command="{Binding ToggleViewCommand}"
+                        BackgroundColor="{Binding IsMapView, Converter={StaticResource BoolToColorConverter}, ConverterParameter='Primary|Gray200'}"
+                        TextColor="{Binding IsMapView, Converter={StaticResource BoolToColorConverter}, ConverterParameter='White|Gray600'}"
+                        Padding="16,8"
+                        CornerRadius="16"
+                        FontSize="14" />
+            </HorizontalStackLayout>
+
+            <!-- List View -->
+            <RefreshView Grid.Row="2"
+                        Command="{Binding LoadMembersCommand}"
+                        IsRefreshing="{Binding IsLoadingMembers}"
+                        IsVisible="{Binding IsListView}">
+                <CollectionView ItemsSource="{Binding Members}"
+                               SelectionMode="None"
+                               Margin="8,0">
+
+                    <CollectionView.EmptyView>
+                        <VerticalStackLayout VerticalOptions="Center"
+                                            HorizontalOptions="Center"
+                                            Spacing="8"
+                                            Padding="24">
+                            <Label Text="{Binding HasSelectedGroup, Converter={StaticResource BoolToTextConverter}, ConverterParameter='No members found|Select a group to see members'}"
+                                   FontSize="16"
+                                   TextColor="{StaticResource Gray500}"
+                                   HorizontalTextAlignment="Center" />
+                        </VerticalStackLayout>
+                    </CollectionView.EmptyView>
+
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="models:GroupMember">
+                            <Frame Margin="0,4"
+                                   Padding="12"
+                                   CornerRadius="8"
+                                   BorderColor="{StaticResource Gray200}">
+                                <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
+
+                                    <!-- Color indicator -->
+                                    <BoxView Grid.RowSpan="2"
+                                            WidthRequest="8"
+                                            HeightRequest="44"
+                                            CornerRadius="4"
+                                            Color="{Binding ColorHex}"
+                                            VerticalOptions="Center" />
+
+                                    <!-- Name and Role -->
+                                    <VerticalStackLayout Grid.Column="1" Margin="12,0,0,0">
+                                        <HorizontalStackLayout Spacing="8">
+                                            <Label Text="{Binding DisplayText}"
+                                                   FontSize="16"
+                                                   FontAttributes="Bold" />
+                                            <Label Text="(You)"
+                                                   FontSize="14"
+                                                   TextColor="{StaticResource Primary}"
+                                                   IsVisible="{Binding IsSelf}" />
+                                        </HorizontalStackLayout>
+                                        <Label Text="{Binding GroupRole}"
+                                               FontSize="12"
+                                               TextColor="{StaticResource Gray500}" />
+                                    </VerticalStackLayout>
+
+                                    <!-- Location Info -->
+                                    <VerticalStackLayout Grid.Column="1"
+                                                        Grid.Row="1"
+                                                        Margin="12,4,0,0"
+                                                        IsVisible="{Binding LastLocation, Converter={StaticResource IsNotNullConverter}}">
+                                        <Label Text="{Binding LastLocation.Address, StringFormat='📍 {0}'}"
+                                               FontSize="12"
+                                               TextColor="{StaticResource Gray600}"
+                                               LineBreakMode="TailTruncation"
+                                               MaxLines="1" />
+                                        <Label FontSize="11"
+                                               TextColor="{StaticResource Gray500}">
+                                            <Label.Text>
+                                                <Binding Path="LastLocation.Timestamp"
+                                                        StringFormat="{}{0:MMM dd, HH:mm}" />
+                                            </Label.Text>
+                                        </Label>
+                                    </VerticalStackLayout>
+
+                                    <!-- Live indicator -->
+                                    <Frame Grid.Column="2"
+                                          Grid.RowSpan="2"
+                                          VerticalOptions="Center"
+                                          Padding="8,4"
+                                          CornerRadius="12"
+                                          IsVisible="{Binding LastLocation.IsLive}"
+                                          BackgroundColor="{StaticResource Success}">
+                                        <Label Text="LIVE"
+                                               FontSize="10"
+                                               FontAttributes="Bold"
+                                               TextColor="White" />
+                                    </Frame>
+
+                                    <!-- Offline indicator -->
+                                    <Label Grid.Column="2"
+                                          Grid.RowSpan="2"
+                                          Text="Offline"
+                                          FontSize="12"
+                                          TextColor="{StaticResource Gray400}"
+                                          VerticalOptions="Center"
+                                          IsVisible="{Binding LastLocation, Converter={StaticResource IsNullConverter}}" />
+
+                                </Grid>
+                            </Frame>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+            </RefreshView>
+
+            <!-- Map View -->
+            <Grid Grid.Row="2"
+                  IsVisible="{Binding IsMapView}">
+                <mapsui:MapControl Map="{Binding Map}" />
+
+                <!-- Member Legend Overlay -->
+                <Frame Margin="8"
+                       Padding="8"
+                       CornerRadius="8"
+                       VerticalOptions="End"
+                       HorizontalOptions="Start"
+                       BackgroundColor="#E0FFFFFF"
+                       BorderColor="{StaticResource Gray300}"
+                       MaximumWidthRequest="200">
+                    <CollectionView ItemsSource="{Binding Members}"
+                                   SelectionMode="None"
+                                   MaximumHeightRequest="200">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="models:GroupMember">
+                                <HorizontalStackLayout Spacing="8" Padding="4,2">
+                                    <Ellipse WidthRequest="12"
+                                             HeightRequest="12"
+                                             Fill="{Binding ColorHex}"
+                                             VerticalOptions="Center" />
+                                    <Label Text="{Binding DisplayText}"
+                                           FontSize="12"
+                                           VerticalOptions="Center"
+                                           LineBreakMode="TailTruncation" />
+                                    <Label Text="●"
+                                           FontSize="8"
+                                           TextColor="{StaticResource Success}"
+                                           VerticalOptions="Center"
+                                           IsVisible="{Binding LastLocation.IsLive}" />
+                                </HorizontalStackLayout>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+                </Frame>
+            </Grid>
+
+            <!-- Error Message -->
+            <Frame Grid.Row="2"
+                  VerticalOptions="End"
+                  Margin="8"
+                  Padding="12"
+                  CornerRadius="8"
+                  BackgroundColor="#FFEBEE"
+                  IsVisible="{Binding ErrorMessage, Converter={StaticResource IsNotNullConverter}}">
+                <Label Text="{Binding ErrorMessage}"
+                       TextColor="#C62828"
+                       FontSize="14" />
+            </Frame>
+        </Grid>
+    </Grid>
+</ContentPage>

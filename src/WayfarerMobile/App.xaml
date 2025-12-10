@@ -1,0 +1,37 @@
+<?xml version = "1.0" encoding = "UTF-8" ?>
+<Application xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:WayfarerMobile"
+             xmlns:converters="clr-namespace:WayfarerMobile.Converters"
+             xmlns:zxing="clr-namespace:ZXing.Net.Maui;assembly=ZXing.Net.MAUI.Controls"
+             x:Class="WayfarerMobile.App">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Default MAUI Styles -->
+                <ResourceDictionary Source="Resources/Styles/Colors.xaml" />
+                <ResourceDictionary Source="Resources/Styles/Styles.xaml" />
+                <!-- Custom App Styles -->
+                <ResourceDictionary Source="Shared/Styles/Colors.xaml" />
+                <ResourceDictionary Source="Shared/Styles/Typography.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Converters -->
+            <converters:InvertedBoolConverter x:Key="InvertedBoolConverter" />
+            <converters:IsNotNullConverter x:Key="IsNotNullConverter" />
+            <converters:IsNullConverter x:Key="IsNullConverter" />
+            <converters:BoolToTextConverter x:Key="BoolToTextConverter" />
+            <converters:BoolToColorConverter x:Key="BoolToColorConverter" />
+            <converters:PercentToDecimalConverter x:Key="PercentToDecimalConverter" />
+            <converters:BoolToExpandIconConverter x:Key="BoolToExpandIconConverter" />
+            <converters:PercentToProgressConverter x:Key="PercentToProgressConverter" />
+            <converters:BoolToMuteIconConverter x:Key="BoolToMuteIconConverter" />
+
+            <!-- QR Scanner Options -->
+            <zxing:BarcodeReaderOptions x:Key="QrScannerOptions"
+                                         Formats="QrCode"
+                                         AutoRotate="True"
+                                         Multiple="False" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

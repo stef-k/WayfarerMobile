@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:viewmodels="clr-namespace:WayfarerMobile.ViewModels"
+             xmlns:mapsui="clr-namespace:Mapsui.UI.Maui;assembly=Mapsui.UI.Maui"
+             x:Class="WayfarerMobile.Views.CheckInPage"
+             x:DataType="viewmodels:CheckInViewModel"
+             Title="Check In"
+             BackgroundColor="{StaticResource Background}">
+
+    <Grid RowDefinitions="200,*,Auto" Padding="0">
+
+        <!-- Mini Map -->
+        <Grid Grid.Row="0">
+            <mapsui:MapControl Map="{Binding Map}" />
+
+            <!-- Location overlay -->
+            <Border Margin="8"
+                    Padding="8,4"
+                    VerticalOptions="End"
+                    HorizontalOptions="Start"
+                    BackgroundColor="#E0FFFFFF"
+                    StrokeThickness="0">
+                <HorizontalStackLayout Spacing="8">
+                    <Label Text="📍"
+                           FontSize="16"
+                           VerticalOptions="Center" />
+                    <Label Text="{Binding LocationText}"
+                           FontSize="12"
+                           VerticalOptions="Center" />
+                    <ActivityIndicator IsRunning="{Binding IsBusy}"
+                                       IsVisible="{Binding IsBusy}"
+                                       WidthRequest="16"
+                                       HeightRequest="16"
+                                       Color="{StaticResource Primary}" />
+                </HorizontalStackLayout>
+            </Border>
+
+            <!-- Refresh button -->
+            <Button Text="↻"
+                    FontSize="16"
+                    WidthRequest="40"
+                    HeightRequest="40"
+                    CornerRadius="20"
+                    Padding="0"
+                    Command="{Binding RefreshLocationCommand}"
+                    BackgroundColor="{StaticResource Primary}"
+                    TextColor="White"
+                    VerticalOptions="End"
+                    HorizontalOptions="End"
+                    Margin="8" />
+        </Grid>
+
+        <!-- Form -->
+        <ScrollView Grid.Row="1">
+            <VerticalStackLayout Spacing="16" Padding="16">
+
+                <!-- Activity Type -->
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="Activity Type"
+                           Style="{StaticResource SubHeadline}"
+                           FontAttributes="Bold" />
+                    <Frame Padding="0"
+                           CornerRadius="8"
+                           BorderColor="{StaticResource Gray200}">
+                        <Picker Title="Select Activity"
+                                ItemsSource="{Binding ActivityTypes}"
+                                SelectedItem="{Binding SelectedActivity}" />
+                    </Frame>
+                </VerticalStackLayout>
+
+                <!-- Notes -->
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="Notes (optional)"
+                           Style="{StaticResource SubHeadline}"
+                           FontAttributes="Bold" />
+                    <Frame Padding="4"
+                           CornerRadius="8"
+                           BorderColor="{StaticResource Gray200}">
+                        <Editor Text="{Binding Notes}"
+                                Placeholder="Add notes about this location..."
+                                HeightRequest="100"
+                                AutoSize="TextChanges" />
+                    </Frame>
+                </VerticalStackLayout>
+
+                <!-- Result Message -->
+                <Frame Padding="12"
+                       CornerRadius="8"
+                       IsVisible="{Binding ResultMessage, Converter={StaticResource IsNotNullConverter}}"
+                       BackgroundColor="{Binding IsSuccess, Converter={StaticResource BoolToColorConverter}, ConverterParameter='#E8F5E9|#FFEBEE'}">
+                    <Label Text="{Binding ResultMessage}"
+                           TextColor="{Binding IsSuccess, Converter={StaticResource BoolToColorConverter}, ConverterParameter='#2E7D32|#C62828'}"
+                           HorizontalTextAlignment="Center" />
+                </Frame>
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- Action Buttons -->
+        <Grid Grid.Row="2"
+              ColumnDefinitions="*,*"
+              ColumnSpacing="16"
+              Padding="16"
+              BackgroundColor="{StaticResource Surface}">
+
+            <Button Grid.Column="0"
+                    Text="Cancel"
+                    Command="{Binding CancelCommand}"
+                    BackgroundColor="{StaticResource Gray200}"
+                    TextColor="{StaticResource Gray600}"
+                    CornerRadius="8"
+                    HeightRequest="50" />
+
+            <Button Grid.Column="1"
+                    Text="{Binding IsSubmitting, Converter={StaticResource BoolToTextConverter}, ConverterParameter='Submitting...|Check In'}"
+                    Command="{Binding SubmitCheckInCommand}"
+                    IsEnabled="{Binding HasLocation}"
+                    BackgroundColor="{StaticResource Primary}"
+                    TextColor="White"
+                    CornerRadius="8"
+                    HeightRequest="50" />
+        </Grid>
+
+        <!-- Loading Overlay -->
+        <Border Grid.RowSpan="3"
+                IsVisible="{Binding IsSubmitting}"
+                BackgroundColor="#80000000">
+            <VerticalStackLayout VerticalOptions="Center"
+                                HorizontalOptions="Center"
+                                Spacing="16">
+                <ActivityIndicator IsRunning="True"
+                                   Color="{StaticResource Primary}"
+                                   WidthRequest="48"
+                                   HeightRequest="48" />
+                <Label Text="Submitting check-in..."
+                       TextColor="White"
+                       FontSize="16" />
+            </VerticalStackLayout>
+        </Border>
+    </Grid>
+</ContentPage>
