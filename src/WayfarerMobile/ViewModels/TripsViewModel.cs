@@ -112,6 +112,19 @@ public partial class TripsViewModel : BaseViewModel
     [ObservableProperty]
     private string? _navigationDestination;
 
+    /// <summary>
+    /// Gets or sets whether the sidebar drawer is open.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isSidebarOpen;
+
+    /// <summary>
+    /// Gets or sets the selected place in the sidebar.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelectedPlace))]
+    private TripPlace? _selectedPlace;
+
     #endregion
 
     #region Computed Properties
@@ -151,6 +164,11 @@ public partial class TripsViewModel : BaseViewModel
     /// Gets the map instance for binding.
     /// </summary>
     public Mapsui.Map Map => _mapService.Map;
+
+    /// <summary>
+    /// Gets whether a place is selected.
+    /// </summary>
+    public bool HasSelectedPlace => SelectedPlace != null;
 
     #endregion
 
@@ -280,7 +298,49 @@ public partial class TripsViewModel : BaseViewModel
         ShowingDetails = false;
         SelectedTrip = null;
         SelectedTripDetails = null;
+        SelectedPlace = null;
+        IsSidebarOpen = false;
         _mapService.ClearTripPlaces();
+    }
+
+    /// <summary>
+    /// Toggles the sidebar drawer open/closed.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleSidebar()
+    {
+        IsSidebarOpen = !IsSidebarOpen;
+    }
+
+    /// <summary>
+    /// Opens the sidebar drawer.
+    /// </summary>
+    [RelayCommand]
+    private void OpenSidebar()
+    {
+        IsSidebarOpen = true;
+    }
+
+    /// <summary>
+    /// Closes the sidebar drawer.
+    /// </summary>
+    [RelayCommand]
+    private void CloseSidebar()
+    {
+        IsSidebarOpen = false;
+    }
+
+    /// <summary>
+    /// Selects a place from the sidebar and centers the map on it.
+    /// </summary>
+    [RelayCommand]
+    private void SelectPlace(TripPlace? place)
+    {
+        if (place == null)
+            return;
+
+        SelectedPlace = place;
+        CenterOnPlace(place);
     }
 
     /// <summary>

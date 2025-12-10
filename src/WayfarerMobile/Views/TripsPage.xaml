@@ -4,6 +4,7 @@
              xmlns:viewmodels="clr-namespace:WayfarerMobile.ViewModels"
              xmlns:models="clr-namespace:WayfarerMobile.Core.Models"
              xmlns:mapsui="clr-namespace:Mapsui.UI.Maui;assembly=Mapsui.UI.Maui"
+             xmlns:navDrawer="clr-namespace:Syncfusion.Maui.Toolkit.NavigationDrawer;assembly=Syncfusion.Maui.Toolkit"
              x:Class="WayfarerMobile.Views.TripsPage"
              x:DataType="viewmodels:TripsViewModel"
              Title="Trips"
@@ -122,156 +123,246 @@
                 </RefreshView>
             </Grid>
 
-            <!-- Trip Details View -->
-            <Grid IsVisible="{Binding ShowingDetails}" RowDefinitions="Auto,Auto,200,*">
-                <!-- Header with Back Button and Download -->
-                <Grid Grid.Row="0"
-                      ColumnDefinitions="Auto,*,Auto"
-                      BackgroundColor="{StaticResource Surface}"
-                      Padding="8">
-                    <Button Text="← Back"
-                            Command="{Binding BackToListCommand}"
-                            BackgroundColor="Transparent"
-                            TextColor="{StaticResource Primary}"
-                            FontSize="14" />
-                    <Label Grid.Column="1"
-                           Text="{Binding SelectedTrip.Name}"
-                           Style="{StaticResource SubHeadline}"
-                           VerticalOptions="Center"
-                           HorizontalOptions="Center"
-                           LineBreakMode="TailTruncation" />
+            <!-- Trip Details View with Navigation Drawer -->
+            <navDrawer:SfNavigationDrawer x:Name="navigationDrawer"
+                                          IsVisible="{Binding ShowingDetails}"
+                                          IsOpen="{Binding IsSidebarOpen, Mode=TwoWay}">
 
-                    <!-- Download Button (when not downloaded) -->
-                    <Button Grid.Column="2"
-                            Text="⬇️ Download"
-                            Command="{Binding DownloadTripCommand}"
-                            BackgroundColor="{StaticResource Primary}"
-                            TextColor="White"
-                            FontSize="12"
-                            Padding="8,4"
-                            CornerRadius="4"
-                            IsVisible="{Binding IsSelectedTripDownloaded, Converter={StaticResource InvertedBoolConverter}}"
-                            IsEnabled="{Binding IsDownloading, Converter={StaticResource InvertedBoolConverter}}" />
+                <!-- Drawer Settings -->
+                <navDrawer:SfNavigationDrawer.DrawerSettings>
+                    <navDrawer:DrawerSettings Position="Right"
+                                              DrawerWidth="300"
+                                              DrawerHeaderHeight="60"
+                                              DrawerFooterHeight="0"
+                                              EnableSwipeGesture="True"
+                                              Transition="SlideOnTop">
 
-                    <!-- Delete Button (when downloaded) -->
-                    <Button Grid.Column="2"
-                            Text="✓ Offline"
-                            Command="{Binding DeleteDownloadedTripCommand}"
-                            BackgroundColor="{StaticResource Success}"
-                            TextColor="White"
-                            FontSize="12"
-                            Padding="8,4"
-                            CornerRadius="4"
-                            IsVisible="{Binding IsSelectedTripDownloaded}" />
-                </Grid>
+                        <!-- Drawer Header -->
+                        <navDrawer:DrawerSettings.DrawerHeaderView>
+                            <Grid BackgroundColor="{StaticResource Surface}"
+                                  Padding="16,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Label Text="Places"
+                                       Style="{StaticResource SubHeadline}"
+                                       FontAttributes="Bold"
+                                       VerticalOptions="Center" />
+                                <Button Grid.Column="1"
+                                        Text="X"
+                                        FontSize="16"
+                                        WidthRequest="36"
+                                        HeightRequest="36"
+                                        Padding="0"
+                                        CornerRadius="18"
+                                        BackgroundColor="Transparent"
+                                        TextColor="{StaticResource TextSecondary}"
+                                        Command="{Binding CloseSidebarCommand}" />
+                            </Grid>
+                        </navDrawer:DrawerSettings.DrawerHeaderView>
 
-                <!-- Download Progress -->
-                <Grid Grid.Row="1"
-                      BackgroundColor="{StaticResource Surface}"
-                      Padding="16,8"
-                      IsVisible="{Binding IsDownloading}">
-                    <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto">
-                        <ProgressBar Progress="{Binding DownloadProgress, Converter={StaticResource PercentToDecimalConverter}}"
-                                    ProgressColor="{StaticResource Primary}"
-                                    HeightRequest="4" />
-                        <Label Grid.Column="1"
-                               Text="{Binding DownloadProgress, StringFormat='{0}%'}"
-                               FontSize="12"
-                               TextColor="{StaticResource TextSecondary}"
-                               Margin="8,0,0,0" />
-                        <Label Grid.Row="1" Grid.ColumnSpan="2"
-                               Text="{Binding DownloadStatusMessage}"
-                               FontSize="12"
-                               TextColor="{StaticResource TextSecondary}"
-                               Margin="0,4,0,0" />
-                    </Grid>
-                </Grid>
+                        <!-- Drawer Content - Places List -->
+                        <navDrawer:DrawerSettings.DrawerContentView>
+                            <Grid BackgroundColor="{StaticResource Background}">
+                                <CollectionView ItemsSource="{Binding SelectedTripDetails.AllPlaces}"
+                                               SelectionMode="None">
 
-                <!-- Map Preview -->
-                <Grid Grid.Row="2">
-                    <mapsui:MapControl Map="{Binding Map}" />
+                                    <CollectionView.EmptyView>
+                                        <Label Text="No places in this trip"
+                                               Style="{StaticResource Caption}"
+                                               TextColor="{StaticResource TextSecondary}"
+                                               HorizontalOptions="Center"
+                                               Margin="16" />
+                                    </CollectionView.EmptyView>
 
-                    <!-- Loading overlay -->
-                    <Border IsVisible="{Binding IsLoadingDetails}"
-                            BackgroundColor="#80000000">
-                        <ActivityIndicator IsRunning="True"
-                                          Color="{StaticResource Primary}"
-                                          VerticalOptions="Center"
-                                          HorizontalOptions="Center" />
-                    </Border>
-                </Grid>
+                                    <CollectionView.ItemTemplate>
+                                        <DataTemplate x:DataType="models:TripPlace">
+                                            <Border Margin="8,2"
+                                                    Padding="12"
+                                                    StrokeThickness="0"
+                                                    BackgroundColor="{StaticResource Surface}">
+                                                <Border.GestureRecognizers>
+                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=SelectPlaceCommand}"
+                                                                          CommandParameter="{Binding .}" />
+                                                </Border.GestureRecognizers>
+                                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                                    <!-- Color Indicator -->
+                                                    <Ellipse WidthRequest="12"
+                                                             HeightRequest="12"
+                                                             Fill="{Binding MarkerColor}"
+                                                             VerticalOptions="Center" />
 
-                <!-- Places List -->
-                <CollectionView Grid.Row="3"
-                               ItemsSource="{Binding SelectedTripDetails.AllPlaces}"
-                               SelectionMode="None"
-                               Margin="0,8,0,0">
+                                                    <!-- Place Name -->
+                                                    <Label Grid.Column="1"
+                                                           Text="{Binding Name}"
+                                                           Style="{StaticResource Body}"
+                                                           VerticalOptions="Center"
+                                                           LineBreakMode="TailTruncation" />
 
-                    <CollectionView.Header>
-                        <Label Text="Places"
-                               Style="{StaticResource SubHeadline}"
-                               FontAttributes="Bold"
-                               Margin="16,8" />
-                    </CollectionView.Header>
+                                                    <!-- Navigate Button -->
+                                                    <Button Grid.Column="2"
+                                                            Text=">"
+                                                            FontSize="12"
+                                                            WidthRequest="32"
+                                                            HeightRequest="32"
+                                                            Padding="0"
+                                                            CornerRadius="16"
+                                                            BackgroundColor="{StaticResource Primary}"
+                                                            TextColor="White"
+                                                            Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=NavigateToPlaceCommand}"
+                                                            CommandParameter="{Binding .}" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </CollectionView.ItemTemplate>
+                                </CollectionView>
+                            </Grid>
+                        </navDrawer:DrawerSettings.DrawerContentView>
 
-                    <CollectionView.EmptyView>
-                        <Label Text="No places in this trip"
-                               Style="{StaticResource Caption}"
-                               TextColor="{StaticResource TextSecondary}"
-                               HorizontalOptions="Center"
-                               Margin="16" />
-                    </CollectionView.EmptyView>
+                    </navDrawer:DrawerSettings>
+                </navDrawer:SfNavigationDrawer.DrawerSettings>
 
-                    <CollectionView.ItemTemplate>
-                        <DataTemplate x:DataType="models:TripPlace">
-                            <Border Margin="8,2"
-                                    Padding="12"
-                                    StrokeThickness="0"
-                                    BackgroundColor="{StaticResource Surface}">
-                                <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="12">
-                                    <!-- Color Indicator -->
-                                    <Ellipse WidthRequest="12"
-                                             HeightRequest="12"
-                                             Fill="{Binding MarkerColor}"
-                                             VerticalOptions="Center" />
+                <!-- Main Content View -->
+                <navDrawer:SfNavigationDrawer.ContentView>
+                    <Grid RowDefinitions="Auto,Auto,*">
+                        <!-- Header with Back Button and Actions -->
+                        <Grid Grid.Row="0"
+                              ColumnDefinitions="Auto,*,Auto,Auto"
+                              BackgroundColor="{StaticResource Surface}"
+                              Padding="8">
+                            <Button Text="&lt;"
+                                    Command="{Binding BackToListCommand}"
+                                    BackgroundColor="Transparent"
+                                    TextColor="{StaticResource Primary}"
+                                    FontSize="18"
+                                    WidthRequest="44"
+                                    HeightRequest="44" />
+                            <Label Grid.Column="1"
+                                   Text="{Binding SelectedTrip.Name}"
+                                   Style="{StaticResource SubHeadline}"
+                                   VerticalOptions="Center"
+                                   HorizontalOptions="Start"
+                                   LineBreakMode="TailTruncation"
+                                   Margin="8,0" />
 
-                                    <!-- Place Name -->
-                                    <Label Grid.Column="1"
-                                           Text="{Binding Name}"
+                            <!-- Download Button (when not downloaded) -->
+                            <Button Grid.Column="2"
+                                    Text="Download"
+                                    Command="{Binding DownloadTripCommand}"
+                                    BackgroundColor="{StaticResource Primary}"
+                                    TextColor="White"
+                                    FontSize="12"
+                                    Padding="12,4"
+                                    CornerRadius="4"
+                                    IsVisible="{Binding IsSelectedTripDownloaded, Converter={StaticResource InvertedBoolConverter}}"
+                                    IsEnabled="{Binding IsDownloading, Converter={StaticResource InvertedBoolConverter}}" />
+
+                            <!-- Offline Badge (when downloaded) -->
+                            <Button Grid.Column="2"
+                                    Text="Offline"
+                                    Command="{Binding DeleteDownloadedTripCommand}"
+                                    BackgroundColor="{StaticResource Success}"
+                                    TextColor="White"
+                                    FontSize="12"
+                                    Padding="12,4"
+                                    CornerRadius="4"
+                                    IsVisible="{Binding IsSelectedTripDownloaded}" />
+
+                            <!-- Places Sidebar Toggle -->
+                            <Button Grid.Column="3"
+                                    Text="="
+                                    Command="{Binding ToggleSidebarCommand}"
+                                    BackgroundColor="Transparent"
+                                    TextColor="{StaticResource Primary}"
+                                    FontSize="18"
+                                    WidthRequest="44"
+                                    HeightRequest="44" />
+                        </Grid>
+
+                        <!-- Download Progress -->
+                        <Grid Grid.Row="1"
+                              BackgroundColor="{StaticResource Surface}"
+                              Padding="16,8"
+                              IsVisible="{Binding IsDownloading}">
+                            <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto">
+                                <ProgressBar Progress="{Binding DownloadProgress, Converter={StaticResource PercentToDecimalConverter}}"
+                                            ProgressColor="{StaticResource Primary}"
+                                            HeightRequest="4" />
+                                <Label Grid.Column="1"
+                                       Text="{Binding DownloadProgress, StringFormat='{0}%'}"
+                                       FontSize="12"
+                                       TextColor="{StaticResource TextSecondary}"
+                                       Margin="8,0,0,0" />
+                                <Label Grid.Row="1" Grid.ColumnSpan="2"
+                                       Text="{Binding DownloadStatusMessage}"
+                                       FontSize="12"
+                                       TextColor="{StaticResource TextSecondary}"
+                                       Margin="0,4,0,0" />
+                            </Grid>
+                        </Grid>
+
+                        <!-- Full Map View -->
+                        <Grid Grid.Row="2">
+                            <mapsui:MapControl Map="{Binding Map}" />
+
+                            <!-- Loading overlay -->
+                            <Border IsVisible="{Binding IsLoadingDetails}"
+                                    BackgroundColor="#80000000">
+                                <ActivityIndicator IsRunning="True"
+                                                  Color="{StaticResource Primary}"
+                                                  VerticalOptions="Center"
+                                                  HorizontalOptions="Center" />
+                            </Border>
+
+                            <!-- Navigation Info Overlay -->
+                            <Border IsVisible="{Binding IsNavigating}"
+                                    VerticalOptions="End"
+                                    HorizontalOptions="Fill"
+                                    Margin="16,0,16,16"
+                                    Padding="16"
+                                    BackgroundColor="{StaticResource Surface}"
+                                    StrokeThickness="0">
+                                <Border.StrokeShape>
+                                    <RoundRectangle CornerRadius="12" />
+                                </Border.StrokeShape>
+                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                                    <Label Text="{Binding NavigationDestination, StringFormat='Navigating to {0}'}"
                                            Style="{StaticResource Body}"
-                                           VerticalOptions="Center"
-                                           LineBreakMode="TailTruncation" />
-
-                                    <!-- Center Button -->
-                                    <Button Grid.Column="2"
-                                            Text="📍"
-                                            FontSize="14"
-                                            WidthRequest="36"
-                                            HeightRequest="36"
-                                            Padding="0"
-                                            CornerRadius="18"
-                                            BackgroundColor="{StaticResource Gray200}"
-                                            Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=CenterOnPlaceCommand}"
-                                            CommandParameter="{Binding .}" />
-
-                                    <!-- Navigate Button -->
-                                    <Button Grid.Column="3"
-                                            Text="▶"
-                                            FontSize="14"
-                                            WidthRequest="36"
-                                            HeightRequest="36"
-                                            Padding="0"
-                                            CornerRadius="18"
-                                            BackgroundColor="{StaticResource Primary}"
+                                           FontAttributes="Bold" />
+                                    <Label Grid.Row="1"
+                                           Text="{Binding NavigationState.DistanceText}"
+                                           Style="{StaticResource Caption}"
+                                           TextColor="{StaticResource TextSecondary}" />
+                                    <Button Grid.Column="1" Grid.RowSpan="2"
+                                            Text="Stop"
+                                            Command="{Binding StopNavigationCommand}"
+                                            BackgroundColor="{StaticResource Error}"
                                             TextColor="White"
-                                            Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=NavigateToPlaceCommand}"
-                                            CommandParameter="{Binding .}" />
+                                            FontSize="12"
+                                            Padding="16,8"
+                                            CornerRadius="4"
+                                            VerticalOptions="Center" />
                                 </Grid>
                             </Border>
-                        </DataTemplate>
-                    </CollectionView.ItemTemplate>
-                </CollectionView>
-            </Grid>
+
+                            <!-- Floating Action Button to Open Sidebar (when closed) -->
+                            <Button IsVisible="{Binding IsSidebarOpen, Converter={StaticResource InvertedBoolConverter}}"
+                                    Text="Places"
+                                    Command="{Binding OpenSidebarCommand}"
+                                    BackgroundColor="{StaticResource Primary}"
+                                    TextColor="White"
+                                    FontSize="12"
+                                    Padding="16,8"
+                                    CornerRadius="20"
+                                    VerticalOptions="Start"
+                                    HorizontalOptions="End"
+                                    Margin="0,16,16,0" />
+                        </Grid>
+                    </Grid>
+                </navDrawer:SfNavigationDrawer.ContentView>
+
+            </navDrawer:SfNavigationDrawer>
         </Grid>
 
         <!-- Error Message -->
