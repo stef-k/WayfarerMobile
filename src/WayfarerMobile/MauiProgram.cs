@@ -105,6 +105,11 @@ public static class MauiProgram
         services.AddSingleton<IGroupsService, GroupsService>();
         services.AddSingleton<NavigationService>();
         services.AddSingleton<TripDownloadService>();
+
+        // Routing Services
+        services.AddSingleton<HttpClient>();
+        services.AddSingleton<OsrmRoutingService>();
+        services.AddSingleton<RouteCacheService>();
         services.AddSingleton<TripNavigationService>();
 
         // Permissions Service
@@ -148,6 +153,7 @@ public static class MauiProgram
         services.AddSingleton<NavigationHudViewModel>();
         services.AddTransient<QrScannerViewModel>();
         services.AddTransient<PublicTripsViewModel>();
+        services.AddTransient<LockScreenViewModel>();
 
         // Pages
         services.AddTransient<MainPage>();
@@ -159,11 +165,13 @@ public static class MauiProgram
         services.AddTransient<TripsPage>();
         services.AddTransient<QrScannerPage>();
         services.AddTransient<PublicTripsPage>();
+        services.AddTransient<LockScreenPage>();
 
         // Route Registration
         Routing.RegisterRoute("checkin", typeof(CheckInPage));
         Routing.RegisterRoute("trips", typeof(TripsPage));
         Routing.RegisterRoute("QrScanner", typeof(QrScannerPage));
         Routing.RegisterRoute("publictrips", typeof(PublicTripsPage));
+        Routing.RegisterRoute("lockscreen", typeof(LockScreenPage));
     }
 }

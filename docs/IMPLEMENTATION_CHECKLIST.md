@@ -30,12 +30,12 @@ Step-by-step guide for implementing WayfarerMobile from scratch.
 | 1. Foundation | Complete | 100% |
 | 2. Location Service (Android) | Complete | 100% |
 | 3. Onboarding Flow | Complete | 100% |
-| 4. Settings | Partial | ~90% (lock screen UI pending) |
-| 5. Main Map | Partial | ~80% |
+| 4. Settings | Complete | 100% |
+| 5. Main Map | Partial | ~90% |
 | 6. Database & API | Partial | ~90% |
 | 7. Timeline | Complete | 100% |
 | 8. Trips | Complete | 100% |
-| 9. Navigation | Partial | ~80% |
+| 9. Navigation | Partial | ~95% |
 | 10. Groups | Complete | 100% |
 | 11. Check-In | Complete | 100% |
 | 12. Polish | Partial | ~50% (logging, error handling, lifecycle done) |
@@ -44,7 +44,6 @@ Step-by-step guide for implementing WayfarerMobile from scratch.
 
 **Remaining UI Work:**
 
-- Lock screen overlay (PIN entry)
 - Offline banner
 - Loading states (`SfBusyIndicator`)
 - Trip sidebar sliding animation
@@ -260,9 +259,9 @@ Reference: `C:\Users\stef\source\repos\Wayfarer.Mobile\Services\Security\AppLock
   - [x] PIN setup flow (create + confirm)
   - [x] PIN change flow (verify old + new + confirm)
   - [x] Enable/disable toggle with PIN verification
-- [ ] Create lock screen overlay
-  - [ ] PIN entry on app resume
-  - [ ] Wrong PIN attempts handling
+- [x] Create lock screen overlay
+  - [x] PIN entry on app resume
+  - [x] Wrong PIN attempts handling (shake animation, lockout after 3 attempts)
 
 ---
 

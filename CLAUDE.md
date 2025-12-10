@@ -2,20 +2,45 @@
 
 ## Current Status
 
-**Progress:** ~92% Complete (Business Logic Done, UI Remaining)
+**Progress:** ~97% Complete (Navigation Complete, UI Polish Remaining)
 
 **Next Tasks (Priority Order):**
 
-1. **P0 - Lock Screen Overlay** - PIN entry on app resume (`Views/LockScreenPage.xaml`)
-2. **P0 - Route Polyline** - Navigation route visualization on map
-3. **P1 - Trip Sidebar** - Sliding panel with `SfNavigationDrawer`
-4. **P1 - Segment Visualization** - Draw trip segments on map
-5. **P2 - Loading States** - `SfBusyIndicator` on all pages
+1. **P1 - Trip Sidebar** - Sliding panel with `SfNavigationDrawer`
+2. **P1 - Segment Visualization** - Draw trip segments on map
+3. **P2 - Loading States** - `SfBusyIndicator` on all pages
+4. **P2 - Offline Banner** - Connectivity status indicator
+
+**Completed Features:**
+- ✅ Lock Screen Overlay (PIN entry on app resume)
+- ✅ Route Polyline (navigation route visualization on map)
+- ✅ Navigation System with OSRM integration
 
 **Key Files for Next Session:**
 
 - `docs/IMPLEMENTATION_PLAN.md` - Detailed UI task specs with Syncfusion components
 - `docs/IMPLEMENTATION_CHECKLIST.md` - Phase-by-phase progress tracking
+- `docs/reference/NAVIGATION_SYSTEM.md` - Navigation architecture documentation
+
+---
+
+## Navigation System Architecture
+
+**Route Calculation Priority:**
+1. **User Segments** - Trip-defined routes with polyline geometry (always preferred)
+2. **Cached OSRM** - Previously fetched route if still valid (same destination, within 50m, < 5 min old)
+3. **OSRM Fetch** - Online route from `router.project-osrm.org` (no API key, 1 req/sec limit)
+4. **Direct Route** - Straight line with bearing + distance (offline fallback)
+
+**Key Services:**
+- `TripNavigationService` - Main orchestrator with `CalculateRouteToPlaceAsync()`
+- `OsrmRoutingService` - OSRM API client
+- `RouteCacheService` - Single-route session cache (stored in Preferences, survives restart)
+- `MapService` - Route polyline display with progress tracking
+
+**Design Decision:** No fallback connections between trip places. Direct route is more honest than fake multi-hop routes through trip sequence.
+
+See `docs/reference/NAVIGATION_SYSTEM.md` for full documentation.
 
 ---
 

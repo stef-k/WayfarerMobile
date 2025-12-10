@@ -9,9 +9,18 @@ namespace WayfarerMobile.Services;
 /// Service for trip-based navigation using the local routing graph.
 /// Provides route calculation, progress tracking, and rerouting.
 /// </summary>
+/// <remarks>
+/// Navigation priority:
+/// 1. User-defined segments (from trip data)
+/// 2. Cached OSRM route (if still valid - same destination, within 50m of origin, &lt; 5 min old)
+/// 3. Fetched routes (from OSRM when online)
+/// 4. Direct route (straight line with bearing/distance)
+/// </remarks>
 public class TripNavigationService
 {
     private readonly ILogger<TripNavigationService> _logger;
+    private readonly OsrmRoutingService _osrmService;
+    private readonly RouteCacheService _routeCacheService;
 
     private TripNavigationGraph? _currentGraph;
     private TripDetails? _currentTrip;
@@ -52,9 +61,17 @@ public class TripNavigationService
     /// <summary>
     /// Creates a new instance of TripNavigationService.
     /// </summary>
-    public TripNavigationService(ILogger<TripNavigationService> logger)
+    /// <param name="logger">The logger.</param>
+    /// <param name="osrmService">The OSRM routing service.</param>
+    /// <param name="routeCacheService">The route cache service.</param>
+    public TripNavigationService(
+        ILogger<TripNavigationService> logger,
+        OsrmRoutingService osrmService,
+        RouteCacheService routeCacheService)
     {
         _logger = logger;
+        _osrmService = osrmService;
+        _routeCacheService = routeCacheService;
     }
 
     /// <summary>
@@ -94,7 +111,8 @@ public class TripNavigationService
     }
 
     /// <summary>
-    /// Calculates a route to a specific place.
+    /// Calculates a route to a specific place (synchronous, no OSRM fetch).
+    /// Use <see cref="CalculateRouteToPlaceAsync"/> for full routing with OSRM support.
     /// </summary>
     /// <param name="currentLat">Current latitude.</param>
     /// <param name="currentLon">Current longitude.</param>
@@ -116,10 +134,9 @@ public class TripNavigationService
 
         _destinationPlaceId = destinationPlaceId;
 
-        // Check if we're within segment routing range of any place
+        // Priority 1: Check for user-defined segment route
         if (_currentGraph.IsWithinSegmentRoutingRange(currentLat, currentLon))
         {
-            // Use A* pathfinding through the graph
             var nearestNode = _currentGraph.FindNearestNode(currentLat, currentLon);
             if (nearestNode != null)
             {
@@ -127,16 +144,219 @@ public class TripNavigationService
                 if (path.Count > 0)
                 {
                     _activeRoute = BuildRouteFromPath(path, currentLat, currentLon);
-                    _logger.LogDebug("Calculated segment route with {WaypointCount} waypoints", _activeRoute?.Waypoints.Count);
+                    _logger.LogDebug("Using segment route with {WaypointCount} waypoints", _activeRoute?.Waypoints.Count);
                     return _activeRoute;
                 }
             }
         }
 
-        // Fall back to direct navigation
+        // Priority 3: Direct navigation (bearing + distance)
         _activeRoute = BuildDirectRoute(currentLat, currentLon, destination);
         _logger.LogDebug("Using direct route to {Destination}", destination.Name);
         return _activeRoute;
+    }
+
+    /// <summary>
+    /// Calculates a route to a specific place with OSRM fetching support.
+    /// </summary>
+    /// <param name="currentLat">Current latitude.</param>
+    /// <param name="currentLon">Current longitude.</param>
+    /// <param name="destinationPlaceId">Destination place ID.</param>
+    /// <param name="fetchFromOsrm">Whether to fetch route from OSRM if no segment exists.</param>
+    /// <returns>The calculated route or null if no route found.</returns>
+    /// <remarks>
+    /// Navigation priority:
+    /// 1. User-defined segments (always preferred)
+    /// 2. Cached OSRM route (if still valid)
+    /// 3. OSRM-fetched routes (if online and fetchFromOsrm is true)
+    /// 4. Direct route (straight line fallback)
+    /// </remarks>
+    public async Task<NavigationRoute?> CalculateRouteToPlaceAsync(
+        double currentLat, double currentLon,
+        string destinationPlaceId,
+        bool fetchFromOsrm = true)
+    {
+        if (_currentGraph == null)
+        {
+            _logger.LogWarning("No trip loaded for navigation");
+            return null;
+        }
+
+        if (!_currentGraph.Nodes.TryGetValue(destinationPlaceId, out var destination))
+        {
+            _logger.LogWarning("Destination place {PlaceId} not found in trip", destinationPlaceId);
+            return null;
+        }
+
+        _destinationPlaceId = destinationPlaceId;
+
+        // Priority 1: Check for user-defined segment route
+        if (_currentGraph.IsWithinSegmentRoutingRange(currentLat, currentLon))
+        {
+            var nearestNode = _currentGraph.FindNearestNode(currentLat, currentLon);
+            if (nearestNode != null)
+            {
+                var path = _currentGraph.FindPath(nearestNode.Id, destinationPlaceId);
+                if (path.Count > 0)
+                {
+                    _activeRoute = BuildRouteFromPath(path, currentLat, currentLon);
+                    _logger.LogDebug("Using segment route with {WaypointCount} waypoints", _activeRoute?.Waypoints.Count);
+                    return _activeRoute;
+                }
+            }
+        }
+
+        // Priority 2: Check for valid cached route
+        var cachedRoute = _routeCacheService.GetValidRoute(currentLat, currentLon, destinationPlaceId);
+        if (cachedRoute != null)
+        {
+            _activeRoute = BuildRouteFromCache(cachedRoute, currentLat, currentLon, destination);
+            _logger.LogInformation(
+                "Using cached route to {Destination}: {Distance:F1}km",
+                destination.Name, cachedRoute.DistanceMeters / 1000);
+            return _activeRoute;
+        }
+
+        // Priority 3: Try OSRM if enabled
+        if (fetchFromOsrm)
+        {
+            var osrmRoute = await _osrmService.GetRouteAsync(
+                currentLat, currentLon,
+                destination.Latitude, destination.Longitude,
+                "foot"); // Default to walking
+
+            if (osrmRoute != null)
+            {
+                // Cache the fetched route
+                _routeCacheService.SaveRoute(new CachedRoute
+                {
+                    DestinationPlaceId = destinationPlaceId,
+                    DestinationName = destination.Name,
+                    OriginLatitude = currentLat,
+                    OriginLongitude = currentLon,
+                    Geometry = osrmRoute.Geometry,
+                    DistanceMeters = osrmRoute.DistanceMeters,
+                    DurationSeconds = osrmRoute.DurationSeconds,
+                    Source = osrmRoute.Source,
+                    FetchedAtUtc = DateTime.UtcNow
+                });
+
+                _activeRoute = BuildRouteFromOsrm(osrmRoute, currentLat, currentLon, destination);
+                _logger.LogInformation(
+                    "Using OSRM route to {Destination}: {Distance:F1}km",
+                    destination.Name, osrmRoute.DistanceMeters / 1000);
+                return _activeRoute;
+            }
+        }
+
+        // Priority 4: Direct navigation (bearing + distance)
+        _activeRoute = BuildDirectRoute(currentLat, currentLon, destination);
+        _logger.LogDebug("Using direct route to {Destination}", destination.Name);
+        return _activeRoute;
+    }
+
+    /// <summary>
+    /// Builds a navigation route from cached route data.
+    /// </summary>
+    private NavigationRoute BuildRouteFromCache(
+        CachedRoute cachedRoute,
+        double startLat, double startLon,
+        NavigationNode destination)
+    {
+        var waypoints = new List<NavigationWaypoint>();
+
+        // Decode the polyline to get all route points
+        var routePoints = DecodePolyline(cachedRoute.Geometry);
+
+        // Add start
+        waypoints.Add(new NavigationWaypoint
+        {
+            Latitude = startLat,
+            Longitude = startLon,
+            Name = "Current Location",
+            Type = WaypointType.Start
+        });
+
+        // Add intermediate route points (skip first and last as they're start/destination)
+        foreach (var point in routePoints.Skip(1).Take(routePoints.Count - 2))
+        {
+            waypoints.Add(new NavigationWaypoint
+            {
+                Latitude = point.Latitude,
+                Longitude = point.Longitude,
+                Type = WaypointType.RoutePoint
+            });
+        }
+
+        // Add destination
+        waypoints.Add(new NavigationWaypoint
+        {
+            Latitude = destination.Latitude,
+            Longitude = destination.Longitude,
+            Name = destination.Name,
+            Type = WaypointType.Destination,
+            PlaceId = destination.Id
+        });
+
+        return new NavigationRoute
+        {
+            Waypoints = waypoints,
+            DestinationName = destination.Name,
+            TotalDistanceMeters = cachedRoute.DistanceMeters,
+            EstimatedDuration = TimeSpan.FromSeconds(cachedRoute.DurationSeconds)
+        };
+    }
+
+    /// <summary>
+    /// Builds a navigation route from OSRM response.
+    /// </summary>
+    private NavigationRoute BuildRouteFromOsrm(
+        OsrmRouteResult osrmRoute,
+        double startLat, double startLon,
+        NavigationNode destination)
+    {
+        var waypoints = new List<NavigationWaypoint>();
+
+        // Decode the polyline to get all route points
+        var routePoints = DecodePolyline(osrmRoute.Geometry);
+
+        // Add start
+        waypoints.Add(new NavigationWaypoint
+        {
+            Latitude = startLat,
+            Longitude = startLon,
+            Name = "Current Location",
+            Type = WaypointType.Start
+        });
+
+        // Add intermediate route points (skip first and last as they're start/destination)
+        foreach (var point in routePoints.Skip(1).Take(routePoints.Count - 2))
+        {
+            waypoints.Add(new NavigationWaypoint
+            {
+                Latitude = point.Latitude,
+                Longitude = point.Longitude,
+                Type = WaypointType.RoutePoint
+            });
+        }
+
+        // Add destination
+        waypoints.Add(new NavigationWaypoint
+        {
+            Latitude = destination.Latitude,
+            Longitude = destination.Longitude,
+            Name = destination.Name,
+            Type = WaypointType.Destination,
+            PlaceId = destination.Id
+        });
+
+        return new NavigationRoute
+        {
+            Waypoints = waypoints,
+            DestinationName = destination.Name,
+            TotalDistanceMeters = osrmRoute.DistanceMeters,
+            EstimatedDuration = TimeSpan.FromSeconds(osrmRoute.DurationSeconds)
+        };
     }
 
     /// <summary>
@@ -399,8 +619,8 @@ public class TripNavigationService
             graph.AddEdge(edge);
         }
 
-        // Generate fallback connections for places without segments
-        graph.GenerateFallbackConnections();
+        // No fallback connections - if no segment exists, use direct route
+        // This matches old app behavior: honest navigation with bearing + distance
 
         return graph;
     }

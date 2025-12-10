@@ -12,6 +12,7 @@ public partial class AppShell : Shell
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ISettingsService _settingsService;
+    private readonly IAppLockService _appLockService;
 
     /// <summary>
     /// Creates a new instance of AppShell.
@@ -22,6 +23,7 @@ public partial class AppShell : Shell
         InitializeComponent();
         _serviceProvider = serviceProvider;
         _settingsService = serviceProvider.GetRequiredService<ISettingsService>();
+        _appLockService = serviceProvider.GetRequiredService<IAppLockService>();
 
         // Set up content templates to use DI
         OnboardingContent.ContentTemplate = new DataTemplate(() =>
@@ -62,6 +64,12 @@ public partial class AppShell : Shell
         {
             // Go directly to main app
             await GoToAsync("//main");
+
+            // Show lock screen on cold start if protection is enabled
+            if (!_appLockService.IsAccessAllowed())
+            {
+                await GoToAsync("lockscreen");
+            }
         }
     }
 }

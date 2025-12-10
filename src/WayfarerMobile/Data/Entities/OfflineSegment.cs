@@ -53,7 +53,7 @@ public class OfflineSegmentEntity
     public int? DurationMinutes { get; set; }
 
     /// <summary>
-    /// Gets or sets the route geometry (encoded polyline).
+    /// Gets or sets the route geometry (encoded polyline) from user-defined segment.
     /// </summary>
     public string? Geometry { get; set; }
 

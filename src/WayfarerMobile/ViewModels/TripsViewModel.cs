@@ -17,6 +17,8 @@ public partial class TripsViewModel : BaseViewModel
     private readonly MapService _mapService;
     private readonly TripDownloadService _downloadService;
     private readonly NavigationService _navigationService;
+    private readonly TripNavigationService _tripNavigationService;
+    private readonly ILocationBridge _locationBridge;
     private readonly HashSet<Guid> _downloadedTripIds = new();
 
     #region Observable Properties
@@ -162,13 +164,17 @@ public partial class TripsViewModel : BaseViewModel
         ISettingsService settingsService,
         MapService mapService,
         TripDownloadService downloadService,
-        NavigationService navigationService)
+        NavigationService navigationService,
+        TripNavigationService tripNavigationService,
+        ILocationBridge locationBridge)
     {
         _apiClient = apiClient;
         _settingsService = settingsService;
         _mapService = mapService;
         _downloadService = downloadService;
         _navigationService = navigationService;
+        _tripNavigationService = tripNavigationService;
+        _locationBridge = locationBridge;
         Title = "Trips";
 
         // Subscribe to download progress
@@ -176,6 +182,9 @@ public partial class TripsViewModel : BaseViewModel
 
         // Subscribe to navigation state changes
         _navigationService.StateChanged += OnNavigationStateChanged;
+
+        // Subscribe to trip navigation state changes for route updates
+        _tripNavigationService.StateChanged += OnTripNavigationStateChanged;
     }
 
     #endregion
@@ -308,8 +317,38 @@ public partial class TripsViewModel : BaseViewModel
             {
                 await _navigationService.StopNavigationAsync();
             }
+            _mapService.ClearNavigationRoute();
 
-            // Start navigation to the selected place
+            // Load trip for routing if we have trip details
+            if (SelectedTripDetails != null && !_tripNavigationService.IsTripLoaded)
+            {
+                _tripNavigationService.LoadTrip(SelectedTripDetails);
+            }
+
+            // Get current location for route calculation
+            var currentLocation = _locationBridge.LastLocation;
+            if (currentLocation != null && _tripNavigationService.IsTripLoaded)
+            {
+                // Calculate route using trip navigation graph with OSRM fallback
+                // Priority: 1. User segments, 2. OSRM fetch, 3. Direct route
+                var route = await _tripNavigationService.CalculateRouteToPlaceAsync(
+                    currentLocation.Latitude,
+                    currentLocation.Longitude,
+                    place.Id.ToString(),
+                    fetchFromOsrm: true);
+
+                if (route != null)
+                {
+                    // Show route on map
+                    _mapService.ShowNavigationRoute(route);
+                    _mapService.ZoomToNavigationRoute();
+
+                    // Subscribe to location updates for route progress
+                    _locationBridge.LocationReceived += OnLocationReceivedForNavigation;
+                }
+            }
+
+            // Start basic navigation for distance/bearing updates
             NavigationDestination = place.Name;
             await _navigationService.StartNavigationAsync(place);
             IsNavigating = true;
@@ -325,15 +364,46 @@ public partial class TripsViewModel : BaseViewModel
     }
 
     /// <summary>
+    /// Handles location updates during navigation to update route progress.
+    /// </summary>
+    private void OnLocationReceivedForNavigation(object? sender, LocationData location)
+    {
+        if (!IsNavigating)
+            return;
+
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            // Update route progress display on map
+            _mapService.UpdateNavigationRouteProgress(location.Latitude, location.Longitude);
+
+            // Update trip navigation state
+            if (_tripNavigationService.IsTripLoaded)
+            {
+                _tripNavigationService.UpdateLocation(location.Latitude, location.Longitude);
+            }
+        });
+    }
+
+    /// <summary>
     /// Stops the current navigation.
     /// </summary>
     [RelayCommand]
     private async Task StopNavigationAsync()
     {
-        if (!_navigationService.IsNavigating)
-            return;
+        // Unsubscribe from location updates for route progress
+        _locationBridge.LocationReceived -= OnLocationReceivedForNavigation;
 
-        await _navigationService.StopNavigationAsync();
+        if (_navigationService.IsNavigating)
+        {
+            await _navigationService.StopNavigationAsync();
+        }
+
+        // Clear route from map
+        _mapService.ClearNavigationRoute();
+
+        // Unload trip navigation
+        _tripNavigationService.UnloadTrip();
+
         IsNavigating = false;
         NavigationDestination = null;
         NavigationState = null;
@@ -477,11 +547,38 @@ public partial class TripsViewModel : BaseViewModel
             NavigationState = state;
             IsNavigating = state.IsActive;
 
-            // If arrived at destination, show notification
+            // If arrived at destination, clean up
             if (state.HasArrived)
             {
+                _locationBridge.LocationReceived -= OnLocationReceivedForNavigation;
+                _mapService.ClearNavigationRoute();
                 IsNavigating = false;
                 NavigationDestination = null;
+            }
+        });
+    }
+
+    /// <summary>
+    /// Handles trip navigation state changes (rerouting, arrival, etc.).
+    /// </summary>
+    private void OnTripNavigationStateChanged(object? sender, TripNavigationState state)
+    {
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            // Handle arrival
+            if (state.Status == NavigationStatus.Arrived)
+            {
+                _locationBridge.LocationReceived -= OnLocationReceivedForNavigation;
+                _mapService.ClearNavigationRoute();
+            }
+            // Handle rerouting - redraw the route
+            else if (state.Status == NavigationStatus.OnRoute)
+            {
+                var route = _tripNavigationService.ActiveRoute;
+                if (route != null)
+                {
+                    _mapService.ShowNavigationRoute(route);
+                }
             }
         });
     }
@@ -526,8 +623,7 @@ public partial class TripsViewModel : BaseViewModel
         // Stop navigation when leaving
         if (_navigationService.IsNavigating)
         {
-            await _navigationService.StopNavigationAsync();
-            IsNavigating = false;
+            await StopNavigationAsync();
         }
 
         // Clear map markers when leaving

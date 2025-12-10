@@ -179,44 +179,6 @@ public class TripNavigationGraph
         return Edges.Any(e => e.FromNodeId == fromId && e.ToNodeId == toId);
     }
 
-    /// <summary>
-    /// Generates fallback connections between consecutive places when no segments exist.
-    /// </summary>
-    public void GenerateFallbackConnections()
-    {
-        var orderedPlaces = Nodes.Values
-            .Where(n => n.Type == NavigationNodeType.Place && n.SortOrder.HasValue)
-            .OrderBy(n => n.SortOrder!.Value)
-            .ToList();
-
-        // Connect consecutive places
-        for (int i = 0; i < orderedPlaces.Count - 1; i++)
-        {
-            var from = orderedPlaces[i];
-            var to = orderedPlaces[i + 1];
-
-            // Only add if no user segment exists
-            if (!HasEdgeBetween(from.Id, to.Id))
-            {
-                var distance = GeoMath.CalculateDistance(
-                    from.Latitude, from.Longitude,
-                    to.Latitude, to.Longitude);
-
-                // Estimate walking time: 5 km/h = 83.3 m/min
-                var durationMinutes = (int)(distance / 83.3);
-
-                Edges.Add(new NavigationEdge
-                {
-                    FromNodeId = from.Id,
-                    ToNodeId = to.Id,
-                    TransportMode = "walking",
-                    DistanceKm = distance / 1000,
-                    DurationMinutes = Math.Max(1, durationMinutes),
-                    EdgeType = NavigationEdgeType.Fallback
-                });
-            }
-        }
-    }
 
     /// <summary>
     /// Checks if the user is within the segment routing threshold of any trip place.
@@ -433,8 +395,8 @@ public enum NavigationEdgeType
 {
     /// <summary>User-defined segment from trip data.</summary>
     UserSegment,
-    /// <summary>Auto-generated fallback connection.</summary>
-    Fallback
+    /// <summary>Route fetched from third-party routing service (OSRM, etc.).</summary>
+    Fetched
 }
 
 /// <summary>

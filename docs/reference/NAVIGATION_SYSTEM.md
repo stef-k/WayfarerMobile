@@ -3,25 +3,127 @@
 ## Complete Design & Implementation Documentation
 
 **Project**: Wayfarer Mobile Trip Navigation
-**Approach**: GPS + Trip Data Graph (No PBF/Itinero dependency)
-**Backend Status**: 100% Feature Complete
-**Remaining Work**: Mobile app implementation only
-**Document Version**: 1.0
+**Approach**: GPS + Trip Data Graph + OSRM Fallback
+**Document Version**: 2.0
 **Last Updated**: December 2024
-**Document Status**: Complete & Ready for Implementation
+**Implementation Status**: ✅ Complete
 
 ---
 
-## Executive Summary
+## Current Implementation (December 2024)
 
-The Trip GPS Navigation system provides offline navigation using **user trip data** (Places + optional Segments) to create a **local routing graph**. This approach eliminates the need for PBF processing, Itinero, or external routing services while providing intelligent navigation that **preserves user route preferences**.
+### Navigation Priority
 
-### **Key Design Decisions**
+| Priority | Source | Turn-by-Turn | Polyline | Offline |
+|----------|--------|--------------|----------|---------|
+| 1 | User Segments | ✅ Yes | ✅ Yes | ✅ Yes |
+| 2 | Cached OSRM Route | ✅ Yes | ✅ Yes | ✅ Yes |
+| 3 | OSRM Fetch (online) | ✅ Yes | ✅ Yes | ❌ No |
+| 4 | Direct Route | ❌ No | ❌ Straight line | ✅ Yes |
 
-- ✅ **Backend is complete** - all required APIs already implemented
-- ✅ **Remove PBF/Itinero code** - no longer needed
-- ✅ **Mobile-centric approach** - all navigation logic in mobile app
-- ✅ **Trip data as routing source** - leverages existing rich data structure
+### Key Services
+
+| Service | File | Purpose |
+|---------|------|---------|
+| `TripNavigationService` | `Services/TripNavigationService.cs` | Main navigation orchestrator |
+| `OsrmRoutingService` | `Services/OsrmRoutingService.cs` | OSRM API client (no key required) |
+| `RouteCacheService` | `Services/RouteCacheService.cs` | Session cache for OSRM routes |
+| `TripNavigationGraph` | `Core/Navigation/TripNavigationGraph.cs` | A* pathfinding through trip places |
+| `MapService` | `Services/MapService.cs` | Route polyline display on map |
+
+### Route Calculation Flow
+
+```
+User taps "Navigate to Place X"
+         │
+         ▼
+┌─────────────────────────────────────┐
+│ 1. User segment exists?             │
+│    (Trip has segment from A → X)    │
+├─────────────────────────────────────┤
+│ YES → Use segment polyline          │
+│ NO  → Continue...                   │
+└─────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────┐
+│ 2. Valid cached route exists?       │
+│    - Same destination               │
+│    - Origin within 50m of current   │
+│    - Less than 5 minutes old        │
+├─────────────────────────────────────┤
+│ YES → Use cached polyline           │
+│ NO  → Continue...                   │
+└─────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────┐
+│ 3. Online + OSRM available?         │
+├─────────────────────────────────────┤
+│ YES → Fetch from OSRM               │
+│       Save to cache (survives       │
+│       app restart)                  │
+│       Use fetched polyline          │
+│ NO  → Continue...                   │
+└─────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────┐
+│ 4. Direct Route (fallback)          │
+│    - Straight line to destination   │
+│    - Shows bearing + distance       │
+│    - Honest: "Beach is 2km SE"      │
+└─────────────────────────────────────┘
+```
+
+### Cache Validity Rules
+
+The `RouteCacheService` stores ONE route in app preferences (survives restart):
+
+```csharp
+CachedRoute {
+    DestinationPlaceId   // Must match target
+    OriginLatitude       // User must be within 50m
+    OriginLongitude
+    Geometry             // Encoded polyline
+    DistanceMeters
+    DurationSeconds
+    FetchedAtUtc         // Must be < 5 minutes old
+}
+```
+
+### OSRM Integration
+
+- **Server**: `router.project-osrm.org` (public demo server)
+- **API Key**: Not required
+- **Rate Limit**: 1 request/second (enforced in code)
+- **Profiles**: foot, car, bike (default: foot)
+- **Returns**: Encoded polyline + distance + duration
+
+### Why No Fallback Connections?
+
+Previous design auto-generated "fallback" edges between consecutive trip places. This was removed because:
+
+1. **Misleading**: Routes followed trip order, not geography
+2. **No turn-by-turn**: Just straight lines between places
+3. **Wrong direction**: Could send user away from nearby destination
+4. **Old app approach**: Direct route is more honest and useful
+
+**Example of the problem:**
+```
+Trip places (in order): Hotel → Museum → Cafe → Beach
+User at: Near Beach
+Wants to go to: Beach (50m away)
+
+❌ Fallback: "Go to Hotel first" (wrong!)
+✅ Direct: "Beach is 50m West" (correct!)
+```
+
+---
+
+## Original Design Documentation
+
+> **Note**: The sections below document the original design. The implementation above reflects the actual current state.
 
 ---
 

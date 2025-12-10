@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:viewmodels="clr-namespace:WayfarerMobile.ViewModels"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+             x:Class="WayfarerMobile.Views.LockScreenPage"
+             x:DataType="viewmodels:LockScreenViewModel"
+             Title="Enter PIN"
+             Shell.NavBarIsVisible="False"
+             BackgroundColor="{StaticResource Primary}">
+
+    <Grid RowDefinitions="*,Auto,2*" Padding="24">
+
+        <!-- Header Section -->
+        <VerticalStackLayout Grid.Row="0"
+                            VerticalOptions="End"
+                            Spacing="16"
+                            Padding="0,0,0,32">
+
+            <!-- App Icon/Lock Icon -->
+            <Border WidthRequest="80"
+                    HeightRequest="80"
+                    StrokeThickness="0"
+                    BackgroundColor="#FFFFFF20"
+                    HorizontalOptions="Center">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="40" />
+                </Border.StrokeShape>
+                <Label Text="🔒"
+                       FontSize="36"
+                       HorizontalOptions="Center"
+                       VerticalOptions="Center" />
+            </Border>
+
+            <!-- Title -->
+            <Label Text="Wayfarer"
+                   FontSize="28"
+                   FontAttributes="Bold"
+                   TextColor="White"
+                   HorizontalOptions="Center" />
+
+            <Label Text="Enter your PIN to unlock"
+                   FontSize="16"
+                   TextColor="#FFFFFFCC"
+                   HorizontalOptions="Center" />
+        </VerticalStackLayout>
+
+        <!-- PIN Display Section -->
+        <VerticalStackLayout Grid.Row="1"
+                            Spacing="24"
+                            VerticalOptions="Center">
+
+            <!-- PIN Dots -->
+            <HorizontalStackLayout x:Name="PinDotsContainer"
+                                   HorizontalOptions="Center"
+                                   Spacing="20">
+                <!-- Digit 1 -->
+                <Border WidthRequest="48"
+                        HeightRequest="48"
+                        StrokeThickness="2"
+                        Stroke="#FFFFFF80"
+                        BackgroundColor="{Binding Digit1, Converter={StaticResource IsNotNullConverter}, ConverterParameter='#FFFFFF40|Transparent'}">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="24" />
+                    </Border.StrokeShape>
+                    <Label Text="{Binding Digit1}"
+                           FontSize="24"
+                           TextColor="White"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center" />
+                </Border>
+
+                <!-- Digit 2 -->
+                <Border WidthRequest="48"
+                        HeightRequest="48"
+                        StrokeThickness="2"
+                        Stroke="#FFFFFF80"
+                        BackgroundColor="{Binding Digit2, Converter={StaticResource IsNotNullConverter}, ConverterParameter='#FFFFFF40|Transparent'}">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="24" />
+                    </Border.StrokeShape>
+                    <Label Text="{Binding Digit2}"
+                           FontSize="24"
+                           TextColor="White"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center" />
+                </Border>
+
+                <!-- Digit 3 -->
+                <Border WidthRequest="48"
+                        HeightRequest="48"
+                        StrokeThickness="2"
+                        Stroke="#FFFFFF80"
+                        BackgroundColor="{Binding Digit3, Converter={StaticResource IsNotNullConverter}, ConverterParameter='#FFFFFF40|Transparent'}">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="24" />
+                    </Border.StrokeShape>
+                    <Label Text="{Binding Digit3}"
+                           FontSize="24"
+                           TextColor="White"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center" />
+                </Border>
+
+                <!-- Digit 4 -->
+                <Border WidthRequest="48"
+                        HeightRequest="48"
+                        StrokeThickness="2"
+                        Stroke="#FFFFFF80"
+                        BackgroundColor="{Binding Digit4, Converter={StaticResource IsNotNullConverter}, ConverterParameter='#FFFFFF40|Transparent'}">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="24" />
+                    </Border.StrokeShape>
+                    <Label Text="{Binding Digit4}"
+                           FontSize="24"
+                           TextColor="White"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center" />
+                </Border>
+            </HorizontalStackLayout>
+
+            <!-- Error Message -->
+            <Label Text="{Binding ErrorMessage}"
+                   FontSize="14"
+                   TextColor="#FF6B6B"
+                   HorizontalOptions="Center"
+                   HorizontalTextAlignment="Center"
+                   IsVisible="{Binding ErrorMessage, Converter={StaticResource IsNotNullConverter}}" />
+
+            <!-- Verifying Indicator -->
+            <HorizontalStackLayout HorizontalOptions="Center"
+                                   Spacing="8"
+                                   IsVisible="{Binding IsVerifying}">
+                <ActivityIndicator IsRunning="True"
+                                   Color="White"
+                                   WidthRequest="20"
+                                   HeightRequest="20" />
+                <Label Text="Verifying..."
+                       FontSize="14"
+                       TextColor="White" />
+            </HorizontalStackLayout>
+        </VerticalStackLayout>
+
+        <!-- Numeric Keypad -->
+        <Grid Grid.Row="2"
+              RowDefinitions="*,*,*,*"
+              ColumnDefinitions="*,*,*"
+              ColumnSpacing="16"
+              RowSpacing="12"
+              VerticalOptions="Center"
+              MaximumWidthRequest="320"
+              HorizontalOptions="Center">
+
+            <!-- Row 1: 1, 2, 3 -->
+            <Button Grid.Row="0" Grid.Column="0"
+                    Text="1"
+                    Command="{Binding EnterDigitCommand}"
+                    CommandParameter="1"
+                    IsEnabled="{Binding CanEnterPin}"
+                    Style="{StaticResource PinKeypadButton}" />
+            <Button Grid.Row="0" Grid.Column="1"
+                    Text="2"
+                    Command="{Binding EnterDigitCommand}"
+                    CommandParameter="2"
+                    IsEnabled="{Binding CanEnterPin}"
+                    Style="{StaticResource PinKeypadButton}" />
+            <Button Grid.Row="0" Grid.Column="2"
+                    Text="3"
+                    Command="{Binding EnterDigitCommand}"
+                    CommandParameter="3"
+                    IsEnabled="{Binding CanEnterPin}"
+                    Style="{StaticResource PinKeypadButton}" />
+
+            <!-- Row 2: 4, 5, 6 -->
+            <Button Grid.Row="1" Grid.Column="0"
+                    Text="4"
+                    Command="{Binding EnterDigitCommand}"
+                    CommandParameter="4"
+                    IsEnabled="{Binding CanEnterPin}"
+                    Style="{StaticResource PinKeypadButton}" />
+            <Button Grid.Row="1" Grid.Column="1"
+                    Text="5"
+                    Command="{Binding EnterDigitCommand}"
+                    CommandParameter="5"
+                    IsEnabled="{Binding CanEnterPin}"
+                    Style="{StaticResource PinKeypadButton}" />
+            <Button Grid.Row="1" Grid.Column="2"
+                    Text="6"
+                    Command="{Binding EnterDigitCommand}"
+                    CommandParameter="6"
+                    IsEnabled="{Binding CanEnterPin}"
+                    Style="{StaticResource PinKeypadButton}" />
+
+            <!-- Row 3: 7, 8, 9 -->
+            <Button Grid.Row="2" Grid.Column="0"
+                    Text="7"
+                    Command="{Binding EnterDigitCommand}"
+                    CommandParameter="7"
+                    IsEnabled="{Binding CanEnterPin}"
+                    Style="{StaticResource PinKeypadButton}" />
+            <Button Grid.Row="2" Grid.Column="1"
+                    Text="8"
+                    Command="{Binding EnterDigitCommand}"
+                    CommandParameter="8"
+                    IsEnabled="{Binding CanEnterPin}"
+                    Style="{StaticResource PinKeypadButton}" />
+            <Button Grid.Row="2" Grid.Column="2"
+                    Text="9"
+                    Command="{Binding EnterDigitCommand}"
+                    CommandParameter="9"
+                    IsEnabled="{Binding CanEnterPin}"
+                    Style="{StaticResource PinKeypadButton}" />
+
+            <!-- Row 4: Clear, 0, Delete -->
+            <Button Grid.Row="3" Grid.Column="0"
+                    Text="Clear"
+                    Command="{Binding ClearPinCommand}"
+                    IsEnabled="{Binding CanEnterPin}"
+                    FontSize="14"
+                    BackgroundColor="Transparent"
+                    TextColor="#FFFFFFCC"
+                    HeightRequest="64" />
+            <Button Grid.Row="3" Grid.Column="1"
+                    Text="0"
+                    Command="{Binding EnterDigitCommand}"
+                    CommandParameter="0"
+                    IsEnabled="{Binding CanEnterPin}"
+                    Style="{StaticResource PinKeypadButton}" />
+            <Button Grid.Row="3" Grid.Column="2"
+                    Text="⌫"
+                    Command="{Binding DeleteDigitCommand}"
+                    IsEnabled="{Binding CanEnterPin}"
+                    FontSize="24"
+                    BackgroundColor="Transparent"
+                    TextColor="#FFFFFFCC"
+                    HeightRequest="64" />
+        </Grid>
+    </Grid>
+
+    <ContentPage.Resources>
+        <Style x:Key="PinKeypadButton" TargetType="Button">
+            <Setter Property="BackgroundColor" Value="#FFFFFF20" />
+            <Setter Property="TextColor" Value="White" />
+            <Setter Property="FontSize" Value="28" />
+            <Setter Property="CornerRadius" Value="32" />
+            <Setter Property="HeightRequest" Value="64" />
+            <Setter Property="WidthRequest" Value="64" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="VisualStateManager.VisualStateGroups">
+                <VisualStateGroupList>
+                    <VisualStateGroup x:Name="CommonStates">
+                        <VisualState x:Name="Normal" />
+                        <VisualState x:Name="Pressed">
+                            <VisualState.Setters>
+                                <Setter Property="BackgroundColor" Value="#FFFFFF40" />
+                            </VisualState.Setters>
+                        </VisualState>
+                        <VisualState x:Name="Disabled">
+                            <VisualState.Setters>
+                                <Setter Property="BackgroundColor" Value="#FFFFFF10" />
+                                <Setter Property="TextColor" Value="#FFFFFF60" />
+                            </VisualState.Setters>
+                        </VisualState>
+                    </VisualStateGroup>
+                </VisualStateGroupList>
+            </Setter>
+        </Style>
+    </ContentPage.Resources>
+</ContentPage>

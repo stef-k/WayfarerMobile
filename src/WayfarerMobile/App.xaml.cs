@@ -109,6 +109,12 @@ public partial class App : Application
             var appLockService = _serviceProvider.GetService<IAppLockService>();
             appLockService?.OnAppToForeground();
 
+            // Show lock screen if protection is enabled and session is locked
+            if (appLockService != null && !appLockService.IsAccessAllowed() && !appLockService.IsPromptAwaiting)
+            {
+                await ShowLockScreenAsync();
+            }
+
             // Handle app lifecycle (sync, state restoration)
             var lifecycleService = _serviceProvider.GetService<IAppLifecycleService>();
             if (lifecycleService != null)
@@ -119,6 +125,28 @@ public partial class App : Application
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[App] Error in OnWindowResumed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Shows the lock screen for PIN entry.
+    /// </summary>
+    private async Task ShowLockScreenAsync()
+    {
+        try
+        {
+            var appLockService = _serviceProvider.GetService<IAppLockService>();
+            appLockService?.SetPromptAwaiting(true);
+
+            await Shell.Current.GoToAsync("lockscreen");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[App] Error showing lock screen: {ex.Message}");
+
+            // Reset prompt awaiting flag on error
+            var appLockService = _serviceProvider.GetService<IAppLockService>();
+            appLockService?.SetPromptAwaiting(false);
         }
     }
 

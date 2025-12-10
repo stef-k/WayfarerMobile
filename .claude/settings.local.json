@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build:*)",
+      "WebSearch",
+      "WebFetch(domain:openrouteservice.org)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat: add OSRM routing, route caching, and lock screen overlay\n\n- Add OsrmRoutingService for online route calculation via OSRM API\n- Add RouteCacheService for session-based route caching with validation\n- Implement lock screen overlay with PIN entry on app resume\n- Update TripNavigationService with route calculation priority system\n- Update navigation documentation with architecture details\nEOF\n)\")"
+    ]
+  }
+}
