@@ -1,7 +1,9 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Models;
 using WayfarerMobile.Services;
 
 namespace WayfarerMobile.ViewModels;

@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Algorithms;
+using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Core.Navigation;
+using WayfarerMobile.Helpers;
 
 namespace WayfarerMobile.Services;
 
@@ -266,7 +268,7 @@ public class TripNavigationService
         var waypoints = new List<NavigationWaypoint>();
 
         // Decode the polyline to get all route points
-        var routePoints = DecodePolyline(cachedRoute.Geometry);
+        var routePoints = PolylineDecoder.Decode(cachedRoute.Geometry);
 
         // Add start
         waypoints.Add(new NavigationWaypoint
@@ -318,7 +320,7 @@ public class TripNavigationService
         var waypoints = new List<NavigationWaypoint>();
 
         // Decode the polyline to get all route points
-        var routePoints = DecodePolyline(osrmRoute.Geometry);
+        var routePoints = PolylineDecoder.Decode(osrmRoute.Geometry);
 
         // Add start
         waypoints.Add(new NavigationWaypoint
@@ -613,7 +615,7 @@ public class TripNavigationService
             // Decode route geometry if available
             if (!string.IsNullOrEmpty(segment.Geometry))
             {
-                edge.RouteGeometry = DecodePolyline(segment.Geometry);
+                edge.RouteGeometry = PolylineDecoder.Decode(segment.Geometry);
             }
 
             graph.AddEdge(edge);
@@ -839,190 +841,5 @@ public class TripNavigationService
         return total;
     }
 
-    /// <summary>
-    /// Decodes an encoded polyline string to route points.
-    /// </summary>
-    private static List<RoutePoint> DecodePolyline(string encoded)
-    {
-        var points = new List<RoutePoint>();
-        int index = 0;
-        int lat = 0;
-        int lng = 0;
-
-        while (index < encoded.Length)
-        {
-            int shift = 0;
-            int result = 0;
-            int b;
-
-            do
-            {
-                b = encoded[index++] - 63;
-                result |= (b & 0x1f) << shift;
-                shift += 5;
-            } while (b >= 0x20);
-
-            lat += (result & 1) != 0 ? ~(result >> 1) : result >> 1;
-
-            shift = 0;
-            result = 0;
-
-            do
-            {
-                b = encoded[index++] - 63;
-                result |= (b & 0x1f) << shift;
-                shift += 5;
-            } while (b >= 0x20);
-
-            lng += (result & 1) != 0 ? ~(result >> 1) : result >> 1;
-
-            points.Add(new RoutePoint
-            {
-                Latitude = lat / 1e5,
-                Longitude = lng / 1e5
-            });
-        }
-
-        return points;
-    }
-
     #endregion
-}
-
-/// <summary>
-/// Represents a calculated navigation route.
-/// </summary>
-public class NavigationRoute
-{
-    /// <summary>
-    /// Gets or sets the route waypoints.
-    /// </summary>
-    public List<NavigationWaypoint> Waypoints { get; set; } = new();
-
-    /// <summary>
-    /// Gets or sets the destination name.
-    /// </summary>
-    public string DestinationName { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Gets or sets the total distance in meters.
-    /// </summary>
-    public double TotalDistanceMeters { get; set; }
-
-    /// <summary>
-    /// Gets or sets the estimated duration.
-    /// </summary>
-    public TimeSpan EstimatedDuration { get; set; }
-}
-
-/// <summary>
-/// Represents a waypoint in a navigation route.
-/// </summary>
-public class NavigationWaypoint
-{
-    /// <summary>
-    /// Gets or sets the latitude.
-    /// </summary>
-    public double Latitude { get; set; }
-
-    /// <summary>
-    /// Gets or sets the longitude.
-    /// </summary>
-    public double Longitude { get; set; }
-
-    /// <summary>
-    /// Gets or sets the waypoint name.
-    /// </summary>
-    public string? Name { get; set; }
-
-    /// <summary>
-    /// Gets or sets the waypoint type.
-    /// </summary>
-    public WaypointType Type { get; set; }
-
-    /// <summary>
-    /// Gets or sets the associated place ID.
-    /// </summary>
-    public string? PlaceId { get; set; }
-}
-
-/// <summary>
-/// Types of route waypoints.
-/// </summary>
-public enum WaypointType
-{
-    /// <summary>Starting point.</summary>
-    Start,
-    /// <summary>Intermediate waypoint (place).</summary>
-    Waypoint,
-    /// <summary>Route geometry point.</summary>
-    RoutePoint,
-    /// <summary>Final destination.</summary>
-    Destination
-}
-
-/// <summary>
-/// Current trip navigation state.
-/// </summary>
-public class TripNavigationState
-{
-    /// <summary>
-    /// Gets or sets the navigation status.
-    /// </summary>
-    public NavigationStatus Status { get; set; }
-
-    /// <summary>
-    /// Gets or sets the status message.
-    /// </summary>
-    public string? Message { get; set; }
-
-    /// <summary>
-    /// Gets or sets the current instruction.
-    /// </summary>
-    public string? CurrentInstruction { get; set; }
-
-    /// <summary>
-    /// Gets or sets the distance to destination in meters.
-    /// </summary>
-    public double DistanceToDestinationMeters { get; set; }
-
-    /// <summary>
-    /// Gets or sets the distance to next waypoint in meters.
-    /// </summary>
-    public double DistanceToNextWaypointMeters { get; set; }
-
-    /// <summary>
-    /// Gets or sets the bearing to destination.
-    /// </summary>
-    public double BearingToDestination { get; set; }
-
-    /// <summary>
-    /// Gets or sets the next waypoint name.
-    /// </summary>
-    public string? NextWaypointName { get; set; }
-
-    /// <summary>
-    /// Gets or sets the estimated time remaining.
-    /// </summary>
-    public TimeSpan EstimatedTimeRemaining { get; set; }
-
-    /// <summary>
-    /// Gets or sets the route progress percentage.
-    /// </summary>
-    public double ProgressPercent { get; set; }
-}
-
-/// <summary>
-/// Navigation status values.
-/// </summary>
-public enum NavigationStatus
-{
-    /// <summary>No active route.</summary>
-    NoRoute,
-    /// <summary>Following the planned route.</summary>
-    OnRoute,
-    /// <summary>Off the planned route.</summary>
-    OffRoute,
-    /// <summary>Arrived at destination.</summary>
-    Arrived
 }

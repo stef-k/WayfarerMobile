@@ -100,7 +100,6 @@ public static class MauiProgram
 
         // API and Sync Services
         services.AddSingleton<IApiClient, ApiClient>();
-        services.AddSingleton<ApiClient>();
         services.AddSingleton<LocationSyncService>();
         services.AddSingleton<IGroupsService, GroupsService>();
         services.AddSingleton<NavigationService>();
