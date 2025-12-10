@@ -6,15 +6,15 @@
 
 **Next Tasks (Priority Order):**
 
-1. **P1 - Trip Sidebar** - Sliding panel with `SfNavigationDrawer`
-2. **P1 - Segment Visualization** - Draw trip segments on map
-3. **P2 - Loading States** - `SfBusyIndicator` on all pages
-4. **P2 - Offline Banner** - Connectivity status indicator
+1. **P2 - Loading States** - `SfBusyIndicator` on all pages
+2. **P2 - Offline Banner** - Connectivity status indicator
 
 **Completed Features:**
 - ✅ Lock Screen Overlay (PIN entry on app resume)
 - ✅ Route Polyline (navigation route visualization on map)
 - ✅ Navigation System with OSRM integration
+- ✅ Trip Sidebar (SfNavigationDrawer with places list)
+- ✅ Segment Visualization (transport mode styled polylines)
 
 **Key Files for Next Session:**
 

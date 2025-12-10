@@ -5,6 +5,7 @@
              xmlns:models="clr-namespace:WayfarerMobile.Core.Models"
              xmlns:mapsui="clr-namespace:Mapsui.UI.Maui;assembly=Mapsui.UI.Maui"
              xmlns:navDrawer="clr-namespace:Syncfusion.Maui.Toolkit.NavigationDrawer;assembly=Syncfusion.Maui.Toolkit"
+             xmlns:controls="clr-namespace:WayfarerMobile.Shared.Controls"
              x:Class="WayfarerMobile.Views.TripsPage"
              x:DataType="viewmodels:TripsViewModel"
              Title="Trips"
@@ -307,13 +308,8 @@
                             <mapsui:MapControl Map="{Binding Map}" />
 
                             <!-- Loading overlay -->
-                            <Border IsVisible="{Binding IsLoadingDetails}"
-                                    BackgroundColor="#80000000">
-                                <ActivityIndicator IsRunning="True"
-                                                  Color="{StaticResource Primary}"
-                                                  VerticalOptions="Center"
-                                                  HorizontalOptions="Center" />
-                            </Border>
+                            <controls:LoadingOverlay IsVisible="{Binding IsLoadingDetails}"
+                                                     Message="Loading trip..." />
 
                             <!-- Navigation Info Overlay -->
                             <Border IsVisible="{Binding IsNavigating}"

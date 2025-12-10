@@ -4,6 +4,7 @@
              xmlns:viewmodels="clr-namespace:WayfarerMobile.ViewModels"
              xmlns:models="clr-namespace:WayfarerMobile.Core.Models"
              xmlns:mapsui="clr-namespace:Mapsui.UI.Maui;assembly=Mapsui.UI.Maui"
+             xmlns:controls="clr-namespace:WayfarerMobile.Shared.Controls"
              x:Class="WayfarerMobile.Views.GroupsPage"
              x:DataType="viewmodels:GroupsViewModel"
              Title="{Binding Title}">
@@ -241,5 +242,10 @@
                        FontSize="14" />
             </Frame>
         </Grid>
+
+        <!-- Loading Overlay -->
+        <controls:LoadingOverlay Grid.Row="0" Grid.RowSpan="2"
+                                 IsVisible="{Binding IsBusy}"
+                                 Message="Loading..." />
     </Grid>
 </ContentPage>
