@@ -104,6 +104,9 @@ public partial class GroupsViewModel : BaseViewModel
     {
         if (value != null)
         {
+            // Persist the selection
+            _settingsService.LastSelectedGroupId = value.Id.ToString();
+            _settingsService.LastSelectedGroupName = value.Name;
             _ = LoadMembersAsync();
         }
         else
@@ -134,10 +137,16 @@ public partial class GroupsViewModel : BaseViewModel
                 Groups.Add(group);
             }
 
-            // Auto-select first group if none selected
+            // Restore last selected group or auto-select first
             if (SelectedGroup == null && Groups.Count > 0)
             {
-                SelectedGroup = Groups[0];
+                var lastGroupId = _settingsService.LastSelectedGroupId;
+                GroupSummary? lastGroup = null;
+                if (!string.IsNullOrEmpty(lastGroupId) && Guid.TryParse(lastGroupId, out var lastGuid))
+                {
+                    lastGroup = Groups.FirstOrDefault(g => g.Id == lastGuid);
+                }
+                SelectedGroup = lastGroup ?? Groups[0];
             }
         }
         catch (Exception ex)

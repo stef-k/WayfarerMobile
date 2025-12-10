@@ -62,6 +62,65 @@ public interface ISettingsService
     /// </summary>
     int MaxTripCacheSizeMB { get; set; }
 
+    #region Navigation Settings
+
+    /// <summary>
+    /// Gets or sets whether navigation audio announcements are enabled.
+    /// </summary>
+    bool NavigationAudioEnabled { get; set; }
+
+    /// <summary>
+    /// Gets or sets the navigation audio volume (0.0 to 1.0).
+    /// </summary>
+    float NavigationVolume { get; set; }
+
+    /// <summary>
+    /// Gets or sets the navigation audio language (e.g., "en-US", "fr-FR").
+    /// Empty string means use device default.
+    /// </summary>
+    string NavigationLanguage { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether vibration feedback is enabled during navigation.
+    /// </summary>
+    bool NavigationVibrationEnabled { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether automatic rerouting is enabled when off-route.
+    /// </summary>
+    bool AutoRerouteEnabled { get; set; }
+
+    /// <summary>
+    /// Gets or sets the distance units ("kilometers" or "miles").
+    /// </summary>
+    string DistanceUnits { get; set; }
+
+    /// <summary>
+    /// Gets or sets the last used transport mode for navigation.
+    /// </summary>
+    string LastTransportMode { get; set; }
+
+    #endregion
+
+    #region Groups Settings
+
+    /// <summary>
+    /// Gets or sets the last selected group ID.
+    /// </summary>
+    string? LastSelectedGroupId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the last selected group name.
+    /// </summary>
+    string? LastSelectedGroupName { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the groups legend is expanded.
+    /// </summary>
+    bool GroupsLegendExpanded { get; set; }
+
+    #endregion
+
     /// <summary>
     /// Clears all settings (for logout/reset).
     /// </summary>

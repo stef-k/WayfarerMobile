@@ -25,6 +25,20 @@ public class SettingsService : ISettingsService
     private const string KeyMaxLiveCacheSizeMB = "max_live_cache_size_mb";
     private const string KeyMaxTripCacheSizeMB = "max_trip_cache_size_mb";
 
+    // Navigation settings
+    private const string KeyNavigationAudioEnabled = "navigation_audio_enabled";
+    private const string KeyNavigationVolume = "navigation_volume";
+    private const string KeyNavigationLanguage = "navigation_language";
+    private const string KeyNavigationVibrationEnabled = "navigation_vibration_enabled";
+    private const string KeyAutoRerouteEnabled = "auto_reroute_enabled";
+    private const string KeyDistanceUnits = "distance_units";
+    private const string KeyLastTransportMode = "last_transport_mode";
+
+    // Groups settings
+    private const string KeyLastSelectedGroupId = "last_selected_group_id";
+    private const string KeyLastSelectedGroupName = "last_selected_group_name";
+    private const string KeyGroupsLegendExpanded = "groups_legend_expanded";
+
     #endregion
 
     #region ISettingsService Implementation
@@ -179,6 +193,105 @@ public class SettingsService : ISettingsService
     {
         get => Preferences.Get(KeyMaxTripCacheSizeMB, 2000);
         set => Preferences.Set(KeyMaxTripCacheSizeMB, Math.Clamp(value, 500, 5000));
+    }
+
+    #endregion
+
+    #region Navigation Settings
+
+    /// <summary>
+    /// Gets or sets whether navigation audio announcements are enabled.
+    /// </summary>
+    public bool NavigationAudioEnabled
+    {
+        get => Preferences.Get(KeyNavigationAudioEnabled, true);
+        set => Preferences.Set(KeyNavigationAudioEnabled, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the navigation audio volume (0.0 to 1.0).
+    /// </summary>
+    public float NavigationVolume
+    {
+        get => Preferences.Get(KeyNavigationVolume, 1.0f);
+        set => Preferences.Set(KeyNavigationVolume, Math.Clamp(value, 0.0f, 1.0f));
+    }
+
+    /// <summary>
+    /// Gets or sets the navigation audio language (e.g., "en-US", "fr-FR").
+    /// Empty string means use device default.
+    /// </summary>
+    public string NavigationLanguage
+    {
+        get => Preferences.Get(KeyNavigationLanguage, string.Empty);
+        set => Preferences.Set(KeyNavigationLanguage, value ?? string.Empty);
+    }
+
+    /// <summary>
+    /// Gets or sets whether vibration feedback is enabled during navigation.
+    /// </summary>
+    public bool NavigationVibrationEnabled
+    {
+        get => Preferences.Get(KeyNavigationVibrationEnabled, true);
+        set => Preferences.Set(KeyNavigationVibrationEnabled, value);
+    }
+
+    /// <summary>
+    /// Gets or sets whether automatic rerouting is enabled when off-route.
+    /// </summary>
+    public bool AutoRerouteEnabled
+    {
+        get => Preferences.Get(KeyAutoRerouteEnabled, true);
+        set => Preferences.Set(KeyAutoRerouteEnabled, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the distance units ("kilometers" or "miles").
+    /// </summary>
+    public string DistanceUnits
+    {
+        get => Preferences.Get(KeyDistanceUnits, "kilometers");
+        set => Preferences.Set(KeyDistanceUnits, value == "miles" ? "miles" : "kilometers");
+    }
+
+    /// <summary>
+    /// Gets or sets the last used transport mode for navigation.
+    /// </summary>
+    public string LastTransportMode
+    {
+        get => Preferences.Get(KeyLastTransportMode, "walk");
+        set => Preferences.Set(KeyLastTransportMode, value ?? "walk");
+    }
+
+    #endregion
+
+    #region Groups Settings
+
+    /// <summary>
+    /// Gets or sets the last selected group ID.
+    /// </summary>
+    public string? LastSelectedGroupId
+    {
+        get => Preferences.Get(KeyLastSelectedGroupId, null as string);
+        set => Preferences.Set(KeyLastSelectedGroupId, value ?? string.Empty);
+    }
+
+    /// <summary>
+    /// Gets or sets the last selected group name.
+    /// </summary>
+    public string? LastSelectedGroupName
+    {
+        get => Preferences.Get(KeyLastSelectedGroupName, null as string);
+        set => Preferences.Set(KeyLastSelectedGroupName, value ?? string.Empty);
+    }
+
+    /// <summary>
+    /// Gets or sets whether the groups legend is expanded.
+    /// </summary>
+    public bool GroupsLegendExpanded
+    {
+        get => Preferences.Get(KeyGroupsLegendExpanded, true);
+        set => Preferences.Set(KeyGroupsLegendExpanded, value);
     }
 
     #endregion

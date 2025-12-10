@@ -10,6 +10,7 @@ namespace WayfarerMobile.Services;
 public class NavigationAudioService : INavigationAudioService
 {
     private readonly ITextToSpeechService _ttsService;
+    private readonly ISettingsService _settingsService;
     private readonly ILogger<NavigationAudioService> _logger;
 
     // Announcement deduplication
@@ -19,19 +20,27 @@ public class NavigationAudioService : INavigationAudioService
 
     /// <summary>
     /// Gets or sets whether audio announcements are enabled.
+    /// Reads from and writes to settings service.
     /// </summary>
-    public bool IsEnabled { get; set; } = true;
+    public bool IsEnabled
+    {
+        get => _settingsService.NavigationAudioEnabled;
+        set => _settingsService.NavigationAudioEnabled = value;
+    }
 
     /// <summary>
     /// Creates a new instance of NavigationAudioService.
     /// </summary>
     /// <param name="ttsService">The text-to-speech service.</param>
+    /// <param name="settingsService">The settings service.</param>
     /// <param name="logger">The logger instance.</param>
     public NavigationAudioService(
         ITextToSpeechService ttsService,
+        ISettingsService settingsService,
         ILogger<NavigationAudioService> logger)
     {
         _ttsService = ttsService;
+        _settingsService = settingsService;
         _logger = logger;
     }
 
@@ -162,10 +171,30 @@ public class NavigationAudioService : INavigationAudioService
     #region Private Methods
 
     /// <summary>
-    /// Formats distance for speech output.
+    /// Formats distance for speech output based on user's distance unit preference.
     /// </summary>
-    private static string FormatDistance(double meters)
+    private string FormatDistance(double meters)
     {
+        var useMiles = _settingsService.DistanceUnits == "miles";
+
+        if (useMiles)
+        {
+            // Convert to miles (1 mile = 1609.344 meters)
+            var miles = meters / 1609.344;
+            if (miles >= 0.5)
+            {
+                return miles >= 10
+                    ? $"{miles:F0} miles"
+                    : $"{miles:F1} miles";
+            }
+
+            // Use feet for short distances (1 mile = 5280 feet)
+            var feet = meters * 3.28084;
+            var roundedFeet = Math.Round(feet / 50) * 50; // Round to nearest 50 feet
+            return $"{roundedFeet:F0} feet";
+        }
+
+        // Metric (default)
         if (meters >= 1000)
         {
             var km = meters / 1000;
