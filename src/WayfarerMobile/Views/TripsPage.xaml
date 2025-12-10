@@ -169,62 +169,105 @@
                             </Grid>
                         </navDrawer:DrawerSettings.DrawerHeaderView>
 
-                        <!-- Drawer Content - Places List -->
+                        <!-- Drawer Content - Places & Segments -->
                         <navDrawer:DrawerSettings.DrawerContentView>
-                            <Grid BackgroundColor="{StaticResource Background}">
-                                <CollectionView ItemsSource="{Binding SelectedTripDetails.AllPlaces}"
-                                               SelectionMode="None">
+                            <ScrollView BackgroundColor="{StaticResource Background}">
+                                <VerticalStackLayout>
+                                    <!-- Places Section -->
+                                    <Label Text="Places"
+                                           Style="{StaticResource Caption}"
+                                           FontAttributes="Bold"
+                                           TextColor="{StaticResource TextSecondary}"
+                                           Margin="12,8,12,4" />
 
-                                    <CollectionView.EmptyView>
-                                        <Label Text="No places in this trip"
-                                               Style="{StaticResource Caption}"
-                                               TextColor="{StaticResource TextSecondary}"
-                                               HorizontalOptions="Center"
-                                               Margin="16" />
-                                    </CollectionView.EmptyView>
+                                    <CollectionView ItemsSource="{Binding SelectedTripDetails.AllPlaces}"
+                                                   SelectionMode="None">
+                                        <CollectionView.EmptyView>
+                                            <Label Text="No places in this trip"
+                                                   Style="{StaticResource Caption}"
+                                                   TextColor="{StaticResource TextSecondary}"
+                                                   HorizontalOptions="Center"
+                                                   Margin="16" />
+                                        </CollectionView.EmptyView>
 
-                                    <CollectionView.ItemTemplate>
-                                        <DataTemplate x:DataType="models:TripPlace">
-                                            <Border Margin="8,2"
-                                                    Padding="12"
-                                                    StrokeThickness="0"
-                                                    BackgroundColor="{StaticResource Surface}">
-                                                <Border.GestureRecognizers>
-                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=SelectPlaceCommand}"
-                                                                          CommandParameter="{Binding .}" />
-                                                </Border.GestureRecognizers>
-                                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
-                                                    <!-- Color Indicator -->
-                                                    <Ellipse WidthRequest="12"
-                                                             HeightRequest="12"
-                                                             Fill="{Binding MarkerColor}"
-                                                             VerticalOptions="Center" />
+                                        <CollectionView.ItemTemplate>
+                                            <DataTemplate x:DataType="models:TripPlace">
+                                                <Border Margin="8,2"
+                                                        Padding="12"
+                                                        StrokeThickness="0"
+                                                        BackgroundColor="{StaticResource Surface}">
+                                                    <Border.GestureRecognizers>
+                                                        <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=SelectPlaceCommand}"
+                                                                              CommandParameter="{Binding .}" />
+                                                    </Border.GestureRecognizers>
+                                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                                        <Ellipse WidthRequest="12"
+                                                                 HeightRequest="12"
+                                                                 Fill="{Binding MarkerColor}"
+                                                                 VerticalOptions="Center" />
+                                                        <Label Grid.Column="1"
+                                                               Text="{Binding Name}"
+                                                               Style="{StaticResource Body}"
+                                                               VerticalOptions="Center"
+                                                               LineBreakMode="TailTruncation" />
+                                                        <Button Grid.Column="2"
+                                                                Text=">"
+                                                                FontSize="12"
+                                                                WidthRequest="32"
+                                                                HeightRequest="32"
+                                                                Padding="0"
+                                                                CornerRadius="16"
+                                                                BackgroundColor="{StaticResource Primary}"
+                                                                TextColor="White"
+                                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=NavigateToPlaceCommand}"
+                                                                CommandParameter="{Binding .}" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </CollectionView.ItemTemplate>
+                                    </CollectionView>
 
-                                                    <!-- Place Name -->
-                                                    <Label Grid.Column="1"
-                                                           Text="{Binding Name}"
-                                                           Style="{StaticResource Body}"
-                                                           VerticalOptions="Center"
-                                                           LineBreakMode="TailTruncation" />
+                                    <!-- Segments Section -->
+                                    <Label Text="Segments"
+                                           Style="{StaticResource Caption}"
+                                           FontAttributes="Bold"
+                                           TextColor="{StaticResource TextSecondary}"
+                                           Margin="12,16,12,4"
+                                           IsVisible="{Binding HasSegments}" />
 
-                                                    <!-- Navigate Button -->
-                                                    <Button Grid.Column="2"
-                                                            Text=">"
-                                                            FontSize="12"
-                                                            WidthRequest="32"
-                                                            HeightRequest="32"
-                                                            Padding="0"
-                                                            CornerRadius="16"
-                                                            BackgroundColor="{StaticResource Primary}"
-                                                            TextColor="White"
-                                                            Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=NavigateToPlaceCommand}"
-                                                            CommandParameter="{Binding .}" />
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </CollectionView.ItemTemplate>
-                                </CollectionView>
-                            </Grid>
+                                    <CollectionView ItemsSource="{Binding SegmentDisplayItems}"
+                                                   SelectionMode="None"
+                                                   IsVisible="{Binding HasSegments}">
+                                        <CollectionView.ItemTemplate>
+                                            <DataTemplate x:DataType="viewmodels:SegmentDisplayItem">
+                                                <Border Margin="8,2"
+                                                        Padding="12"
+                                                        StrokeThickness="0"
+                                                        BackgroundColor="{StaticResource Surface}">
+                                                    <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*" ColumnSpacing="12" RowSpacing="4">
+                                                        <!-- Transport Mode Icon -->
+                                                        <Label Text="{Binding TransportIcon}"
+                                                               FontSize="20"
+                                                               VerticalOptions="Center"
+                                                               Grid.RowSpan="2" />
+                                                        <!-- From -> To -->
+                                                        <Label Grid.Column="1"
+                                                               Text="{Binding Description}"
+                                                               Style="{StaticResource Body}"
+                                                               LineBreakMode="TailTruncation" />
+                                                        <!-- Distance & Duration -->
+                                                        <Label Grid.Row="1"
+                                                               Grid.Column="1"
+                                                               Text="{Binding DistanceAndDuration}"
+                                                               Style="{StaticResource Caption}"
+                                                               TextColor="{StaticResource TextSecondary}" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </CollectionView.ItemTemplate>
+                                    </CollectionView>
+                                </VerticalStackLayout>
+                            </ScrollView>
                         </navDrawer:DrawerSettings.DrawerContentView>
 
                     </navDrawer:DrawerSettings>

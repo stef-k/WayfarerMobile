@@ -44,6 +44,7 @@ public partial class TripsViewModel : BaseViewModel
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasPlaces))]
     [NotifyPropertyChangedFor(nameof(HasSegments))]
+    [NotifyPropertyChangedFor(nameof(SegmentDisplayItems))]
     private TripDetails? _selectedTripDetails;
 
     /// <summary>
@@ -149,6 +150,11 @@ public partial class TripsViewModel : BaseViewModel
     /// Gets whether the selected trip has segments.
     /// </summary>
     public bool HasSegments => SelectedTripDetails?.Segments.Any() ?? false;
+
+    /// <summary>
+    /// Gets the segment display items for the sidebar.
+    /// </summary>
+    public IEnumerable<SegmentDisplayItem> SegmentDisplayItems => BuildSegmentDisplayItems();
 
     /// <summary>
     /// Gets whether the selected trip is downloaded.
@@ -701,6 +707,39 @@ public partial class TripsViewModel : BaseViewModel
             _mapService.ClearTripSegments();
         }
         await base.OnDisappearingAsync();
+    }
+
+    #endregion
+
+    #region Private Helpers
+
+    /// <summary>
+    /// Builds the segment display items from the current trip details.
+    /// </summary>
+    private IEnumerable<SegmentDisplayItem> BuildSegmentDisplayItems()
+    {
+        if (SelectedTripDetails?.Segments == null || !SelectedTripDetails.Segments.Any())
+        {
+            return Enumerable.Empty<SegmentDisplayItem>();
+        }
+
+        var places = SelectedTripDetails.AllPlaces.ToDictionary(p => p.Id);
+
+        return SelectedTripDetails.Segments.Select(segment =>
+        {
+            var originName = places.TryGetValue(segment.OriginId, out var origin) ? origin.Name : "Unknown";
+            var destName = places.TryGetValue(segment.DestinationId, out var dest) ? dest.Name : "Unknown";
+
+            return new SegmentDisplayItem
+            {
+                Id = segment.Id,
+                OriginName = originName,
+                DestinationName = destName,
+                TransportMode = segment.TransportMode ?? "walk",
+                DistanceKm = segment.DistanceKm,
+                DurationMinutes = segment.DurationMinutes
+            };
+        }).ToList();
     }
 
     #endregion
