@@ -2,45 +2,39 @@
 
 ## Current Status
 
-**Progress:** ~94% Complete (Core Features Done, Polish & Settings Remaining)
+**Progress:** ~97% Complete (Core Features + Settings Done, Polish Remaining)
 
-**Next Tasks (Priority Order):** See `docs/REMAINING_TASKS.md` for full details
+**Completed This Session (December 10, 2025):**
+- ✅ P0: Extracted NavigationRoute, NavigationWaypoint, TripNavigationState, enums to Core/
+- ✅ P0: Removed duplicate PolylineDecoder, fixed ApiClient DI registration
+- ✅ P1: Navigation settings (audio, vibration, auto-reroute, distance units km/miles)
+- ✅ P1: About page with open source license attributions
+- ✅ P1: Groups state persistence (remembers last selected group)
+- ✅ P1: Trip segment list UI in sidebar (transport mode icons, distance, duration)
 
-**P0 - Code Quality (before any testing):**
-1. Extract classes from TripNavigationService → Core/Models/, Core/Enums/
-2. Remove duplicate PolylineDecoder (use Helpers/PolylineDecoder.cs)
-3. Fix duplicate ApiClient DI registration in MauiProgram.cs
-4. Add logging to exception handlers in ViewModels
-5. Commit untracked PolylineDecoder.cs
-
-**P1 - Feature Implementation:**
-1. Navigation settings UI (audio, volume, vibration, language, units)
-2. About page with version and open source licenses
-3. Background notifications (tracking state, download progress)
-4. Trip segment list UI in sidebar
-5. Groups state persistence
-
-**P2 - Polish:**
+**Next Tasks (P2 - Polish):**
 1. Toast notification system
 2. User-friendly error dialogs
-3. Sidebar fade animations
+3. Background notifications (tracking state, download progress)
+4. Sidebar fade animations
 
 **Completed Features:**
 - ✅ Lock Screen Overlay (PIN entry on app resume)
 - ✅ Route Polyline (navigation route visualization on map)
 - ✅ Navigation System with OSRM integration
-- ✅ Trip Sidebar (SfNavigationDrawer with places list)
-- ✅ Segment Visualization (transport mode styled polylines)
+- ✅ Trip Sidebar (SfNavigationDrawer with places + segments list)
+- ✅ Segment Visualization (transport mode styled polylines on map)
 - ✅ Loading States (reusable LoadingOverlay control)
 - ✅ Offline Banner (connectivity status on key pages)
 - ✅ iOS Background Banner (blue status bar during tracking)
 - ✅ Page Transition Animations (modal animations for overlay pages)
 - ✅ App Icon and Splash Screen (Wayfarer themed)
+- ✅ Navigation Settings (audio, vibration, auto-reroute, km/miles)
+- ✅ About Page (version, open source libraries, OSM attribution)
 
 **Key Files for Next Session:**
 
-- `docs/REMAINING_TASKS.md` - **Detailed task list with priorities and effort estimates**
-- `docs/REWRITE_ASSESSMENT_REPORT.md` - Comprehensive codebase analysis
+- `docs/REMAINING_TASKS.md` - P2 polish items remaining
 - `docs/IMPLEMENTATION_CHECKLIST.md` - Phase-by-phase progress tracking
 
 ---

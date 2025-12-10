@@ -30,26 +30,31 @@ Step-by-step guide for implementing WayfarerMobile from scratch.
 | 1. Foundation | Complete | 100% |
 | 2. Location Service (Android) | Complete | 100% |
 | 3. Onboarding Flow | Complete | 100% |
-| 4. Settings | Partial | ~85% (navigation settings missing) |
+| 4. Settings | Complete | 100% |
 | 5. Main Map | Complete | 100% |
 | 6. Database & API | Complete | 100% |
 | 7. Timeline | Complete | 100% |
 | 8. Trips | Complete | 100% |
-| 9. Navigation | Partial | ~95% (settings integration needed) |
-| 10. Groups | Partial | ~95% (state persistence needed) |
+| 9. Navigation | Complete | 100% |
+| 10. Groups | Complete | 100% |
 | 11. Check-In | Complete | 100% |
-| 12. Polish | Partial | ~75% |
+| 12. Polish | Partial | ~85% |
 
-**Overall: ~94% Complete (Core Features)**
+**Overall: ~97% Complete**
 
-**Remaining Work (see docs/REMAINING_TASKS.md):**
+**Remaining Work (P2 Polish):**
 
-- Code quality fixes (P0)
-- Navigation settings UI (P1)
-- About page with licenses (P1)
-- Background notifications (P1)
-- Toast notification system (P2)
-- Diagnostic tools (P2)
+- Toast notification system
+- User-friendly error dialogs
+- Background notifications (tracking state, download progress)
+- Sidebar fade animations
+
+**Completed December 10, 2025:**
+- P0: Code quality fixes (extracted classes, fixed DI)
+- P1: Navigation settings UI (audio, vibration, auto-reroute, km/miles)
+- P1: About page with open source licenses
+- P1: Groups state persistence
+- P1: Trip segment list UI in sidebar
 
 ---
 
