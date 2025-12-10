@@ -6,7 +6,8 @@
              x:Class="WayfarerMobile.Views.QrScannerPage"
              x:DataType="vm:QrScannerViewModel"
              Title="{Binding Title}"
-             Shell.NavBarIsVisible="True">
+             Shell.NavBarIsVisible="True"
+             Shell.PresentationMode="ModalAnimated">
 
     <Grid>
         <!-- Camera Preview -->

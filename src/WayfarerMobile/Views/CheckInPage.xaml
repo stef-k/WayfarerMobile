@@ -6,6 +6,7 @@
              x:Class="WayfarerMobile.Views.CheckInPage"
              x:DataType="viewmodels:CheckInViewModel"
              Title="Check In"
+             Shell.PresentationMode="ModalAnimated"
              BackgroundColor="{StaticResource Background}">
 
     <Grid RowDefinitions="200,*,Auto" Padding="0">

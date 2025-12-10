@@ -7,6 +7,7 @@
              x:DataType="viewmodels:LockScreenViewModel"
              Title="Enter PIN"
              Shell.NavBarIsVisible="False"
+             Shell.PresentationMode="ModalAnimated"
              BackgroundColor="{StaticResource Primary}">
 
     <Grid RowDefinitions="*,Auto,2*" Padding="24">

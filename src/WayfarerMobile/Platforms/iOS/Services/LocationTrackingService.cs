@@ -92,6 +92,12 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
                 _locationManager.AllowsBackgroundLocationUpdates = true;
             }
 
+            // Show blue status bar indicator when app is in background (iOS 11+)
+            if (UIDevice.CurrentDevice.CheckSystemVersion(11, 0))
+            {
+                _locationManager.ShowsBackgroundLocationIndicator = true;
+            }
+
             // Request always authorization for background tracking
             _locationManager.RequestAlwaysAuthorization();
 
@@ -133,6 +139,12 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
             if (UIDevice.CurrentDevice.CheckSystemVersion(9, 0))
             {
                 _locationManager.AllowsBackgroundLocationUpdates = false;
+            }
+
+            // Hide blue status bar indicator
+            if (UIDevice.CurrentDevice.CheckSystemVersion(11, 0))
+            {
+                _locationManager.ShowsBackgroundLocationIndicator = false;
             }
 
             _locationManager.Delegate = null!;
