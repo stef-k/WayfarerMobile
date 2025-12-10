@@ -6,8 +6,7 @@
 
 **Next Tasks (Priority Order):**
 
-1. **P2 - Loading States** - `SfBusyIndicator` on all pages
-2. **P2 - Offline Banner** - Connectivity status indicator
+1. **P3 - Polish** - App icon, splash screen refinements
 
 **Completed Features:**
 - ✅ Lock Screen Overlay (PIN entry on app resume)
@@ -15,6 +14,8 @@
 - ✅ Navigation System with OSRM integration
 - ✅ Trip Sidebar (SfNavigationDrawer with places list)
 - ✅ Segment Visualization (transport mode styled polylines)
+- ✅ Loading States (reusable LoadingOverlay control)
+- ✅ Offline Banner (connectivity status on key pages)
 
 **Key Files for Next Session:**
 
