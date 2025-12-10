@@ -7,6 +7,7 @@ Step-by-step guide for implementing WayfarerMobile from scratch.
 ## ⚠️ MANDATORY PROCESS
 
 **Before implementing ANY feature:**
+
 1. Read the relevant section in `DESIGN_SPEC.md`
 2. Read any referenced docs in `docs/reference/`
 3. Follow the checklist items IN ORDER
@@ -14,6 +15,7 @@ Step-by-step guide for implementing WayfarerMobile from scratch.
 5. Verify against the spec after completion
 
 **DO NOT:**
+
 - Skip phases or items
 - Create stub implementations
 - Deviate from the design without documenting why
@@ -41,6 +43,7 @@ Step-by-step guide for implementing WayfarerMobile from scratch.
 **Overall: ~94% Complete (Backend/MVVM)**
 
 **Remaining UI Work:**
+
 - Lock screen overlay (PIN entry)
 - Offline banner
 - Loading states (`SfBusyIndicator`)
@@ -73,6 +76,7 @@ Step-by-step guide for implementing WayfarerMobile from scratch.
   - [x] `Styles.xaml` - Typography + Control styles (Headline, SubHeadline, DarkButton, DangerButton, Frame, ListView, etc.)
 
 **UI Components to use (from DESIGN_SPEC.md):**
+
 - `SfSwitch` for toggles
 - `SfExpander` for collapsible sections
 - `SfListView` for lists with grouping
@@ -264,7 +268,7 @@ Reference: `C:\Users\stef\source\repos\Wayfarer.Mobile\Services\Security\AppLock
 
 ## Phase 5: Main Map
 
-**Status: COMPLETE**
+### Status: COMPLETE
 
 ### 5.1 Create Map Page
 
@@ -356,7 +360,7 @@ Reference: `C:\Users\stef\source\repos\Wayfarer.Mobile\Services\Api\WayfarerHttp
 
 ## Phase 7: Timeline
 
-**Status: COMPLETE**
+### Status: COMPLETE
 
 Reference: `C:\Users\stef\source\repos\Wayfarer.Mobile\Pages\TimelinePage.xaml`
 
@@ -385,7 +389,7 @@ Reference: `C:\Users\stef\source\repos\Wayfarer.Mobile\Pages\TimelinePage.xaml`
 
 ## Phase 8: Trips
 
-**Status: COMPLETE (100%)**
+### Status: COMPLETE (100%)
 
 Reference: `docs/reference/TILE_CACHING.md`
 
@@ -409,28 +413,6 @@ Reference: `C:\Users\stef\source\repos\Wayfarer.Mobile\Controls\TripSidebar\`
 - [ ] Segment visualization
 - [x] Navigate to place command (via NavigationService)
 
-### 8.4 Custom Icon System
-
-- [x] Icon assets copied (`Resources/Raw/wayfarer-map-icons/`) - 63 icons × 5 colors
-- [x] `IconCatalog` helper class (`Helpers/IconCatalog.cs`)
-  - [x] Icon name validation and coercion
-  - [x] Color validation and coercion
-  - [x] Resource path generation
-- [x] `MapService` custom place markers
-  - [x] Dedicated `_tripPlacesLayer` for trip places
-  - [x] `UpdateTripPlacesAsync()` with custom icons
-  - [x] Icon caching for performance
-  - [x] Mapsui 5.0 `ImageStyle` with base64-content scheme
-  - [x] Fallback to colored ellipse if icon fails
-
-### 8.5 Offline Database
-
-- [x] `DownloadedTripEntity` (`Data/Entities/DownloadedTrip.cs`)
-- [x] `TripTileEntity` (`Data/Entities/TripTile.cs`)
-- [x] `OfflinePlaceEntity` (`Data/Entities/OfflinePlace.cs`)
-- [x] DatabaseService trip management methods
-- [x] `TripDownloadService` for download orchestration
-
 ### 8.3 Create Tile Cache
 
 Reference: `docs/reference/TILE_CACHING.md` (501 lines of detailed design)
@@ -453,11 +435,33 @@ Reference: `docs/reference/TILE_CACHING.md` (501 lines of detailed design)
 - [x] `GetOfflineTripDetailsAsync` - Load complete trip for navigation
 - [x] Database cascade delete for all trip entities
 
+### 8.4 Custom Icon System
+
+- [x] Icon assets copied (`Resources/Raw/wayfarer-map-icons/`) - 63 icons × 5 colors
+- [x] `IconCatalog` helper class (`Helpers/IconCatalog.cs`)
+  - [x] Icon name validation and coercion
+  - [x] Color validation and coercion
+  - [x] Resource path generation
+- [x] `MapService` custom place markers
+  - [x] Dedicated `_tripPlacesLayer` for trip places
+  - [x] `UpdateTripPlacesAsync()` with custom icons
+  - [x] Icon caching for performance
+  - [x] Mapsui 5.0 `ImageStyle` with base64-content scheme
+  - [x] Fallback to colored ellipse if icon fails
+
+### 8.5 Offline Database
+
+- [x] `DownloadedTripEntity` (`Data/Entities/DownloadedTrip.cs`)
+- [x] `TripTileEntity` (`Data/Entities/TripTile.cs`)
+- [x] `OfflinePlaceEntity` (`Data/Entities/OfflinePlace.cs`)
+- [x] DatabaseService trip management methods
+- [x] `TripDownloadService` for download orchestration
+
 ---
 
 ## Phase 9: Navigation
 
-**Status: COMPLETE**
+### Status: COMPLETE
 
 Reference: `docs/reference/NAVIGATION_SYSTEM.md` (1382 lines of detailed design)
 
@@ -502,7 +506,7 @@ Reference: `C:\Users\stef\source\repos\Wayfarer.Mobile\Services\Navigation\Navig
 
 ## Phase 10: Groups
 
-**Status: COMPLETE**
+### Status: COMPLETE
 
 ### 10.1 Create Groups Page
 
@@ -527,7 +531,7 @@ Reference: `docs/reference/GROUPS_FEATURE.md`
 
 ## Phase 11: Check-In
 
-**Status: COMPLETE**
+### Status: COMPLETE
 
 ### 11.1 Create Check-In Page
 
@@ -547,7 +551,7 @@ Reference: `docs/reference/GROUPS_FEATURE.md`
 
 ## Phase 12: Polish
 
-**Status: PARTIAL (~50%)**
+### Status: PARTIAL (~50%)
 
 ### 12.1 Error Handling
 
