@@ -10,6 +10,7 @@ using WayfarerMobile.Core.Algorithms;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Services;
+using WayfarerMobile.Platforms.Android.Receivers;
 using WayfarerMobile.Services;
 using Location = Android.Locations.Location;
 
@@ -51,6 +52,9 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
 
     /// <summary>Action to set normal mode (server-configured interval).</summary>
     public const string ActionSetNormal = "com.wayfarer.mobile.ACTION_SET_NORMAL";
+
+    /// <summary>Action for check-in from notification (handled by NotificationActionReceiver).</summary>
+    public const string ActionCheckIn = "com.wayfarer.mobile.ACTION_CHECK_IN";
 
     // Performance mode intervals (milliseconds)
     private const long HighPerformanceIntervalMs = 1000;
@@ -628,29 +632,34 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     /// </summary>
     private Notification CreateNotification(string text)
     {
-        // Intent to open the app when notification is tapped
-        var pendingIntentFlags = PendingIntentFlags.UpdateCurrent;
-        if (Build.VERSION.SdkInt >= BuildVersionCodes.S)
-        {
-            pendingIntentFlags |= PendingIntentFlags.Immutable;
-        }
+        // PendingIntent flags - Immutable required for Android 12+
+        var pendingIntentFlags = PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent;
 
+        // Intent to open the app when notification is tapped
         var openAppIntent = PackageManager?.GetLaunchIntentForPackage(PackageName ?? "");
         var openAppPendingIntent = PendingIntent.GetActivity(
             this, 0, openAppIntent, pendingIntentFlags);
 
-        // Pause/Resume action
-        var pauseIntent = new Intent(this, typeof(LocationTrackingService));
-        pauseIntent.SetAction(_currentState == TrackingState.Paused ? ActionResume : ActionPause);
-        var pausePendingIntent = PendingIntent.GetService(
-            this, 1, pauseIntent, pendingIntentFlags);
-        var pauseText = _currentState == TrackingState.Paused ? "Resume" : "Pause";
+        // Check In action (broadcast to NotificationActionReceiver)
+        var checkInIntent = new Intent(this, typeof(NotificationActionReceiver));
+        checkInIntent.SetAction(NotificationActionReceiver.ActionCheckIn);
+        var checkInPendingIntent = PendingIntent.GetBroadcast(
+            this, 1, checkInIntent, pendingIntentFlags);
 
-        // Stop action
-        var stopIntent = new Intent(this, typeof(LocationTrackingService));
-        stopIntent.SetAction(ActionStop);
-        var stopPendingIntent = PendingIntent.GetService(
-            this, 2, stopIntent, pendingIntentFlags);
+        // Pause/Resume action (broadcast to NotificationActionReceiver)
+        var isPaused = _currentState == TrackingState.Paused;
+        var pauseIntent = new Intent(this, typeof(NotificationActionReceiver));
+        pauseIntent.SetAction(NotificationActionReceiver.ActionPauseResume);
+        pauseIntent.PutExtra("is_paused", isPaused);
+        var pausePendingIntent = PendingIntent.GetBroadcast(
+            this, 2, pauseIntent, pendingIntentFlags);
+        var pauseText = isPaused ? "Resume" : "Pause";
+
+        // Stop action (broadcast to NotificationActionReceiver)
+        var stopIntent = new Intent(this, typeof(NotificationActionReceiver));
+        stopIntent.SetAction(NotificationActionReceiver.ActionStop);
+        var stopPendingIntent = PendingIntent.GetBroadcast(
+            this, 3, stopIntent, pendingIntentFlags);
 
         var builder = new NotificationCompat.Builder(this, ChannelId);
         builder.SetContentTitle("WayfarerMobile");
@@ -658,6 +667,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         builder.SetSmallIcon(Resource.Drawable.ic_notification);
         builder.SetOngoing(true);
         builder.SetContentIntent(openAppPendingIntent);
+        builder.AddAction(0, "Check In", checkInPendingIntent);
         builder.AddAction(0, pauseText, pausePendingIntent);
         builder.AddAction(0, "Stop", stopPendingIntent);
         builder.SetPriority(NotificationCompat.PriorityLow);
