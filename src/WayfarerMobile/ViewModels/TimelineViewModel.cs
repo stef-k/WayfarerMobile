@@ -2,8 +2,11 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WayfarerMobile.Core.Enums;
+using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Data.Entities;
 using WayfarerMobile.Data.Services;
+using WayfarerMobile.Services;
+using WayfarerMobile.Shared.Controls;
 
 namespace WayfarerMobile.ViewModels;
 
@@ -15,6 +18,8 @@ public partial class TimelineViewModel : BaseViewModel
     #region Fields
 
     private readonly DatabaseService _database;
+    private readonly ITimelineSyncService _timelineSyncService;
+    private readonly IToastService _toastService;
 
     #endregion
 
@@ -51,6 +56,24 @@ public partial class TimelineViewModel : BaseViewModel
     [ObservableProperty]
     private int _totalCount;
 
+    /// <summary>
+    /// Gets or sets the selected entry for the details sheet.
+    /// </summary>
+    [ObservableProperty]
+    private TimelineItem? _selectedEntry;
+
+    /// <summary>
+    /// Gets or sets whether the entry details sheet is open.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isEntryDetailsOpen;
+
+    /// <summary>
+    /// Gets or sets whether the date picker popup is open.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isDatePickerOpen;
+
     #endregion
 
     #region Computed Properties
@@ -77,10 +100,20 @@ public partial class TimelineViewModel : BaseViewModel
     /// <summary>
     /// Creates a new instance of TimelineViewModel.
     /// </summary>
-    public TimelineViewModel(DatabaseService database)
+    public TimelineViewModel(
+        DatabaseService database,
+        ITimelineSyncService timelineSyncService,
+        IToastService toastService)
     {
         _database = database;
+        _timelineSyncService = timelineSyncService;
+        _toastService = toastService;
         Title = "Timeline";
+
+        // Subscribe to sync events
+        _timelineSyncService.SyncCompleted += OnSyncCompleted;
+        _timelineSyncService.SyncQueued += OnSyncQueued;
+        _timelineSyncService.SyncRejected += OnSyncRejected;
     }
 
     #endregion
@@ -166,10 +199,112 @@ public partial class TimelineViewModel : BaseViewModel
     /// Opens date picker to select a specific date.
     /// </summary>
     [RelayCommand]
-    private async Task SelectDateAsync()
+    private void OpenDatePicker()
     {
-        // The view will handle this through a DatePicker binding
-        await LoadDataAsync();
+        IsDatePickerOpen = true;
+    }
+
+    /// <summary>
+    /// Called when the date picker selection changes.
+    /// </summary>
+    [RelayCommand]
+    private async Task DateSelectedAsync(DateTime? date)
+    {
+        if (date.HasValue && date.Value.Date != SelectedDate.Date)
+        {
+            SelectedDate = date.Value.Date;
+            await LoadDataAsync();
+        }
+        IsDatePickerOpen = false;
+    }
+
+    /// <summary>
+    /// Closes the date picker without selecting.
+    /// </summary>
+    [RelayCommand]
+    private void CloseDatePicker()
+    {
+        IsDatePickerOpen = false;
+    }
+
+    /// <summary>
+    /// Shows the entry details bottom sheet.
+    /// </summary>
+    [RelayCommand]
+    private void ShowEntryDetails(TimelineItem? entry)
+    {
+        if (entry == null)
+            return;
+
+        SelectedEntry = entry;
+        IsEntryDetailsOpen = true;
+    }
+
+    /// <summary>
+    /// Closes the entry details bottom sheet.
+    /// </summary>
+    public void CloseEntryDetails()
+    {
+        IsEntryDetailsOpen = false;
+        SelectedEntry = null;
+    }
+
+    /// <summary>
+    /// Saves entry changes with optimistic UI update.
+    /// </summary>
+    /// <param name="e">The timeline entry update event args.</param>
+    public async Task SaveEntryChangesAsync(TimelineEntryUpdateEventArgs e)
+    {
+        // Apply optimistic UI update to the local item
+        if (SelectedEntry != null)
+        {
+            SelectedEntry.Location.Latitude = e.Latitude;
+            SelectedEntry.Location.Longitude = e.Longitude;
+            SelectedEntry.Location.Timestamp = e.LocalTimestamp;
+            SelectedEntry.Location.Notes = e.Notes;
+        }
+
+        // Sync to server (handles offline queueing automatically)
+        await _timelineSyncService.UpdateLocationAsync(
+            e.LocationId,
+            e.Latitude,
+            e.Longitude,
+            e.LocalTimestamp,
+            e.Notes,
+            includeNotes: true);
+    }
+
+    /// <summary>
+    /// Handles sync completed event.
+    /// </summary>
+    private async void OnSyncCompleted(object? sender, SyncSuccessEventArgs e)
+    {
+        await MainThread.InvokeOnMainThreadAsync(async () =>
+        {
+            await _toastService.ShowSuccessAsync("Changes saved");
+        });
+    }
+
+    /// <summary>
+    /// Handles sync queued event (offline).
+    /// </summary>
+    private async void OnSyncQueued(object? sender, SyncQueuedEventArgs e)
+    {
+        await MainThread.InvokeOnMainThreadAsync(async () =>
+        {
+            await _toastService.ShowWarningAsync(e.Message);
+        });
+    }
+
+    /// <summary>
+    /// Handles sync rejected event (server error).
+    /// </summary>
+    private async void OnSyncRejected(object? sender, SyncFailureEventArgs e)
+    {
+        await MainThread.InvokeOnMainThreadAsync(async () =>
+        {
+            await _toastService.ShowErrorAsync($"Save failed: {e.ErrorMessage}");
+        });
     }
 
     #endregion

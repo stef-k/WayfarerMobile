@@ -1,0 +1,352 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:bottomSheet="clr-namespace:Syncfusion.Maui.Toolkit.BottomSheet;assembly=Syncfusion.Maui.Toolkit"
+             xmlns:controls="clr-namespace:WayfarerMobile.Shared.Controls"
+             xmlns:sys="clr-namespace:System;assembly=netstandard"
+             x:Class="WayfarerMobile.Shared.Controls.TimelineEntrySheet"
+             x:Name="Root">
+
+    <bottomSheet:SfBottomSheet x:Name="BottomSheet"
+                               IsOpen="{Binding IsOpen, Source={x:Reference Root}}"
+                               AllowedState="All"
+                               State="{Binding SheetState, Source={x:Reference Root}, Mode=TwoWay}"
+                               HalfExpandedRatio="0.45"
+                               FullExpandedRatio="0.85"
+                               EnableSwiping="True"
+                               IsModal="False"
+                               ShowGrabber="True"
+                               CornerRadius="16"
+                               Closed="OnBottomSheetClosed"
+                               BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+
+        <!-- Main Content (placeholder) -->
+        <bottomSheet:SfBottomSheet.Content>
+            <Grid />
+        </bottomSheet:SfBottomSheet.Content>
+
+        <!-- Bottom Sheet Content -->
+        <bottomSheet:SfBottomSheet.BottomSheetContent>
+            <Grid RowDefinitions="Auto,*,Auto"
+                  BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+
+                <!-- Header Section -->
+                <Grid Grid.Row="0" Padding="16,8,16,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- View Mode: Time and Date -->
+                    <VerticalStackLayout Spacing="4"
+                                        IsVisible="{Binding IsEditing, Source={x:Reference Root}, Converter={StaticResource InvertedBoolConverter}}">
+                        <Label Text="{Binding TimeText, Source={x:Reference Root}}"
+                               Style="{StaticResource Headline}"
+                               FontAttributes="Bold" />
+                        <Label Text="{Binding DateText, Source={x:Reference Root}}"
+                               Style="{StaticResource Caption}"
+                               TextColor="{StaticResource TextSecondary}" />
+                    </VerticalStackLayout>
+
+                    <!-- Edit Mode: Timestamp Editing -->
+                    <VerticalStackLayout Spacing="8"
+                                        IsVisible="{Binding IsEditing, Source={x:Reference Root}}">
+                        <Label Text="Date &amp; Time"
+                               Style="{StaticResource Caption}"
+                               FontAttributes="Bold"
+                               TextColor="{StaticResource TextSecondary}" />
+                        <HorizontalStackLayout Spacing="8">
+                            <DatePicker Date="{Binding EditDate, Source={x:Reference Root}, Mode=TwoWay}"
+                                       MinimumDate="2020-01-01"
+                                       MaximumDate="{x:Static sys:DateTime.Today}" />
+                            <TimePicker Time="{Binding EditTime, Source={x:Reference Root}, Mode=TwoWay}" />
+                        </HorizontalStackLayout>
+                    </VerticalStackLayout>
+
+                    <!-- Close Button -->
+                    <Button Grid.Column="1"
+                            Text="✕"
+                            FontSize="16"
+                            WidthRequest="36"
+                            HeightRequest="36"
+                            Padding="0"
+                            CornerRadius="18"
+                            BackgroundColor="Transparent"
+                            TextColor="{StaticResource TextSecondary}"
+                            Clicked="OnCloseClicked" />
+                </Grid>
+
+                <!-- Scrollable Content -->
+                <ScrollView Grid.Row="1" Padding="16,0">
+                    <VerticalStackLayout Spacing="16">
+
+                        <!-- View Mode: Coordinates Section -->
+                        <Frame Padding="12"
+                               BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                               BorderColor="Transparent"
+                               CornerRadius="8"
+                               HasShadow="False"
+                               IsVisible="{Binding IsEditing, Source={x:Reference Root}, Converter={StaticResource InvertedBoolConverter}}">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                                <Label Text="📍"
+                                       FontSize="20"
+                                       VerticalOptions="Center" />
+                                <VerticalStackLayout Grid.Column="1" Spacing="4">
+                                    <Label Text="Coordinates"
+                                           Style="{StaticResource Caption}"
+                                           FontAttributes="Bold"
+                                           TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding CoordinatesText, Source={x:Reference Root}}"
+                                           Style="{StaticResource Body}"
+                                           FontFamily="Consolas" />
+                                </VerticalStackLayout>
+                            </Grid>
+                        </Frame>
+
+                        <!-- Edit Mode: Coordinates Section -->
+                        <Frame Padding="12"
+                               BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                               BorderColor="{StaticResource Gray300}"
+                               CornerRadius="8"
+                               HasShadow="False"
+                               IsVisible="{Binding IsEditing, Source={x:Reference Root}}">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                                <Label Text="📍"
+                                       FontSize="20"
+                                       VerticalOptions="Start"
+                                       Margin="0,8,0,0" />
+                                <VerticalStackLayout Grid.Column="1" Spacing="8">
+                                    <Label Text="Coordinates"
+                                           Style="{StaticResource Caption}"
+                                           FontAttributes="Bold"
+                                           TextColor="{StaticResource TextSecondary}" />
+                                    <Entry Text="{Binding EditLatitude, Source={x:Reference Root}, Mode=TwoWay}"
+                                           Keyboard="Numeric"
+                                           Placeholder="Latitude" />
+                                    <Entry Text="{Binding EditLongitude, Source={x:Reference Root}, Mode=TwoWay}"
+                                           Keyboard="Numeric"
+                                           Placeholder="Longitude" />
+                                </VerticalStackLayout>
+                            </Grid>
+                        </Frame>
+
+                        <!-- View Mode: Accuracy & Speed Section -->
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12"
+                              IsVisible="{Binding IsEditing, Source={x:Reference Root}, Converter={StaticResource InvertedBoolConverter}}">
+                            <!-- Accuracy -->
+                            <Frame Padding="12"
+                                   BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                                   BorderColor="Transparent"
+                                   CornerRadius="8"
+                                   HasShadow="False">
+                                <VerticalStackLayout Spacing="4">
+                                    <HorizontalStackLayout Spacing="8">
+                                        <Ellipse WidthRequest="10"
+                                                 HeightRequest="10"
+                                                 Fill="{Binding AccuracyColor, Source={x:Reference Root}}"
+                                                 VerticalOptions="Center" />
+                                        <Label Text="Accuracy"
+                                               Style="{StaticResource Caption}"
+                                               FontAttributes="Bold"
+                                               TextColor="{StaticResource TextSecondary}" />
+                                    </HorizontalStackLayout>
+                                    <Label Text="{Binding AccuracyText, Source={x:Reference Root}}"
+                                           Style="{StaticResource SubHeadline}" />
+                                </VerticalStackLayout>
+                            </Frame>
+
+                            <!-- Speed -->
+                            <Frame Grid.Column="1"
+                                   Padding="12"
+                                   BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                                   BorderColor="Transparent"
+                                   CornerRadius="8"
+                                   HasShadow="False">
+                                <VerticalStackLayout Spacing="4">
+                                    <Label Text="Speed"
+                                           Style="{StaticResource Caption}"
+                                           FontAttributes="Bold"
+                                           TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SpeedText, Source={x:Reference Root}}"
+                                           Style="{StaticResource SubHeadline}" />
+                                </VerticalStackLayout>
+                            </Frame>
+                        </Grid>
+
+                        <!-- View Mode: Altitude Section (if available) -->
+                        <Frame Padding="12"
+                               BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                               BorderColor="Transparent"
+                               CornerRadius="8"
+                               HasShadow="False"
+                               IsVisible="{Binding HasAltitude, Source={x:Reference Root}}">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12"
+                                  IsVisible="{Binding IsEditing, Source={x:Reference Root}, Converter={StaticResource InvertedBoolConverter}}">
+                                <Label Text="⛰️"
+                                       FontSize="20"
+                                       VerticalOptions="Center" />
+                                <VerticalStackLayout Grid.Column="1" Spacing="4">
+                                    <Label Text="Altitude"
+                                           Style="{StaticResource Caption}"
+                                           FontAttributes="Bold"
+                                           TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding AltitudeText, Source={x:Reference Root}}"
+                                           Style="{StaticResource Body}" />
+                                </VerticalStackLayout>
+                            </Grid>
+                        </Frame>
+
+                        <!-- Edit Mode: Notes Section -->
+                        <VerticalStackLayout IsVisible="{Binding IsEditing, Source={x:Reference Root}}"
+                                            Spacing="8">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Label Text="Notes"
+                                       Style="{StaticResource Caption}"
+                                       FontAttributes="Bold"
+                                       TextColor="{StaticResource TextSecondary}"
+                                       VerticalOptions="Center" />
+                                <Button Grid.Column="1"
+                                        Text="Edit Rich Text"
+                                        FontSize="12"
+                                        Padding="12,6"
+                                        HeightRequest="32"
+                                        CornerRadius="16"
+                                        BackgroundColor="{StaticResource Primary}"
+                                        TextColor="White"
+                                        Clicked="OnEditNotesClicked" />
+                            </Grid>
+                            <Frame Padding="12"
+                                   BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                                   BorderColor="{StaticResource Gray300}"
+                                   CornerRadius="8"
+                                   HasShadow="False">
+                                <Label Text="{Binding EditNotesPreview, Source={x:Reference Root}}"
+                                       Style="{StaticResource Body}"
+                                       LineBreakMode="WordWrap"
+                                       MaxLines="5"
+                                       TextColor="{Binding HasEditNotes, Source={x:Reference Root}, Converter={StaticResource BoolToColorConverter}}" />
+                            </Frame>
+                        </VerticalStackLayout>
+
+                        <!-- View Mode: Provider & Sync Status -->
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12"
+                              IsVisible="{Binding IsEditing, Source={x:Reference Root}, Converter={StaticResource InvertedBoolConverter}}">
+                            <!-- Provider -->
+                            <Frame Padding="12"
+                                   BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                                   BorderColor="Transparent"
+                                   CornerRadius="8"
+                                   HasShadow="False">
+                                <VerticalStackLayout Spacing="4">
+                                    <Label Text="Provider"
+                                           Style="{StaticResource Caption}"
+                                           FontAttributes="Bold"
+                                           TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding ProviderText, Source={x:Reference Root}}"
+                                           Style="{StaticResource Body}" />
+                                </VerticalStackLayout>
+                            </Frame>
+
+                            <!-- Sync Status -->
+                            <Frame Grid.Column="1"
+                                   Padding="12"
+                                   BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                                   BorderColor="Transparent"
+                                   CornerRadius="8"
+                                   HasShadow="False">
+                                <VerticalStackLayout Spacing="4">
+                                    <Label Text="Sync Status"
+                                           Style="{StaticResource Caption}"
+                                           FontAttributes="Bold"
+                                           TextColor="{StaticResource TextSecondary}" />
+                                    <HorizontalStackLayout Spacing="8">
+                                        <Label Text="{Binding SyncStatusIcon, Source={x:Reference Root}}"
+                                               FontSize="18" />
+                                        <Label Text="{Binding SyncStatusText, Source={x:Reference Root}}"
+                                               Style="{StaticResource Body}" />
+                                    </HorizontalStackLayout>
+                                </VerticalStackLayout>
+                            </Frame>
+                        </Grid>
+
+                        <!-- Spacer -->
+                        <BoxView HeightRequest="60" Color="Transparent" />
+
+                    </VerticalStackLayout>
+                </ScrollView>
+
+                <!-- View Mode: Action Buttons -->
+                <Grid Grid.Row="2"
+                      Padding="16"
+                      ColumnDefinitions="*,*,Auto,Auto"
+                      ColumnSpacing="12"
+                      BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}"
+                      IsVisible="{Binding IsEditing, Source={x:Reference Root}, Converter={StaticResource InvertedBoolConverter}}">
+
+                    <Button Text="Maps"
+                            Clicked="OnOpenInMapsClicked"
+                            BackgroundColor="{StaticResource Primary}"
+                            TextColor="White"
+                            FontSize="14"
+                            HeightRequest="44"
+                            CornerRadius="8" />
+
+                    <Button Grid.Column="1"
+                            Text="More..."
+                            Clicked="OnMoreActionsClicked"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                            TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
+                            FontSize="14"
+                            HeightRequest="44"
+                            CornerRadius="8" />
+
+                    <Button Grid.Column="2"
+                            Text="✏️"
+                            FontSize="18"
+                            WidthRequest="44"
+                            HeightRequest="44"
+                            Padding="0"
+                            CornerRadius="8"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                            Clicked="OnEditClicked" />
+                </Grid>
+
+                <!-- Edit Mode: Action Buttons -->
+                <Grid Grid.Row="2"
+                      Padding="16"
+                      ColumnDefinitions="*,*"
+                      ColumnSpacing="12"
+                      BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}"
+                      IsVisible="{Binding IsEditing, Source={x:Reference Root}}">
+
+                    <Button Text="Cancel"
+                            Clicked="OnCancelEditClicked"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                            TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
+                            FontSize="14"
+                            HeightRequest="44"
+                            CornerRadius="8" />
+
+                    <Button Grid.Column="1"
+                            Text="Save"
+                            Clicked="OnSaveEditClicked"
+                            BackgroundColor="{StaticResource Primary}"
+                            TextColor="White"
+                            FontSize="14"
+                            HeightRequest="44"
+                            CornerRadius="8"
+                            IsEnabled="{Binding IsSaving, Source={x:Reference Root}, Converter={StaticResource InvertedBoolConverter}}" />
+                </Grid>
+
+            </Grid>
+        </bottomSheet:SfBottomSheet.BottomSheetContent>
+
+    </bottomSheet:SfBottomSheet>
+
+    <!-- Notes Editor Overlay -->
+    <controls:NotesEditorControl x:Name="NotesEditor"
+                                 EditorTitle="Location Notes"
+                                 NotesSaved="OnNotesSaved"
+                                 EditorClosed="OnNotesEditorClosed" />
+
+</ContentView>

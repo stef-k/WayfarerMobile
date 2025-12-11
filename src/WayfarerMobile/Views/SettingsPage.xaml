@@ -242,6 +242,52 @@
                 </sfExpander:SfExpander.Content>
             </sfExpander:SfExpander>
 
+            <!-- Battery Section -->
+            <sfExpander:SfExpander IsExpanded="False">
+                <sfExpander:SfExpander.Header>
+                    <Grid HeightRequest="48" Padding="10,0">
+                        <Label Text="Battery"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               VerticalOptions="Center" />
+                    </Grid>
+                </sfExpander:SfExpander.Header>
+                <sfExpander:SfExpander.Content>
+                    <VerticalStackLayout Padding="15" Spacing="15">
+                        <!-- Battery Warnings Toggle -->
+                        <Grid ColumnDefinitions="*,Auto">
+                            <VerticalStackLayout Grid.Column="0">
+                                <Label Text="Battery Warnings"
+                                       FontSize="14" />
+                                <Label Text="Show alerts when battery is low during tracking"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            </VerticalStackLayout>
+                            <sfSwitch:SfSwitch Grid.Column="1"
+                                               IsOn="{Binding ShowBatteryWarnings}"
+                                               VisualType="Cupertino" />
+                        </Grid>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+
+                        <!-- Auto-Pause on Critical Battery -->
+                        <Grid ColumnDefinitions="*,Auto">
+                            <VerticalStackLayout Grid.Column="0">
+                                <Label Text="Auto-Pause on Critical"
+                                       FontSize="14" />
+                                <Label Text="Pause tracking when battery falls below 10%"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            </VerticalStackLayout>
+                            <sfSwitch:SfSwitch Grid.Column="1"
+                                               IsOn="{Binding AutoPauseTrackingOnCriticalBattery}"
+                                               VisualType="Cupertino" />
+                        </Grid>
+                    </VerticalStackLayout>
+                </sfExpander:SfExpander.Content>
+            </sfExpander:SfExpander>
+
             <!-- Security Section -->
             <sfExpander:SfExpander IsExpanded="False">
                 <sfExpander:SfExpander.Header>
@@ -328,6 +374,11 @@
 
                         <Button Text="About WayfarerMobile"
                                 Command="{Binding ShowAboutCommand}"
+                                Style="{StaticResource DarkButton}"
+                                HeightRequest="44" />
+
+                        <Button Text="Diagnostics"
+                                Command="{Binding ShowDiagnosticsCommand}"
                                 Style="{StaticResource DarkButton}"
                                 HeightRequest="44" />
                     </VerticalStackLayout>

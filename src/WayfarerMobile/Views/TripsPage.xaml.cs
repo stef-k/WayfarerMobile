@@ -1,3 +1,4 @@
+using WayfarerMobile.Shared.Controls;
 using WayfarerMobile.ViewModels;
 
 namespace WayfarerMobile.Views;
@@ -36,5 +37,21 @@ public partial class TripsPage : ContentPage
     {
         base.OnDisappearing();
         await _viewModel.OnDisappearingAsync();
+    }
+
+    /// <summary>
+    /// Called when the place details sheet is closed.
+    /// </summary>
+    private void OnPlaceDetailsSheetClosed(object? sender, EventArgs e)
+    {
+        _viewModel.ClosePlaceDetails();
+    }
+
+    /// <summary>
+    /// Called when place details save is requested.
+    /// </summary>
+    private async void OnPlaceDetailsSaveRequested(object? sender, PlaceUpdateEventArgs e)
+    {
+        await _viewModel.SavePlaceChangesAsync(e);
     }
 }

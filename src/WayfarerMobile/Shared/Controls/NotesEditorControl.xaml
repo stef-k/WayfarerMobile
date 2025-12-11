@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="WayfarerMobile.Shared.Controls.NotesEditorControl"
+             x:Name="Root">
+
+    <Grid>
+        <!-- Notes Viewer WebView (HTML display) - Shown when viewing -->
+        <WebView x:Name="NotesWebView"
+                 HeightRequest="400"
+                 MinimumHeightRequest="100"
+                 HorizontalOptions="Fill"
+                 VerticalOptions="Fill"
+                 Navigating="OnNotesWebViewNavigating"
+                 IsVisible="False" />
+
+        <!-- Notes Editor Modal Overlay - Shown when editing -->
+        <Grid x:Name="NotesEditorModalOverlay"
+              IsVisible="False"
+              BackgroundColor="#80000000"
+              InputTransparent="False"
+              ZIndex="1000">
+            <Grid.GestureRecognizers>
+                <TapGestureRecognizer Tapped="OnModalBackdropTapped" />
+            </Grid.GestureRecognizers>
+
+            <!-- Modal Content Card -->
+            <Frame Margin="16"
+                   VerticalOptions="Fill"
+                   HorizontalOptions="Fill"
+                   BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}"
+                   CornerRadius="16"
+                   Padding="0"
+                   HasShadow="True"
+                   InputTransparent="False">
+                <Frame.GestureRecognizers>
+                    <TapGestureRecognizer />
+                </Frame.GestureRecognizers>
+
+                <Grid RowDefinitions="Auto,*,Auto">
+                    <!-- Header -->
+                    <Grid Grid.Row="0"
+                          BackgroundColor="{StaticResource Primary}"
+                          Padding="16,12"
+                          ColumnDefinitions="*,Auto">
+                        <VerticalStackLayout>
+                            <Label x:Name="ModalTitleLabel"
+                                   Text="Edit Notes"
+                                   FontAttributes="Bold"
+                                   FontSize="18"
+                                   TextColor="White"
+                                   LineBreakMode="TailTruncation"
+                                   MaxLines="1" />
+                            <Label Text="Rich text editor"
+                                   FontSize="12"
+                                   TextColor="White"
+                                   Opacity="0.8" />
+                        </VerticalStackLayout>
+                        <Button Grid.Column="1"
+                                Text="✕"
+                                FontSize="18"
+                                WidthRequest="40"
+                                HeightRequest="40"
+                                Padding="0"
+                                CornerRadius="20"
+                                BackgroundColor="Transparent"
+                                TextColor="White"
+                                Clicked="OnCloseNotesEditorModal" />
+                    </Grid>
+
+                    <!-- Editor WebView -->
+                    <WebView x:Name="NotesWebViewModal"
+                             Grid.Row="1" />
+
+                    <!-- Footer Actions -->
+                    <Grid Grid.Row="2"
+                          BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                          Padding="16,12"
+                          ColumnDefinitions="*,*"
+                          ColumnSpacing="12">
+                        <Button Text="Cancel"
+                                FontSize="14"
+                                HeightRequest="44"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
+                                CornerRadius="8"
+                                Clicked="OnCancelNotesEdit" />
+                        <Button Grid.Column="1"
+                                Text="Save"
+                                FontSize="14"
+                                HeightRequest="44"
+                                BackgroundColor="{StaticResource Primary}"
+                                TextColor="White"
+                                CornerRadius="8"
+                                Clicked="OnSaveNotesEdit" />
+                    </Grid>
+                </Grid>
+            </Frame>
+        </Grid>
+    </Grid>
+</ContentView>

@@ -77,6 +77,31 @@ public class BoolToTextConverter : IValueConverter
 }
 
 /// <summary>
+/// Converts a boolean to a checkmark or X symbol.
+/// </summary>
+public class BoolToCheckConverter : IValueConverter
+{
+    /// <summary>
+    /// Converts a boolean to a checkmark or X symbol.
+    /// </summary>
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is bool boolValue)
+            return boolValue ? "OK" : "X";
+
+        return "?";
+    }
+
+    /// <summary>
+    /// Not implemented.
+    /// </summary>
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        throw new NotImplementedException();
+    }
+}
+
+/// <summary>
 /// Converts a percentage (0-100) to a decimal (0.0-1.0).
 /// </summary>
 public class PercentToDecimalConverter : IValueConverter

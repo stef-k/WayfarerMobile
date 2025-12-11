@@ -97,6 +97,18 @@ public partial class SettingsViewModel : BaseViewModel
     public bool IsMiles => DistanceUnits == "miles";
 
     /// <summary>
+    /// Gets or sets whether to show battery warnings during tracking.
+    /// </summary>
+    [ObservableProperty]
+    private bool _showBatteryWarnings;
+
+    /// <summary>
+    /// Gets or sets whether to auto-pause tracking on critical battery.
+    /// </summary>
+    [ObservableProperty]
+    private bool _autoPauseTrackingOnCriticalBattery;
+
+    /// <summary>
     /// Gets or sets the user email.
     /// </summary>
     [ObservableProperty]
@@ -158,6 +170,10 @@ public partial class SettingsViewModel : BaseViewModel
         NavigationVibrationEnabled = _settingsService.NavigationVibrationEnabled;
         AutoRerouteEnabled = _settingsService.AutoRerouteEnabled;
         DistanceUnits = _settingsService.DistanceUnits;
+
+        // Battery settings
+        ShowBatteryWarnings = _settingsService.ShowBatteryWarnings;
+        AutoPauseTrackingOnCriticalBattery = _settingsService.AutoPauseTrackingOnCriticalBattery;
 
         UserEmail = _settingsService.UserEmail ?? string.Empty;
         IsLoggedIn = _settingsService.IsConfigured;
@@ -223,6 +239,22 @@ public partial class SettingsViewModel : BaseViewModel
     partial void OnDistanceUnitsChanged(string value)
     {
         _settingsService.DistanceUnits = value;
+    }
+
+    /// <summary>
+    /// Saves show battery warnings setting.
+    /// </summary>
+    partial void OnShowBatteryWarningsChanged(bool value)
+    {
+        _settingsService.ShowBatteryWarnings = value;
+    }
+
+    /// <summary>
+    /// Saves auto-pause on critical battery setting.
+    /// </summary>
+    partial void OnAutoPauseTrackingOnCriticalBatteryChanged(bool value)
+    {
+        _settingsService.AutoPauseTrackingOnCriticalBattery = value;
     }
 
     /// <summary>
@@ -307,6 +339,15 @@ public partial class SettingsViewModel : BaseViewModel
     private async Task ShowAboutAsync()
     {
         await Shell.Current.GoToAsync("about");
+    }
+
+    /// <summary>
+    /// Opens the diagnostics page.
+    /// </summary>
+    [RelayCommand]
+    private async Task ShowDiagnosticsAsync()
+    {
+        await Shell.Current.GoToAsync("diagnostics");
     }
 
     #endregion

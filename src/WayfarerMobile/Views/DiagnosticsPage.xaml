@@ -1,0 +1,310 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:WayfarerMobile.ViewModels"
+             xmlns:services="clr-namespace:WayfarerMobile.Services"
+             xmlns:sfExpander="clr-namespace:Syncfusion.Maui.Toolkit.Expander;assembly=Syncfusion.Maui.Toolkit"
+             xmlns:progress="clr-namespace:Syncfusion.Maui.Toolkit.ProgressBar;assembly=Syncfusion.Maui.Toolkit"
+             x:Class="WayfarerMobile.Views.DiagnosticsPage"
+             x:DataType="vm:DiagnosticsViewModel"
+             Title="{Binding Title}">
+
+    <Grid>
+        <ScrollView>
+            <VerticalStackLayout Padding="15" Spacing="10">
+
+                <!-- Health Status Card -->
+                <Frame Padding="15" CornerRadius="10">
+                    <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto" RowSpacing="10">
+                        <Label Grid.Row="0" Grid.Column="0" Text="System Health" FontSize="18" FontAttributes="Bold" />
+                        <Label Grid.Row="0" Grid.Column="1" Text="{Binding HealthStatus}" TextColor="{Binding HealthStatusColor}" FontSize="18" FontAttributes="Bold" />
+                        <Grid Grid.Row="1" Grid.ColumnSpan="2" RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,*" RowSpacing="8" ColumnSpacing="15">
+                            <HorizontalStackLayout Grid.Row="0" Grid.Column="0" Spacing="5">
+                                <Label Text="FG Location:" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Text="{Binding HasForegroundLocation, Converter={StaticResource BoolToCheckConverter}}" FontSize="12" />
+                            </HorizontalStackLayout>
+                            <HorizontalStackLayout Grid.Row="0" Grid.Column="1" Spacing="5">
+                                <Label Text="BG Location:" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Text="{Binding HasBackgroundLocation, Converter={StaticResource BoolToCheckConverter}}" FontSize="12" />
+                            </HorizontalStackLayout>
+                            <HorizontalStackLayout Grid.Row="1" Grid.Column="0" Spacing="5">
+                                <Label Text="GPS:" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Text="{Binding IsGpsRunning, Converter={StaticResource BoolToCheckConverter}}" FontSize="12" />
+                            </HorizontalStackLayout>
+                            <HorizontalStackLayout Grid.Row="1" Grid.Column="1" Spacing="5">
+                                <Label Text="Server:" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Text="{Binding HasServerConfig, Converter={StaticResource BoolToCheckConverter}}" FontSize="12" />
+                            </HorizontalStackLayout>
+                            <HorizontalStackLayout Grid.Row="2" Grid.Column="0" Spacing="5">
+                                <Label Text="Tracking:" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Text="{Binding IsTrackingEnabled, Converter={StaticResource BoolToCheckConverter}}" FontSize="12" />
+                            </HorizontalStackLayout>
+                            <HorizontalStackLayout Grid.Row="2" Grid.Column="1" Spacing="5">
+                                <Label Text="Network:" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Text="{Binding HasNetwork, Converter={StaticResource BoolToCheckConverter}}" FontSize="12" />
+                            </HorizontalStackLayout>
+                        </Grid>
+                    </Grid>
+                </Frame>
+
+                <!-- Location Queue Section -->
+                <sfExpander:SfExpander IsExpanded="True">
+                    <sfExpander:SfExpander.Header>
+                        <Grid HeightRequest="48" Padding="10,0" ColumnDefinitions="*,Auto">
+                            <Label Grid.Column="0" Text="Location Queue" FontSize="16" FontAttributes="Bold" VerticalOptions="Center" />
+                            <Label Grid.Column="1" Text="{Binding QueueHealthStatus}" FontSize="14" VerticalOptions="Center" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        </Grid>
+                    </sfExpander:SfExpander.Header>
+                    <sfExpander:SfExpander.Content>
+                        <VerticalStackLayout Padding="15" Spacing="8">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="Pending:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding PendingLocations}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="Synced:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding SyncedLocations}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="Failed:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding FailedLocations}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="Oldest Pending:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding OldestPendingAge}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="Last Sync:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding LastSyncTime}" />
+                            </Grid>
+                        </VerticalStackLayout>
+                    </sfExpander:SfExpander.Content>
+                </sfExpander:SfExpander>
+
+                <!-- Tile Cache Section -->
+                <sfExpander:SfExpander IsExpanded="True">
+                    <sfExpander:SfExpander.Header>
+                        <Grid HeightRequest="48" Padding="10,0" ColumnDefinitions="*,Auto">
+                            <Label Grid.Column="0" Text="Tile Cache" FontSize="16" FontAttributes="Bold" VerticalOptions="Center" />
+                            <Label Grid.Column="1" Text="{Binding CacheHealthStatus}" FontSize="14" VerticalOptions="Center" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        </Grid>
+                    </sfExpander:SfExpander.Header>
+                    <sfExpander:SfExpander.Content>
+                        <VerticalStackLayout Padding="15" Spacing="8">
+                            <Label Text="Live Cache" FontAttributes="Bold" FontSize="13" />
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="Tiles:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding LiveTileCount}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" HeightRequest="50">
+                                <progress:SfCircularProgressBar Grid.Column="0"
+                                                                Progress="{Binding LiveCacheUsagePercent}"
+                                                                Minimum="0"
+                                                                Maximum="100"
+                                                                WidthRequest="45"
+                                                                HeightRequest="45"
+                                                                TrackFill="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                                                ProgressFill="{StaticResource Primary}"
+                                                                TrackThickness="5"
+                                                                ProgressThickness="5"
+                                                                VerticalOptions="Center">
+                                    <progress:SfCircularProgressBar.Content>
+                                        <Label Text="{Binding LiveCacheUsage}"
+                                               FontSize="9"
+                                               HorizontalOptions="Center"
+                                               VerticalOptions="Center" />
+                                    </progress:SfCircularProgressBar.Content>
+                                </progress:SfCircularProgressBar>
+                                <Label Grid.Column="1" Text="Cache Usage" VerticalOptions="Center" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="2" Text="{Binding LiveCacheSize}" VerticalOptions="Center" />
+                            </Grid>
+                            <BoxView HeightRequest="1" Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+                            <Label Text="Trip Cache" FontAttributes="Bold" FontSize="13" />
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="Tiles:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding TripTileCount}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="Size:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding TripCacheSize}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="Trips:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding DownloadedTripCount}" />
+                            </Grid>
+                            <BoxView HeightRequest="1" Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="Total:" FontAttributes="Bold" />
+                                <Label Grid.Column="1" Text="{Binding TotalCacheSize}" FontAttributes="Bold" />
+                            </Grid>
+                        </VerticalStackLayout>
+                    </sfExpander:SfExpander.Content>
+                </sfExpander:SfExpander>
+
+                <!-- Tracking Section -->
+                <sfExpander:SfExpander IsExpanded="True">
+                    <sfExpander:SfExpander.Header>
+                        <Grid HeightRequest="48" Padding="10,0">
+                            <Label Text="Tracking" FontSize="16" FontAttributes="Bold" VerticalOptions="Center" />
+                        </Grid>
+                    </sfExpander:SfExpander.Header>
+                    <sfExpander:SfExpander.Content>
+                        <VerticalStackLayout Padding="15" Spacing="8">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="State:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding TrackingState}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="Mode:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding PerformanceMode}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="Thresholds:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding TrackingThresholds}" />
+                            </Grid>
+                            <Label Text="Last Location:" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            <Label Text="{Binding LastLocationInfo}" FontSize="11" />
+                        </VerticalStackLayout>
+                    </sfExpander:SfExpander.Content>
+                </sfExpander:SfExpander>
+
+                <!-- Navigation Section -->
+                <sfExpander:SfExpander IsExpanded="False">
+                    <sfExpander:SfExpander.Header>
+                        <Grid HeightRequest="48" Padding="10,0" ColumnDefinitions="*,Auto">
+                            <Label Grid.Column="0" Text="Navigation" FontSize="16" FontAttributes="Bold" VerticalOptions="Center" />
+                            <Label Grid.Column="1" Text="{Binding HasCachedRoute, Converter={StaticResource BoolToCheckConverter}}" FontSize="14" VerticalOptions="Center" />
+                        </Grid>
+                    </sfExpander:SfExpander.Header>
+                    <sfExpander:SfExpander.Content>
+                        <VerticalStackLayout Padding="15" Spacing="8">
+                            <Label Text="{Binding CachedRouteInfo}" FontSize="12" />
+                        </VerticalStackLayout>
+                    </sfExpander:SfExpander.Content>
+                </sfExpander:SfExpander>
+
+                <!-- System Information -->
+                <sfExpander:SfExpander IsExpanded="False">
+                    <sfExpander:SfExpander.Header>
+                        <Grid HeightRequest="48" Padding="10,0">
+                            <Label Text="System" FontSize="16" FontAttributes="Bold" VerticalOptions="Center" />
+                        </Grid>
+                    </sfExpander:SfExpander.Header>
+                    <sfExpander:SfExpander.Content>
+                        <VerticalStackLayout Padding="15" Spacing="8">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="Platform:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding Platform}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="OS:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding OsVersion}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="Device:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding DeviceInfo}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="App:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding AppVersion}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="Battery:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding BatteryStatus}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" IsVisible="{Binding IsEnergySaverOn}">
+                                <Label Grid.Column="0" Text="Saver:" TextColor="Orange" />
+                                <Label Grid.Column="1" Text="ON" TextColor="Orange" />
+                            </Grid>
+                        </VerticalStackLayout>
+                    </sfExpander:SfExpander.Content>
+                </sfExpander:SfExpander>
+
+                <!-- Performance Section -->
+                <sfExpander:SfExpander IsExpanded="False">
+                    <sfExpander:SfExpander.Header>
+                        <Grid HeightRequest="48" Padding="10,0">
+                            <Label Text="Performance" FontSize="16" FontAttributes="Bold" VerticalOptions="Center" />
+                        </Grid>
+                    </sfExpander:SfExpander.Header>
+                    <sfExpander:SfExpander.Content>
+                        <VerticalStackLayout Padding="15" Spacing="8">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="Memory:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding MemoryUsage}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="Session:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding SessionDuration}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="Ops:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding TotalOperations}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                <Label Grid.Column="0" Text="GC:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding GcCollections}" />
+                            </Grid>
+                        </VerticalStackLayout>
+                    </sfExpander:SfExpander.Content>
+                </sfExpander:SfExpander>
+
+                <!-- Log Files -->
+                <sfExpander:SfExpander IsExpanded="False">
+                    <sfExpander:SfExpander.Header>
+                        <Grid HeightRequest="48" Padding="10,0">
+                            <Label Text="Log Files" FontSize="16" FontAttributes="Bold" VerticalOptions="Center" />
+                        </Grid>
+                    </sfExpander:SfExpander.Header>
+                    <sfExpander:SfExpander.Content>
+                        <VerticalStackLayout Padding="15" Spacing="8">
+                            <CollectionView ItemsSource="{Binding LogFiles}" HeightRequest="150">
+                                <CollectionView.ItemTemplate>
+                                    <DataTemplate x:DataType="services:LogFileInfo">
+                                        <Grid Padding="0,5" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+                                            <Label Grid.Column="0" Text="{Binding FileName}" FontSize="12" />
+                                            <Label Grid.Column="1" Text="{Binding Size, StringFormat='{0:N0} B'}" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                            <Label Grid.Column="2" Text="{Binding LastModified, StringFormat='{0:MM/dd HH:mm}'}" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </CollectionView.ItemTemplate>
+                                <CollectionView.EmptyView>
+                                    <Label Text="No log files" HorizontalOptions="Center" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                </CollectionView.EmptyView>
+                            </CollectionView>
+                        </VerticalStackLayout>
+                    </sfExpander:SfExpander.Content>
+                </sfExpander:SfExpander>
+
+                <!-- Recent Logs -->
+                <sfExpander:SfExpander IsExpanded="False">
+                    <sfExpander:SfExpander.Header>
+                        <Grid HeightRequest="48" Padding="10,0" ColumnDefinitions="*,Auto">
+                            <Label Grid.Column="0" Text="Recent Logs" FontSize="16" FontAttributes="Bold" VerticalOptions="Center" />
+                            <Button Grid.Column="1" Text="Refresh" Command="{Binding RefreshLogsCommand}" Style="{StaticResource DarkButton}" HeightRequest="30" Padding="10,0" FontSize="12" VerticalOptions="Center" />
+                        </Grid>
+                    </sfExpander:SfExpander.Header>
+                    <sfExpander:SfExpander.Content>
+                        <ScrollView HeightRequest="300" Orientation="Both">
+                            <Label Text="{Binding RecentLogs}" FontFamily="Consolas" FontSize="10" Padding="15" />
+                        </ScrollView>
+                    </sfExpander:SfExpander.Content>
+                </sfExpander:SfExpander>
+
+                <!-- Actions -->
+                <VerticalStackLayout Spacing="10" Padding="0,10">
+                    <Button Text="Generate and Share Report" Command="{Binding ShareReportCommand}" HeightRequest="44" />
+                    <Button Text="Copy Report to Clipboard" Command="{Binding CopyReportCommand}" Style="{StaticResource DarkButton}" HeightRequest="44" />
+                    <Button Text="Refresh Status" Command="{Binding LoadDataCommand}" Style="{StaticResource DarkButton}" HeightRequest="44" />
+                </VerticalStackLayout>
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- Loading Overlay -->
+        <Grid BackgroundColor="{AppThemeBinding Light=#80FFFFFF, Dark=#80000000}" IsVisible="{Binding IsLoading}">
+            <ActivityIndicator IsRunning="{Binding IsLoading}" HorizontalOptions="Center" VerticalOptions="Center" HeightRequest="50" WidthRequest="50" />
+        </Grid>
+    </Grid>
+
+</ContentPage>

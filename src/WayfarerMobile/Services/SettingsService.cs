@@ -296,6 +296,31 @@ public class SettingsService : ISettingsService
 
     #endregion
 
+    #region Battery Settings
+
+    private const string KeyAutoPauseTrackingOnCriticalBattery = "auto_pause_tracking_critical_battery";
+    private const string KeyShowBatteryWarnings = "show_battery_warnings";
+
+    /// <summary>
+    /// Gets or sets whether tracking should auto-pause when battery is critical (below 10%).
+    /// </summary>
+    public bool AutoPauseTrackingOnCriticalBattery
+    {
+        get => Preferences.Get(KeyAutoPauseTrackingOnCriticalBattery, false);
+        set => Preferences.Set(KeyAutoPauseTrackingOnCriticalBattery, value);
+    }
+
+    /// <summary>
+    /// Gets or sets whether battery warnings should be shown during tracking.
+    /// </summary>
+    public bool ShowBatteryWarnings
+    {
+        get => Preferences.Get(KeyShowBatteryWarnings, true);
+        set => Preferences.Set(KeyShowBatteryWarnings, value);
+    }
+
+    #endregion
+
     #region Methods
 
     /// <summary>

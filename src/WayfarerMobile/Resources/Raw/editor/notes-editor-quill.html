@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self';
+                 style-src 'self' 'unsafe-inline';
+                 script-src 'self' 'unsafe-inline';
+                 img-src * data: blob: https: http:;">
+  <title>Notes Editor</title>
+
+  <!-- Local Quill.js - use absolute path from android_asset root -->
+  <link href="/android_asset/quill/quill.snow.css" rel="stylesheet">
+  <script src="/android_asset/quill/quill.js" defer onerror="console.error('FAILED TO LOAD QUILL.JS')"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      background: #fff;
+    }
+
+    #toolbar {
+      background: #f5f5f5;
+      border-bottom: 1px solid #ccc;
+      flex-shrink: 0;
+      padding: 4px;
+    }
+
+    #editor-container {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    #editor { height: 100%; }
+
+    .ql-container {
+      font-size: 15px;
+      /* Remove default Quill borders */
+      border: none !important;
+    }
+
+    .ql-editor {
+      padding: 16px;
+      /* Large bottom padding to account for:
+         - Footer: ~70px
+         - Mobile keyboard: ~300-350px
+         - Safety buffer: ~50px
+         Total: ~450px to ensure content at bottom is always editable
+      */
+      padding-bottom: 450px;
+      /* Ensure editor can scroll properly even with minimal content */
+      min-height: calc(100vh + 200px);
+      /* Remove any borders */
+      border: none !important;
+      outline: none !important;
+    }
+
+    .ql-editor.ql-blank::before { color: #999; font-style: italic; }
+
+    /* Responsive images in editor */
+    .ql-editor img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 8px 0;
+      border-radius: 4px;
+    }
+
+    /* Mobile-friendly toolbar */
+    .ql-toolbar button {
+      width: 36px;
+      height: 36px;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      margin: 2px;
+    }
+    .ql-toolbar button:hover { background: #f0f0f0; }
+    .ql-toolbar button.ql-active { background: #e0e0e0; }
+    .ql-toolbar .ql-picker {
+      font-size: 14px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #fff;
+      padding: 4px;
+    }
+
+    /* Button labels - show text/emoji directly */
+    .ql-toolbar button {
+      font-size: 16px;
+      font-weight: bold;
+      color: #333;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Hide Quill's SVG icons */
+    .ql-toolbar button svg,
+    .ql-toolbar .ql-picker-label svg {
+      display: none !important;
+    }
+
+    /* Picker label styling - center text properly */
+    .ql-toolbar .ql-picker-label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-left: 8px !important;
+      padding-right: 20px !important;
+      font-size: 16px;
+    }
+
+    /* Picker label text positioning */
+    .ql-toolbar .ql-picker-label::before {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <!-- Quill Toolbar -->
+  <div id="toolbar">
+    <select class="ql-header">
+      <option value="1">H1</option>
+      <option value="2">H2</option>
+      <option value="3">H3</option>
+      <option selected>Normal</option>
+    </select>
+    <button class="ql-bold"></button>
+    <button class="ql-italic"></button>
+    <button class="ql-underline"></button>
+    <button class="ql-list" value="ordered"></button>
+    <button class="ql-list" value="bullet"></button>
+    <select class="ql-align">
+      <option selected></option>
+      <option value="center"></option>
+      <option value="right"></option>
+      <option value="justify"></option>
+    </select>
+    <button class="ql-link"></button>
+    <button class="ql-image"></button>
+  </div>
+
+  <!-- Quill Editor -->
+  <div id="editor-container">
+    <div id="editor"></div>
+  </div>
+
+  <!-- Image URL Input Modal -->
+  <div id="imageUrlModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 10000; align-items: center; justify-content: center;">
+    <div style="background: white; padding: 20px; border-radius: 8px; max-width: 90%; width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+      <h3 style="margin: 0 0 15px 0; font-size: 18px; color: #333;">Insert Image</h3>
+      <input type="text" id="imageUrlInput" placeholder="https://example.com/image.jpg" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; box-sizing: border-box; margin-bottom: 15px;">
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button onclick="hideImageUrlModal()" style="padding: 8px 16px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; font-size: 14px;">Cancel</button>
+        <button onclick="insertImageUrl()" style="padding: 8px 16px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">Insert</button>
+      </div>
+    </div>
+  </div>
+
+  <script defer>
+    // Initialize content BEFORE Quill init
+    window.__initialContent = __WF_INITIAL_CONTENT__;
+
+    var quill = null;
+    var savedRange = null;
+
+    // Image URL modal functions
+    function showImageUrlModal() {
+      savedRange = quill.getSelection();
+      document.getElementById('imageUrlModal').style.display = 'flex';
+      document.getElementById('imageUrlInput').value = '';
+      setTimeout(function() {
+        document.getElementById('imageUrlInput').focus();
+      }, 100);
+    }
+
+    function hideImageUrlModal() {
+      document.getElementById('imageUrlModal').style.display = 'none';
+    }
+
+    function insertImageUrl() {
+      var url = document.getElementById('imageUrlInput').value.trim();
+      if (url && savedRange) {
+        quill.insertEmbed(savedRange.index, 'image', url, 'user');
+        hideImageUrlModal();
+      }
+    }
+
+    // Allow Enter key to insert image
+    document.addEventListener('DOMContentLoaded', function() {
+      var input = document.getElementById('imageUrlInput');
+      if (input) {
+        input.addEventListener('keypress', function(e) {
+          if (e.key === 'Enter') {
+            insertImageUrl();
+          }
+        });
+      }
+    });
+
+    // Initialize Quill after library is loaded
+    function initQuill() {
+      try {
+        console.log('Initializing Quill editor...');
+        console.log('Initial content type:', typeof window.__initialContent);
+        console.log('Initial content:', window.__initialContent);
+
+        quill = new Quill('#editor', {
+          modules: {
+            toolbar: {
+              container: '#toolbar',
+              handlers: {
+                // Override image handler to use custom URL input
+                image: function() {
+                  showImageUrlModal();
+                }
+              }
+            }
+          },
+          theme: 'snow',
+          placeholder: 'Start typing your notes...'
+        });
+
+        console.log('Quill created, setting content...');
+
+        // Set initial content using Quill's clipboard module for better HTML parsing
+        if (window.__initialContent && window.__initialContent !== '' && window.__initialContent !== null) {
+          try {
+            var delta = quill.clipboard.convert(window.__initialContent);
+            quill.setContents(delta, 'silent');
+            console.log('Content set successfully using delta');
+          } catch(e) {
+            console.error('Error setting content via delta, trying innerHTML:', e);
+            // Fallback to innerHTML
+            quill.root.innerHTML = window.__initialContent;
+          }
+        } else {
+          console.log('No initial content to set');
+        }
+
+        // Replace toolbar buttons AFTER Quill fully renders
+        // Use MutationObserver or direct replacement after a slight delay
+        requestAnimationFrame(function() {
+          setTimeout(function() {
+            try {
+              console.log('Replacing toolbar button content...');
+
+              // Get all toolbar buttons
+              var toolbar = document.querySelector('.ql-toolbar');
+              if (!toolbar) {
+                console.error('Toolbar not found!');
+                return;
+              }
+
+              // Bold: B
+              var boldBtn = toolbar.querySelector('.ql-bold');
+              if (boldBtn) {
+                boldBtn.textContent = 'B';
+                boldBtn.style.fontWeight = 'bold';
+                console.log('Bold button updated');
+              }
+
+              // Italic: I
+              var italicBtn = toolbar.querySelector('.ql-italic');
+              if (italicBtn) {
+                italicBtn.textContent = 'I';
+                italicBtn.style.fontStyle = 'italic';
+                console.log('Italic button updated');
+              }
+
+              // Underline: U
+              var underlineBtn = toolbar.querySelector('.ql-underline');
+              if (underlineBtn) {
+                underlineBtn.textContent = 'U';
+                underlineBtn.style.textDecoration = 'underline';
+                console.log('Underline button updated');
+              }
+
+              // Link: 🔗
+              var linkBtn = toolbar.querySelector('.ql-link');
+              if (linkBtn) {
+                linkBtn.textContent = '🔗';
+                console.log('Link button updated');
+              }
+
+              // Image: 🖼️
+              var imageBtn = toolbar.querySelector('.ql-image');
+              if (imageBtn) {
+                imageBtn.textContent = '🖼️';
+                console.log('Image button updated');
+              }
+
+              // Ordered list: 1.
+              var olBtns = toolbar.querySelectorAll('.ql-list');
+              olBtns.forEach(function(btn) {
+                if (btn.value === 'ordered') {
+                  btn.textContent = '1.';
+                  console.log('OL button updated');
+                } else if (btn.value === 'bullet') {
+                  btn.textContent = '•';  // Bullet point
+                  btn.style.fontSize = '24px';
+                  console.log('UL button updated');
+                }
+              });
+
+              // Text align dropdown - use letters L, C, R, J for clarity
+              var alignPicker = toolbar.querySelector('.ql-align');
+              if (alignPicker) {
+                var alignLabel = alignPicker.querySelector('.ql-picker-label');
+                if (alignLabel) {
+                  // Set default label to L (left align)
+                  alignLabel.innerHTML = '<span style="display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: bold;">L</span>';
+                  console.log('Align label updated');
+                }
+                // Add letter labels to dropdown options
+                var alignOptions = alignPicker.querySelectorAll('.ql-picker-item');
+                if (alignOptions.length >= 4) {
+                  alignOptions[0].innerHTML = '<span style="font-size: 16px; font-weight: bold;">L</span>';  // Left
+                  alignOptions[1].innerHTML = '<span style="font-size: 16px; font-weight: bold;">C</span>';  // Center
+                  alignOptions[2].innerHTML = '<span style="font-size: 16px; font-weight: bold;">R</span>';  // Right
+                  alignOptions[3].innerHTML = '<span style="font-size: 16px; font-weight: bold;">J</span>';  // Justify
+                  console.log('Align options updated');
+                }
+                console.log('Align dropdown updated');
+              }
+
+              console.log('Toolbar buttons updated successfully');
+            } catch(e) {
+              console.error('Error updating toolbar buttons:', e);
+            }
+          }, 200);
+        });
+
+        window.__editorReady = true;
+        console.log('Quill editor initialized successfully');
+
+        // AGGRESSIVE auto-scroll to keep cursor visible above keyboard
+        function scrollToCursor(range) {
+          if (!range) return;
+
+          try {
+            var bounds = quill.getBounds(range.index);
+            var container = document.getElementById('editor-container');
+
+            if (bounds && container) {
+              // Position cursor near TOP of visible area (100px from top)
+              // This leaves maximum space below for context while typing
+              // Even with keyboard taking 300-350px, cursor stays visible
+              var targetPosition = bounds.top + container.scrollTop - 100;
+
+              container.scrollTo({
+                top: Math.max(0, targetPosition),
+                behavior: 'smooth'
+              });
+
+              console.log('Cursor positioned at:', targetPosition, 'bounds.top:', bounds.top);
+            }
+          } catch(e) {
+            console.error('Error scrolling to cursor:', e);
+          }
+        }
+
+        // Trigger on selection change (clicking, arrow keys, etc)
+        quill.on('selection-change', function(range) {
+          if (range) {
+            // Delay to let keyboard animation complete
+            setTimeout(function() {
+              scrollToCursor(range);
+            }, 350);
+          }
+        });
+
+        // Trigger while typing to maintain visibility
+        quill.on('text-change', function() {
+          setTimeout(function() {
+            var range = quill.getSelection();
+            if (range) {
+              scrollToCursor(range);
+            }
+          }, 50);
+        });
+      } catch(e) {
+        console.error('Error initializing Quill:', e);
+      }
+    }
+
+    // API for C#
+    window.__editorSetContent = function(html) {
+      try {
+        if (quill) {
+          quill.root.innerHTML = html || '';
+        }
+      } catch(e) {
+        console.error('Error setting content:', e);
+      }
+    };
+
+    window.__editorGetContent = function() {
+      try {
+        if (quill) {
+          return quill.root.innerHTML || '';
+        }
+        return '';
+      } catch(e) {
+        console.error('Error getting content:', e);
+        return '';
+      }
+    };
+
+    // Debug: Log all script tags
+    console.log('=== DEBUGGING SCRIPT LOADING ===');
+    var scripts = document.getElementsByTagName('script');
+    console.log('Total script tags found:', scripts.length);
+    for (var i = 0; i < scripts.length; i++) {
+      console.log('Script ' + i + ':', scripts[i].src || '(inline)', 'defer:', scripts[i].defer);
+    }
+
+    // Wait for window load event (after all scripts and resources load)
+    window.addEventListener('load', function() {
+      console.log('Window loaded, Quill available:', typeof Quill !== 'undefined');
+      console.log('Window location:', window.location.href);
+
+      if (typeof Quill !== 'undefined') {
+        initQuill();
+      } else {
+        console.error('Window loaded but Quill still not available!');
+        console.error('Checking script elements again...');
+        var scriptsAfterLoad = document.getElementsByTagName('script');
+        for (var j = 0; j < scriptsAfterLoad.length; j++) {
+          console.log('Script after load ' + j + ':', scriptsAfterLoad[j].src || '(inline)');
+        }
+
+        // Try polling as fallback
+        var attempts = 0;
+        var pollInterval = setInterval(function() {
+          attempts++;
+          if (typeof Quill !== 'undefined') {
+            console.log('Quill loaded after ' + attempts + ' attempts');
+            clearInterval(pollInterval);
+            initQuill();
+          } else if (attempts > 50) {
+            clearInterval(pollInterval);
+            console.error('Failed to load Quill after 50 attempts (5 seconds)');
+          }
+        }, 100);
+      }
+    });
+  </script>
+</body>
+</html>

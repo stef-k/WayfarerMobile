@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:viewmodels="clr-namespace:WayfarerMobile.ViewModels"
              xmlns:mapsui="clr-namespace:Mapsui.UI.Maui;assembly=Mapsui.UI.Maui"
+             xmlns:controls="clr-namespace:WayfarerMobile.Shared.Controls"
              x:Class="WayfarerMobile.Views.CheckInPage"
              x:DataType="viewmodels:CheckInViewModel"
              Title="Check In"
@@ -57,18 +58,10 @@
             <VerticalStackLayout Spacing="16" Padding="16">
 
                 <!-- Activity Type -->
-                <VerticalStackLayout Spacing="4">
-                    <Label Text="Activity Type"
-                           Style="{StaticResource SubHeadline}"
-                           FontAttributes="Bold" />
-                    <Frame Padding="0"
-                           CornerRadius="8"
-                           BorderColor="{StaticResource Gray200}">
-                        <Picker Title="Select Activity"
-                                ItemsSource="{Binding ActivityTypes}"
-                                SelectedItem="{Binding SelectedActivity}" />
-                    </Frame>
-                </VerticalStackLayout>
+                <controls:SearchableDropdown Placeholder="Activity Type"
+                                             ItemsSource="{Binding ActivityTypes}"
+                                             SelectedItem="{Binding SelectedActivity, Mode=TwoWay}"
+                                             MinimumSearchLength="0" />
 
                 <!-- Notes -->
                 <VerticalStackLayout Spacing="4">

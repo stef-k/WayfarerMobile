@@ -5,6 +5,7 @@
              xmlns:models="clr-namespace:WayfarerMobile.Core.Models"
              xmlns:mapsui="clr-namespace:Mapsui.UI.Maui;assembly=Mapsui.UI.Maui"
              xmlns:controls="clr-namespace:WayfarerMobile.Shared.Controls"
+             xmlns:segmented="clr-namespace:Syncfusion.Maui.Toolkit.SegmentedControl;assembly=Syncfusion.Maui.Toolkit"
              x:Class="WayfarerMobile.Views.GroupsPage"
              x:DataType="viewmodels:GroupsViewModel"
              Title="{Binding Title}">
@@ -66,32 +67,33 @@
                 </Grid>
             </Frame>
 
-            <!-- View Toggle -->
-            <HorizontalStackLayout Grid.Row="1"
-                                   HorizontalOptions="Center"
-                                   Spacing="8"
-                                   Margin="8,0">
-                <Button Text="📋 List"
-                        Command="{Binding ToggleViewCommand}"
-                        BackgroundColor="{Binding IsListView, Converter={StaticResource BoolToColorConverter}, ConverterParameter='Primary|Gray200'}"
-                        TextColor="{Binding IsListView, Converter={StaticResource BoolToColorConverter}, ConverterParameter='White|Gray600'}"
-                        Padding="16,8"
-                        CornerRadius="16"
-                        FontSize="14" />
-                <Button Text="🗺️ Map"
-                        Command="{Binding ToggleViewCommand}"
-                        BackgroundColor="{Binding IsMapView, Converter={StaticResource BoolToColorConverter}, ConverterParameter='Primary|Gray200'}"
-                        TextColor="{Binding IsMapView, Converter={StaticResource BoolToColorConverter}, ConverterParameter='White|Gray600'}"
-                        Padding="16,8"
-                        CornerRadius="16"
-                        FontSize="14" />
-            </HorizontalStackLayout>
+            <!-- View Toggle - Segmented Control -->
+            <segmented:SfSegmentedControl Grid.Row="1"
+                                          HorizontalOptions="Center"
+                                          Margin="8,0"
+                                          SelectedIndex="{Binding ViewModeIndex, Mode=TwoWay}"
+                                          CornerRadius="16"
+                                          SegmentCornerRadius="14"
+                                          SegmentHeight="36"
+                                          SegmentWidth="100"
+                                          SelectionIndicatorSettings="{segmented:SelectionIndicatorSettings Background={StaticResource Primary}, SelectionIndicatorPlacement=Fill}">
+                <segmented:SfSegmentedControl.ItemsSource>
+                    <x:Array Type="{x:Type segmented:SfSegmentItem}">
+                        <segmented:SfSegmentItem Text="List" />
+                        <segmented:SfSegmentItem Text="Map" />
+                    </x:Array>
+                </segmented:SfSegmentedControl.ItemsSource>
+            </segmented:SfSegmentedControl>
 
             <!-- List View -->
-            <RefreshView Grid.Row="2"
-                        Command="{Binding LoadMembersCommand}"
-                        IsRefreshing="{Binding IsLoadingMembers}"
-                        IsVisible="{Binding IsListView}">
+            <Grid Grid.Row="2" IsVisible="{Binding IsListView}">
+                <!-- Shimmer Loading Placeholder -->
+                <controls:ShimmerLoadingView IsActive="{Binding IsLoadingMembers}"
+                                             IsVisible="{Binding IsLoadingMembers}" />
+
+                <RefreshView Command="{Binding LoadMembersCommand}"
+                            IsRefreshing="{Binding IsLoadingMembers}"
+                            IsVisible="{Binding IsLoadingMembers, Converter={StaticResource InvertedBoolConverter}}">
                 <CollectionView ItemsSource="{Binding Members}"
                                SelectionMode="None"
                                Margin="8,0">
@@ -187,7 +189,8 @@
                         </DataTemplate>
                     </CollectionView.ItemTemplate>
                 </CollectionView>
-            </RefreshView>
+                </RefreshView>
+            </Grid>
 
             <!-- Map View -->
             <Grid Grid.Row="2"

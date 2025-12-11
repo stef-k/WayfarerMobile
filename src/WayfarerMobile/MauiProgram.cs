@@ -101,6 +101,8 @@ public static class MauiProgram
         // API and Sync Services
         services.AddSingleton<IApiClient, ApiClient>();
         services.AddSingleton<LocationSyncService>();
+        services.AddSingleton<ITripSyncService, TripSyncService>();
+        services.AddSingleton<ITimelineSyncService, TimelineSyncService>();
         services.AddSingleton<IGroupsService, GroupsService>();
         services.AddSingleton<NavigationService>();
         services.AddSingleton<TripDownloadService>();
@@ -127,13 +129,30 @@ public static class MauiProgram
         // Exception Handling
         services.AddSingleton<IExceptionHandlerService, ExceptionHandlerService>();
 
+        // Diagnostic Services
+        services.AddSingleton<DiagnosticService>();
+        services.AddSingleton<AppDiagnosticService>();
+
+        // Battery Monitor
+        services.AddSingleton<BatteryMonitorService>();
+
+        // Performance Monitor
+        services.AddSingleton<PerformanceMonitorService>();
+
         // UI Services
         services.AddSingleton<IToastService, ToastService>();
         services.AddSingleton<IDialogService, DialogService>();
 
+        // Wikipedia Service
+        services.AddSingleton<IWikipediaService, WikipediaService>();
+
+        // Download Notification Service
+        services.AddSingleton<IDownloadNotificationService, DownloadNotificationService>();
+
         // Tile Cache Services
         services.AddSingleton<LiveTileCacheService>();
         services.AddSingleton<UnifiedTileCacheService>();
+        services.AddSingleton<Services.TileCache.CacheOverlayService>();
 
         // Platform Services (registered conditionally)
 #if ANDROID
@@ -158,6 +177,7 @@ public static class MauiProgram
         services.AddTransient<PublicTripsViewModel>();
         services.AddTransient<LockScreenViewModel>();
         services.AddTransient<AboutViewModel>();
+        services.AddTransient<DiagnosticsViewModel>();
 
         // Pages
         services.AddTransient<MainPage>();
@@ -171,6 +191,7 @@ public static class MauiProgram
         services.AddTransient<PublicTripsPage>();
         services.AddTransient<LockScreenPage>();
         services.AddTransient<AboutPage>();
+        services.AddTransient<DiagnosticsPage>();
 
         // Route Registration
         Routing.RegisterRoute("checkin", typeof(CheckInPage));
@@ -179,5 +200,6 @@ public static class MauiProgram
         Routing.RegisterRoute("publictrips", typeof(PublicTripsPage));
         Routing.RegisterRoute("lockscreen", typeof(LockScreenPage));
         Routing.RegisterRoute("about", typeof(AboutPage));
+        Routing.RegisterRoute("diagnostics", typeof(DiagnosticsPage));
     }
 }

@@ -59,12 +59,33 @@ public partial class GroupsViewModel : BaseViewModel
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsListView))]
+    [NotifyPropertyChangedFor(nameof(ViewModeIndex))]
     private bool _isMapView;
 
     /// <summary>
     /// Gets whether list view is active.
     /// </summary>
     public bool IsListView => !IsMapView;
+
+    /// <summary>
+    /// Gets or sets the view mode index (0=List, 1=Map) for SfSegmentedControl binding.
+    /// </summary>
+    public int ViewModeIndex
+    {
+        get => IsMapView ? 1 : 0;
+        set
+        {
+            var newIsMapView = value == 1;
+            if (IsMapView != newIsMapView)
+            {
+                IsMapView = newIsMapView;
+                if (IsMapView)
+                {
+                    UpdateMapMarkers();
+                }
+            }
+        }
+    }
 
     /// <summary>
     /// Gets the map instance for binding.

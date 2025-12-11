@@ -5,6 +5,8 @@
              xmlns:viewmodels="clr-namespace:WayfarerMobile.ViewModels"
              xmlns:controls="clr-namespace:WayfarerMobile.Shared.Controls"
              xmlns:offlineBanner="clr-namespace:WayfarerMobile.Views.Controls"
+             xmlns:picker="clr-namespace:Syncfusion.Maui.Toolkit.Picker;assembly=Syncfusion.Maui.Toolkit"
+             xmlns:sys="clr-namespace:System;assembly=netstandard"
              x:Class="WayfarerMobile.Views.TimelinePage"
              x:DataType="viewmodels:TimelineViewModel"
              Title="Timeline"
@@ -30,14 +32,23 @@
                         WidthRequest="44"
                         HeightRequest="44" />
 
-                <!-- Current Date -->
+                <!-- Current Date (tappable to open date picker) -->
                 <VerticalStackLayout Grid.Column="1"
                                      HorizontalOptions="Center"
                                      VerticalOptions="Center"
                                      Spacing="4">
-                    <Label Text="{Binding SelectedDateText}"
-                           Style="{StaticResource Headline}"
-                           HorizontalOptions="Center" />
+                    <VerticalStackLayout.GestureRecognizers>
+                        <TapGestureRecognizer Command="{Binding OpenDatePickerCommand}" />
+                    </VerticalStackLayout.GestureRecognizers>
+                    <HorizontalStackLayout HorizontalOptions="Center" Spacing="6">
+                        <Label Text="{Binding SelectedDateText}"
+                               Style="{StaticResource Headline}"
+                               VerticalOptions="Center" />
+                        <Label Text="📅"
+                               FontSize="16"
+                               VerticalOptions="Center"
+                               TextColor="{StaticResource Primary}" />
+                    </HorizontalStackLayout>
                     <Label Text="{Binding TotalCount, StringFormat='{0} locations'}"
                            Style="{StaticResource Caption}"
                            HorizontalOptions="Center"
@@ -66,11 +77,16 @@
         </Border>
 
         <!-- Timeline Content -->
-        <RefreshView Grid.Row="2"
-                     IsRefreshing="{Binding IsRefreshing}"
-                     Command="{Binding RefreshCommand}">
-            <Grid>
-                <!-- Empty State -->
+        <Grid Grid.Row="2">
+            <!-- Shimmer Loading Placeholder -->
+            <controls:ShimmerLoadingView IsActive="{Binding IsBusy}"
+                                         IsVisible="{Binding IsBusy}" />
+
+            <RefreshView IsRefreshing="{Binding IsRefreshing}"
+                         Command="{Binding RefreshCommand}"
+                         IsVisible="{Binding IsBusy, Converter={StaticResource InvertedBoolConverter}}">
+                <Grid>
+                    <!-- Empty State -->
                 <VerticalStackLayout IsVisible="{Binding IsEmpty}"
                                      VerticalOptions="Center"
                                      HorizontalOptions="Center"
@@ -125,6 +141,10 @@
                                     Padding="16,12"
                                     Margin="0,0,0,1"
                                     StrokeThickness="0">
+                                <Border.GestureRecognizers>
+                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TimelineViewModel}}, Path=ShowEntryDetailsCommand}"
+                                                          CommandParameter="{Binding .}" />
+                                </Border.GestureRecognizers>
                                 <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
                                     <!-- Time Column -->
                                     <VerticalStackLayout Grid.Column="0"
@@ -172,12 +192,34 @@
                         </DataTemplate>
                     </CollectionView.ItemTemplate>
                 </CollectionView>
-            </Grid>
-        </RefreshView>
+                </Grid>
+            </RefreshView>
+        </Grid>
 
         <!-- Loading Overlay -->
         <controls:LoadingOverlay Grid.RowSpan="3"
                                  IsVisible="{Binding IsBusy}"
                                  Message="Loading timeline..." />
+
+        <!-- Entry Details Bottom Sheet -->
+        <controls:TimelineEntrySheet x:Name="EntryDetailsSheet"
+                                     Grid.RowSpan="3"
+                                     Entry="{Binding SelectedEntry}"
+                                     IsOpen="{Binding IsEntryDetailsOpen, Mode=TwoWay}"
+                                     Closed="OnEntryDetailsSheetClosed"
+                                     SaveRequested="OnEntryDetailsSaveRequested" />
+
+        <!-- Date Picker Popup -->
+        <picker:SfDatePicker x:Name="DatePicker"
+                             Grid.RowSpan="3"
+                             IsOpen="{Binding IsDatePickerOpen, Mode=TwoWay}"
+                             Mode="Dialog"
+                             SelectedDate="{Binding SelectedDate}"
+                             MaximumDate="{x:Static sys:DateTime.Today}"
+                             Format="dd_MMM_yyyy"
+                             HeaderView="{picker:PickerHeaderView Height=40, Text='Select Date'}"
+                             FooterView="{picker:PickerFooterView ShowOkButton=True, ShowCancelButton=True}"
+                             OkButtonClicked="OnDatePickerOkClicked"
+                             CancelButtonClicked="OnDatePickerCancelClicked" />
     </Grid>
 </ContentPage>

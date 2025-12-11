@@ -9,6 +9,7 @@
              xmlns:offlineBanner="clr-namespace:WayfarerMobile.Views.Controls"
              x:Class="WayfarerMobile.Views.TripsPage"
              x:DataType="viewmodels:TripsViewModel"
+             x:Name="ThisPage"
              Title="Trips"
              BackgroundColor="{StaticResource Background}">
 
@@ -45,8 +46,13 @@
 
             <!-- Trip List View -->
             <Grid IsVisible="{Binding ShowingList}" RowDefinitions="*">
+                <!-- Shimmer Loading Placeholder -->
+                <controls:ShimmerLoadingView IsActive="{Binding IsLoadingTrips}"
+                                             IsVisible="{Binding IsLoadingTrips}" />
+
                 <RefreshView Command="{Binding LoadTripsCommand}"
-                            IsRefreshing="{Binding IsLoadingTrips}">
+                            IsRefreshing="{Binding IsLoadingTrips}"
+                            IsVisible="{Binding IsLoadingTrips, Converter={StaticResource InvertedBoolConverter}}">
                     <CollectionView ItemsSource="{Binding AvailableTrips}"
                                    SelectionMode="None">
 
@@ -197,7 +203,7 @@
                                                         StrokeThickness="0"
                                                         BackgroundColor="{StaticResource Surface}">
                                                     <Border.GestureRecognizers>
-                                                        <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=SelectPlaceCommand}"
+                                                        <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=ShowPlaceDetailsCommand}"
                                                                               CommandParameter="{Binding .}" />
                                                     </Border.GestureRecognizers>
                                                     <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
@@ -420,6 +426,14 @@
                        TextColor="#C62828"
                        FontSize="14" />
             </Border>
+
+            <!-- Place Details Bottom Sheet -->
+            <controls:PlaceDetailsSheet x:Name="PlaceDetailsSheet"
+                                        Place="{Binding SelectedPlaceForDetails}"
+                                        IsOpen="{Binding IsPlaceDetailsOpen, Mode=TwoWay}"
+                                        NavigateCommand="{Binding NavigateToPlaceCommand}"
+                                        Closed="OnPlaceDetailsSheetClosed"
+                                        SaveRequested="OnPlaceDetailsSaveRequested" />
         </Grid>
         </Grid>
     </Grid>

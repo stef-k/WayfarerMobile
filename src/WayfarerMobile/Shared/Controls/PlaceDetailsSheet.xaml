@@ -1,0 +1,271 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:bottomSheet="clr-namespace:Syncfusion.Maui.Toolkit.BottomSheet;assembly=Syncfusion.Maui.Toolkit"
+             xmlns:controls="clr-namespace:WayfarerMobile.Shared.Controls"
+             x:Class="WayfarerMobile.Shared.Controls.PlaceDetailsSheet"
+             x:Name="Root">
+
+    <bottomSheet:SfBottomSheet x:Name="BottomSheet"
+                               IsOpen="{Binding IsOpen, Source={x:Reference Root}}"
+                               AllowedState="All"
+                               State="{Binding SheetState, Source={x:Reference Root}, Mode=TwoWay}"
+                               HalfExpandedRatio="0.5"
+                               FullExpandedRatio="0.9"
+                               EnableSwiping="True"
+                               IsModal="False"
+                               ShowGrabber="True"
+                               CornerRadius="16"
+                               Closed="OnBottomSheetClosed"
+                               BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+
+        <!-- Main Content (Map placeholder - actual map is behind this) -->
+        <bottomSheet:SfBottomSheet.Content>
+            <Grid />
+        </bottomSheet:SfBottomSheet.Content>
+
+        <!-- Bottom Sheet Content -->
+        <bottomSheet:SfBottomSheet.BottomSheetContent>
+            <Grid RowDefinitions="Auto,*,Auto"
+                  BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+
+                <!-- Header Section -->
+                <Grid Grid.Row="0" Padding="16,8,16,12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Color Indicator -->
+                    <Ellipse Grid.RowSpan="2"
+                             WidthRequest="16"
+                             HeightRequest="16"
+                             Fill="{Binding Place.MarkerColor, Source={x:Reference Root}, TargetNullValue='#4CAF50'}"
+                             VerticalOptions="Center"
+                             Margin="0,0,12,0" />
+
+                    <!-- View Mode: Place Name Label -->
+                    <Label Grid.Column="1"
+                           Text="{Binding Place.Name, Source={x:Reference Root}}"
+                           Style="{StaticResource SubHeadline}"
+                           FontAttributes="Bold"
+                           LineBreakMode="TailTruncation"
+                           MaxLines="2"
+                           IsVisible="{Binding IsEditing, Source={x:Reference Root}, Converter={StaticResource InvertedBoolConverter}}" />
+
+                    <!-- Edit Mode: Place Name Entry -->
+                    <Entry Grid.Column="1"
+                           Text="{Binding EditName, Source={x:Reference Root}, Mode=TwoWay}"
+                           Style="{StaticResource SubHeadline}"
+                           FontAttributes="Bold"
+                           Placeholder="Place name"
+                           IsVisible="{Binding IsEditing, Source={x:Reference Root}}" />
+
+                    <!-- Close Button -->
+                    <Button Grid.Column="2"
+                            Grid.RowSpan="2"
+                            Text="✕"
+                            FontSize="16"
+                            WidthRequest="36"
+                            HeightRequest="36"
+                            Padding="0"
+                            CornerRadius="18"
+                            BackgroundColor="Transparent"
+                            TextColor="{StaticResource TextSecondary}"
+                            Clicked="OnCloseClicked" />
+
+                    <!-- View Mode: Coordinates Label -->
+                    <Label Grid.Row="1"
+                           Grid.Column="1"
+                           Text="{Binding CoordinatesText, Source={x:Reference Root}}"
+                           Style="{StaticResource Caption}"
+                           TextColor="{StaticResource TextSecondary}"
+                           Margin="0,4,0,0"
+                           IsVisible="{Binding IsEditing, Source={x:Reference Root}, Converter={StaticResource InvertedBoolConverter}}" />
+
+                    <!-- Edit Mode: Coordinates -->
+                    <HorizontalStackLayout Grid.Row="1"
+                                          Grid.Column="1"
+                                          Spacing="8"
+                                          Margin="0,4,0,0"
+                                          IsVisible="{Binding IsEditing, Source={x:Reference Root}}">
+                        <Entry Text="{Binding EditLatitude, Source={x:Reference Root}, Mode=TwoWay}"
+                               Keyboard="Numeric"
+                               WidthRequest="110"
+                               Placeholder="Latitude" />
+                        <Entry Text="{Binding EditLongitude, Source={x:Reference Root}, Mode=TwoWay}"
+                               Keyboard="Numeric"
+                               WidthRequest="110"
+                               Placeholder="Longitude" />
+                    </HorizontalStackLayout>
+                </Grid>
+
+                <!-- Scrollable Content -->
+                <ScrollView Grid.Row="1" Padding="16,0">
+                    <VerticalStackLayout Spacing="16">
+
+                        <!-- View Mode: Notes Section -->
+                        <VerticalStackLayout IsVisible="{Binding IsEditing, Source={x:Reference Root}, Converter={StaticResource InvertedBoolConverter}}"
+                                            Spacing="8">
+                            <Label Text="Notes"
+                                   Style="{StaticResource Caption}"
+                                   FontAttributes="Bold"
+                                   TextColor="{StaticResource TextSecondary}"
+                                   IsVisible="{Binding HasNotes, Source={x:Reference Root}}" />
+                            <Frame Padding="12"
+                                   BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                                   BorderColor="Transparent"
+                                   CornerRadius="8"
+                                   HasShadow="False"
+                                   IsVisible="{Binding HasNotes, Source={x:Reference Root}}">
+                                <Label Text="{Binding PlainNotes, Source={x:Reference Root}}"
+                                       Style="{StaticResource Body}"
+                                       LineBreakMode="WordWrap" />
+                            </Frame>
+
+                            <!-- No notes message -->
+                            <Label Text="No notes"
+                                   Style="{StaticResource Caption}"
+                                   TextColor="{StaticResource TextSecondary}"
+                                   IsVisible="{Binding HasNotes, Source={x:Reference Root}, Converter={StaticResource InvertedBoolConverter}}" />
+                        </VerticalStackLayout>
+
+                        <!-- Edit Mode: Notes Section -->
+                        <VerticalStackLayout IsVisible="{Binding IsEditing, Source={x:Reference Root}}"
+                                            Spacing="8">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Label Text="Notes"
+                                       Style="{StaticResource Caption}"
+                                       FontAttributes="Bold"
+                                       TextColor="{StaticResource TextSecondary}"
+                                       VerticalOptions="Center" />
+                                <Button Grid.Column="1"
+                                        Text="Edit Rich Text"
+                                        FontSize="12"
+                                        Padding="12,6"
+                                        HeightRequest="32"
+                                        CornerRadius="16"
+                                        BackgroundColor="{StaticResource Primary}"
+                                        TextColor="White"
+                                        Clicked="OnEditNotesClicked" />
+                            </Grid>
+                            <Frame Padding="12"
+                                   BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                                   BorderColor="{StaticResource Gray300}"
+                                   CornerRadius="8"
+                                   HasShadow="False">
+                                <Label Text="{Binding EditNotesPreview, Source={x:Reference Root}}"
+                                       Style="{StaticResource Body}"
+                                       LineBreakMode="WordWrap"
+                                       MaxLines="5"
+                                       TextColor="{Binding HasEditNotes, Source={x:Reference Root}, Converter={StaticResource BoolToColorConverter}}" />
+                            </Frame>
+                        </VerticalStackLayout>
+
+                        <!-- Location Details (View Mode only) -->
+                        <VerticalStackLayout Spacing="8"
+                                            IsVisible="{Binding IsEditing, Source={x:Reference Root}, Converter={StaticResource InvertedBoolConverter}}">
+                            <Label Text="Location"
+                                   Style="{StaticResource Caption}"
+                                   FontAttributes="Bold"
+                                   TextColor="{StaticResource TextSecondary}" />
+
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                                <Label Text="📍"
+                                       FontSize="16"
+                                       VerticalOptions="Center" />
+                                <VerticalStackLayout Grid.Column="1" Spacing="2">
+                                    <Label Text="{Binding Place.Latitude, Source={x:Reference Root}, StringFormat='Lat: {0:F6}'}"
+                                           Style="{StaticResource Caption}" />
+                                    <Label Text="{Binding Place.Longitude, Source={x:Reference Root}, StringFormat='Lon: {0:F6}'}"
+                                           Style="{StaticResource Caption}" />
+                                </VerticalStackLayout>
+                            </Grid>
+                        </VerticalStackLayout>
+
+                        <!-- Spacer -->
+                        <BoxView HeightRequest="60" Color="Transparent" />
+
+                    </VerticalStackLayout>
+                </ScrollView>
+
+                <!-- View Mode: Action Buttons -->
+                <Grid Grid.Row="2"
+                      Padding="16"
+                      ColumnDefinitions="*,*,Auto"
+                      ColumnSpacing="12"
+                      BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}"
+                      IsVisible="{Binding IsEditing, Source={x:Reference Root}, Converter={StaticResource InvertedBoolConverter}}">
+
+                    <Button Text="Navigate"
+                            Command="{Binding NavigateCommand, Source={x:Reference Root}}"
+                            BackgroundColor="{StaticResource Primary}"
+                            TextColor="White"
+                            FontSize="14"
+                            HeightRequest="44"
+                            CornerRadius="8" />
+
+                    <Button Grid.Column="1"
+                            Text="More..."
+                            Clicked="OnMoreActionsClicked"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                            TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
+                            FontSize="14"
+                            HeightRequest="44"
+                            CornerRadius="8" />
+
+                    <Button Grid.Column="2"
+                            Text="✏️"
+                            FontSize="18"
+                            WidthRequest="44"
+                            HeightRequest="44"
+                            Padding="0"
+                            CornerRadius="8"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                            Clicked="OnEditClicked" />
+                </Grid>
+
+                <!-- Edit Mode: Action Buttons -->
+                <Grid Grid.Row="2"
+                      Padding="16"
+                      ColumnDefinitions="*,*"
+                      ColumnSpacing="12"
+                      BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}"
+                      IsVisible="{Binding IsEditing, Source={x:Reference Root}}">
+
+                    <Button Text="Cancel"
+                            Clicked="OnCancelEditClicked"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                            TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
+                            FontSize="14"
+                            HeightRequest="44"
+                            CornerRadius="8" />
+
+                    <Button Grid.Column="1"
+                            Text="Save"
+                            Clicked="OnSaveEditClicked"
+                            BackgroundColor="{StaticResource Primary}"
+                            TextColor="White"
+                            FontSize="14"
+                            HeightRequest="44"
+                            CornerRadius="8"
+                            IsEnabled="{Binding IsSaving, Source={x:Reference Root}, Converter={StaticResource InvertedBoolConverter}}" />
+                </Grid>
+
+            </Grid>
+        </bottomSheet:SfBottomSheet.BottomSheetContent>
+
+    </bottomSheet:SfBottomSheet>
+
+    <!-- Notes Editor Overlay (appears above bottom sheet when editing notes) -->
+    <controls:NotesEditorControl x:Name="NotesEditor"
+                                 EditorTitle="{Binding Place.Name, Source={x:Reference Root}}"
+                                 NotesSaved="OnNotesSaved"
+                                 EditorClosed="OnNotesEditorClosed" />
+
+</ContentView>

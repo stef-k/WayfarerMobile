@@ -58,6 +58,108 @@ public interface IApiClient
         int? month = null,
         int? day = null,
         CancellationToken cancellationToken = default);
+
+    #region Place Operations
+
+    /// <summary>
+    /// Creates a new place in a trip.
+    /// </summary>
+    /// <param name="tripId">The trip ID.</param>
+    /// <param name="request">The place create request.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Place response or null on failure.</returns>
+    Task<PlaceResponse?> CreatePlaceAsync(
+        Guid tripId,
+        PlaceCreateRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Updates an existing place.
+    /// </summary>
+    /// <param name="placeId">The place ID.</param>
+    /// <param name="request">The place update request.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Place response or null on failure.</returns>
+    Task<PlaceResponse?> UpdatePlaceAsync(
+        Guid placeId,
+        PlaceUpdateRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes a place.
+    /// </summary>
+    /// <param name="placeId">The place ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>True if successful.</returns>
+    Task<bool> DeletePlaceAsync(
+        Guid placeId,
+        CancellationToken cancellationToken = default);
+
+    #endregion
+
+    #region Region Operations
+
+    /// <summary>
+    /// Creates a new region in a trip.
+    /// </summary>
+    /// <param name="tripId">The trip ID.</param>
+    /// <param name="request">The region create request.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Region response or null on failure.</returns>
+    Task<RegionResponse?> CreateRegionAsync(
+        Guid tripId,
+        RegionCreateRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Updates an existing region.
+    /// </summary>
+    /// <param name="regionId">The region ID.</param>
+    /// <param name="request">The region update request.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Region response or null on failure.</returns>
+    Task<RegionResponse?> UpdateRegionAsync(
+        Guid regionId,
+        RegionUpdateRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes a region.
+    /// </summary>
+    /// <param name="regionId">The region ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>True if successful.</returns>
+    Task<bool> DeleteRegionAsync(
+        Guid regionId,
+        CancellationToken cancellationToken = default);
+
+    #endregion
+
+    #region Timeline Operations
+
+    /// <summary>
+    /// Updates a timeline location.
+    /// </summary>
+    /// <param name="locationId">The location ID.</param>
+    /// <param name="request">The update request.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Update response or null on failure.</returns>
+    Task<TimelineUpdateResponse?> UpdateTimelineLocationAsync(
+        int locationId,
+        TimelineLocationUpdateRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes a timeline location.
+    /// </summary>
+    /// <param name="locationId">The location ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>True if successful.</returns>
+    Task<bool> DeleteTimelineLocationAsync(
+        int locationId,
+        CancellationToken cancellationToken = default);
+
+    #endregion
 }
 
 /// <summary>

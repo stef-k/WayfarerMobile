@@ -743,6 +743,11 @@ public class PlaceCreateRequest
     /// Gets or sets the marker color.
     /// </summary>
     public string? MarkerColor { get; set; }
+
+    /// <summary>
+    /// Gets or sets the display order.
+    /// </summary>
+    public int? DisplayOrder { get; set; }
 }
 
 /// <summary>
@@ -797,9 +802,29 @@ public class RegionCreateRequest
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the sort order.
+    /// Gets or sets the notes.
     /// </summary>
-    public int? SortOrder { get; set; }
+    public string? Notes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the cover image URL.
+    /// </summary>
+    public string? CoverImageUrl { get; set; }
+
+    /// <summary>
+    /// Gets or sets the center latitude.
+    /// </summary>
+    public double? CenterLatitude { get; set; }
+
+    /// <summary>
+    /// Gets or sets the center longitude.
+    /// </summary>
+    public double? CenterLongitude { get; set; }
+
+    /// <summary>
+    /// Gets or sets the display order.
+    /// </summary>
+    public int? DisplayOrder { get; set; }
 }
 
 /// <summary>
@@ -813,9 +838,29 @@ public class RegionUpdateRequest
     public string? Name { get; set; }
 
     /// <summary>
-    /// Gets or sets the sort order.
+    /// Gets or sets the notes.
     /// </summary>
-    public int? SortOrder { get; set; }
+    public string? Notes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the cover image URL.
+    /// </summary>
+    public string? CoverImageUrl { get; set; }
+
+    /// <summary>
+    /// Gets or sets the center latitude.
+    /// </summary>
+    public double? CenterLatitude { get; set; }
+
+    /// <summary>
+    /// Gets or sets the center longitude.
+    /// </summary>
+    public double? CenterLongitude { get; set; }
+
+    /// <summary>
+    /// Gets or sets the display order.
+    /// </summary>
+    public int? DisplayOrder { get; set; }
 }
 
 /// <summary>
@@ -868,6 +913,57 @@ public class RegionResponse
     /// Gets or sets the created/updated region.
     /// </summary>
     public TripRegion? Region { get; set; }
+}
+
+#endregion
+
+#region Timeline
+
+/// <summary>
+/// Request for updating a timeline location.
+/// </summary>
+public class TimelineLocationUpdateRequest
+{
+    /// <summary>
+    /// Gets or sets the latitude (null if not changed).
+    /// </summary>
+    public double? Latitude { get; set; }
+
+    /// <summary>
+    /// Gets or sets the longitude (null if not changed).
+    /// </summary>
+    public double? Longitude { get; set; }
+
+    /// <summary>
+    /// Gets or sets the local timestamp (null if not changed).
+    /// </summary>
+    public DateTime? LocalTimestamp { get; set; }
+
+    /// <summary>
+    /// Gets or sets the notes HTML (null if not changed).
+    /// </summary>
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Response from timeline location update.
+/// </summary>
+public class TimelineUpdateResponse
+{
+    /// <summary>
+    /// Gets or sets the location ID.
+    /// </summary>
+    public int LocationId { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the operation was successful.
+    /// </summary>
+    public bool Success { get; set; }
+
+    /// <summary>
+    /// Gets or sets the error message if failed.
+    /// </summary>
+    public string? Error { get; set; }
 }
 
 #endregion

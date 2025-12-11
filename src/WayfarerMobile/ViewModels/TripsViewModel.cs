@@ -5,6 +5,7 @@ using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Services;
+using WayfarerMobile.Shared.Controls;
 
 namespace WayfarerMobile.ViewModels;
 
@@ -20,6 +21,9 @@ public partial class TripsViewModel : BaseViewModel
     private readonly NavigationService _navigationService;
     private readonly TripNavigationService _tripNavigationService;
     private readonly ILocationBridge _locationBridge;
+    private readonly ITripSyncService _tripSyncService;
+    private readonly IToastService _toastService;
+    private readonly IDownloadNotificationService _downloadNotificationService;
     private readonly HashSet<Guid> _downloadedTripIds = new();
 
     #region Observable Properties
@@ -127,6 +131,18 @@ public partial class TripsViewModel : BaseViewModel
     [NotifyPropertyChangedFor(nameof(HasSelectedPlace))]
     private TripPlace? _selectedPlace;
 
+    /// <summary>
+    /// Gets or sets the place being shown in the details sheet.
+    /// </summary>
+    [ObservableProperty]
+    private TripPlace? _selectedPlaceForDetails;
+
+    /// <summary>
+    /// Gets or sets whether the place details sheet is open.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isPlaceDetailsOpen;
+
     #endregion
 
     #region Computed Properties
@@ -191,15 +207,21 @@ public partial class TripsViewModel : BaseViewModel
         TripDownloadService downloadService,
         NavigationService navigationService,
         TripNavigationService tripNavigationService,
-        ILocationBridge locationBridge)
+        ILocationBridge locationBridge,
+        ITripSyncService tripSyncService,
+        IToastService toastService,
+        IDownloadNotificationService downloadNotificationService)
     {
         _apiClient = apiClient;
         _settingsService = settingsService;
         _mapService = mapService;
         _downloadService = downloadService;
         _navigationService = navigationService;
+        _downloadNotificationService = downloadNotificationService;
         _tripNavigationService = tripNavigationService;
         _locationBridge = locationBridge;
+        _tripSyncService = tripSyncService;
+        _toastService = toastService;
         Title = "Trips";
 
         // Subscribe to download progress
@@ -210,6 +232,11 @@ public partial class TripsViewModel : BaseViewModel
 
         // Subscribe to trip navigation state changes for route updates
         _tripNavigationService.StateChanged += OnTripNavigationStateChanged;
+
+        // Subscribe to sync events
+        _tripSyncService.SyncCompleted += OnSyncCompleted;
+        _tripSyncService.SyncQueued += OnSyncQueued;
+        _tripSyncService.SyncRejected += OnSyncRejected;
     }
 
     #endregion
@@ -352,6 +379,34 @@ public partial class TripsViewModel : BaseViewModel
     }
 
     /// <summary>
+    /// Shows the place details bottom sheet for the specified place.
+    /// </summary>
+    [RelayCommand]
+    private void ShowPlaceDetails(TripPlace? place)
+    {
+        if (place == null)
+            return;
+
+        SelectedPlaceForDetails = place;
+        IsPlaceDetailsOpen = true;
+
+        // Also center the map on the place
+        CenterOnPlace(place);
+
+        // Close sidebar to show the bottom sheet
+        IsSidebarOpen = false;
+    }
+
+    /// <summary>
+    /// Closes the place details bottom sheet.
+    /// </summary>
+    public void ClosePlaceDetails()
+    {
+        IsPlaceDetailsOpen = false;
+        SelectedPlaceForDetails = null;
+    }
+
+    /// <summary>
     /// Centers map on a specific place.
     /// </summary>
     [RelayCommand]
@@ -486,6 +541,18 @@ public partial class TripsViewModel : BaseViewModel
         if (SelectedTrip == null || IsDownloading)
             return;
 
+        // Show download guidance and get confirmation
+        // Estimate based on bounding box area if available, otherwise use conservative default
+        var estimatedSizeMb = EstimateDownloadSize(SelectedTrip);
+        var confirmed = await _downloadNotificationService.ShowDownloadGuidanceAsync(SelectedTrip.Name, estimatedSizeMb);
+        if (!confirmed)
+            return;
+
+        // Check storage space
+        var hasStorage = await _downloadNotificationService.CheckStorageBeforeDownloadAsync(estimatedSizeMb);
+        if (!hasStorage)
+            return;
+
         try
         {
             IsDownloading = true;
@@ -499,16 +566,32 @@ public partial class TripsViewModel : BaseViewModel
                 _downloadedTripIds.Add(SelectedTrip.Id);
                 OnPropertyChanged(nameof(IsSelectedTripDownloaded));
                 DownloadStatusMessage = "Download complete!";
+
+                // Show completion notification
+                await _downloadNotificationService.NotifyDownloadCompletedAsync(
+                    SelectedTrip.Name,
+                    result.TotalSizeBytes / (1024.0 * 1024.0));
             }
             else
             {
                 DownloadStatusMessage = "Download failed";
+                await _downloadNotificationService.HandleUnexpectedInterruptionAsync(
+                    SelectedTrip.Name,
+                    DownloadInterruptionReason.DownloadFailed);
             }
         }
         catch (Exception ex)
         {
             ErrorMessage = $"Download failed: {ex.Message}";
             DownloadStatusMessage = "Download failed";
+
+            var reason = ex.Message.Contains("network", StringComparison.OrdinalIgnoreCase)
+                ? DownloadInterruptionReason.NetworkLost
+                : ex.Message.Contains("storage", StringComparison.OrdinalIgnoreCase)
+                    ? DownloadInterruptionReason.StorageLow
+                    : DownloadInterruptionReason.Unknown;
+
+            await _downloadNotificationService.HandleUnexpectedInterruptionAsync(SelectedTrip.Name, reason);
         }
         finally
         {
@@ -562,6 +645,33 @@ public partial class TripsViewModel : BaseViewModel
     #endregion
 
     #region Private Methods
+
+    /// <summary>
+    /// Estimates the download size for a trip based on its bounding box.
+    /// </summary>
+    /// <param name="trip">The trip to estimate.</param>
+    /// <returns>Estimated size in megabytes.</returns>
+    private static double EstimateDownloadSize(TripSummary trip)
+    {
+        // If we have a bounding box, estimate based on area
+        if (trip.BoundingBox != null)
+        {
+            var bbox = trip.BoundingBox;
+            var latSpan = Math.Abs(bbox.North - bbox.South);
+            var lonSpan = Math.Abs(bbox.East - bbox.West);
+
+            // Rough estimate: degrees at equator is ~111km
+            // Area in square degrees * ~2MB per square degree for tiles at typical zoom levels
+            var areaSqDegrees = latSpan * lonSpan;
+            var estimatedMb = areaSqDegrees * 50; // ~50MB per square degree covers multiple zoom levels
+
+            // Clamp to reasonable range (10MB - 500MB)
+            return Math.Clamp(estimatedMb, 10, 500);
+        }
+
+        // Default estimate based on typical trip size
+        return 50; // Conservative 50MB default
+    }
 
     /// <summary>
     /// Displays trip places and segments on the map.
@@ -740,6 +850,75 @@ public partial class TripsViewModel : BaseViewModel
                 DurationMinutes = segment.DurationMinutes
             };
         }).ToList();
+    }
+
+    #endregion
+
+    #region Place Editing
+
+    /// <summary>
+    /// Saves place changes with optimistic UI update.
+    /// </summary>
+    /// <param name="e">The place update event args.</param>
+    public async Task SavePlaceChangesAsync(PlaceUpdateEventArgs e)
+    {
+        if (SelectedTrip == null)
+            return;
+
+        // Apply optimistic UI update
+        var place = SelectedTripDetails?.AllPlaces.FirstOrDefault(p => p.Id == e.PlaceId);
+        if (place != null)
+        {
+            place.Name = e.Name;
+            place.Latitude = e.Latitude;
+            place.Longitude = e.Longitude;
+            place.Notes = e.Notes;
+        }
+
+        // Sync to server (handles offline queueing automatically)
+        await _tripSyncService.UpdatePlaceAsync(
+            e.PlaceId,
+            SelectedTrip.Id,
+            e.Name,
+            e.Latitude,
+            e.Longitude,
+            e.Notes,
+            includeNotes: true);
+    }
+
+    /// <summary>
+    /// Handles sync completed event.
+    /// </summary>
+    private async void OnSyncCompleted(object? sender, SyncSuccessEventArgs e)
+    {
+        await MainThread.InvokeOnMainThreadAsync(async () =>
+        {
+            await _toastService.ShowSuccessAsync("Changes saved");
+        });
+    }
+
+    /// <summary>
+    /// Handles sync queued event (offline).
+    /// </summary>
+    private async void OnSyncQueued(object? sender, SyncQueuedEventArgs e)
+    {
+        await MainThread.InvokeOnMainThreadAsync(async () =>
+        {
+            await _toastService.ShowWarningAsync(e.Message);
+        });
+    }
+
+    /// <summary>
+    /// Handles sync rejected event (server error).
+    /// </summary>
+    private async void OnSyncRejected(object? sender, SyncFailureEventArgs e)
+    {
+        await MainThread.InvokeOnMainThreadAsync(async () =>
+        {
+            await _toastService.ShowErrorAsync($"Save failed: {e.ErrorMessage}");
+
+            // TODO: Could revert optimistic UI update here if needed
+        });
     }
 
     #endregion

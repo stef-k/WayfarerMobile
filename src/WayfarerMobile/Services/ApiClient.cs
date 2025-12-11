@@ -347,6 +347,77 @@ public class ApiClient : IApiClient
 
     #endregion
 
+    #region Timeline
+
+    /// <summary>
+    /// Updates a timeline location entry.
+    /// </summary>
+    /// <param name="locationId">The location ID.</param>
+    /// <param name="request">The update request.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The response containing update result.</returns>
+    public async Task<TimelineUpdateResponse?> UpdateTimelineLocationAsync(
+        int locationId,
+        TimelineLocationUpdateRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsConfigured) return null;
+
+        try
+        {
+            var httpRequest = CreateRequest(HttpMethod.Put, $"/api/timeline/{locationId}");
+            httpRequest.Content = JsonContent.Create(request, options: JsonOptions);
+
+            var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+
+            if (response.IsSuccessStatusCode)
+            {
+                return new TimelineUpdateResponse { Success = true, LocationId = locationId };
+            }
+
+            _logger.LogWarning("Failed to update timeline location {LocationId}: {StatusCode}", locationId, response.StatusCode);
+            return new TimelineUpdateResponse { Success = false, Error = $"HTTP {(int)response.StatusCode}" };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating timeline location {LocationId}", locationId);
+            return new TimelineUpdateResponse { Success = false, Error = ex.Message };
+        }
+    }
+
+    /// <summary>
+    /// Deletes a timeline location.
+    /// </summary>
+    /// <param name="locationId">The location ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>True if successful.</returns>
+    public async Task<bool> DeleteTimelineLocationAsync(int locationId, CancellationToken cancellationToken = default)
+    {
+        if (!IsConfigured) return false;
+
+        try
+        {
+            var request = CreateRequest(HttpMethod.Delete, $"/api/timeline/{locationId}");
+            var response = await _httpClient.SendAsync(request, cancellationToken);
+
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("Deleted timeline location {LocationId}", locationId);
+                return true;
+            }
+
+            _logger.LogWarning("Failed to delete timeline location {LocationId}: {StatusCode}", locationId, response.StatusCode);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting timeline location {LocationId}", locationId);
+            return false;
+        }
+    }
+
+    #endregion
+
     #region Region CRUD
 
     /// <summary>

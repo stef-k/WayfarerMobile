@@ -39,6 +39,16 @@ public class DatabaseService : IAsyncDisposable
     public static string DatabasePath =>
         Path.Combine(FileSystem.AppDataDirectory, DatabaseFilename);
 
+    /// <summary>
+    /// Gets the database connection for sync services.
+    /// Prefer using dedicated methods where available.
+    /// </summary>
+    public async Task<SQLiteAsyncConnection> GetConnectionAsync()
+    {
+        await EnsureInitializedAsync();
+        return _database!;
+    }
+
     #endregion
 
     #region Initialization
@@ -708,6 +718,86 @@ public class DatabaseService : IAsyncDisposable
     {
         await EnsureInitializedAsync();
         await _database!.ExecuteAsync("DELETE FROM LiveTiles");
+    }
+
+    #endregion
+
+    #region Diagnostic Queries
+
+    /// <summary>
+    /// Gets the count of pending locations for diagnostics.
+    /// </summary>
+    public async Task<int> GetPendingLocationCountAsync()
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<QueuedLocation>()
+            .Where(l => l.SyncStatus == SyncStatus.Pending)
+            .CountAsync();
+    }
+
+    /// <summary>
+    /// Gets the count of synced locations for diagnostics.
+    /// </summary>
+    public async Task<int> GetSyncedLocationCountAsync()
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<QueuedLocation>()
+            .Where(l => l.SyncStatus == SyncStatus.Synced)
+            .CountAsync();
+    }
+
+    /// <summary>
+    /// Gets the count of failed locations for diagnostics.
+    /// </summary>
+    public async Task<int> GetFailedLocationCountAsync()
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<QueuedLocation>()
+            .Where(l => l.SyncStatus == SyncStatus.Failed)
+            .CountAsync();
+    }
+
+    /// <summary>
+    /// Gets the oldest pending location for diagnostics.
+    /// </summary>
+    public async Task<QueuedLocation?> GetOldestPendingLocationAsync()
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<QueuedLocation>()
+            .Where(l => l.SyncStatus == SyncStatus.Pending)
+            .OrderBy(l => l.Timestamp)
+            .FirstOrDefaultAsync();
+    }
+
+    /// <summary>
+    /// Gets the last synced location for diagnostics.
+    /// </summary>
+    public async Task<QueuedLocation?> GetLastSyncedLocationAsync()
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<QueuedLocation>()
+            .Where(l => l.SyncStatus == SyncStatus.Synced)
+            .OrderByDescending(l => l.LastSyncAttempt)
+            .FirstOrDefaultAsync();
+    }
+
+    /// <summary>
+    /// Gets the total count of trip tiles across all trips.
+    /// </summary>
+    public async Task<int> GetTripTileCountAsync()
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<TripTileEntity>().CountAsync();
+    }
+
+    /// <summary>
+    /// Gets the total size of trip tile cache in bytes.
+    /// </summary>
+    public async Task<long> GetTripCacheSizeAsync()
+    {
+        await EnsureInitializedAsync();
+        var tiles = await _database!.Table<TripTileEntity>().ToListAsync();
+        return tiles.Sum(t => t.FileSizeBytes);
     }
 
     #endregion

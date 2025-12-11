@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self';
+                 style-src 'self' 'unsafe-inline';
+                 script-src 'self' 'unsafe-inline';
+                 img-src * data: blob: https: http:;">
+  <title>Notes Viewer</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background: #fff;
+      color: #111;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    #viewer {
+      width: 100%;
+      height: 100%;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      padding: 16px;
+      padding-bottom: 80px;
+    }
+
+    /* Headings */
+    h1 { font-size: 1.8em; font-weight: 600; margin: 0.8em 0 0.4em; }
+    h2 { font-size: 1.5em; font-weight: 600; margin: 0.8em 0 0.4em; }
+    h3 { font-size: 1.3em; font-weight: 600; margin: 0.8em 0 0.4em; }
+    h4 { font-size: 1.1em; font-weight: 600; margin: 0.6em 0 0.3em; }
+    h5 { font-size: 1em; font-weight: 600; margin: 0.6em 0 0.3em; }
+    h6 { font-size: 0.9em; font-weight: 600; margin: 0.6em 0 0.3em; }
+
+    /* Paragraphs */
+    p { margin: 0.6em 0; }
+
+    /* Text formatting */
+    strong, b { font-weight: 600; }
+    em, i { font-style: italic; }
+    u { text-decoration: underline; }
+    s { text-decoration: line-through; }
+
+    /* Links */
+    a {
+      color: #1976d2;
+      text-decoration: underline;
+      word-break: break-word;
+    }
+
+    /* Lists */
+    ul, ol {
+      margin: 0.6em 0;
+      padding-left: 2em;
+    }
+    li { margin: 0.3em 0; }
+
+    /* Images */
+    img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 10px 0;
+      border-radius: 4px;
+    }
+
+    /* Blockquotes */
+    blockquote {
+      border-left: 4px solid #ddd;
+      padding-left: 16px;
+      margin: 0.8em 0;
+      color: #666;
+      font-style: italic;
+    }
+
+    /* Code */
+    code {
+      background: #f5f5f5;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9em;
+    }
+
+    pre {
+      background: #f5f5f5;
+      padding: 12px;
+      border-radius: 4px;
+      overflow-x: auto;
+      margin: 0.8em 0;
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+    }
+
+    /* Horizontal rule */
+    hr {
+      border: none;
+      border-top: 1px solid #ddd;
+      margin: 1em 0;
+    }
+
+    /* Quill alignment classes (preserve server formatting) */
+    .ql-align-center { text-align: center; }
+    .ql-align-right { text-align: right; }
+    .ql-align-justify { text-align: justify; }
+
+    /* Quill indentation */
+    .ql-indent-1 { padding-left: 3em; }
+    .ql-indent-2 { padding-left: 6em; }
+    .ql-indent-3 { padding-left: 9em; }
+  </style>
+</head>
+<body>
+  <div id="viewer"></div>
+
+  <script>
+    // API for C# to set content
+    window.__setContent = function(html) {
+      try {
+        var viewer = document.getElementById('viewer');
+        viewer.innerHTML = html || '';
+
+        // Filter out data: images (base64 encoded), allow http/https URLs
+        var images = viewer.querySelectorAll('img');
+        images.forEach(function(img) {
+          var src = img.getAttribute('src');
+          if (src && src.startsWith('data:')) {
+            console.log('Removing data: image (base64 not supported)');
+            img.remove();
+          } else if (src) {
+            console.log('Allowing image:', src.substring(0, 100));
+            // Ensure http/https URLs load correctly
+            img.onerror = function() {
+              console.error('Failed to load image:', src);
+              img.alt = '[Image failed to load]';
+              img.style.border = '1px dashed #ccc';
+              img.style.padding = '10px';
+              img.style.textAlign = 'center';
+            };
+          }
+        });
+
+        // Notify height after content is set and filtered
+        setTimeout(function() {
+          notifyHeight();
+        }, 100);
+      } catch(e) {
+        console.error('Error setting content:', e);
+      }
+    };
+
+    // Calculate and notify content height to C#
+    function notifyHeight() {
+      try {
+        var viewer = document.getElementById('viewer');
+        var height = Math.max(
+          viewer.scrollHeight,
+          viewer.offsetHeight,
+          document.documentElement.scrollHeight,
+          document.documentElement.offsetHeight
+        );
+
+        // Add extra padding for footer clearance and scrolling
+        height = height + 200;
+
+        console.log('Content height:', height);
+
+        // Try to notify C# via location hash (MAUI WebView can intercept this)
+        window.location.hash = 'height:' + height;
+      } catch(e) {
+        console.error('Error calculating height:', e);
+      }
+    }
+
+    // Initialize with placeholder (replaced by C#)
+    window.__initialContent = __WF_INITIAL_CONTENT__;
+
+    document.addEventListener('DOMContentLoaded', function() {
+      if (window.__initialContent !== undefined) {
+        window.__setContent(window.__initialContent);
+      }
+
+      // Intercept link clicks and trigger navigation to external browser
+      document.addEventListener('click', function(e) {
+        var target = e.target;
+
+        // Find the closest <a> tag (in case user clicked child element)
+        while (target && target.tagName !== 'A') {
+          target = target.parentElement;
+        }
+
+        // If we found a link with an href
+        if (target && target.tagName === 'A' && target.href) {
+          e.preventDefault();
+          console.log('Link clicked:', target.href);
+          // Navigate to the URL - this will trigger the Navigating event in C#
+          window.location.href = target.href;
+        }
+      });
+
+      // Listen for image load events and recalculate height
+      // This ensures height adapts after images finish loading
+      var images = document.querySelectorAll('#viewer img');
+      var loadedCount = 0;
+      var totalImages = images.length;
+
+      if (totalImages > 0) {
+        console.log('Found ' + totalImages + ' images, waiting for them to load...');
+
+        images.forEach(function(img) {
+          // If image is already loaded (cached)
+          if (img.complete) {
+            loadedCount++;
+            if (loadedCount === totalImages) {
+              console.log('All images already loaded, recalculating height');
+              setTimeout(notifyHeight, 200);
+            }
+          } else {
+            // Wait for image to load
+            img.addEventListener('load', function() {
+              loadedCount++;
+              console.log('Image loaded (' + loadedCount + '/' + totalImages + ')');
+              if (loadedCount === totalImages) {
+                console.log('All images loaded, recalculating height');
+                setTimeout(notifyHeight, 200);
+              }
+            });
+
+            // Handle image load errors
+            img.addEventListener('error', function() {
+              loadedCount++;
+              console.log('Image failed to load (' + loadedCount + '/' + totalImages + ')');
+              if (loadedCount === totalImages) {
+                setTimeout(notifyHeight, 200);
+              }
+            });
+          }
+        });
+      }
+    });
+
+    // Also notify on window resize
+    window.addEventListener('resize', function() {
+      setTimeout(notifyHeight, 100);
+    });
+  </script>
+</body>
+</html>
