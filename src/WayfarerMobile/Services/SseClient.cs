@@ -1,0 +1,441 @@
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+using Microsoft.Extensions.Logging;
+using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Models;
+
+namespace WayfarerMobile.Services;
+
+/// <summary>
+/// Client for subscribing to Server-Sent Events (SSE) location updates.
+/// Supports per-user and group-level channels with automatic reconnection.
+/// </summary>
+public class SseClient : ISseClient
+{
+    #region Fields
+
+    private readonly ISettingsService _settings;
+    private readonly ILogger<SseClient> _logger;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private CancellationTokenSource? _cancellationTokenSource;
+    private readonly object _connectionLock = new();
+    private bool _disposed;
+    private volatile bool _isConnected;
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    /// <summary>
+    /// Exponential backoff delays in milliseconds: 1s, 2s, 5s (capped).
+    /// </summary>
+    private static readonly int[] BackoffDelaysMs = [1000, 2000, 5000];
+
+    #endregion
+
+    #region Events
+
+    /// <inheritdoc />
+    public event EventHandler<SseLocationEventArgs>? LocationReceived;
+
+    /// <inheritdoc />
+    public event EventHandler<SseMembershipEventArgs>? MembershipReceived;
+
+    /// <inheritdoc />
+    public event EventHandler? HeartbeatReceived;
+
+    /// <inheritdoc />
+    public event EventHandler? Connected;
+
+    /// <inheritdoc />
+    public event EventHandler<SseReconnectEventArgs>? Reconnecting;
+
+    #endregion
+
+    #region Properties
+
+    /// <inheritdoc />
+    public bool IsConnected => _isConnected;
+
+    #endregion
+
+    #region Constructor
+
+    /// <summary>
+    /// Initializes a new instance of <see cref="SseClient"/>.
+    /// </summary>
+    /// <param name="settings">Settings service for server URL and API token.</param>
+    /// <param name="logger">Logger instance.</param>
+    /// <param name="httpClientFactory">HTTP client factory for creating clients.</param>
+    public SseClient(
+        ISettingsService settings,
+        ILogger<SseClient> logger,
+        IHttpClientFactory httpClientFactory)
+    {
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
+    }
+
+    #endregion
+
+    #region Public Methods
+
+    /// <inheritdoc />
+    public async Task SubscribeToUserAsync(string userName, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(userName))
+        {
+            _logger.LogWarning("Cannot subscribe to SSE: userName is empty");
+            return;
+        }
+
+        string? serverUrl = _settings.ServerUrl;
+        if (string.IsNullOrWhiteSpace(serverUrl))
+        {
+            _logger.LogError("Server URL not configured for SSE subscription");
+            return;
+        }
+
+        string url = $"{serverUrl.TrimEnd('/')}/api/mobile/sse/location-update/{Uri.EscapeDataString(userName)}";
+        await SubscribeAsync(url, $"user:{userName}", cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task SubscribeToGroupAsync(string groupId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(groupId))
+        {
+            _logger.LogWarning("Cannot subscribe to SSE: groupId is empty");
+            return;
+        }
+
+        string? serverUrl = _settings.ServerUrl;
+        if (string.IsNullOrWhiteSpace(serverUrl))
+        {
+            _logger.LogError("Server URL not configured for SSE subscription");
+            return;
+        }
+
+        string url = $"{serverUrl.TrimEnd('/')}/api/mobile/sse/group-location-update/{Uri.EscapeDataString(groupId)}";
+        await SubscribeAsync(url, $"group:{groupId}", cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task SubscribeToGroupMembershipAsync(string groupId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(groupId))
+        {
+            _logger.LogWarning("Cannot subscribe to SSE: groupId is empty");
+            return;
+        }
+
+        string? serverUrl = _settings.ServerUrl;
+        if (string.IsNullOrWhiteSpace(serverUrl))
+        {
+            _logger.LogError("Server URL not configured for SSE subscription");
+            return;
+        }
+
+        string url = $"{serverUrl.TrimEnd('/')}/api/sse/stream/group-membership-update/{Uri.EscapeDataString(groupId)}";
+        await SubscribeAsync(url, $"group-membership:{groupId}", cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public void Stop()
+    {
+        lock (_connectionLock)
+        {
+            _cancellationTokenSource?.Cancel();
+            _isConnected = false;
+        }
+
+        _logger.LogInformation("SSE subscription stopped");
+    }
+
+    #endregion
+
+    #region Private Methods
+
+    /// <summary>
+    /// Subscribe to SSE endpoint with automatic reconnection.
+    /// </summary>
+    private async Task SubscribeAsync(string url, string channelName, CancellationToken externalToken)
+    {
+        // Cancel any existing subscription
+        Stop();
+
+        // Create new cancellation token linked to external token
+        CancellationTokenSource cts;
+        lock (_connectionLock)
+        {
+            _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(externalToken);
+            cts = _cancellationTokenSource;
+        }
+
+        var cancellationToken = cts.Token;
+        int reconnectAttempt = 0;
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                if (reconnectAttempt > 0)
+                {
+                    int delayMs = BackoffDelaysMs[Math.Min(reconnectAttempt - 1, BackoffDelaysMs.Length - 1)];
+                    _logger.LogInformation("Reconnecting to {Channel} in {Delay}ms (attempt {Attempt})",
+                        channelName, delayMs, reconnectAttempt);
+
+                    Reconnecting?.Invoke(this, new SseReconnectEventArgs(reconnectAttempt, delayMs));
+
+                    await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
+                }
+
+                _logger.LogInformation("Connecting to SSE channel: {Channel}", channelName);
+                await ConnectAndStreamAsync(url, cancellationToken).ConfigureAwait(false);
+
+                // If we reach here, stream ended normally (not an error)
+                break;
+            }
+            catch (OperationCanceledException)
+            {
+                // Normal cancellation (user-initiated stop)
+                _logger.LogInformation("SSE subscription cancelled: {Channel}", channelName);
+                break;
+            }
+            catch (Exception ex) when (IsCancellationException(ex))
+            {
+                // HttpClient sometimes wraps cancellation in other exception types
+                _logger.LogInformation("SSE subscription stopped: {Message}", ex.Message);
+                break;
+            }
+            catch (Exception ex)
+            {
+                // Real connection error - log and retry with backoff
+                _logger.LogError(ex, "SSE connection error on {Channel}", channelName);
+                reconnectAttempt++;
+                _isConnected = false;
+
+                // Continue loop to reconnect with backoff
+            }
+        }
+
+        _isConnected = false;
+    }
+
+    /// <summary>
+    /// Connect to SSE endpoint and stream events.
+    /// </summary>
+    private async Task ConnectAndStreamAsync(string url, CancellationToken cancellationToken)
+    {
+        string? apiToken = _settings.ApiToken;
+        if (string.IsNullOrWhiteSpace(apiToken))
+        {
+            _logger.LogError("API token not configured for SSE subscription");
+            return;
+        }
+
+        // Check cancellation before starting
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Create HttpClient with extended timeout for long-lived SSE connections
+        var httpClient = _httpClientFactory.CreateClient();
+        httpClient.Timeout = TimeSpan.FromMinutes(30);
+
+        // Create request with Bearer auth and Accept header
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
+
+        HttpResponseMessage? response;
+        try
+        {
+            // Send request and get streaming response
+            response = await httpClient.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("SSE connection cancelled during request");
+            throw;
+        }
+        catch (Exception ex) when (IsCancellationException(ex))
+        {
+            _logger.LogInformation("SSE connection stopped: {Message}", ex.Message);
+            throw new OperationCanceledException("SSE connection was cancelled", ex);
+        }
+
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                string error = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                _logger.LogError("SSE subscription failed: {StatusCode} - {Error}",
+                    response.StatusCode, error);
+                throw new HttpRequestException($"SSE subscription failed: {response.StatusCode}");
+            }
+
+            _isConnected = true;
+            Connected?.Invoke(this, EventArgs.Empty);
+            _logger.LogInformation("SSE connected: {Url}", url);
+
+            // Stream and parse SSE frames
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+
+            await ParseSseStreamAsync(reader, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Parse SSE stream and emit events.
+    /// </summary>
+    private async Task ParseSseStreamAsync(StreamReader reader, CancellationToken cancellationToken)
+    {
+        var dataBuffer = new StringBuilder();
+
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                string? line;
+                try
+                {
+                    line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.LogInformation("SSE stream reading cancelled");
+                    return;
+                }
+                catch (Exception ex) when (IsCancellationException(ex))
+                {
+                    _logger.LogInformation("SSE stream stopped: {Message}", ex.Message);
+                    return;
+                }
+
+                // End of stream
+                if (line == null)
+                {
+                    break;
+                }
+
+                // Heartbeat comment frame (e.g., ": heartbeat")
+                if (line.StartsWith(':'))
+                {
+                    _logger.LogDebug("SSE heartbeat received");
+                    HeartbeatReceived?.Invoke(this, EventArgs.Empty);
+                    continue;
+                }
+
+                // Data frame (e.g., "data: {...}")
+                if (line.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                {
+                    string data = line[5..].TrimStart();
+                    dataBuffer.Append(data);
+                    continue;
+                }
+
+                // Empty line signals end of event
+                if (string.IsNullOrWhiteSpace(line) && dataBuffer.Length > 0)
+                {
+                    string json = dataBuffer.ToString();
+                    dataBuffer.Clear();
+
+                    ProcessEventData(json);
+                }
+            }
+        }
+        catch (Exception ex) when (!IsCancellationException(ex))
+        {
+            _logger.LogError(ex, "Error parsing SSE stream");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Process a single SSE event data payload.
+    /// </summary>
+    private void ProcessEventData(string json)
+    {
+        try
+        {
+            // Try parsing as location event first (more common)
+            var locationEvent = JsonSerializer.Deserialize<SseLocationEvent>(json, JsonOptions);
+
+            if (locationEvent != null && !string.IsNullOrEmpty(locationEvent.UserName))
+            {
+                _logger.LogInformation("SSE location received: {UserName} at {Timestamp}",
+                    locationEvent.UserName, locationEvent.TimestampUtc);
+                LocationReceived?.Invoke(this, new SseLocationEventArgs(locationEvent));
+                return;
+            }
+
+            // Try parsing as membership event
+            var membershipEvent = JsonSerializer.Deserialize<SseMembershipEvent>(json, JsonOptions);
+
+            if (membershipEvent != null && !string.IsNullOrEmpty(membershipEvent.Action))
+            {
+                _logger.LogInformation("SSE membership event received: {Action} for user {UserId}",
+                    membershipEvent.Action, membershipEvent.UserId);
+                MembershipReceived?.Invoke(this, new SseMembershipEventArgs(membershipEvent));
+            }
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse SSE data: {Json}", json);
+        }
+    }
+
+    /// <summary>
+    /// Check if an exception is related to cancellation/disconnection (not a real error).
+    /// </summary>
+    private static bool IsCancellationException(Exception ex)
+    {
+        if (ex is OperationCanceledException or TaskCanceledException)
+        {
+            return true;
+        }
+
+        string message = ex.Message.ToLowerInvariant();
+        return message.Contains("canceled") ||
+               message.Contains("cancelled") ||
+               message.Contains("socket closed") ||
+               message.Contains("connection closed") ||
+               message.Contains("request was canceled") ||
+               message.Contains("the request was aborted") ||
+               (ex is IOException && message.Contains("closed"));
+    }
+
+    #endregion
+
+    #region IDisposable
+
+    /// <summary>
+    /// Dispose resources.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        Stop();
+
+        lock (_connectionLock)
+        {
+            _cancellationTokenSource?.Dispose();
+            _cancellationTokenSource = null;
+        }
+
+        _disposed = true;
+        GC.SuppressFinalize(this);
+    }
+
+    #endregion
+}
