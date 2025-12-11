@@ -24,6 +24,9 @@ public class SettingsService : ISettingsService
     private const string KeyMinTileRequestDelayMs = "min_tile_request_delay_ms";
     private const string KeyMaxLiveCacheSizeMB = "max_live_cache_size_mb";
     private const string KeyMaxTripCacheSizeMB = "max_trip_cache_size_mb";
+    private const string KeyTileServerUrl = "tile_server_url";
+    private const string KeyLiveCachePrefetchRadius = "live_cache_prefetch_radius";
+    private const string KeyPrefetchDistanceThreshold = "prefetch_distance_threshold";
 
     // Navigation settings
     private const string KeyNavigationAudioEnabled = "navigation_audio_enabled";
@@ -64,37 +67,61 @@ public class SettingsService : ISettingsService
 
     /// <summary>
     /// Gets or sets the server URL for API calls.
+    /// Stored in SecureStorage for enhanced security.
     /// </summary>
     public string? ServerUrl
     {
-        get => Preferences.Get(KeyServerUrl, null as string);
-        set => Preferences.Set(KeyServerUrl, value ?? string.Empty);
+        get => SecureStorage.Default.GetAsync(KeyServerUrl).GetAwaiter().GetResult();
+        set
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                SecureStorage.Default.Remove(KeyServerUrl);
+            }
+            else
+            {
+                SecureStorage.Default.SetAsync(KeyServerUrl, value).GetAwaiter().GetResult();
+            }
+        }
     }
 
     /// <summary>
     /// Gets or sets the API authentication token.
+    /// Stored in SecureStorage for enhanced security.
     /// </summary>
     public string? ApiToken
     {
-        get => Preferences.Get(KeyApiToken, null as string);
-        set => Preferences.Set(KeyApiToken, value ?? string.Empty);
+        get => SecureStorage.Default.GetAsync(KeyApiToken).GetAwaiter().GetResult();
+        set
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                SecureStorage.Default.Remove(KeyApiToken);
+            }
+            else
+            {
+                SecureStorage.Default.SetAsync(KeyApiToken, value).GetAwaiter().GetResult();
+            }
+        }
     }
 
     /// <summary>
     /// Gets or sets the minimum time between logged locations (from server config).
+    /// Default: 5 minutes.
     /// </summary>
     public int LocationTimeThresholdMinutes
     {
-        get => Preferences.Get(KeyLocationTimeThreshold, 1);
+        get => Preferences.Get(KeyLocationTimeThreshold, 5);
         set => Preferences.Set(KeyLocationTimeThreshold, value);
     }
 
     /// <summary>
     /// Gets or sets the minimum distance between logged locations (from server config).
+    /// Default: 15 meters.
     /// </summary>
     public int LocationDistanceThresholdMeters
     {
-        get => Preferences.Get(KeyLocationDistanceThreshold, 50);
+        get => Preferences.Get(KeyLocationDistanceThreshold, 15);
         set => Preferences.Set(KeyLocationDistanceThreshold, value);
     }
 
@@ -193,6 +220,64 @@ public class SettingsService : ISettingsService
     {
         get => Preferences.Get(KeyMaxTripCacheSizeMB, 2000);
         set => Preferences.Set(KeyMaxTripCacheSizeMB, Math.Clamp(value, 500, 5000));
+    }
+
+    /// <summary>
+    /// Default tile server URL (OpenStreetMap).
+    /// </summary>
+    public const string DefaultTileServerUrl = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+
+    /// <summary>
+    /// Gets or sets the custom tile server URL.
+    /// Must contain {z}, {x}, {y} placeholders.
+    /// Default: OpenStreetMap tile server.
+    /// </summary>
+    public string TileServerUrl
+    {
+        get => Preferences.Get(KeyTileServerUrl, DefaultTileServerUrl);
+        set => Preferences.Set(KeyTileServerUrl, ValidateTileServerUrl(value));
+    }
+
+    /// <summary>
+    /// Validates a tile server URL, returning the default if invalid.
+    /// </summary>
+    private static string ValidateTileServerUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return DefaultTileServerUrl;
+
+        // Must contain required placeholders
+        if (!url.Contains("{z}") || !url.Contains("{x}") || !url.Contains("{y}"))
+            return DefaultTileServerUrl;
+
+        // Must be a valid URL (basic check)
+        if (!url.StartsWith("http://") && !url.StartsWith("https://"))
+            return DefaultTileServerUrl;
+
+        return url;
+    }
+
+    /// <summary>
+    /// Prefetch radius in tiles for live cache around user location.
+    /// Radius of N means (2N+1)x(2N+1) grid of tiles per zoom level.
+    /// Default: 5 (11x11 grid). Range: 1-9 tiles.
+    /// </summary>
+    public int LiveCachePrefetchRadius
+    {
+        get => Preferences.Get(KeyLiveCachePrefetchRadius, 5);
+        set => Preferences.Set(KeyLiveCachePrefetchRadius, Math.Clamp(value, 1, 9));
+    }
+
+    /// <summary>
+    /// Independent distance threshold for tile prefetching (in meters).
+    /// This is separate from location logging threshold.
+    /// Default: 500 meters - only prefetch when user has moved significantly.
+    /// Range: 100-2000 meters.
+    /// </summary>
+    public int PrefetchDistanceThresholdMeters
+    {
+        get => Preferences.Get(KeyPrefetchDistanceThreshold, 500);
+        set => Preferences.Set(KeyPrefetchDistanceThreshold, Math.Clamp(value, 100, 2000));
     }
 
     #endregion
@@ -335,10 +420,12 @@ public class SettingsService : ISettingsService
 
     /// <summary>
     /// Clears authentication data only.
+    /// Removes sensitive data from SecureStorage.
     /// </summary>
     public void ClearAuth()
     {
-        ApiToken = null;
+        SecureStorage.Default.Remove(KeyApiToken);
+        SecureStorage.Default.Remove(KeyServerUrl);
         UserId = null;
         UserEmail = null;
     }

@@ -702,6 +702,52 @@ public class TripDownloadProgress
     }
 }
 
+#region Location Logging
+
+/// <summary>
+/// Request to log a location to the server.
+/// Used by IApiClient.LogLocationAsync and CheckInAsync methods.
+/// </summary>
+public class LocationLogRequest
+{
+    /// <summary>
+    /// Gets or sets the latitude in degrees.
+    /// </summary>
+    public double Latitude { get; set; }
+
+    /// <summary>
+    /// Gets or sets the longitude in degrees.
+    /// </summary>
+    public double Longitude { get; set; }
+
+    /// <summary>
+    /// Gets or sets the altitude in meters above sea level.
+    /// </summary>
+    public double? Altitude { get; set; }
+
+    /// <summary>
+    /// Gets or sets the horizontal accuracy in meters.
+    /// </summary>
+    public double? Accuracy { get; set; }
+
+    /// <summary>
+    /// Gets or sets the speed in meters per second.
+    /// </summary>
+    public double? Speed { get; set; }
+
+    /// <summary>
+    /// Gets or sets the timestamp when this location was recorded.
+    /// </summary>
+    public DateTime Timestamp { get; set; }
+
+    /// <summary>
+    /// Gets or sets the location provider (GPS, Network, etc.).
+    /// </summary>
+    public string? Provider { get; set; }
+}
+
+#endregion
+
 #region CRUD Request/Response Models
 
 /// <summary>
@@ -921,16 +967,19 @@ public class RegionResponse
 
 /// <summary>
 /// Request for updating a timeline location.
+/// Matches server API: PUT /api/location/{id}
 /// </summary>
 public class TimelineLocationUpdateRequest
 {
     /// <summary>
     /// Gets or sets the latitude (null if not changed).
+    /// Must be provided together with Longitude.
     /// </summary>
     public double? Latitude { get; set; }
 
     /// <summary>
     /// Gets or sets the longitude (null if not changed).
+    /// Must be provided together with Latitude.
     /// </summary>
     public double? Longitude { get; set; }
 
@@ -943,6 +992,21 @@ public class TimelineLocationUpdateRequest
     /// Gets or sets the notes HTML (null if not changed).
     /// </summary>
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to clear notes (server will set notes to null).
+    /// </summary>
+    public bool? ClearNotes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the activity type ID (null if not changed).
+    /// </summary>
+    public int? ActivityTypeId { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to clear the activity type.
+    /// </summary>
+    public bool? ClearActivity { get; set; }
 }
 
 /// <summary>

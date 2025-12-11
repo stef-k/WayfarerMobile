@@ -96,11 +96,16 @@ public partial class QrScannerViewModel : BaseViewModel
                 return;
             }
 
-            // Validate URL
-            if (!Uri.TryCreate(config.ServerUrl, UriKind.Absolute, out var serverUri) ||
-                (serverUri.Scheme != "http" && serverUri.Scheme != "https"))
+            // Validate URL - HTTPS only for security
+            if (!Uri.TryCreate(config.ServerUrl, UriKind.Absolute, out var serverUri))
             {
                 ShowError("Invalid server URL format.");
+                return;
+            }
+
+            if (serverUri.Scheme != "https")
+            {
+                ShowError("Server URL must use HTTPS for security.");
                 return;
             }
 
@@ -119,6 +124,10 @@ public partial class QrScannerViewModel : BaseViewModel
             _settingsService.ApiToken = config.ApiToken;
 
             _logger.LogInformation("Server configuration saved successfully");
+
+            // Fetch and apply server settings (thresholds)
+            StatusMessage = "Fetching server settings...";
+            await ApplyServerSettingsAsync();
 
             IsSuccess = true;
             StatusMessage = "Connected successfully!";
@@ -191,6 +200,45 @@ public partial class QrScannerViewModel : BaseViewModel
         {
             _logger.LogWarning(ex, "Failed to parse QR code JSON");
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Fetches and applies server settings (thresholds) to local settings.
+    /// </summary>
+    private async Task ApplyServerSettingsAsync()
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            var serverSettings = await _apiClient.GetSettingsAsync(cts.Token);
+
+            if (serverSettings != null)
+            {
+                // Validate and apply server thresholds
+                if (serverSettings.LocationTimeThresholdMinutes > 0)
+                {
+                    _settingsService.LocationTimeThresholdMinutes = serverSettings.LocationTimeThresholdMinutes;
+                }
+
+                if (serverSettings.LocationDistanceThresholdMeters > 0)
+                {
+                    _settingsService.LocationDistanceThresholdMeters = serverSettings.LocationDistanceThresholdMeters;
+                }
+
+                _logger.LogInformation(
+                    "Server settings applied: Time={Time}min, Distance={Distance}m",
+                    _settingsService.LocationTimeThresholdMinutes,
+                    _settingsService.LocationDistanceThresholdMeters);
+            }
+            else
+            {
+                _logger.LogWarning("Could not fetch server settings, using defaults");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to apply server settings, using defaults");
         }
     }
 

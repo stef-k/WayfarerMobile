@@ -1,5 +1,4 @@
 using WayfarerMobile.Core.Models;
-using WayfarerMobile.Data.Entities;
 
 namespace WayfarerMobile.Core.Interfaces;
 
@@ -16,18 +15,18 @@ public interface IApiClient
     /// <summary>
     /// Logs a location to the server.
     /// </summary>
-    /// <param name="location">The location to log.</param>
+    /// <param name="location">The location data to log.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Result indicating success or failure with optional message.</returns>
-    Task<ApiResult> LogLocationAsync(QueuedLocation location, CancellationToken cancellationToken = default);
+    Task<ApiResult> LogLocationAsync(LocationLogRequest location, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Performs a manual check-in (bypasses time/distance thresholds).
     /// </summary>
-    /// <param name="location">The location to check in.</param>
+    /// <param name="location">The location data to check in.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Result indicating success or failure with optional message.</returns>
-    Task<ApiResult> CheckInAsync(QueuedLocation location, CancellationToken cancellationToken = default);
+    Task<ApiResult> CheckInAsync(LocationLogRequest location, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Tests connectivity to the server.

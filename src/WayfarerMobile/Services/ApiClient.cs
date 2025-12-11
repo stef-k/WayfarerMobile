@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -7,7 +8,6 @@ using Polly;
 using Polly.Retry;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
-using WayfarerMobile.Data.Entities;
 
 namespace WayfarerMobile.Services;
 
@@ -18,7 +18,7 @@ public class ApiClient : IApiClient
 {
     private readonly ISettingsService _settings;
     private readonly ILogger<ApiClient> _logger;
-    private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ResiliencePipeline<HttpResponseMessage> _retryPipeline;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -45,14 +45,16 @@ public class ApiClient : IApiClient
     /// </summary>
     /// <param name="settings">Settings service for configuration.</param>
     /// <param name="logger">Logger instance.</param>
-    public ApiClient(ISettingsService settings, ILogger<ApiClient> logger)
+    /// <param name="httpClientFactory">HTTP client factory for creating named clients.</param>
+    public ApiClient(ISettingsService settings, ILogger<ApiClient> logger, IHttpClientFactory httpClientFactory)
     {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(httpClientFactory);
+
         _settings = settings;
         _logger = logger;
-        _httpClient = new HttpClient
-        {
-            Timeout = TimeSpan.FromSeconds(30)
-        };
+        _httpClientFactory = httpClientFactory;
 
         // Configure Polly retry pipeline for transient failures
         _retryPipeline = new ResiliencePipelineBuilder<HttpResponseMessage>()
@@ -79,17 +81,22 @@ public class ApiClient : IApiClient
             .Build();
     }
 
+    /// <summary>
+    /// Gets the HttpClient instance for API calls.
+    /// </summary>
+    private HttpClient HttpClientInstance => _httpClientFactory.CreateClient("WayfarerApi");
+
     /// <inheritdoc/>
     public bool IsConfigured => _settings.IsConfigured;
 
     /// <inheritdoc/>
-    public async Task<ApiResult> LogLocationAsync(QueuedLocation location, CancellationToken cancellationToken = default)
+    public async Task<ApiResult> LogLocationAsync(LocationLogRequest location, CancellationToken cancellationToken = default)
     {
         return await SendLocationAsync("/api/location/log-location", location, cancellationToken);
     }
 
     /// <inheritdoc/>
-    public async Task<ApiResult> CheckInAsync(QueuedLocation location, CancellationToken cancellationToken = default)
+    public async Task<ApiResult> CheckInAsync(LocationLogRequest location, CancellationToken cancellationToken = default)
     {
         return await SendLocationAsync("/api/location/check-in", location, cancellationToken);
     }
@@ -260,7 +267,7 @@ public class ApiClient : IApiClient
         {
             var httpRequest = CreateRequest(HttpMethod.Post, $"/api/trips/{tripId}/places");
             httpRequest.Content = JsonContent.Create(request, options: JsonOptions);
-            var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            var response = await HttpClientInstance.SendAsync(httpRequest, cancellationToken);
 
             if (response.IsSuccessStatusCode)
             {
@@ -296,7 +303,7 @@ public class ApiClient : IApiClient
         {
             var httpRequest = CreateRequest(HttpMethod.Put, $"/api/trips/places/{placeId}");
             httpRequest.Content = JsonContent.Create(request, options: JsonOptions);
-            var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            var response = await HttpClientInstance.SendAsync(httpRequest, cancellationToken);
 
             if (response.IsSuccessStatusCode)
             {
@@ -327,7 +334,7 @@ public class ApiClient : IApiClient
         try
         {
             var request = CreateRequest(HttpMethod.Delete, $"/api/trips/places/{placeId}");
-            var response = await _httpClient.SendAsync(request, cancellationToken);
+            var response = await HttpClientInstance.SendAsync(request, cancellationToken);
 
             if (response.IsSuccessStatusCode)
             {
@@ -365,10 +372,11 @@ public class ApiClient : IApiClient
 
         try
         {
-            var httpRequest = CreateRequest(HttpMethod.Put, $"/api/timeline/{locationId}");
+            // Server API uses /api/location/{id} for timeline updates
+            var httpRequest = CreateRequest(HttpMethod.Put, $"/api/location/{locationId}");
             httpRequest.Content = JsonContent.Create(request, options: JsonOptions);
 
-            var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            var response = await HttpClientInstance.SendAsync(httpRequest, cancellationToken);
 
             if (response.IsSuccessStatusCode)
             {
@@ -397,8 +405,9 @@ public class ApiClient : IApiClient
 
         try
         {
-            var request = CreateRequest(HttpMethod.Delete, $"/api/timeline/{locationId}");
-            var response = await _httpClient.SendAsync(request, cancellationToken);
+            // Server API uses /api/location/{id} for timeline deletes
+            var request = CreateRequest(HttpMethod.Delete, $"/api/location/{locationId}");
+            var response = await HttpClientInstance.SendAsync(request, cancellationToken);
 
             if (response.IsSuccessStatusCode)
             {
@@ -438,7 +447,7 @@ public class ApiClient : IApiClient
         {
             var httpRequest = CreateRequest(HttpMethod.Post, $"/api/trips/{tripId}/regions");
             httpRequest.Content = JsonContent.Create(request, options: JsonOptions);
-            var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            var response = await HttpClientInstance.SendAsync(httpRequest, cancellationToken);
 
             if (response.IsSuccessStatusCode)
             {
@@ -474,7 +483,7 @@ public class ApiClient : IApiClient
         {
             var httpRequest = CreateRequest(HttpMethod.Put, $"/api/trips/regions/{regionId}");
             httpRequest.Content = JsonContent.Create(request, options: JsonOptions);
-            var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            var response = await HttpClientInstance.SendAsync(httpRequest, cancellationToken);
 
             if (response.IsSuccessStatusCode)
             {
@@ -505,7 +514,7 @@ public class ApiClient : IApiClient
         try
         {
             var request = CreateRequest(HttpMethod.Delete, $"/api/trips/regions/{regionId}");
-            var response = await _httpClient.SendAsync(request, cancellationToken);
+            var response = await HttpClientInstance.SendAsync(request, cancellationToken);
 
             if (response.IsSuccessStatusCode)
             {
@@ -599,7 +608,7 @@ public class ApiClient : IApiClient
         try
         {
             var request = CreateRequest(HttpMethod.Post, $"/api/trips/{tripId}/clone");
-            var response = await _httpClient.SendAsync(request, cancellationToken);
+            var response = await HttpClientInstance.SendAsync(request, cancellationToken);
 
             if (response.IsSuccessStatusCode)
             {
@@ -635,7 +644,7 @@ public class ApiClient : IApiClient
     /// <summary>
     /// Gets the underlying HttpClient for direct tile downloads.
     /// </summary>
-    public HttpClient HttpClient => _httpClient;
+    public HttpClient HttpClient => HttpClientInstance;
 
     /// <inheritdoc/>
     public async Task<TimelineResponse?> GetTimelineLocationsAsync(
@@ -693,7 +702,7 @@ public class ApiClient : IApiClient
     /// </summary>
     private async Task<ApiResult> SendLocationAsync(
         string endpoint,
-        QueuedLocation location,
+        LocationLogRequest location,
         CancellationToken cancellationToken)
     {
         if (!IsConfigured)
@@ -721,7 +730,7 @@ public class ApiClient : IApiClient
             _logger.LogDebug("Sending location to {Endpoint}: ({Lat}, {Lon})",
                 endpoint, location.Latitude, location.Longitude);
 
-            var response = await _httpClient.SendAsync(request, cancellationToken);
+            var response = await HttpClientInstance.SendAsync(request, cancellationToken);
             var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
             if (response.IsSuccessStatusCode)
@@ -786,7 +795,7 @@ public class ApiClient : IApiClient
             async token =>
             {
                 var request = requestFactory();
-                return await _httpClient.SendAsync(request, token);
+                return await HttpClientInstance.SendAsync(request, token);
             },
             cancellationToken);
     }
@@ -813,8 +822,9 @@ public class ApiClient : IApiClient
 
             return ApiResult.Ok(message);
         }
-        catch
+        catch (JsonException)
         {
+            // Non-JSON response or malformed JSON - treat as success with default message
             return ApiResult.Ok("Location logged");
         }
     }
