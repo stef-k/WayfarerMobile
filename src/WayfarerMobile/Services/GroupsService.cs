@@ -1,3 +1,4 @@
+using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -14,7 +15,7 @@ public class GroupsService : IGroupsService
 {
     private readonly ISettingsService _settings;
     private readonly ILogger<GroupsService> _logger;
-    private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -25,15 +26,24 @@ public class GroupsService : IGroupsService
     /// <summary>
     /// Creates a new instance of GroupsService.
     /// </summary>
-    public GroupsService(ISettingsService settings, ILogger<GroupsService> logger)
+    /// <param name="settings">Settings service for configuration.</param>
+    /// <param name="logger">Logger instance.</param>
+    /// <param name="httpClientFactory">HTTP client factory for creating named clients.</param>
+    public GroupsService(ISettingsService settings, ILogger<GroupsService> logger, IHttpClientFactory httpClientFactory)
     {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(httpClientFactory);
+
         _settings = settings;
         _logger = logger;
-        _httpClient = new HttpClient
-        {
-            Timeout = TimeSpan.FromSeconds(30)
-        };
+        _httpClientFactory = httpClientFactory;
     }
+
+    /// <summary>
+    /// Gets the HttpClient instance for API calls.
+    /// </summary>
+    private HttpClient HttpClientInstance => _httpClientFactory.CreateClient("WayfarerApi");
 
     /// <inheritdoc/>
     public async Task<List<GroupSummary>> GetGroupsAsync(CancellationToken cancellationToken = default)
@@ -47,7 +57,7 @@ public class GroupsService : IGroupsService
         try
         {
             var request = CreateRequest(HttpMethod.Get, "/api/mobile/groups?scope=all");
-            var response = await _httpClient.SendAsync(request, cancellationToken);
+            var response = await HttpClientInstance.SendAsync(request, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -79,7 +89,7 @@ public class GroupsService : IGroupsService
         try
         {
             var request = CreateRequest(HttpMethod.Get, $"/api/mobile/groups/{groupId}/members");
-            var response = await _httpClient.SendAsync(request, cancellationToken);
+            var response = await HttpClientInstance.SendAsync(request, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -116,7 +126,7 @@ public class GroupsService : IGroupsService
             var request = CreateRequest(HttpMethod.Post, $"/api/mobile/groups/{groupId}/locations/latest");
             request.Content = JsonContent.Create(new { includeUserIds = userIds }, options: JsonOptions);
 
-            var response = await _httpClient.SendAsync(request, cancellationToken);
+            var response = await HttpClientInstance.SendAsync(request, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -153,6 +163,84 @@ public class GroupsService : IGroupsService
 
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         return request;
+    }
+
+    /// <inheritdoc/>
+    public async Task<GroupLocationsQueryResponse?> QueryLocationsAsync(
+        Guid groupId,
+        GroupLocationsQueryRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (!_settings.IsConfigured)
+        {
+            _logger.LogWarning("Cannot query locations - API not configured");
+            return null;
+        }
+
+        try
+        {
+            var httpRequest = CreateRequest(HttpMethod.Post, $"/api/mobile/groups/{groupId}/locations/query");
+            httpRequest.Content = JsonContent.Create(request, options: JsonOptions);
+
+            var response = await HttpClientInstance.SendAsync(httpRequest, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Failed to query locations: {StatusCode}", response.StatusCode);
+                return null;
+            }
+
+            var queryResponse = await response.Content.ReadFromJsonAsync<GroupLocationsQueryResponse>(JsonOptions, cancellationToken);
+            _logger.LogDebug(
+                "Queried {Count} locations (total {Total}) for group {GroupId}",
+                queryResponse?.ReturnedItems ?? 0,
+                queryResponse?.TotalItems ?? 0,
+                groupId);
+
+            return queryResponse;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error querying locations for {GroupId}", groupId);
+            return null;
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> UpdatePeerVisibilityAsync(
+        Guid groupId,
+        bool disabled,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_settings.IsConfigured)
+        {
+            _logger.LogWarning("Cannot update peer visibility - API not configured");
+            return false;
+        }
+
+        try
+        {
+            var request = CreateRequest(new HttpMethod("PATCH"), $"/api/mobile/groups/{groupId}/peer-visibility");
+            request.Content = JsonContent.Create(new PeerVisibilityUpdateRequest { Disabled = disabled }, options: JsonOptions);
+
+            var response = await HttpClientInstance.SendAsync(request, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Failed to update peer visibility: {StatusCode}", response.StatusCode);
+                return false;
+            }
+
+            _logger.LogDebug("Updated peer visibility for group {GroupId}: disabled={Disabled}", groupId, disabled);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating peer visibility for {GroupId}", groupId);
+            return false;
+        }
     }
 
     /// <summary>
@@ -201,9 +289,10 @@ public class GroupsService : IGroupsService
                 }
             }
         }
-        catch
+        catch (JsonException ex)
         {
-            // Return empty dictionary on parse error
+            // Log parse error but don't propagate - return partial results
+            System.Diagnostics.Debug.WriteLine($"[GroupsService] Failed to parse locations response: {ex.Message}");
         }
 
         return result;

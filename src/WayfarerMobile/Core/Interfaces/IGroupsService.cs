@@ -33,4 +33,30 @@ public interface IGroupsService
         Guid groupId,
         List<string>? userIds = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Queries locations within viewport bounds for historical viewing.
+    /// POST /api/mobile/groups/{groupId}/locations/query
+    /// </summary>
+    /// <param name="groupId">The group ID.</param>
+    /// <param name="request">Query request with bounds, date filter, and pagination.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Query response with pagination metadata and results, or null if request failed.</returns>
+    Task<GroupLocationsQueryResponse?> QueryLocationsAsync(
+        Guid groupId,
+        GroupLocationsQueryRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Updates the current user's peer visibility setting.
+    /// PATCH /api/mobile/groups/{groupId}/peer-visibility
+    /// </summary>
+    /// <param name="groupId">The group ID.</param>
+    /// <param name="disabled">Whether peer visibility should be disabled.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>True if the update succeeded, false otherwise.</returns>
+    Task<bool> UpdatePeerVisibilityAsync(
+        Guid groupId,
+        bool disabled,
+        CancellationToken cancellationToken = default);
 }
