@@ -46,6 +46,44 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
     private LocationTrackingService()
     {
         InitializeDatabase();
+        SubscribeToCallbacks();
+    }
+
+    /// <summary>
+    /// Subscribes to notification action callbacks.
+    /// </summary>
+    private void SubscribeToCallbacks()
+    {
+        LocationServiceCallbacks.PauseRequested += OnPauseRequested;
+        LocationServiceCallbacks.ResumeRequested += OnResumeRequested;
+        LocationServiceCallbacks.StopRequested += OnStopRequested;
+    }
+
+    /// <summary>
+    /// Handles pause request from notification.
+    /// </summary>
+    private void OnPauseRequested(object? sender, EventArgs e)
+    {
+        Pause();
+        _ = TrackingNotificationService.Instance.UpdateNotificationAsync(true);
+    }
+
+    /// <summary>
+    /// Handles resume request from notification.
+    /// </summary>
+    private void OnResumeRequested(object? sender, EventArgs e)
+    {
+        Resume();
+        _ = TrackingNotificationService.Instance.UpdateNotificationAsync(false);
+    }
+
+    /// <summary>
+    /// Handles stop request from notification.
+    /// </summary>
+    private void OnStopRequested(object? sender, EventArgs e)
+    {
+        Stop();
+        _ = TrackingNotificationService.Instance.HideTrackingNotificationAsync();
     }
 
     /// <summary>

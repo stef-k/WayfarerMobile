@@ -1,0 +1,295 @@
+using Foundation;
+using UserNotifications;
+using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Models;
+using WayfarerMobile.Services;
+
+namespace WayfarerMobile.Platforms.iOS.Services;
+
+/// <summary>
+/// Manages local notifications with quick actions for iOS location tracking.
+/// Implements IUNUserNotificationCenterDelegate to handle notification action responses.
+/// </summary>
+public class TrackingNotificationService : NSObject, IUNUserNotificationCenterDelegate
+{
+    #region Constants
+
+    /// <summary>
+    /// Category identifier for tracking notifications.
+    /// </summary>
+    public const string CategoryIdentifier = "WAYFARER_TRACKING";
+
+    /// <summary>
+    /// Action identifier for check-in action.
+    /// </summary>
+    public const string ActionCheckIn = "CHECK_IN_ACTION";
+
+    /// <summary>
+    /// Action identifier for pause action.
+    /// </summary>
+    public const string ActionPause = "PAUSE_ACTION";
+
+    /// <summary>
+    /// Action identifier for resume action.
+    /// </summary>
+    public const string ActionResume = "RESUME_ACTION";
+
+    /// <summary>
+    /// Action identifier for stop action.
+    /// </summary>
+    public const string ActionStop = "STOP_ACTION";
+
+    /// <summary>
+    /// Unique identifier for the tracking notification.
+    /// </summary>
+    public const string NotificationIdentifier = "wayfarer_tracking_notification";
+
+    #endregion
+
+    #region Singleton
+
+    private static TrackingNotificationService? _instance;
+
+    /// <summary>
+    /// Gets the singleton instance of the service.
+    /// </summary>
+    public static TrackingNotificationService Instance => _instance ??= new TrackingNotificationService();
+
+    private TrackingNotificationService() { }
+
+    #endregion
+
+    #region Public Methods
+
+    /// <summary>
+    /// Registers notification categories and actions with the system.
+    /// Should be called during app startup.
+    /// </summary>
+    public void RegisterNotificationActions()
+    {
+        var checkInAction = UNNotificationAction.FromIdentifier(
+            ActionCheckIn,
+            "Check In",
+            UNNotificationActionOptions.None);
+
+        var pauseAction = UNNotificationAction.FromIdentifier(
+            ActionPause,
+            "Pause",
+            UNNotificationActionOptions.None);
+
+        var resumeAction = UNNotificationAction.FromIdentifier(
+            ActionResume,
+            "Resume",
+            UNNotificationActionOptions.None);
+
+        var stopAction = UNNotificationAction.FromIdentifier(
+            ActionStop,
+            "Stop",
+            UNNotificationActionOptions.Destructive);
+
+        // Create category with check-in, pause, and stop actions (default active state)
+        var category = UNNotificationCategory.FromIdentifier(
+            CategoryIdentifier,
+            new[] { checkInAction, pauseAction, stopAction },
+            Array.Empty<string>(),
+            UNNotificationCategoryOptions.None);
+
+        UNUserNotificationCenter.Current.SetNotificationCategories(
+            new NSSet<UNNotificationCategory>(category));
+
+        System.Diagnostics.Debug.WriteLine("[iOS TrackingNotificationService] Registered notification actions");
+    }
+
+    /// <summary>
+    /// Shows the tracking notification with actions.
+    /// </summary>
+    /// <param name="isPaused">Whether tracking is currently paused.</param>
+    /// <returns>A task representing the async operation.</returns>
+    public async Task ShowTrackingNotificationAsync(bool isPaused)
+    {
+        var content = new UNMutableNotificationContent
+        {
+            Title = "Wayfarer",
+            Body = isPaused ? "Tracking paused" : "Tracking your location",
+            CategoryIdentifier = CategoryIdentifier
+        };
+
+        var request = UNNotificationRequest.FromIdentifier(
+            NotificationIdentifier,
+            content,
+            null);
+
+        try
+        {
+            await UNUserNotificationCenter.Current.AddNotificationRequestAsync(request);
+            System.Diagnostics.Debug.WriteLine($"[iOS TrackingNotificationService] Notification shown (paused: {isPaused})");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[iOS TrackingNotificationService] Failed to show notification: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Updates the notification content based on tracking state.
+    /// </summary>
+    /// <param name="isPaused">Whether tracking is currently paused.</param>
+    /// <returns>A task representing the async operation.</returns>
+    public async Task UpdateNotificationAsync(bool isPaused)
+    {
+        await HideTrackingNotificationAsync();
+        await ShowTrackingNotificationAsync(isPaused);
+    }
+
+    /// <summary>
+    /// Removes the tracking notification.
+    /// </summary>
+    /// <returns>A task representing the async operation.</returns>
+    public Task HideTrackingNotificationAsync()
+    {
+        UNUserNotificationCenter.Current.RemoveDeliveredNotifications(
+            new[] { NotificationIdentifier });
+
+        System.Diagnostics.Debug.WriteLine("[iOS TrackingNotificationService] Notification hidden");
+        return Task.CompletedTask;
+    }
+
+    #endregion
+
+    #region IUNUserNotificationCenterDelegate
+
+    /// <summary>
+    /// Handles notification action responses from the user.
+    /// </summary>
+    /// <param name="center">The notification center.</param>
+    /// <param name="response">The user's response to the notification.</param>
+    /// <param name="completionHandler">Completion handler to call when done.</param>
+    [Export("userNotificationCenter:didReceiveNotificationResponse:withCompletionHandler:")]
+    public async void DidReceiveNotificationResponse(
+        UNUserNotificationCenter center,
+        UNNotificationResponse response,
+        Action completionHandler)
+    {
+        try
+        {
+            System.Diagnostics.Debug.WriteLine($"[iOS TrackingNotificationService] Received action: {response.ActionIdentifier}");
+
+            switch (response.ActionIdentifier)
+            {
+                case ActionCheckIn:
+                    await PerformCheckInAsync();
+                    break;
+
+                case ActionPause:
+                    LocationServiceCallbacks.RequestPause();
+                    break;
+
+                case ActionResume:
+                    LocationServiceCallbacks.RequestResume();
+                    break;
+
+                case ActionStop:
+                    LocationServiceCallbacks.RequestStop();
+                    break;
+
+                default:
+                    // User tapped the notification itself (not an action)
+                    System.Diagnostics.Debug.WriteLine($"[iOS TrackingNotificationService] Notification tapped: {response.ActionIdentifier}");
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[iOS TrackingNotificationService] Action handler error: {ex.Message}");
+        }
+        finally
+        {
+            completionHandler();
+        }
+    }
+
+    /// <summary>
+    /// Called when a notification is about to be presented while the app is in foreground.
+    /// </summary>
+    /// <param name="center">The notification center.</param>
+    /// <param name="notification">The notification to present.</param>
+    /// <param name="completionHandler">Completion handler to call with presentation options.</param>
+    [Export("userNotificationCenter:willPresentNotification:withCompletionHandler:")]
+    public void WillPresentNotification(
+        UNUserNotificationCenter center,
+        UNNotification notification,
+        Action<UNNotificationPresentationOptions> completionHandler)
+    {
+        // Show notification even when app is in foreground
+        completionHandler(UNNotificationPresentationOptions.Banner | UNNotificationPresentationOptions.List);
+    }
+
+    #endregion
+
+    #region Private Methods
+
+    /// <summary>
+    /// Performs a manual check-in using the last received location.
+    /// </summary>
+    private async Task PerformCheckInAsync()
+    {
+        var lastLocation = LocationServiceCallbacks.LastLocation;
+        if (lastLocation == null)
+        {
+            LocationServiceCallbacks.NotifyCheckInPerformed(false, "No location available");
+            System.Diagnostics.Debug.WriteLine("[iOS TrackingNotificationService] Check-in failed: no location");
+            return;
+        }
+
+        try
+        {
+            var apiClient = IPlatformApplication.Current?.Services.GetService<IApiClient>();
+            if (apiClient == null)
+            {
+                LocationServiceCallbacks.NotifyCheckInPerformed(false, "Service unavailable");
+                System.Diagnostics.Debug.WriteLine("[iOS TrackingNotificationService] Check-in failed: IApiClient not available");
+                return;
+            }
+
+            if (!apiClient.IsConfigured)
+            {
+                LocationServiceCallbacks.NotifyCheckInPerformed(false, "Server not configured");
+                System.Diagnostics.Debug.WriteLine("[iOS TrackingNotificationService] Check-in failed: API client not configured");
+                return;
+            }
+
+            var request = new LocationLogRequest
+            {
+                Latitude = lastLocation.Latitude,
+                Longitude = lastLocation.Longitude,
+                Altitude = lastLocation.Altitude,
+                Accuracy = lastLocation.Accuracy,
+                Speed = lastLocation.Speed,
+                Timestamp = lastLocation.Timestamp,
+                Provider = "notification-checkin"
+            };
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var result = await apiClient.CheckInAsync(request, cts.Token);
+
+            LocationServiceCallbacks.NotifyCheckInPerformed(
+                result.Success,
+                result.Success ? "Checked in successfully" : result.Message);
+
+            System.Diagnostics.Debug.WriteLine(
+                $"[iOS TrackingNotificationService] Check-in {(result.Success ? "successful" : $"failed: {result.Message}")}");
+        }
+        catch (OperationCanceledException)
+        {
+            LocationServiceCallbacks.NotifyCheckInPerformed(false, "Timeout");
+            System.Diagnostics.Debug.WriteLine("[iOS TrackingNotificationService] Check-in timed out");
+        }
+        catch (Exception ex)
+        {
+            LocationServiceCallbacks.NotifyCheckInPerformed(false, ex.Message);
+            System.Diagnostics.Debug.WriteLine($"[iOS TrackingNotificationService] Check-in error: {ex.Message}");
+        }
+    }
+
+    #endregion
+}
