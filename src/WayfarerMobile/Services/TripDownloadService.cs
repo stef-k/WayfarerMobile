@@ -17,8 +17,6 @@ public class TripDownloadService
     private readonly ILogger<TripDownloadService> _logger;
 
     // Tile download configuration
-    private const string TileUrlTemplate = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-    private const string TileServerHost = "tile.openstreetmap.org";
     private static readonly int[] DownloadZoomLevels = { 10, 11, 12, 13, 14, 15, 16 };
     private const int TileTimeoutMs = 10000;
     private const long EstimatedTileSizeBytes = 15000; // ~15KB average
@@ -870,7 +868,7 @@ public class TripDownloadService
 
         try
         {
-            var url = tile.GetTileUrl(TileUrlTemplate);
+            var url = tile.GetTileUrl(_settingsService.TileServerUrl);
 
             // Skip if already exists and has content
             if (File.Exists(filePath))

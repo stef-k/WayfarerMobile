@@ -11,7 +11,6 @@ public class LiveTileCacheService
 {
     #region Constants
 
-    private const string TileUrlTemplate = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
     private const int TileTimeoutMs = 10000;
     private const int DefaultMaxCacheSizeMB = 500;
 
@@ -223,7 +222,7 @@ public class LiveTileCacheService
 
         try
         {
-            var url = TileUrlTemplate
+            var url = _settingsService.TileServerUrl
                 .Replace("{z}", z.ToString())
                 .Replace("{x}", x.ToString())
                 .Replace("{y}", y.ToString());
