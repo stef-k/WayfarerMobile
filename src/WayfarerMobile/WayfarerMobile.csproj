@@ -79,4 +79,9 @@
 	  <PackageReference Include="Xamarin.GooglePlayServices.Location" Version="121.0.1" />
 	</ItemGroup>
 
+	<!-- Project References -->
+	<ItemGroup>
+	  <ProjectReference Include="..\WayfarerMobile.Core\WayfarerMobile.Core.csproj" />
+	</ItemGroup>
+
 </Project>

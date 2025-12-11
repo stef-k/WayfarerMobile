@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>WayfarerMobile.Core</RootNamespace>
+  </PropertyGroup>
+
+  <!-- System.Text.Json is included with .NET 10, no explicit package needed -->
+
+</Project>

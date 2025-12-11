@@ -32,30 +32,14 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
 
-    <!-- Shared dependencies for testing Core types -->
+    <!-- Shared dependencies for testing -->
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0-*" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0-*" />
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
-    <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
-    <PackageReference Include="SQLitePCLRaw.bundle_green" Version="2.1.10" />
   </ItemGroup>
 
+  <!-- Project Reference to Core library -->
   <ItemGroup>
-    <!--
-      Note: We cannot directly reference the MAUI project from a pure .NET test project.
-      Instead, we use a source-linking approach for Core types that have no MAUI dependencies.
-      This allows us to test the actual production code without duplication.
-
-      We only include pure C# types that don't depend on MAUI or Data layer types.
-    -->
-    <Compile Include="..\..\src\WayfarerMobile\Core\Algorithms\*.cs" Link="Core\Algorithms\%(Filename)%(Extension)" />
-    <Compile Include="..\..\src\WayfarerMobile\Core\Enums\*.cs" Link="Core\Enums\%(Filename)%(Extension)" />
-    <Compile Include="..\..\src\WayfarerMobile\Core\Models\*.cs" Link="Core\Models\%(Filename)%(Extension)" />
-    <Compile Include="..\..\src\WayfarerMobile\Core\Navigation\*.cs" Link="Core\Navigation\%(Filename)%(Extension)" />
-    <!-- Only include interfaces that don't have external dependencies -->
-    <Compile Include="..\..\src\WayfarerMobile\Core\Interfaces\ISettingsService.cs" Link="Core\Interfaces\ISettingsService.cs" />
-    <Compile Include="..\..\src\WayfarerMobile\Core\Interfaces\IToastService.cs" Link="Core\Interfaces\IToastService.cs" />
-    <Compile Include="..\..\src\WayfarerMobile\Core\Interfaces\IDialogService.cs" Link="Core\Interfaces\IDialogService.cs" />
+    <ProjectReference Include="..\..\src\WayfarerMobile.Core\WayfarerMobile.Core.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -64,9 +48,10 @@
     <CoverletOutputFormat>cobertura,lcov</CoverletOutputFormat>
     <CoverletOutput>./coverage/</CoverletOutput>
     <ExcludeByAttribute>GeneratedCodeAttribute,ObsoleteAttribute,CompilerGeneratedAttribute</ExcludeByAttribute>
-    <!-- Include the source files linked into this project -->
-    <Include>[WayfarerMobile.Tests]*</Include>
-    <Exclude>[WayfarerMobile.Tests]WayfarerMobile.Tests.*</Exclude>
+    <!-- Include the Core library in coverage -->
+    <Include>[WayfarerMobile.Core]*</Include>
+    <!-- Exclude test assembly from coverage -->
+    <Exclude>[WayfarerMobile.Tests]*</Exclude>
   </PropertyGroup>
 
 </Project>
