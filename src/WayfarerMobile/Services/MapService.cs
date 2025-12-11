@@ -7,7 +7,7 @@ using Mapsui.Styles;
 using Mapsui.Tiling;
 using NetTopologySuite.Geometries;
 using WayfarerMobile.Core.Models;
-using WayfarerMobile.Helpers;
+using WayfarerMobile.Core.Helpers;
 using Color = Mapsui.Styles.Color;
 using Map = Mapsui.Map;
 using Brush = Mapsui.Styles.Brush;
@@ -839,9 +839,13 @@ public class MapService : IDisposable
                 return Color.FromArgb(255, r, g, b);
             }
         }
-        catch
+        catch (FormatException)
         {
-            // Ignore parsing errors
+            // Invalid hex format - use default color
+        }
+        catch (OverflowException)
+        {
+            // Hex value overflow - use default color
         }
 
         return Color.FromArgb(255, 66, 133, 244); // Default blue

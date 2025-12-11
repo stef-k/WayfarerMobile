@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Polly;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
 using WayfarerMobile.Data.Services;
 
@@ -73,12 +74,21 @@ public class LocationSyncService : IDisposable
     /// <summary>
     /// Creates a new instance of LocationSyncService.
     /// </summary>
+    /// <param name="apiClient">API client for server communication.</param>
+    /// <param name="database">Database service for location queue.</param>
+    /// <param name="settings">Settings service for configuration.</param>
+    /// <param name="logger">Logger instance.</param>
     public LocationSyncService(
         IApiClient apiClient,
         DatabaseService database,
         ISettingsService settings,
         ILogger<LocationSyncService> logger)
     {
+        ArgumentNullException.ThrowIfNull(apiClient);
+        ArgumentNullException.ThrowIfNull(database);
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(logger);
+
         _apiClient = apiClient;
         _database = database;
         _settings = settings;
@@ -292,6 +302,7 @@ public class LocationSyncService : IDisposable
 
     /// <summary>
     /// Syncs pending locations to the server with retry for transient failures.
+    /// Uses batch update for successful syncs to minimize database operations.
     /// </summary>
     private async Task<int> SyncPendingLocationsAsync()
     {
@@ -304,7 +315,7 @@ public class LocationSyncService : IDisposable
 
         _logger.LogInformation("Syncing {Count} pending locations", pending.Count);
 
-        var successCount = 0;
+        var successfulIds = new List<int>();
         var cancellationToken = CancellationToken.None;
 
         foreach (var location in pending)
@@ -313,7 +324,7 @@ public class LocationSyncService : IDisposable
 
             if (success)
             {
-                successCount++;
+                successfulIds.Add(location.Id);
             }
 
             if (!shouldContinue)
@@ -322,16 +333,24 @@ public class LocationSyncService : IDisposable
             }
         }
 
-        _logger.LogInformation("Sync complete: {Success}/{Total} locations", successCount, pending.Count);
+        // Batch update all successful syncs in one database operation
+        if (successfulIds.Count > 0)
+        {
+            await _database.MarkLocationsSyncedAsync(successfulIds);
+            _logger.LogDebug("Batch marked {Count} locations as synced", successfulIds.Count);
+        }
+
+        _logger.LogInformation("Sync complete: {Success}/{Total} locations", successfulIds.Count, pending.Count);
 
         // Cleanup old synced locations
         await PurgeOldLocationsAsync();
 
-        return successCount;
+        return successfulIds.Count;
     }
 
     /// <summary>
     /// Syncs a single location with retry policy for transient failures.
+    /// Does not update database status - caller handles batch updates for successful syncs.
     /// </summary>
     /// <returns>Tuple of (success, shouldContinue).</returns>
     private async Task<(bool Success, bool ShouldContinue)> SyncLocationWithRetryAsync(
@@ -340,14 +359,25 @@ public class LocationSyncService : IDisposable
     {
         try
         {
+            // Convert to API request model
+            var request = new LocationLogRequest
+            {
+                Latitude = location.Latitude,
+                Longitude = location.Longitude,
+                Altitude = location.Altitude,
+                Accuracy = location.Accuracy,
+                Speed = location.Speed,
+                Timestamp = location.Timestamp,
+                Provider = location.Provider
+            };
+
             // Use Polly retry for transient network failures
             var result = await _retryPipeline.ExecuteAsync(async ct =>
-                await _apiClient.LogLocationAsync(location, ct), cancellationToken);
+                await _apiClient.LogLocationAsync(request, ct), cancellationToken);
 
             if (result.Success)
             {
-                await _database.MarkLocationSyncedAsync(location.Id);
-
+                // Note: Database status update is handled in batch by caller
                 if (result.Skipped)
                 {
                     _logger.LogDebug("Location {Id} skipped by server (thresholds)", location.Id);

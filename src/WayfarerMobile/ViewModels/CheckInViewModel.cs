@@ -2,7 +2,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
-using WayfarerMobile.Data.Entities;
 using WayfarerMobile.Services;
 
 namespace WayfarerMobile.ViewModels;
@@ -165,19 +164,18 @@ public partial class CheckInViewModel : BaseViewModel
             IsSubmitting = true;
             ResultMessage = null;
 
-            var queuedLocation = new QueuedLocation
+            var request = new LocationLogRequest
             {
                 Latitude = CurrentLocation.Latitude,
                 Longitude = CurrentLocation.Longitude,
                 Altitude = CurrentLocation.Altitude,
                 Accuracy = CurrentLocation.Accuracy,
                 Speed = CurrentLocation.Speed,
-                Bearing = CurrentLocation.Bearing,
                 Timestamp = DateTime.UtcNow,
                 Provider = "manual-checkin"
             };
 
-            var result = await _apiClient.CheckInAsync(queuedLocation);
+            var result = await _apiClient.CheckInAsync(request);
 
             if (result.Success)
             {

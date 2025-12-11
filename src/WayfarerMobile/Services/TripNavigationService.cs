@@ -3,7 +3,7 @@ using WayfarerMobile.Core.Algorithms;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Core.Navigation;
-using WayfarerMobile.Helpers;
+using WayfarerMobile.Core.Helpers;
 
 namespace WayfarerMobile.Services;
 
@@ -71,6 +71,10 @@ public class TripNavigationService
         OsrmRoutingService osrmService,
         RouteCacheService routeCacheService)
     {
+        ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(osrmService);
+        ArgumentNullException.ThrowIfNull(routeCacheService);
+
         _logger = logger;
         _osrmService = osrmService;
         _routeCacheService = routeCacheService;

@@ -141,24 +141,51 @@ public class DatabaseService : IAsyncDisposable
 
     /// <summary>
     /// Marks a location as successfully synced.
+    /// Uses single UPDATE statement for efficiency.
     /// </summary>
     /// <param name="id">The location ID.</param>
     public async Task MarkLocationSyncedAsync(int id)
     {
         await EnsureInitializedAsync();
 
-        var location = await _database!.Table<QueuedLocation>()
-            .FirstOrDefaultAsync(l => l.Id == id);
+        await _database!.ExecuteAsync(
+            "UPDATE QueuedLocations SET SyncStatus = ? WHERE Id = ?",
+            (int)SyncStatus.Synced, id);
+    }
 
-        if (location != null)
+    /// <summary>
+    /// Marks multiple locations as successfully synced in a single batch operation.
+    /// Uses single UPDATE statement with IN clause for efficiency.
+    /// </summary>
+    /// <param name="ids">The location IDs to mark as synced.</param>
+    /// <returns>The number of rows affected.</returns>
+    public async Task<int> MarkLocationsSyncedAsync(IEnumerable<int> ids)
+    {
+        await EnsureInitializedAsync();
+
+        var idList = ids.ToList();
+        if (idList.Count == 0)
+            return 0;
+
+        // Build parameterized query with IN clause
+        var placeholders = string.Join(",", idList.Select((_, i) => $"?{i + 2}"));
+        var query = $"UPDATE QueuedLocations SET SyncStatus = ?1 WHERE Id IN ({placeholders})";
+
+        // Build parameters: first is SyncStatus, rest are IDs
+        var parameters = new object[idList.Count + 1];
+        parameters[0] = (int)SyncStatus.Synced;
+        for (var i = 0; i < idList.Count; i++)
         {
-            location.SyncStatus = SyncStatus.Synced;
-            await _database.UpdateAsync(location);
+            parameters[i + 1] = idList[i];
         }
+
+        return await _database!.ExecuteAsync(query, parameters);
     }
 
     /// <summary>
     /// Marks a location sync as failed.
+    /// Uses single UPDATE statement for efficiency.
+    /// Updates SyncStatus to Failed if SyncAttempts reaches MaxSyncAttempts.
     /// </summary>
     /// <param name="id">The location ID.</param>
     /// <param name="error">The error message.</param>
@@ -166,42 +193,30 @@ public class DatabaseService : IAsyncDisposable
     {
         await EnsureInitializedAsync();
 
-        var location = await _database!.Table<QueuedLocation>()
-            .FirstOrDefaultAsync(l => l.Id == id);
-
-        if (location != null)
-        {
-            location.SyncAttempts++;
-            location.LastSyncAttempt = DateTime.UtcNow;
-            location.LastError = error;
-
-            if (location.SyncAttempts >= MaxSyncAttempts)
-            {
-                location.SyncStatus = SyncStatus.Failed;
-            }
-
-            await _database.UpdateAsync(location);
-        }
+        // Increment attempts and conditionally set status to Failed if max attempts reached
+        await _database!.ExecuteAsync(
+            @"UPDATE QueuedLocations
+              SET SyncAttempts = SyncAttempts + 1,
+                  LastSyncAttempt = ?,
+                  LastError = ?,
+                  SyncStatus = CASE WHEN SyncAttempts + 1 >= ? THEN ? ELSE SyncStatus END
+              WHERE Id = ?",
+            DateTime.UtcNow, error, MaxSyncAttempts, (int)SyncStatus.Failed, id);
     }
 
     /// <summary>
     /// Increments the retry count for a location without marking it as failed.
     /// Used for transient failures that may succeed on retry.
+    /// Uses single UPDATE statement for efficiency.
     /// </summary>
     /// <param name="id">The location ID.</param>
     public async Task IncrementRetryCountAsync(int id)
     {
         await EnsureInitializedAsync();
 
-        var location = await _database!.Table<QueuedLocation>()
-            .FirstOrDefaultAsync(l => l.Id == id);
-
-        if (location != null)
-        {
-            location.SyncAttempts++;
-            location.LastSyncAttempt = DateTime.UtcNow;
-            await _database.UpdateAsync(location);
-        }
+        await _database!.ExecuteAsync(
+            "UPDATE QueuedLocations SET SyncAttempts = SyncAttempts + 1, LastSyncAttempt = ? WHERE Id = ?",
+            DateTime.UtcNow, id);
     }
 
     /// <summary>
@@ -496,6 +511,7 @@ public class DatabaseService : IAsyncDisposable
 
     /// <summary>
     /// Saves offline places for a trip.
+    /// Uses bulk insert for efficiency.
     /// </summary>
     public async Task SaveOfflinePlacesAsync(int tripId, IEnumerable<OfflinePlaceEntity> places)
     {
@@ -505,11 +521,16 @@ public class DatabaseService : IAsyncDisposable
         await _database!.ExecuteAsync(
             "DELETE FROM OfflinePlaces WHERE TripId = ?", tripId);
 
-        // Insert new places
-        foreach (var place in places)
+        // Set TripId and bulk insert
+        var placeList = places.ToList();
+        foreach (var place in placeList)
         {
             place.TripId = tripId;
-            await _database.InsertAsync(place);
+        }
+
+        if (placeList.Count > 0)
+        {
+            await _database.InsertAllAsync(placeList);
         }
     }
 
@@ -531,6 +552,7 @@ public class DatabaseService : IAsyncDisposable
 
     /// <summary>
     /// Saves offline segments for a trip.
+    /// Uses bulk insert for efficiency.
     /// </summary>
     public async Task SaveOfflineSegmentsAsync(int tripId, IEnumerable<OfflineSegmentEntity> segments)
     {
@@ -540,11 +562,16 @@ public class DatabaseService : IAsyncDisposable
         await _database!.ExecuteAsync(
             "DELETE FROM OfflineSegments WHERE TripId = ?", tripId);
 
-        // Insert new segments
-        foreach (var segment in segments)
+        // Set TripId and bulk insert
+        var segmentList = segments.ToList();
+        foreach (var segment in segmentList)
         {
             segment.TripId = tripId;
-            await _database.InsertAsync(segment);
+        }
+
+        if (segmentList.Count > 0)
+        {
+            await _database.InsertAllAsync(segmentList);
         }
     }
 
@@ -792,12 +819,13 @@ public class DatabaseService : IAsyncDisposable
 
     /// <summary>
     /// Gets the total size of trip tile cache in bytes.
+    /// Uses SQL aggregation to avoid loading all entities into memory.
     /// </summary>
     public async Task<long> GetTripCacheSizeAsync()
     {
         await EnsureInitializedAsync();
-        var tiles = await _database!.Table<TripTileEntity>().ToListAsync();
-        return tiles.Sum(t => t.FileSizeBytes);
+        return await _database!.ExecuteScalarAsync<long>(
+            "SELECT COALESCE(SUM(FileSizeBytes), 0) FROM TripTiles");
     }
 
     #endregion

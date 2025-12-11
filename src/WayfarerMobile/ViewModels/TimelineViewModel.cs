@@ -320,6 +320,19 @@ public partial class TimelineViewModel : BaseViewModel
         await base.OnAppearingAsync();
     }
 
+    /// <summary>
+    /// Cleans up event subscriptions to prevent memory leaks.
+    /// </summary>
+    protected override void Cleanup()
+    {
+        // Unsubscribe from sync events
+        _timelineSyncService.SyncCompleted -= OnSyncCompleted;
+        _timelineSyncService.SyncQueued -= OnSyncQueued;
+        _timelineSyncService.SyncRejected -= OnSyncRejected;
+
+        base.Cleanup();
+    }
+
     #endregion
 }
 

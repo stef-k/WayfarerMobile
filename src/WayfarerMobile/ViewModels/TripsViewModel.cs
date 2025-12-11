@@ -5,6 +5,7 @@ using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Services;
+using WayfarerMobile.Shared.Collections;
 using WayfarerMobile.Shared.Controls;
 
 namespace WayfarerMobile.ViewModels;
@@ -25,6 +26,7 @@ public partial class TripsViewModel : BaseViewModel
     private readonly IToastService _toastService;
     private readonly IDownloadNotificationService _downloadNotificationService;
     private readonly HashSet<Guid> _downloadedTripIds = new();
+    private IReadOnlyList<SegmentDisplayItem>? _cachedSegmentDisplayItems;
 
     #region Observable Properties
 
@@ -32,7 +34,7 @@ public partial class TripsViewModel : BaseViewModel
     /// Gets or sets the collection of available trips from the server.
     /// </summary>
     [ObservableProperty]
-    private ObservableCollection<TripSummary> _availableTrips = new();
+    private ObservableRangeCollection<TripSummary> _availableTrips = new();
 
     /// <summary>
     /// Gets or sets the selected trip.
@@ -168,9 +170,9 @@ public partial class TripsViewModel : BaseViewModel
     public bool HasSegments => SelectedTripDetails?.Segments.Any() ?? false;
 
     /// <summary>
-    /// Gets the segment display items for the sidebar.
+    /// Gets the segment display items for the sidebar, using cached value when available.
     /// </summary>
-    public IEnumerable<SegmentDisplayItem> SegmentDisplayItems => BuildSegmentDisplayItems();
+    public IEnumerable<SegmentDisplayItem> SegmentDisplayItems => _cachedSegmentDisplayItems ??= BuildSegmentDisplayItems();
 
     /// <summary>
     /// Gets whether the selected trip is downloaded.
@@ -241,6 +243,18 @@ public partial class TripsViewModel : BaseViewModel
 
     #endregion
 
+    #region Property Change Handlers
+
+    /// <summary>
+    /// Called when SelectedTripDetails changes - invalidates the segment display items cache.
+    /// </summary>
+    partial void OnSelectedTripDetailsChanged(TripDetails? value)
+    {
+        _cachedSegmentDisplayItems = null;
+    }
+
+    #endregion
+
     #region Commands
 
     /// <summary>
@@ -259,11 +273,7 @@ public partial class TripsViewModel : BaseViewModel
 
             var trips = await _apiClient.GetTripsAsync();
 
-            AvailableTrips.Clear();
-            foreach (var trip in trips.OrderByDescending(t => t.UpdatedAt))
-            {
-                AvailableTrips.Add(trip);
-            }
+            AvailableTrips.ReplaceRange(trips.OrderByDescending(t => t.UpdatedAt));
 
             IsEmpty = !AvailableTrips.Any();
         }
@@ -819,6 +829,31 @@ public partial class TripsViewModel : BaseViewModel
         await base.OnDisappearingAsync();
     }
 
+    /// <summary>
+    /// Cleans up event subscriptions to prevent memory leaks.
+    /// </summary>
+    protected override void Cleanup()
+    {
+        // Unsubscribe from download progress events
+        _downloadService.ProgressChanged -= OnDownloadProgressChanged;
+
+        // Unsubscribe from navigation state change events
+        _navigationService.StateChanged -= OnNavigationStateChanged;
+
+        // Unsubscribe from trip navigation state change events
+        _tripNavigationService.StateChanged -= OnTripNavigationStateChanged;
+
+        // Unsubscribe from sync events
+        _tripSyncService.SyncCompleted -= OnSyncCompleted;
+        _tripSyncService.SyncQueued -= OnSyncQueued;
+        _tripSyncService.SyncRejected -= OnSyncRejected;
+
+        // Unsubscribe from location updates if still subscribed
+        _locationBridge.LocationReceived -= OnLocationReceivedForNavigation;
+
+        base.Cleanup();
+    }
+
     #endregion
 
     #region Private Helpers
@@ -826,11 +861,11 @@ public partial class TripsViewModel : BaseViewModel
     /// <summary>
     /// Builds the segment display items from the current trip details.
     /// </summary>
-    private IEnumerable<SegmentDisplayItem> BuildSegmentDisplayItems()
+    private IReadOnlyList<SegmentDisplayItem> BuildSegmentDisplayItems()
     {
         if (SelectedTripDetails?.Segments == null || !SelectedTripDetails.Segments.Any())
         {
-            return Enumerable.Empty<SegmentDisplayItem>();
+            return Array.Empty<SegmentDisplayItem>();
         }
 
         var places = SelectedTripDetails.AllPlaces.ToDictionary(p => p.Id);

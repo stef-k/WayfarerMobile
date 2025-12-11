@@ -17,10 +17,12 @@ public sealed class AppLockService : IAppLockService
     #region Constants
 
     private const string PinHashKey = "AppPinHash";
+    private const string PinSaltKey = "AppPinSalt";
     private const string ProtectionEnabledKey = "ProtectionEnabled";
     private const string LegacyPinCodeKey = "AppPinCode";
     private const string LegacyPinLockEnabledKey = "PinLockEnabled";
     private const int PinLength = 4;
+    private const int SaltLength = 32;
 
     #endregion
 
@@ -109,10 +111,19 @@ public sealed class AppLockService : IAppLockService
 
         try
         {
-            string hash = HashPin(pin);
+            // Generate a new salt for this PIN
+            byte[] salt = RandomNumberGenerator.GetBytes(SaltLength);
+            string saltBase64 = Convert.ToBase64String(salt);
+
+            // Hash the PIN with the salt
+            string hash = HashPinWithSalt(pin, salt);
+
+            // Store both salt and hash
+            await SecureStorage.Default.SetAsync(PinSaltKey, saltBase64);
             await SecureStorage.Default.SetAsync(PinHashKey, hash);
+
             IsPinConfigured = true;
-            System.Diagnostics.Debug.WriteLine("[AppLockService] PIN set successfully");
+            System.Diagnostics.Debug.WriteLine("[AppLockService] PIN set successfully with salted hash");
             return true;
         }
         catch (Exception ex)
@@ -138,7 +149,18 @@ public sealed class AppLockService : IAppLockService
                 return false;
             }
 
-            string inputHash = HashPin(pin);
+            // Get the salt - if no salt exists, this is a legacy hash
+            string? saltBase64 = await SecureStorage.Default.GetAsync(PinSaltKey);
+            if (string.IsNullOrEmpty(saltBase64))
+            {
+                // Legacy verification without salt
+                string legacyHash = HashPinLegacy(pin);
+                return storedHash == legacyHash;
+            }
+
+            // Salted verification
+            byte[] salt = Convert.FromBase64String(saltBase64);
+            string inputHash = HashPinWithSalt(pin, salt);
             return storedHash == inputHash;
         }
         catch (Exception ex)
@@ -154,11 +176,12 @@ public sealed class AppLockService : IAppLockService
         try
         {
             SecureStorage.Default.Remove(PinHashKey);
+            SecureStorage.Default.Remove(PinSaltKey);
             IsPinConfigured = false;
             IsProtectionEnabled = false;
             SaveProtectionEnabled();
             IsSessionUnlocked = false;
-            System.Diagnostics.Debug.WriteLine("[AppLockService] PIN removed");
+            System.Diagnostics.Debug.WriteLine("[AppLockService] PIN and salt removed");
         }
         catch (Exception ex)
         {
@@ -258,7 +281,7 @@ public sealed class AppLockService : IAppLockService
     #region Private Helpers
 
     /// <summary>
-    /// Migrates legacy PIN storage (unhashed) to new hashed format.
+    /// Migrates legacy PIN storage (unhashed) to new salted hash format.
     /// </summary>
     private async Task MigrateLegacyStorageAsync()
     {
@@ -271,10 +294,14 @@ public sealed class AppLockService : IAppLockService
                 string? newHash = await SecureStorage.Default.GetAsync(PinHashKey);
                 if (string.IsNullOrEmpty(newHash))
                 {
-                    // Migrate: hash the old PIN and store
-                    string hash = HashPin(oldPin);
+                    // Migrate: generate salt and hash the old PIN with salt
+                    byte[] salt = RandomNumberGenerator.GetBytes(SaltLength);
+                    string saltBase64 = Convert.ToBase64String(salt);
+                    string hash = HashPinWithSalt(oldPin, salt);
+
+                    await SecureStorage.Default.SetAsync(PinSaltKey, saltBase64);
                     await SecureStorage.Default.SetAsync(PinHashKey, hash);
-                    System.Diagnostics.Debug.WriteLine("[AppLockService] Migrated legacy PIN storage");
+                    System.Diagnostics.Debug.WriteLine("[AppLockService] Migrated legacy PIN storage with salted hash");
                 }
 
                 // Remove old storage
@@ -322,9 +349,30 @@ public sealed class AppLockService : IAppLockService
     }
 
     /// <summary>
-    /// Hashes a PIN using SHA256.
+    /// Hashes a PIN using SHA256 with a salt for improved security.
     /// </summary>
-    private static string HashPin(string pin)
+    /// <param name="pin">The PIN to hash.</param>
+    /// <param name="salt">The random salt bytes.</param>
+    /// <returns>Base64-encoded hash of salt+PIN.</returns>
+    private static string HashPinWithSalt(string pin, byte[] salt)
+    {
+        byte[] pinBytes = Encoding.UTF8.GetBytes(pin);
+
+        // Combine salt and PIN bytes
+        byte[] saltedPin = new byte[salt.Length + pinBytes.Length];
+        Buffer.BlockCopy(salt, 0, saltedPin, 0, salt.Length);
+        Buffer.BlockCopy(pinBytes, 0, saltedPin, salt.Length, pinBytes.Length);
+
+        byte[] hash = SHA256.HashData(saltedPin);
+        return Convert.ToBase64String(hash);
+    }
+
+    /// <summary>
+    /// Hashes a PIN using SHA256 without salt (legacy method for backward compatibility).
+    /// </summary>
+    /// <param name="pin">The PIN to hash.</param>
+    /// <returns>Base64-encoded hash of PIN.</returns>
+    private static string HashPinLegacy(string pin)
     {
         byte[] bytes = Encoding.UTF8.GetBytes(pin);
         byte[] hash = SHA256.HashData(bytes);
