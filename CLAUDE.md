@@ -1,10 +1,15 @@
 # WayfarerMobile - Development Instructions
 
+## General Guidance
+
+- Use the available agents when appropriate and provide value.
+
 ## Current Status
 
 **Progress:** 100% Complete (All P0-P4 Features Done)
 
 **Completed P3 Tasks (December 11, 2025):**
+
 - ✅ P3: App-specific diagnostics (AppDiagnosticService with queue, cache, tracking diagnostics)
 - ✅ P3: Cache debug overlay (CacheOverlayService - visual tile coverage on map)
 - ✅ P3: DiagnosticsPage with expandable sections (Location Queue, Tile Cache, Tracking, Navigation)
@@ -13,6 +18,7 @@
 - ❌ P3: Feature folder reorganization (skipped - low value refactoring)
 
 **Completed P4 UI Enhancements (December 11, 2025):**
+
 - ✅ PlaceDetailsSheet (SfBottomSheet) - trip place details with edit mode
 - ✅ TimelineEntrySheet (SfBottomSheet) - timeline entry details with edit mode
 - ✅ NotesEditorControl - Rich text editing with Quill.js
@@ -22,6 +28,7 @@
 - ✅ SfDatePicker on TimelinePage - Date navigation
 
 **Completed Features:**
+
 - ✅ Lock Screen Overlay (PIN entry on app resume)
 - ✅ Route Polyline (navigation route visualization on map)
 - ✅ Navigation System with OSRM integration
@@ -41,6 +48,7 @@
 - ✅ Performance Monitor (memory tracking, operation timing, GC stats)
 
 **Next Steps:**
+
 - Device testing on Android and iOS
 - Unit tests for core algorithms
 - Integration tests for services
@@ -50,12 +58,14 @@
 ## Navigation System Architecture
 
 **Route Calculation Priority:**
+
 1. **User Segments** - Trip-defined routes with polyline geometry (always preferred)
 2. **Cached OSRM** - Previously fetched route if still valid (same destination, within 50m, < 5 min old)
 3. **OSRM Fetch** - Online route from `router.project-osrm.org` (no API key, 1 req/sec limit)
 4. **Direct Route** - Straight line with bearing + distance (offline fallback)
 
 **Key Services:**
+
 - `TripNavigationService` - Main orchestrator with `CalculateRouteToPlaceAsync()`
 - `OsrmRoutingService` - OSRM API client
 - `RouteCacheService` - Single-route session cache (stored in Preferences, survives restart)
@@ -110,6 +120,7 @@ The previous implementation is at: `C:\Users\stef\source\repos\Wayfarer.Mobile`
 - DTOs from `Models/Dto/` - Server communication models ✅ DONE
 
 **NOT NEEDED (native providers are better):**
+
 - `GpsAccuracyFilter.cs` - Native FusedLocationProvider handles filtering
 - `BearingStabilityTracker.cs` - Speed-based check is more reliable than accelerometer
 
