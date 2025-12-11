@@ -1,32 +1,60 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Services;
+using WayfarerMobile.Shared.Collections;
 
 namespace WayfarerMobile.ViewModels;
 
 /// <summary>
 /// ViewModel for the groups page showing user's groups and member locations.
+/// Uses SSE (Server-Sent Events) for real-time location and membership updates.
 /// </summary>
 public partial class GroupsViewModel : BaseViewModel
 {
     private readonly IGroupsService _groupsService;
     private readonly ISettingsService _settingsService;
     private readonly MapService _mapService;
-    private Timer? _refreshTimer;
-    private const int RefreshIntervalSeconds = 30;
+    private readonly ISseClientFactory _sseClientFactory;
+    private readonly ILogger<GroupsViewModel> _logger;
+
+    /// <summary>
+    /// SSE client for location updates.
+    /// </summary>
+    private ISseClient? _locationSseClient;
+
+    /// <summary>
+    /// SSE client for membership updates (visibility, removals).
+    /// </summary>
+    private ISseClient? _membershipSseClient;
+
+    /// <summary>
+    /// Cancellation token source for SSE subscriptions.
+    /// </summary>
+    private CancellationTokenSource? _sseCts;
+
+    /// <summary>
+    /// Dictionary tracking last update time per user for throttling.
+    /// </summary>
+    private readonly Dictionary<string, DateTime> _lastUpdateTimes = new();
+
+    /// <summary>
+    /// Throttle interval in milliseconds for SSE updates.
+    /// </summary>
+    private const int ThrottleIntervalMs = 2000;
 
     /// <summary>
     /// Gets the collection of groups.
     /// </summary>
-    public ObservableCollection<GroupSummary> Groups { get; } = new();
+    public ObservableRangeCollection<GroupSummary> Groups { get; } = new();
 
     /// <summary>
     /// Gets the collection of members for the selected group.
     /// </summary>
-    public ObservableCollection<GroupMember> Members { get; } = new();
+    public ObservableRangeCollection<GroupMember> Members { get; } = new();
 
     /// <summary>
     /// Gets or sets the selected group.
@@ -34,6 +62,7 @@ public partial class GroupsViewModel : BaseViewModel
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelectedGroup))]
     [NotifyPropertyChangedFor(nameof(SelectedGroupName))]
+    [NotifyPropertyChangedFor(nameof(IsFriendsGroup))]
     private GroupSummary? _selectedGroup;
 
     /// <summary>
@@ -63,9 +92,44 @@ public partial class GroupsViewModel : BaseViewModel
     private bool _isMapView;
 
     /// <summary>
+    /// Gets or sets whether the current user's peer visibility is disabled.
+    /// </summary>
+    [ObservableProperty]
+    private bool _myPeerVisibilityDisabled;
+
+    /// <summary>
+    /// Gets or sets the selected date for viewing locations.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsToday))]
+    [NotifyPropertyChangedFor(nameof(ShowHistoricalToggle))]
+    private DateTime _selectedDate = DateTime.Today;
+
+    /// <summary>
+    /// Gets or sets whether to show historical locations (when viewing today).
+    /// </summary>
+    [ObservableProperty]
+    private bool _showHistoricalLocations;
+
+    /// <summary>
     /// Gets whether list view is active.
     /// </summary>
     public bool IsListView => !IsMapView;
+
+    /// <summary>
+    /// Gets whether the selected date is today.
+    /// </summary>
+    public bool IsToday => SelectedDate.Date == DateTime.Today;
+
+    /// <summary>
+    /// Gets whether to show the historical toggle (only visible when viewing today).
+    /// </summary>
+    public bool ShowHistoricalToggle => IsToday;
+
+    /// <summary>
+    /// Gets whether the selected group is a Friends group (shows peer visibility toggle).
+    /// </summary>
+    public bool IsFriendsGroup => string.Equals(SelectedGroup?.GroupType, "Friends", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Gets or sets the view mode index (0=List, 1=Map) for SfSegmentedControl binding.
@@ -110,11 +174,23 @@ public partial class GroupsViewModel : BaseViewModel
     /// <summary>
     /// Creates a new instance of GroupsViewModel.
     /// </summary>
-    public GroupsViewModel(IGroupsService groupsService, ISettingsService settingsService, MapService mapService)
+    /// <param name="groupsService">Service for group operations.</param>
+    /// <param name="settingsService">Service for application settings.</param>
+    /// <param name="mapService">Service for map operations.</param>
+    /// <param name="sseClientFactory">Factory for creating SSE clients.</param>
+    /// <param name="logger">Logger instance.</param>
+    public GroupsViewModel(
+        IGroupsService groupsService,
+        ISettingsService settingsService,
+        MapService mapService,
+        ISseClientFactory sseClientFactory,
+        ILogger<GroupsViewModel> logger)
     {
         _groupsService = groupsService;
         _settingsService = settingsService;
         _mapService = mapService;
+        _sseClientFactory = sseClientFactory;
+        _logger = logger;
         Title = "Groups";
     }
 
@@ -128,11 +204,53 @@ public partial class GroupsViewModel : BaseViewModel
             // Persist the selection
             _settingsService.LastSelectedGroupId = value.Id.ToString();
             _settingsService.LastSelectedGroupName = value.Name;
-            _ = LoadMembersAsync();
+
+            // Stop existing SSE subscriptions before loading new group
+            StopSseSubscriptions();
+
+            _ = LoadMembersAndStartSseAsync();
         }
         else
         {
+            StopSseSubscriptions();
             Members.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Called when the selected date changes.
+    /// </summary>
+    partial void OnSelectedDateChanged(DateTime value)
+    {
+        OnPropertyChanged(nameof(IsToday));
+        OnPropertyChanged(nameof(ShowHistoricalToggle));
+
+        if (SelectedGroup != null)
+        {
+            if (IsToday)
+            {
+                // Switch to live mode - start SSE
+                _ = StartSseSubscriptionsAsync();
+            }
+            else
+            {
+                // Switch to historical mode - stop SSE and load historical data
+                StopSseSubscriptions();
+                _ = LoadHistoricalLocationsAsync();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Loads members and starts SSE subscriptions for the selected group.
+    /// </summary>
+    private async Task LoadMembersAndStartSseAsync()
+    {
+        await LoadMembersAsync();
+
+        if (IsToday && SelectedGroup != null)
+        {
+            await StartSseSubscriptionsAsync();
         }
     }
 
@@ -152,11 +270,7 @@ public partial class GroupsViewModel : BaseViewModel
 
             var groups = await _groupsService.GetGroupsAsync();
 
-            Groups.Clear();
-            foreach (var group in groups)
-            {
-                Groups.Add(group);
-            }
+            Groups.ReplaceRange(groups);
 
             // Restore last selected group or auto-select first
             if (SelectedGroup == null && Groups.Count > 0)
@@ -172,6 +286,7 @@ public partial class GroupsViewModel : BaseViewModel
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to load groups");
             ErrorMessage = $"Failed to load groups: {ex.Message}";
         }
         finally
@@ -202,6 +317,13 @@ public partial class GroupsViewModel : BaseViewModel
             // Load latest locations
             var locations = await _groupsService.GetLatestLocationsAsync(groupId);
 
+            // Find current user and update visibility state
+            var currentUser = members.FirstOrDefault(m => m.IsSelf);
+            if (currentUser != null)
+            {
+                MyPeerVisibilityDisabled = currentUser.OrgPeerVisibilityAccessDisabled;
+            }
+
             // Merge locations into members
             foreach (var member in members)
             {
@@ -211,12 +333,8 @@ public partial class GroupsViewModel : BaseViewModel
                 }
             }
 
-            Members.Clear();
-            foreach (var member in members.OrderByDescending(m => m.LastLocation?.IsLive ?? false)
-                                          .ThenBy(m => m.DisplayText))
-            {
-                Members.Add(member);
-            }
+            Members.ReplaceRange(members.OrderByDescending(m => m.LastLocation?.IsLive ?? false)
+                                        .ThenBy(m => m.DisplayText));
 
             // Update map markers if in map view
             if (IsMapView)
@@ -226,6 +344,7 @@ public partial class GroupsViewModel : BaseViewModel
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to load members for group {GroupId}", SelectedGroup?.Id);
             ErrorMessage = $"Failed to load members: {ex.Message}";
         }
         finally
@@ -256,16 +375,12 @@ public partial class GroupsViewModel : BaseViewModel
                 }
             }
 
-            // Trigger UI refresh by re-sorting
+            // Trigger UI refresh by re-sorting using batch operation
             var sorted = Members.OrderByDescending(m => m.LastLocation?.IsLive ?? false)
                                .ThenBy(m => m.DisplayText)
                                .ToList();
 
-            Members.Clear();
-            foreach (var member in sorted)
-            {
-                Members.Add(member);
-            }
+            Members.ReplaceRange(sorted);
 
             // Update map markers if in map view
             if (IsMapView)
@@ -275,7 +390,52 @@ public partial class GroupsViewModel : BaseViewModel
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[GroupsViewModel] Refresh error: {ex.Message}");
+            _logger.LogWarning(ex, "Refresh locations error");
+        }
+    }
+
+    /// <summary>
+    /// Loads historical locations for the selected date.
+    /// </summary>
+    [RelayCommand]
+    private async Task LoadHistoricalLocationsAsync()
+    {
+        if (SelectedGroup == null)
+            return;
+
+        try
+        {
+            _logger.LogInformation("Loading historical locations for {Date}", SelectedDate);
+
+            var request = new GroupLocationsQueryRequest
+            {
+                MinLng = -180,
+                MaxLng = 180,
+                MinLat = -90,
+                MaxLat = 90,
+                ZoomLevel = 10,
+                DateType = "day",
+                Year = SelectedDate.Year,
+                Month = SelectedDate.Month,
+                Day = SelectedDate.Day
+            };
+
+            var response = await _groupsService.QueryLocationsAsync(SelectedGroup.Id, request);
+
+            if (response != null)
+            {
+                _logger.LogInformation("Loaded {Count} historical locations", response.TotalItems);
+                // Update map markers with historical data
+                if (IsMapView)
+                {
+                    UpdateMapMarkers();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load historical locations");
+            ErrorMessage = "Failed to load historical locations";
         }
     }
 
@@ -286,6 +446,57 @@ public partial class GroupsViewModel : BaseViewModel
     private void SelectGroup(GroupSummary? group)
     {
         SelectedGroup = group;
+    }
+
+    /// <summary>
+    /// Selects a date for viewing locations.
+    /// </summary>
+    [RelayCommand]
+    private void SelectDate(DateTime date)
+    {
+        SelectedDate = date;
+    }
+
+    /// <summary>
+    /// Toggles the current user's peer visibility in the selected group.
+    /// </summary>
+    [RelayCommand]
+    private async Task TogglePeerVisibilityAsync()
+    {
+        if (SelectedGroup == null)
+            return;
+
+        try
+        {
+            var newDisabledState = !MyPeerVisibilityDisabled;
+            _logger.LogInformation("Toggling peer visibility: disabled={Disabled}", newDisabledState);
+
+            var success = await _groupsService.UpdatePeerVisibilityAsync(SelectedGroup.Id, newDisabledState);
+
+            if (success)
+            {
+                MyPeerVisibilityDisabled = newDisabledState;
+
+                // Update the current user's member record
+                var currentUser = Members.FirstOrDefault(m => m.IsSelf);
+                if (currentUser != null)
+                {
+                    currentUser.OrgPeerVisibilityAccessDisabled = newDisabledState;
+                }
+
+                _logger.LogInformation("Peer visibility updated successfully: disabled={Disabled}", newDisabledState);
+            }
+            else
+            {
+                _logger.LogWarning("Failed to update peer visibility");
+                ErrorMessage = "Failed to update peer visibility";
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error toggling peer visibility");
+            ErrorMessage = "Failed to update peer visibility";
+        }
     }
 
     /// <summary>
@@ -321,6 +532,291 @@ public partial class GroupsViewModel : BaseViewModel
         _mapService.UpdateGroupMembers(memberLocations);
     }
 
+    #region SSE Management
+
+    /// <summary>
+    /// Starts SSE subscriptions for the selected group.
+    /// </summary>
+    private async Task StartSseSubscriptionsAsync()
+    {
+        if (SelectedGroup == null || !IsToday)
+            return;
+
+        // Stop any existing subscriptions
+        StopSseSubscriptions();
+
+        _sseCts = new CancellationTokenSource();
+        var groupId = SelectedGroup.Id.ToString();
+
+        // Create and start location SSE client
+        _locationSseClient = _sseClientFactory.Create();
+        _locationSseClient.LocationReceived += OnLocationReceived;
+        _locationSseClient.Connected += OnSseConnected;
+        _locationSseClient.Reconnecting += OnSseReconnecting;
+
+        // Create and start membership SSE client
+        _membershipSseClient = _sseClientFactory.Create();
+        _membershipSseClient.MembershipReceived += OnMembershipReceived;
+
+        _logger.LogInformation("Starting SSE subscriptions for group {GroupId}", groupId);
+
+        // Start subscriptions in background (fire and forget)
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _locationSseClient.SubscribeToGroupAsync(groupId, _sseCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogDebug("Location SSE subscription cancelled");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Location SSE subscription error");
+            }
+        });
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _membershipSseClient.SubscribeToGroupMembershipAsync(groupId, _sseCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogDebug("Membership SSE subscription cancelled");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Membership SSE subscription error");
+            }
+        });
+
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Stops all SSE subscriptions.
+    /// </summary>
+    private void StopSseSubscriptions()
+    {
+        _logger.LogDebug("Stopping SSE subscriptions");
+
+        // Cancel ongoing operations
+        _sseCts?.Cancel();
+        _sseCts?.Dispose();
+        _sseCts = null;
+
+        // Stop and dispose location SSE client
+        if (_locationSseClient != null)
+        {
+            _locationSseClient.LocationReceived -= OnLocationReceived;
+            _locationSseClient.Connected -= OnSseConnected;
+            _locationSseClient.Reconnecting -= OnSseReconnecting;
+            _locationSseClient.Stop();
+            _locationSseClient.Dispose();
+            _locationSseClient = null;
+        }
+
+        // Stop and dispose membership SSE client
+        if (_membershipSseClient != null)
+        {
+            _membershipSseClient.MembershipReceived -= OnMembershipReceived;
+            _membershipSseClient.Stop();
+            _membershipSseClient.Dispose();
+            _membershipSseClient = null;
+        }
+
+        // Clear throttle tracking
+        _lastUpdateTimes.Clear();
+    }
+
+    /// <summary>
+    /// Handles location received events from SSE with throttling.
+    /// </summary>
+    private async void OnLocationReceived(object? sender, SseLocationEventArgs e)
+    {
+        try
+        {
+            var userId = e.Location.UserId;
+            var now = DateTime.UtcNow;
+
+            // Throttle updates - only process if enough time has passed
+            if (_lastUpdateTimes.TryGetValue(userId, out var lastUpdate))
+            {
+                var elapsed = (now - lastUpdate).TotalMilliseconds;
+                if (elapsed < ThrottleIntervalMs)
+                {
+                    _logger.LogDebug("SSE update throttled for {UserId} ({Elapsed}ms since last)", userId, elapsed);
+                    return;
+                }
+            }
+
+            _lastUpdateTimes[userId] = now;
+            _logger.LogDebug("SSE location received for {UserName}", e.Location.UserName);
+
+            // Refresh the specific member's location
+            await RefreshMemberLocationAsync(userId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error handling SSE location event");
+        }
+    }
+
+    /// <summary>
+    /// Handles membership events from SSE (peer visibility changes, member removal).
+    /// </summary>
+    private async void OnMembershipReceived(object? sender, SseMembershipEventArgs e)
+    {
+        try
+        {
+            var membership = e.Membership;
+            _logger.LogDebug("SSE membership event: {Action} for {UserId}", membership.Action, membership.UserId);
+
+            switch (membership.Action)
+            {
+                case "peer-visibility-changed":
+                    await HandlePeerVisibilityChangedAsync(membership.UserId, membership.Disabled ?? false);
+                    break;
+
+                case "member-removed":
+                case "member-left":
+                    await HandleMemberRemovedAsync(membership.UserId);
+                    break;
+
+                default:
+                    _logger.LogDebug("Unhandled membership action: {Action}", membership.Action);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error handling SSE membership event");
+        }
+    }
+
+    /// <summary>
+    /// Handles peer visibility change events.
+    /// </summary>
+    private async Task HandlePeerVisibilityChangedAsync(string? userId, bool isDisabled)
+    {
+        if (string.IsNullOrEmpty(userId))
+            return;
+
+        await MainThread.InvokeOnMainThreadAsync(() =>
+        {
+            var member = Members.FirstOrDefault(m => m.UserId == userId);
+            if (member != null)
+            {
+                member.OrgPeerVisibilityAccessDisabled = isDisabled;
+
+                // Update current user state if this is us
+                if (member.IsSelf)
+                {
+                    MyPeerVisibilityDisabled = isDisabled;
+                }
+
+                // If another member disabled visibility, remove their location
+                if (!member.IsSelf && isDisabled)
+                {
+                    member.LastLocation = null;
+                }
+
+                // Update map markers
+                if (IsMapView)
+                {
+                    UpdateMapMarkers();
+                }
+
+                _logger.LogInformation("Updated peer visibility for {UserId}: disabled={Disabled}", userId, isDisabled);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Handles member removal events.
+    /// </summary>
+    private async Task HandleMemberRemovedAsync(string? userId)
+    {
+        if (string.IsNullOrEmpty(userId))
+            return;
+
+        await MainThread.InvokeOnMainThreadAsync(() =>
+        {
+            var member = Members.FirstOrDefault(m => m.UserId == userId);
+            if (member != null)
+            {
+                Members.Remove(member);
+
+                // Update map markers
+                if (IsMapView)
+                {
+                    UpdateMapMarkers();
+                }
+
+                _logger.LogInformation("Removed member {UserId} from group", userId);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Refreshes a specific member's location.
+    /// </summary>
+    private async Task RefreshMemberLocationAsync(string userId)
+    {
+        if (SelectedGroup == null)
+            return;
+
+        try
+        {
+            var locations = await _groupsService.GetLatestLocationsAsync(
+                SelectedGroup.Id,
+                new List<string> { userId });
+
+            if (locations.TryGetValue(userId, out var location))
+            {
+                await MainThread.InvokeOnMainThreadAsync(() =>
+                {
+                    var member = Members.FirstOrDefault(m => m.UserId == userId);
+                    if (member != null)
+                    {
+                        member.LastLocation = location;
+
+                        // Update map markers
+                        if (IsMapView)
+                        {
+                            UpdateMapMarkers();
+                        }
+                    }
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to refresh location for {UserId}", userId);
+        }
+    }
+
+    /// <summary>
+    /// Handles SSE connected event.
+    /// </summary>
+    private void OnSseConnected(object? sender, EventArgs e)
+    {
+        _logger.LogInformation("SSE connected");
+    }
+
+    /// <summary>
+    /// Handles SSE reconnecting event.
+    /// </summary>
+    private void OnSseReconnecting(object? sender, SseReconnectEventArgs e)
+    {
+        _logger.LogInformation("SSE reconnecting (attempt {Attempt}, delay {DelayMs}ms)", e.Attempt, e.DelayMs);
+    }
+
+    #endregion
+
     /// <summary>
     /// Called when the view appears.
     /// </summary>
@@ -334,9 +830,11 @@ public partial class GroupsViewModel : BaseViewModel
         {
             await LoadGroupsAsync();
         }
-
-        // Start auto-refresh timer
-        StartRefreshTimer();
+        else if (SelectedGroup != null && IsToday)
+        {
+            // Resume SSE subscriptions when returning to the page
+            await StartSseSubscriptionsAsync();
+        }
     }
 
     /// <summary>
@@ -344,30 +842,16 @@ public partial class GroupsViewModel : BaseViewModel
     /// </summary>
     public override Task OnDisappearingAsync()
     {
-        StopRefreshTimer();
+        StopSseSubscriptions();
         return base.OnDisappearingAsync();
     }
 
     /// <summary>
-    /// Starts the auto-refresh timer.
+    /// Cleans up resources to prevent memory leaks.
     /// </summary>
-    private void StartRefreshTimer()
+    protected override void Cleanup()
     {
-        _refreshTimer?.Dispose();
-        _refreshTimer = new Timer(
-            async _ => await RefreshLocationsAsync(),
-            null,
-            TimeSpan.FromSeconds(RefreshIntervalSeconds),
-            TimeSpan.FromSeconds(RefreshIntervalSeconds));
-    }
-
-    /// <summary>
-    /// Stops the auto-refresh timer.
-    /// </summary>
-    private void StopRefreshTimer()
-    {
-        _refreshTimer?.Change(Timeout.Infinite, Timeout.Infinite);
-        _refreshTimer?.Dispose();
-        _refreshTimer = null;
+        StopSseSubscriptions();
+        base.Cleanup();
     }
 }

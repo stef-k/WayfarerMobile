@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
@@ -92,6 +93,9 @@ public static class MauiProgram
     /// <param name="services">Service collection to configure.</param>
     private static void ConfigureServices(IServiceCollection services)
     {
+        // Configure named HttpClient instances via IHttpClientFactory
+        ConfigureHttpClients(services);
+
         // Infrastructure Services
         services.AddSingleton<DatabaseService>();
         services.AddSingleton<LocationIndicatorService>();
@@ -108,7 +112,6 @@ public static class MauiProgram
         services.AddSingleton<TripDownloadService>();
 
         // Routing Services
-        services.AddSingleton<HttpClient>();
         services.AddSingleton<OsrmRoutingService>();
         services.AddSingleton<RouteCacheService>();
         services.AddSingleton<TripNavigationService>();
@@ -148,6 +151,9 @@ public static class MauiProgram
 
         // Download Notification Service
         services.AddSingleton<IDownloadNotificationService, DownloadNotificationService>();
+
+        // SSE Client Factory (for real-time updates)
+        services.AddSingleton<ISseClientFactory, SseClientFactory>();
 
         // Tile Cache Services
         services.AddSingleton<LiveTileCacheService>();
@@ -201,5 +207,44 @@ public static class MauiProgram
         Routing.RegisterRoute("lockscreen", typeof(LockScreenPage));
         Routing.RegisterRoute("about", typeof(AboutPage));
         Routing.RegisterRoute("diagnostics", typeof(DiagnosticsPage));
+    }
+
+    /// <summary>
+    /// Configures named HttpClient instances using IHttpClientFactory.
+    /// </summary>
+    /// <param name="services">Service collection to configure.</param>
+    private static void ConfigureHttpClients(IServiceCollection services)
+    {
+        // Register IHttpClientFactory
+        services.AddHttpClient();
+
+        // WayfarerApi - main API client with 30s timeout
+        services.AddHttpClient("WayfarerApi", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestHeaders.Accept.Add(
+                new MediaTypeWithQualityHeaderValue("application/json"));
+        });
+
+        // Wikipedia - geosearch API with 10s timeout
+        services.AddHttpClient("Wikipedia", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(10);
+            client.DefaultRequestHeaders.Add("User-Agent", "WayfarerMobile/1.0 (Location tracking app)");
+        });
+
+        // Tiles - map tile downloads with 60s timeout
+        services.AddHttpClient("Tiles", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(60);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("WayfarerMobile/1.0");
+        });
+
+        // Osrm - routing service with 30s timeout
+        services.AddHttpClient("Osrm", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestHeaders.Add("User-Agent", "WayfarerMobile/1.0");
+        });
     }
 }
