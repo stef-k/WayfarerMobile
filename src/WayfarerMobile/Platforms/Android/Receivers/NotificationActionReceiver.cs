@@ -9,19 +9,13 @@ namespace WayfarerMobile.Platforms.Android.Receivers;
 
 /// <summary>
 /// BroadcastReceiver that handles notification action button clicks.
-/// Processes check-in, pause/resume, and stop actions from the tracking notification.
+/// Processes check-in action from the tracking notification.
 /// </summary>
 [BroadcastReceiver(Enabled = true, Exported = false)]
 public class NotificationActionReceiver : BroadcastReceiver
 {
     /// <summary>Action intent for manual check-in from notification.</summary>
     public const string ActionCheckIn = "com.wayfarer.mobile.notification.CHECK_IN";
-
-    /// <summary>Action intent for pause/resume toggle from notification.</summary>
-    public const string ActionPauseResume = "com.wayfarer.mobile.notification.PAUSE_RESUME";
-
-    /// <summary>Action intent for stop tracking from notification.</summary>
-    public const string ActionStop = "com.wayfarer.mobile.notification.STOP";
 
     /// <summary>
     /// Called when the receiver receives a broadcast intent.
@@ -35,24 +29,9 @@ public class NotificationActionReceiver : BroadcastReceiver
 
         System.Diagnostics.Debug.WriteLine($"[NotificationActionReceiver] Received action: {intent.Action}");
 
-        switch (intent.Action)
+        if (intent.Action == ActionCheckIn)
         {
-            case ActionCheckIn:
-                _ = PerformCheckInAsync(context);
-                break;
-
-            case ActionPauseResume:
-                // Toggle based on current state - the service will handle the actual state
-                var isPaused = intent.GetBooleanExtra("is_paused", false);
-                var serviceAction = isPaused
-                    ? LocationTrackingService.ActionResume
-                    : LocationTrackingService.ActionPause;
-                SendServiceCommand(context, serviceAction);
-                break;
-
-            case ActionStop:
-                SendServiceCommand(context, LocationTrackingService.ActionStop);
-                break;
+            _ = PerformCheckInAsync(context);
         }
     }
 
@@ -96,7 +75,8 @@ public class NotificationActionReceiver : BroadcastReceiver
                 Altitude = lastLocation.Altitude,
                 Accuracy = lastLocation.Accuracy,
                 Speed = lastLocation.Speed,
-                Timestamp = lastLocation.Timestamp
+                Timestamp = lastLocation.Timestamp,
+                Provider = "notification-checkin"
             };
 
             // Perform check-in (bypasses thresholds)
@@ -127,35 +107,6 @@ public class NotificationActionReceiver : BroadcastReceiver
             ShowToast(context, "Check-in error");
             LocationServiceCallbacks.NotifyCheckInPerformed(false, ex.Message);
             System.Diagnostics.Debug.WriteLine($"[NotificationActionReceiver] Check-in error: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Sends a command to the LocationTrackingService.
-    /// </summary>
-    /// <param name="context">The Android context.</param>
-    /// <param name="action">The service action to invoke.</param>
-    private static void SendServiceCommand(Context context, string action)
-    {
-        try
-        {
-            var serviceIntent = new Intent(context, typeof(LocationTrackingService));
-            serviceIntent.SetAction(action);
-
-            if (OperatingSystem.IsAndroidVersionAtLeast(26))
-            {
-                context.StartForegroundService(serviceIntent);
-            }
-            else
-            {
-                context.StartService(serviceIntent);
-            }
-
-            System.Diagnostics.Debug.WriteLine($"[NotificationActionReceiver] Sent service command: {action}");
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[NotificationActionReceiver] Failed to send service command: {ex.Message}");
         }
     }
 
