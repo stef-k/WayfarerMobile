@@ -4,17 +4,22 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
 
-    <!-- Primary Colors (Wayfarer Purple Theme) -->
-    <Color x:Key="Primary">#512BD4</Color>
-    <Color x:Key="PrimaryDark">#3B1F9E</Color>
-    <Color x:Key="PrimaryLight">#7B5EDC</Color>
+    <!-- Primary Brand Colors (Wayfarer Coral/Teal Theme) -->
+    <Color x:Key="Primary">#e45243</Color>
+    <Color x:Key="PrimaryDark">#c43a2d</Color>
+    <Color x:Key="PrimaryLight">#f06b5e</Color>
 
-    <!-- Secondary Colors -->
-    <Color x:Key="Secondary">#DFD8F7</Color>
-    <Color x:Key="SecondaryDark">#A69BD1</Color>
+    <!-- Secondary Colors (Teal/Mint) -->
+    <Color x:Key="Secondary">#94ddd3</Color>
+    <Color x:Key="SecondaryDark">#0f5563</Color>
+    <Color x:Key="SecondaryLight">#b4ede5</Color>
 
-    <!-- Accent Colors -->
-    <Color x:Key="Accent">#2B0B98</Color>
+    <!-- Accent Colors (Dark Teal) -->
+    <Color x:Key="Accent">#0f5563</Color>
+    <Color x:Key="AccentLight">#1a7a8c</Color>
+
+    <!-- Off-Black for dark theme backgrounds -->
+    <Color x:Key="OffBlack">#1a1a1a</Color>
 
     <!-- Status Colors -->
     <Color x:Key="Success">#4CAF50</Color>
@@ -52,10 +57,21 @@
     <Color x:Key="DarkOnBackground">#FFFFFF</Color>
     <Color x:Key="DarkOnSurface">#E0E0E0</Color>
 
+    <!-- Semantic Colors (used by pages) -->
+    <Color x:Key="Background">#FFFFFF</Color>
+    <Color x:Key="BackgroundDark">#121212</Color>
+    <Color x:Key="Surface">#F5F5F5</Color>
+    <Color x:Key="SurfaceVariant">#EEEEEE</Color>
+    <Color x:Key="SurfaceDark">#2B2B2B</Color>
+    <Color x:Key="TextPrimary">#212121</Color>
+    <Color x:Key="TextPrimaryDark">#FFFFFF</Color>
+    <Color x:Key="TextSecondary">#757575</Color>
+    <Color x:Key="TextSecondaryDark">#B0B0B0</Color>
+
     <!-- Map Colors -->
-    <Color x:Key="LocationIndicator">#2196F3</Color>
-    <Color x:Key="LocationAccuracyCircle">#332196F3</Color>
-    <Color x:Key="TripRoute">#512BD4</Color>
-    <Color x:Key="TripPlace">#4CAF50</Color>
+    <Color x:Key="LocationIndicator">#0f5563</Color>
+    <Color x:Key="LocationAccuracyCircle">#330f5563</Color>
+    <Color x:Key="TripRoute">#e45243</Color>
+    <Color x:Key="TripPlace">#0f5563</Color>
 
 </ResourceDictionary>

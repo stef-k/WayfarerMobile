@@ -34,11 +34,16 @@
         <Setter Property="FontFamily" Value="OpenSansRegular" />
     </Style>
 
+    <Style x:Key="Body" TargetType="Label">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontFamily" Value="OpenSansRegular" />
+    </Style>
+
     <!-- Caption Style -->
     <Style x:Key="Caption" TargetType="Label">
         <Setter Property="FontSize" Value="12" />
         <Setter Property="FontFamily" Value="OpenSansRegular" />
-        <Setter Property="TextColor" Value="{StaticResource Gray600}" />
+        <Setter Property="TextColor" Value="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
     </Style>
 
     <!-- Button Text Style -->
