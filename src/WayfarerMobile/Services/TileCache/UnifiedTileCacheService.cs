@@ -1,4 +1,5 @@
 using WayfarerMobile.Core.Algorithms;
+using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
 using WayfarerMobile.Data.Services;
@@ -8,6 +9,7 @@ namespace WayfarerMobile.Services.TileCache;
 /// <summary>
 /// Smart tile source coordinator with intelligent priority system.
 /// Priority: Live cache → Trip tiles → Direct download with caching.
+/// Subscribes to LocationBridge to trigger prefetch on location changes.
 /// </summary>
 public class UnifiedTileCacheService
 {
@@ -16,12 +18,23 @@ public class UnifiedTileCacheService
     private readonly LiveTileCacheService _liveTileService;
     private readonly TripDownloadService _tripDownloadService;
     private readonly DatabaseService _databaseService;
+    private readonly ILocationBridge _locationBridge;
+    private readonly ISettingsService _settingsService;
 
     // Cache the active trip to avoid repeated database queries
     private DownloadedTripEntity? _cachedActiveTrip;
     private LocationData? _lastLocationCheck;
     private DateTime _lastTripCheckTime = DateTime.MinValue;
     private readonly TimeSpan _tripCheckCooldown = TimeSpan.FromSeconds(30);
+
+    // Prefetch debouncing and retry
+    private LocationData? _lastPrefetchLocation;
+    private DateTime _lastPrefetchTime = DateTime.MinValue;
+    private bool _isPrefetching;
+    private int _lastPrefetchDownloaded;
+    private int _lastPrefetchTotal;
+    private readonly object _prefetchLock = new();
+    private static readonly TimeSpan RetryInterval = TimeSpan.FromSeconds(30);
 
     // Tile statistics for logging
     private readonly object _statsLock = new();
@@ -40,11 +53,138 @@ public class UnifiedTileCacheService
     public UnifiedTileCacheService(
         LiveTileCacheService liveTileService,
         TripDownloadService tripDownloadService,
-        DatabaseService databaseService)
+        DatabaseService databaseService,
+        ILocationBridge locationBridge,
+        ISettingsService settingsService)
     {
         _liveTileService = liveTileService;
         _tripDownloadService = tripDownloadService;
         _databaseService = databaseService;
+        _locationBridge = locationBridge;
+        _settingsService = settingsService;
+
+        // Subscribe to location updates to trigger prefetch
+        _locationBridge.LocationReceived += OnLocationReceived;
+
+        // Subscribe to prefetch events to track completion for retry logic
+        _liveTileService.PrefetchProgress += OnPrefetchProgress;
+        _liveTileService.PrefetchCompleted += OnPrefetchCompleted;
+
+        System.Diagnostics.Debug.WriteLine("[UnifiedTileCacheService] Initialized and subscribed to LocationBridge for prefetch");
+    }
+
+    /// <summary>
+    /// Tracks prefetch progress for retry logic.
+    /// </summary>
+    private void OnPrefetchProgress(object? sender, (int Downloaded, int Total) progress)
+    {
+        lock (_prefetchLock)
+        {
+            _lastPrefetchDownloaded = progress.Downloaded;
+            _lastPrefetchTotal = progress.Total;
+        }
+    }
+
+    /// <summary>
+    /// Handles prefetch completion - updates final counts.
+    /// </summary>
+    private void OnPrefetchCompleted(object? sender, int downloadedCount)
+    {
+        lock (_prefetchLock)
+        {
+            // If no tiles needed downloading (100% cached), mark as complete
+            if (_lastPrefetchTotal == 0)
+            {
+                _lastPrefetchDownloaded = 0;
+                _lastPrefetchTotal = 0; // 0/0 means 100% cached
+            }
+            else
+            {
+                // Update final downloaded count
+                _lastPrefetchDownloaded = downloadedCount;
+            }
+        }
+    }
+
+    #endregion
+
+    #region Location Handling
+
+    /// <summary>
+    /// Handles location updates to trigger prefetch when user moves significantly.
+    /// </summary>
+    private void OnLocationReceived(object? sender, LocationData location)
+    {
+        // Check if we should prefetch (debounce by distance)
+        if (!ShouldPrefetch(location))
+            return;
+
+        // Fire and forget prefetch on background thread
+        _ = Task.Run(() => PrefetchAroundLocationAsync(location));
+    }
+
+    /// <summary>
+    /// Determines if we should trigger prefetch based on distance moved or incomplete cache.
+    /// </summary>
+    private bool ShouldPrefetch(LocationData location)
+    {
+        lock (_prefetchLock)
+        {
+            // Don't start another prefetch if one is running
+            if (_isPrefetching)
+                return false;
+
+            // Always prefetch if never done before
+            if (_lastPrefetchLocation == null)
+                return true;
+
+            // Check if user moved significantly
+            var threshold = _settingsService.PrefetchDistanceThresholdMeters;
+            var distance = GeoMath.CalculateDistance(
+                _lastPrefetchLocation.Latitude, _lastPrefetchLocation.Longitude,
+                location.Latitude, location.Longitude);
+
+            if (distance >= threshold)
+                return true;
+
+            // If cache wasn't 100% complete, retry after interval (even without movement)
+            if (_lastPrefetchTotal > 0 && _lastPrefetchDownloaded < _lastPrefetchTotal)
+            {
+                var timeSinceLastPrefetch = DateTime.UtcNow - _lastPrefetchTime;
+                if (timeSinceLastPrefetch >= RetryInterval)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Retrying prefetch - incomplete ({_lastPrefetchDownloaded}/{_lastPrefetchTotal})");
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Checks if cache has room for prefetch (below 90% of max).
+    /// </summary>
+    private async Task<bool> HasRoomForPrefetchAsync()
+    {
+        try
+        {
+            var currentSize = await _liveTileService.GetTotalCacheSizeBytesAsync();
+            var maxSizeBytes = (long)_settingsService.MaxLiveCacheSizeMB * 1024 * 1024;
+            var usagePercent = (double)currentSize / maxSizeBytes * 100;
+
+            if (usagePercent >= 90)
+            {
+                System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Skipping prefetch - cache at {usagePercent:F0}% capacity");
+                return false;
+            }
+
+            return true;
+        }
+        catch
+        {
+            return true; // On error, allow prefetch
+        }
     }
 
     #endregion
@@ -168,17 +308,56 @@ public class UnifiedTileCacheService
 
     /// <summary>
     /// Intelligent prefetch that adapts based on trip context.
+    /// Respects storage limits - skips prefetch if cache is near capacity.
     /// </summary>
     /// <param name="currentLocation">Current user location.</param>
     public async Task PrefetchAroundLocationAsync(LocationData currentLocation)
     {
+        lock (_prefetchLock)
+        {
+            if (_isPrefetching)
+                return;
+            _isPrefetching = true;
+        }
+
         try
         {
+            // Check storage capacity before prefetching to avoid churn
+            if (!await HasRoomForPrefetchAsync())
+            {
+                lock (_prefetchLock)
+                {
+                    _lastPrefetchLocation = currentLocation;
+                    _lastPrefetchTime = DateTime.UtcNow;
+                    // Mark as "complete" to prevent retry spam when at capacity
+                    _lastPrefetchTotal = 0;
+                    _lastPrefetchDownloaded = 0;
+                }
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Starting prefetch at {currentLocation.Latitude:F4}, {currentLocation.Longitude:F4}");
+
             await _liveTileService.PrefetchAroundLocationAsync(currentLocation.Latitude, currentLocation.Longitude);
+
+            lock (_prefetchLock)
+            {
+                _lastPrefetchLocation = currentLocation;
+                _lastPrefetchTime = DateTime.UtcNow;
+            }
+
+            System.Diagnostics.Debug.WriteLine("[UnifiedTileCacheService] Prefetch completed");
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Error during prefetch: {ex.Message}");
+        }
+        finally
+        {
+            lock (_prefetchLock)
+            {
+                _isPrefetching = false;
+            }
         }
     }
 

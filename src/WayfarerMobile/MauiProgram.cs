@@ -127,6 +127,7 @@ public static class MauiProgram
         services.AddSingleton<UnifiedTileCacheService>();
         services.AddSingleton<WayfarerTileSource>();
         services.AddSingleton<Services.TileCache.CacheOverlayService>();
+        services.AddSingleton<CacheStatusService>(); // Subscribes to LocationBridge for cache health updates
 
         // Map Services (depends on tile cache)
         services.AddSingleton<LocationIndicatorService>();

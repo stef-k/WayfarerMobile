@@ -1,11 +1,13 @@
 using Microsoft.Extensions.Logging;
 using Mapsui;
+using Mapsui.Extensions;
 using Mapsui.Layers;
 using Mapsui.Nts;
 using Mapsui.Nts.Extensions;
 using Mapsui.Projections;
 using Mapsui.Styles;
 using NetTopologySuite.Geometries;
+using WayfarerMobile.Core.Interfaces;
 using Map = Mapsui.Map;
 using Color = Mapsui.Styles.Color;
 using Brush = Mapsui.Styles.Brush;
@@ -16,6 +18,7 @@ namespace WayfarerMobile.Services.TileCache;
 /// <summary>
 /// Service for displaying cache coverage as visual overlay on the map.
 /// Shows circles indicating tile cache coverage at different zoom levels.
+/// Uses user-configured prefetch radius from settings.
 /// </summary>
 public class CacheOverlayService
 {
@@ -24,6 +27,9 @@ public class CacheOverlayService
 
     private readonly ILogger<CacheOverlayService> _logger;
     private readonly LiveTileCacheService _liveTileCache;
+    private readonly ISettingsService _settingsService;
+    private readonly string _liveCacheDirectory;
+    private readonly string _tripCacheDirectory;
     private WritableLayer? _overlayLayer;
     private WritableLayer? _labelsLayer;
 
@@ -37,10 +43,14 @@ public class CacheOverlayService
     /// </summary>
     public CacheOverlayService(
         ILogger<CacheOverlayService> logger,
-        LiveTileCacheService liveTileCache)
+        LiveTileCacheService liveTileCache,
+        ISettingsService settingsService)
     {
         _logger = logger;
         _liveTileCache = liveTileCache;
+        _settingsService = settingsService;
+        _liveCacheDirectory = Path.Combine(FileSystem.CacheDirectory, "tiles", "live");
+        _tripCacheDirectory = Path.Combine(FileSystem.CacheDirectory, "tiles", "trips");
     }
 
     /// <summary>
@@ -74,16 +84,22 @@ public class CacheOverlayService
             // Remove existing overlay first
             HideOverlay(map);
 
-            // Create overlay layer
-            _overlayLayer = new WritableLayer { Name = CacheOverlayLayerName };
-            _labelsLayer = new WritableLayer { Name = CacheLabelsLayerName };
+            // Create overlay layer - IMPORTANT: Set Style to null to prevent default style override
+            _overlayLayer = new WritableLayer { Name = CacheOverlayLayerName, Style = null };
+            _labelsLayer = new WritableLayer { Name = CacheLabelsLayerName, Style = null };
 
-            // Calculate and display cache coverage for each zoom level
-            var zoomLevels = new[] { 12, 13, 14, 15, 16, 17 };
+            // Zoom levels to check
+            var zoomLevels = new[] { 15, 14, 16, 13, 12, 11, 10, 17 };
 
-            foreach (var zoom in zoomLevels)
+            // Calculate all coverages in parallel for speed (direct file checks, no DB)
+            var coverageTasks = zoomLevels.Select(zoom =>
+                Task.Run(() => (zoom, coverage: CalculateCoverageFast(latitude, longitude, zoom)))).ToArray();
+
+            var results = await Task.WhenAll(coverageTasks);
+
+            // Create features from results
+            foreach (var (zoom, coverage) in results)
             {
-                var coverage = await CalculateCoverageAsync(latitude, longitude, zoom);
                 var feature = CreateCoverageFeature(latitude, longitude, zoom, coverage);
                 if (feature != null)
                 {
@@ -100,6 +116,17 @@ public class CacheOverlayService
             // Add layers to map
             map.Layers.Add(_overlayLayer);
             map.Layers.Add(_labelsLayer);
+
+            // Zoom out to fit all circles (largest is zoom level 10)
+            var largestRadius = GetRadiusForZoom(10);
+            var (centerX, centerY) = SphericalMercator.FromLonLat(longitude, latitude);
+            var extent = new MRect(
+                centerX - largestRadius * 1.2,
+                centerY - largestRadius * 1.2,
+                centerX + largestRadius * 1.2,
+                centerY + largestRadius * 1.2);
+
+            map.Navigator.ZoomToBox(extent, MBoxFit.Fit);
 
             IsVisible = true;
             _logger.LogInformation("Cache overlay displayed for location {Lat}, {Lon}", latitude, longitude);
@@ -151,10 +178,22 @@ public class CacheOverlayService
         await ShowOverlayAsync(map, latitude, longitude);
     }
 
-    private async Task<CoverageResult> CalculateCoverageAsync(double lat, double lon, int zoom)
+    /// <summary>
+    /// Fast coverage calculation using direct file checks (no DB updates).
+    /// Runs synchronously on background thread for parallel execution.
+    /// </summary>
+    private CoverageResult CalculateCoverageFast(double lat, double lon, int zoom)
     {
         var (centerX, centerY) = LatLonToTile(lat, lon, zoom);
-        const int radius = 3;
+        int radius = _settingsService.LiveCachePrefetchRadius;
+        int maxTiles = 1 << zoom;
+
+        // Cache trip directories once
+        string[]? tripDirs = null;
+        if (Directory.Exists(_tripCacheDirectory))
+        {
+            tripDirs = Directory.GetDirectories(_tripCacheDirectory);
+        }
 
         int total = 0;
         int cached = 0;
@@ -166,13 +205,32 @@ public class CacheOverlayService
                 int x = centerX + dx;
                 int y = centerY + dy;
 
-                if (x < 0 || y < 0 || y >= (1 << zoom))
+                if (x < 0 || x >= maxTiles || y < 0 || y >= maxTiles)
                     continue;
 
                 total++;
-                var tile = await _liveTileCache.GetCachedTileAsync(zoom, x, y);
-                if (tile != null)
+
+                // Direct file check - much faster than GetCachedTileAsync
+                var livePath = Path.Combine(_liveCacheDirectory, zoom.ToString(), x.ToString(), $"{y}.png");
+                if (File.Exists(livePath))
+                {
                     cached++;
+                    continue;
+                }
+
+                // Check trip caches
+                if (tripDirs != null)
+                {
+                    foreach (var tripDir in tripDirs)
+                    {
+                        var tripPath = Path.Combine(tripDir, zoom.ToString(), x.ToString(), $"{y}.png");
+                        if (File.Exists(tripPath))
+                        {
+                            cached++;
+                            break;
+                        }
+                    }
+                }
             }
         }
 
@@ -191,20 +249,22 @@ public class CacheOverlayService
             var (x, y) = SphericalMercator.FromLonLat(lon, lat);
             var radius = GetRadiusForZoom(zoom);
 
-            // Create circle geometry
+            // Create circle geometry with fewer segments for faster rendering
             var factory = new GeometryFactory();
             var center = factory.CreatePoint(new Coordinate(x, y));
-            var circle = center.Buffer(radius, 32);
+            var circle = center.Buffer(radius, 16); // Reduced from 32 to 16 segments
 
-            // Determine color based on coverage
-            var color = GetColorForCoverage(coverage.CoveragePercent);
+            // Use ONE consistent blue color for all circles (Material Blue #2196F3)
+            // For VectorStyle, transparency MUST be in color alpha (Opacity property is for bitmaps only)
+            var fillColor = Color.FromArgb(40, 33, 150, 243);   // ~15% opacity fill
+            var strokeColor = Color.FromArgb(120, 33, 150, 243); // ~47% opacity stroke
 
             var style = new VectorStyle
             {
-                Fill = new Brush(Color.FromArgb(64, color.R, color.G, color.B)),
-                Outline = new Pen(Color.FromArgb(180, color.R, color.G, color.B), 2),
-                Opacity = 0.6f
+                Fill = new Brush(fillColor),
+                Outline = new Pen(strokeColor, 2)
             };
+            // NOTE: Do NOT set style.Opacity - it only works for bitmaps, not vector shapes
 
             return new GeometryFeature(circle) { Styles = new[] { style } };
         }
@@ -252,9 +312,11 @@ public class CacheOverlayService
 
     private static double GetRadiusForZoom(int zoom)
     {
-        // Radius decreases with higher zoom levels
+        // Radius decreases with higher zoom levels (covers all prefetch zoom levels 10-17)
         return zoom switch
         {
+            10 => 6000,
+            11 => 4500,
             12 => 3000,
             13 => 2000,
             14 => 1500,

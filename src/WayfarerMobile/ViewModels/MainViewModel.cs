@@ -25,6 +25,8 @@ public partial class MainViewModel : BaseViewModel
     private readonly IToastService _toastService;
     private readonly CheckInViewModel _checkInViewModel;
     private readonly UnifiedTileCacheService _tileCacheService;
+    private readonly CacheStatusService _cacheStatusService;
+    private readonly CacheOverlayService _cacheOverlayService;
 
     #endregion
 
@@ -365,6 +367,8 @@ public partial class MainViewModel : BaseViewModel
     /// <param name="toastService">The toast notification service.</param>
     /// <param name="checkInViewModel">The check-in view model.</param>
     /// <param name="tileCacheService">The tile cache service.</param>
+    /// <param name="cacheStatusService">The cache status service.</param>
+    /// <param name="cacheOverlayService">The cache overlay service.</param>
     public MainViewModel(
         ILocationBridge locationBridge,
         MapService mapService,
@@ -373,7 +377,9 @@ public partial class MainViewModel : BaseViewModel
         NavigationHudViewModel navigationHudViewModel,
         IToastService toastService,
         CheckInViewModel checkInViewModel,
-        UnifiedTileCacheService tileCacheService)
+        UnifiedTileCacheService tileCacheService,
+        CacheStatusService cacheStatusService,
+        CacheOverlayService cacheOverlayService)
     {
         _locationBridge = locationBridge;
         _mapService = mapService;
@@ -383,6 +389,8 @@ public partial class MainViewModel : BaseViewModel
         _toastService = toastService;
         _checkInViewModel = checkInViewModel;
         _tileCacheService = tileCacheService;
+        _cacheStatusService = cacheStatusService;
+        _cacheOverlayService = cacheOverlayService;
         Title = "WayfarerMobile";
 
         // Subscribe to location events
@@ -394,6 +402,9 @@ public partial class MainViewModel : BaseViewModel
 
         // Subscribe to check-in completion to auto-close sheet
         _checkInViewModel.CheckInCompleted += OnCheckInCompleted;
+
+        // Subscribe to cache status updates (updates when location changes, NOT on startup)
+        _cacheStatusService.StatusChanged += OnCacheStatusChanged;
 
         // Set default map zoom
         _mapService.SetDefaultZoom();
@@ -1012,8 +1023,7 @@ public partial class MainViewModel : BaseViewModel
         // Refresh map to fix any layout issues (e.g., after bottom sheet closes)
         _mapService.RefreshMap();
 
-        // Update cache health indicator
-        await UpdateCacheHealthAsync();
+        // Cache health is updated by CacheStatusService when location changes - NOT here on startup
 
         // Set high performance mode for real-time updates when map is visible
         if (TrackingState == TrackingState.Active)
@@ -1063,58 +1073,56 @@ public partial class MainViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Updates the cache health indicator based on tile cache statistics.
+    /// Handles cache status changes from CacheStatusService.
     /// </summary>
-    private async Task UpdateCacheHealthAsync()
+    private void OnCacheStatusChanged(object? sender, string status)
+    {
+        CacheHealth = status switch
+        {
+            "green" => CacheHealthStatus.Good,
+            "yellow" => CacheHealthStatus.Warning,
+            "red" => CacheHealthStatus.Poor,
+            _ => CacheHealthStatus.Unknown
+        };
+    }
+
+    /// <summary>
+    /// Shows cache status details in a dialog with option to show/hide overlay on map.
+    /// </summary>
+    [RelayCommand]
+    private async Task ShowCacheStatusAsync()
     {
         try
         {
-            var stats = await _tileCacheService.GetStatisticsAsync();
-            var hitSummary = _tileCacheService.GetHitStatsSummary();
+            var info = await _cacheStatusService.GetDetailedCacheInfoAsync();
+            var message = _cacheStatusService.FormatStatusMessage(info);
 
-            // Parse hit rate from summary (format: "Tiles: X (Live:X Trip:X DL:X Miss:X) Hit:XX%")
-            var hasNetwork = Connectivity.Current.NetworkAccess == NetworkAccess.Internet;
+            var page = Application.Current?.Windows.FirstOrDefault()?.Page;
+            if (page == null) return;
 
-            if (stats.LiveTileCount == 0 && stats.TripCacheSizeBytes == 0)
+            // Button text depends on whether overlay is currently visible
+            var buttonText = _cacheOverlayService.IsVisible ? "Hide Overlay" : "Show on Map";
+
+            var toggleOverlay = await page.DisplayAlertAsync(
+                "Cache Status",
+                message,
+                buttonText,
+                "Close");
+
+            if (toggleOverlay && CurrentLocation != null)
             {
-                // No cache at all
-                CacheHealth = hasNetwork ? CacheHealthStatus.Warning : CacheHealthStatus.Poor;
+                await _cacheOverlayService.ToggleOverlayAsync(
+                    Map, CurrentLocation.Latitude, CurrentLocation.Longitude);
             }
-            else if (hitSummary.Contains("Hit:"))
+            else if (toggleOverlay)
             {
-                // Extract hit rate percentage
-                var hitIndex = hitSummary.IndexOf("Hit:");
-                if (hitIndex >= 0)
-                {
-                    var hitPart = hitSummary.Substring(hitIndex + 4).TrimEnd('%', ')');
-                    if (int.TryParse(hitPart, out var hitRate))
-                    {
-                        if (hitRate >= 70)
-                        {
-                            CacheHealth = CacheHealthStatus.Good;
-                        }
-                        else if (hitRate >= 30 || hasNetwork)
-                        {
-                            CacheHealth = CacheHealthStatus.Warning;
-                        }
-                        else
-                        {
-                            CacheHealth = CacheHealthStatus.Poor;
-                        }
-                        return;
-                    }
-                }
+                await _toastService.ShowWarningAsync("No location available for overlay");
             }
-
-            // Default: if we have tiles and network, assume good
-            CacheHealth = (stats.LiveTileCount > 0 || stats.TripCacheSizeBytes > 0)
-                ? CacheHealthStatus.Good
-                : (hasNetwork ? CacheHealthStatus.Warning : CacheHealthStatus.Poor);
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[MainViewModel] Error updating cache health: {ex.Message}");
-            CacheHealth = CacheHealthStatus.Unknown;
+            System.Diagnostics.Debug.WriteLine($"[MainViewModel] Error showing cache status: {ex.Message}");
+            await _toastService.ShowErrorAsync("Could not load cache status");
         }
     }
 

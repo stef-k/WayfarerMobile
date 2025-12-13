@@ -42,8 +42,8 @@
 
                     <!-- Floating status overlay at top (2 rows, tappable to copy coords) -->
                     <Frame VerticalOptions="Start"
-                           HorizontalOptions="Center"
-                           Margin="0,8,0,0"
+                           HorizontalOptions="Start"
+                           Margin="8,8,0,0"
                            Padding="12,6"
                            CornerRadius="16"
                            BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}"
@@ -65,30 +65,38 @@
                                        TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
                             </HorizontalStackLayout>
                             <!-- Row 2: Accuracy, Heading, Altitude, Cache Health -->
-                            <HorizontalStackLayout Spacing="8">
+                            <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
                                 <Label Text="{Binding AccuracyText}"
                                        FontSize="11"
                                        IsVisible="{Binding HasAccuracy}"
+                                       VerticalOptions="Center"
                                        TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
                                 <Label Text="{Binding HeadingText}"
                                        FontSize="11"
                                        IsVisible="{Binding HasHeading}"
+                                       VerticalOptions="Center"
                                        TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
                                 <Label Text="{Binding AltitudeText, StringFormat='Alt: {0}'}"
                                        FontSize="11"
                                        IsVisible="{Binding HasAltitude}"
+                                       VerticalOptions="Center"
                                        TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
-                                <!-- Cache health indicator -->
-                                <HorizontalStackLayout Spacing="3" VerticalOptions="Center">
-                                    <Ellipse WidthRequest="7"
-                                             HeightRequest="7"
-                                             Fill="{Binding CacheHealthColor}"
-                                             VerticalOptions="Center" />
-                                    <Label Text="{Binding CacheHealthTooltip}"
-                                           FontSize="11"
-                                           TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}"
-                                           VerticalOptions="Center" />
-                                </HorizontalStackLayout>
+                                <!-- Cache health indicator (tappable, larger hit area) -->
+                                <Border Padding="4,0" StrokeThickness="0" BackgroundColor="Transparent" VerticalOptions="Center">
+                                    <Border.GestureRecognizers>
+                                        <TapGestureRecognizer Command="{Binding ShowCacheStatusCommand}" />
+                                    </Border.GestureRecognizers>
+                                    <HorizontalStackLayout Spacing="4" VerticalOptions="Center">
+                                        <Ellipse WidthRequest="10"
+                                                 HeightRequest="10"
+                                                 Fill="{Binding CacheHealthColor}"
+                                                 VerticalOptions="Center" />
+                                        <Label Text="{Binding CacheHealthTooltip}"
+                                               FontSize="11"
+                                               TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}"
+                                               VerticalOptions="Center" />
+                                    </HorizontalStackLayout>
+                                </Border>
                             </HorizontalStackLayout>
                         </VerticalStackLayout>
                     </Frame>

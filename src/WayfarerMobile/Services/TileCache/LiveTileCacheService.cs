@@ -26,6 +26,20 @@ public class LiveTileCacheService
 
     #endregion
 
+    #region Events
+
+    /// <summary>
+    /// Event raised periodically during prefetch with progress. Args: (downloaded, total).
+    /// </summary>
+    public event EventHandler<(int Downloaded, int Total)>? PrefetchProgress;
+
+    /// <summary>
+    /// Event raised when prefetch operation completes. Argument is number of tiles downloaded.
+    /// </summary>
+    public event EventHandler<int>? PrefetchCompleted;
+
+    #endregion
+
     #region Constructor
 
     /// <summary>
@@ -103,33 +117,129 @@ public class LiveTileCacheService
 
     /// <summary>
     /// Prefetches tiles around a location for smooth panning.
+    /// Uses configured prefetch radius and max concurrent downloads from settings.
+    /// Zoom levels are ordered by importance: current view (15), then adjacent (14, 16), then rest.
     /// </summary>
     /// <param name="latitude">Center latitude.</param>
     /// <param name="longitude">Center longitude.</param>
-    /// <param name="zoom">Zoom level.</param>
-    /// <param name="radius">Number of tiles around center.</param>
-    public async Task PrefetchAroundLocationAsync(double latitude, double longitude, int zoom = 15, int radius = 2)
+    public async Task PrefetchAroundLocationAsync(double latitude, double longitude)
     {
         if (Connectivity.Current.NetworkAccess != NetworkAccess.Internet)
             return;
 
-        var (centerX, centerY) = LatLonToTile(latitude, longitude, zoom);
+        // Use configured settings
+        int radius = _settingsService.LiveCachePrefetchRadius;
+        int maxConcurrent = _settingsService.MaxConcurrentTileDownloads;
 
-        var tasks = new List<Task>();
-        for (int dx = -radius; dx <= radius; dx++)
+        // Zoom levels ordered by importance:
+        // 1. Current view (15), one up (14), one down (16) - most crucial
+        // 2. Rest for full coverage: 13, 12, 11, 10, 17
+        int[] zoomLevels = { 15, 14, 16, 13, 12, 11, 10, 17 };
+
+        // Collect all tile coordinates to download
+        var tilesToFetch = new List<(int zoom, int x, int y)>();
+
+        foreach (var zoom in zoomLevels)
         {
-            for (int dy = -radius; dy <= radius; dy++)
+            var (centerX, centerY) = LatLonToTile(latitude, longitude, zoom);
+            int maxTiles = 1 << zoom;
+
+            for (int dx = -radius; dx <= radius; dx++)
             {
-                var x = centerX + dx;
-                var y = centerY + dy;
-                if (x >= 0 && y >= 0)
+                for (int dy = -radius; dy <= radius; dy++)
                 {
-                    tasks.Add(GetOrDownloadTileAsync(zoom, x, y));
+                    var x = centerX + dx;
+                    var y = centerY + dy;
+
+                    // Validate both X and Y coordinates
+                    if (x < 0 || x >= maxTiles || y < 0 || y >= maxTiles)
+                        continue;
+
+                    // Only add if not already cached (check file exists, no DB hit)
+                    var filePath = GetTileFilePath(zoom, x, y);
+                    if (!File.Exists(filePath))
+                    {
+                        tilesToFetch.Add((zoom, x, y));
+                    }
                 }
             }
         }
 
-        await Task.WhenAll(tasks);
+        if (tilesToFetch.Count == 0)
+        {
+            // No tiles to fetch, but still notify (status might need refresh)
+            PrefetchCompleted?.Invoke(this, 0);
+            return;
+        }
+
+        // Use semaphore to limit concurrent downloads (respects server/battery)
+        // Don't use 'using' - manage lifetime explicitly to avoid race condition
+        var semaphore = new SemaphoreSlim(maxConcurrent);
+        int downloadedCount = 0;
+        int processedCount = 0;
+        int totalToFetch = tilesToFetch.Count;
+        int lastProgressReport = 0;
+        const int progressInterval = 10; // Report every 10 tiles
+
+        try
+        {
+            var tasks = tilesToFetch.Select(async tile =>
+            {
+                var success = await PrefetchTileWithThrottleAsync(semaphore, tile.zoom, tile.x, tile.y);
+                if (success)
+                    Interlocked.Increment(ref downloadedCount);
+
+                var processed = Interlocked.Increment(ref processedCount);
+
+                // Fire progress event every N tiles
+                if (processed - lastProgressReport >= progressInterval)
+                {
+                    lastProgressReport = processed;
+                    PrefetchProgress?.Invoke(this, (downloadedCount, totalToFetch));
+                }
+            }).ToArray();
+
+            await Task.WhenAll(tasks);
+        }
+        finally
+        {
+            semaphore.Dispose();
+        }
+
+        // Notify subscribers that prefetch completed
+        PrefetchCompleted?.Invoke(this, downloadedCount);
+    }
+
+    /// <summary>
+    /// Downloads a tile for prefetch with semaphore throttling.
+    /// Bypasses the class-level _downloadLock to avoid double blocking.
+    /// </summary>
+    /// <returns>True if tile was successfully downloaded, false otherwise.</returns>
+    private async Task<bool> PrefetchTileWithThrottleAsync(SemaphoreSlim semaphore, int zoom, int x, int y)
+    {
+        await semaphore.WaitAsync();
+        try
+        {
+            // Check cache again (another task might have downloaded it)
+            var filePath = GetTileFilePath(zoom, x, y);
+            if (File.Exists(filePath))
+                return false; // Already cached, not a new download
+
+            // Download directly without going through GetOrDownloadTileAsync
+            // (which has its own _downloadLock causing double blocking)
+            var result = await DownloadTileAsync(zoom, x, y);
+            return result != null;
+        }
+        catch (Exception ex)
+        {
+            // Silently handle prefetch failures - not critical
+            System.Diagnostics.Debug.WriteLine($"[LiveTileCache] Prefetch failed {zoom}/{x}/{y}: {ex.Message}");
+            return false;
+        }
+        finally
+        {
+            semaphore.Release();
+        }
     }
 
     /// <summary>

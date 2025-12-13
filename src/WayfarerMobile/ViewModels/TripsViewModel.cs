@@ -5,6 +5,7 @@ using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Services;
+using WayfarerMobile.Services.TileCache;
 using WayfarerMobile.Shared.Collections;
 using WayfarerMobile.Shared.Controls;
 
@@ -25,6 +26,7 @@ public partial class TripsViewModel : BaseViewModel
     private readonly ITripSyncService _tripSyncService;
     private readonly IToastService _toastService;
     private readonly IDownloadNotificationService _downloadNotificationService;
+    private readonly CacheStatusService _cacheStatusService;
     private IReadOnlyList<SegmentDisplayItem>? _cachedSegmentDisplayItems;
 
     #region Observable Properties
@@ -210,7 +212,8 @@ public partial class TripsViewModel : BaseViewModel
         ILocationBridge locationBridge,
         ITripSyncService tripSyncService,
         IToastService toastService,
-        IDownloadNotificationService downloadNotificationService)
+        IDownloadNotificationService downloadNotificationService,
+        CacheStatusService cacheStatusService)
     {
         _apiClient = apiClient;
         _settingsService = settingsService;
@@ -222,6 +225,7 @@ public partial class TripsViewModel : BaseViewModel
         _locationBridge = locationBridge;
         _tripSyncService = tripSyncService;
         _toastService = toastService;
+        _cacheStatusService = cacheStatusService;
         Title = "Trips";
 
         // Subscribe to download progress
@@ -608,6 +612,9 @@ public partial class TripsViewModel : BaseViewModel
                 await _downloadNotificationService.NotifyDownloadCompletedAsync(
                     SelectedTrip.Name,
                     result.TotalSizeBytes / (1024.0 * 1024.0));
+
+                // Refresh cache status to reflect newly downloaded tiles
+                await _cacheStatusService.ForceRefreshAsync();
             }
             else
             {
