@@ -1,3 +1,6 @@
+using System.Net.Http.Headers;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Android.App;
 using Android.Content;
 using Android.Gms.Common;
@@ -13,6 +16,7 @@ using WayfarerMobile.Data.Services;
 using WayfarerMobile.Platforms.Android.Receivers;
 using WayfarerMobile.Services;
 using Location = Android.Locations.Location;
+using Timer = System.Threading.Timer;
 
 namespace WayfarerMobile.Platforms.Android.Services;
 
@@ -57,12 +61,21 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     public const string ActionCheckIn = "com.wayfarer.mobile.ACTION_CHECK_IN";
 
     // Performance mode intervals (milliseconds)
+    // High: 1s for real-time map updates when app visible
+    // Normal: 95s for background - balances battery vs server's 2-min threshold
+    // PowerSaver: 5min for critical battery situations
     private const long HighPerformanceIntervalMs = 1000;
-    private const long NormalIntervalMs = 60000;
+    private const long NormalIntervalMs = 95000;
     private const long PowerSaverIntervalMs = 300000;
 
     // Location filtering
     private const float MinAccuracyMeters = 100f;
+
+    // Settings sync - runs every hour, syncs if 6+ hours elapsed
+    private const long SettingsSyncCheckIntervalMs = 3600000; // 1 hour
+    private static readonly TimeSpan SettingsSyncInterval = TimeSpan.FromHours(6);
+    private const string LastSettingsSyncKey = "foreground_service_settings_sync";
+    private const int SettingsSyncTimeoutSeconds = 15;
 
     #endregion
 
@@ -86,6 +99,10 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     private bool _timelineTrackingEnabled = true;
     private readonly object _lock = new();
 
+    // Settings sync timer (completely isolated from location tracking)
+    private Timer? _settingsSyncTimer;
+    private volatile bool _settingsSyncInProgress;
+
     #endregion
 
     #region Service Lifecycle
@@ -106,8 +123,9 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] TimelineTrackingEnabled: {_timelineTrackingEnabled}");
 
         // Load server thresholds for location filtering (respects server configuration)
-        var timeThreshold = Preferences.Get("location_time_threshold", 1);
-        var distanceThreshold = Preferences.Get("location_distance_threshold", 50);
+        // Defaults match SettingsService: 5 min / 15 m
+        var timeThreshold = Preferences.Get("location_time_threshold", 5);
+        var distanceThreshold = Preferences.Get("location_distance_threshold", 15);
         _thresholdFilter.UpdateThresholds(timeThreshold, distanceThreshold);
         System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] Thresholds: {timeThreshold}min / {distanceThreshold}m");
 
@@ -131,6 +149,10 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
 
         CreateNotificationChannel();
 
+        // Start settings sync timer (checks every hour, syncs if 6+ hours elapsed)
+        // Completely isolated - failures never affect location tracking
+        StartSettingsSyncTimer();
+
         System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Service created");
     }
 
@@ -142,6 +164,19 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         var action = intent?.Action ?? ActionStart;
 
         System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] OnStartCommand: {action}");
+
+        // CRITICAL: If service is not initialized and we're not stopping,
+        // we must call StartForeground within 5 seconds to avoid ANR/crash.
+        // This handles cases where service is restarted by Android or control commands
+        // are sent when service wasn't running.
+        if (_currentState == TrackingState.NotInitialized && action != ActionStop)
+        {
+            var notification = CreateNotification("Initializing...");
+            StartForeground(NotificationId, notification);
+            _currentState = TrackingState.Ready;
+            SendStateChangeBroadcast();
+            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Foreground started for non-Start action");
+        }
 
         switch (action)
         {
@@ -181,6 +216,9 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     public override void OnDestroy()
     {
         System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Service destroyed");
+
+        // Stop settings sync timer safely
+        StopSettingsSyncTimer();
 
         StopLocationUpdates();
         _currentState = TrackingState.NotInitialized;
@@ -226,7 +264,8 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
 
             _currentState = TrackingState.Active;
             SendStateChangeBroadcast();
-            UpdateNotification("Tracking active");
+            var initialStatus = _timelineTrackingEnabled ? "Timeline: ON" : "Timeline: OFF";
+            UpdateNotification($"{initialStatus} • Acquiring GPS...");
 
             System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Tracking started");
         }
@@ -284,7 +323,8 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
             StartLocationUpdates();
             _currentState = TrackingState.Active;
             SendStateChangeBroadcast();
-            UpdateNotification("Tracking active");
+            var resumeStatus = _timelineTrackingEnabled ? "Timeline: ON" : "Timeline: OFF";
+            UpdateNotification($"{resumeStatus} • Resuming...");
 
             System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Tracking resumed");
         }
@@ -492,6 +532,9 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
             _locationCount++;
         }
 
+        // Persist for instant availability on app start (works even when app UI is closed)
+        PersistLastLocation(locationData);
+
         // Broadcast to UI
         SendLocationBroadcast(locationData);
 
@@ -504,8 +547,10 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
             }
         }
 
-        // Update notification
-        UpdateNotification($"Last: {DateTime.Now:HH:mm:ss} ({_locationCount} pts)");
+        // Update notification with useful info
+        var timelineStatus = _timelineTrackingEnabled ? "Timeline: ON" : "Timeline: OFF";
+        var accuracyText = locationData.Accuracy.HasValue ? $"±{locationData.Accuracy:F0}m" : "";
+        UpdateNotification($"{timelineStatus} {accuracyText}".Trim());
 
         System.Diagnostics.Debug.WriteLine(
             $"[LocationTrackingService] Location: {locationData.Latitude:F6}, {locationData.Longitude:F6} " +
@@ -584,6 +629,23 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         }
     }
 
+    /// <summary>
+    /// Persists location to preferences for instant availability on app start.
+    /// Uses same key as LocationBridge so they share the persisted location.
+    /// </summary>
+    private static void PersistLastLocation(LocationData location)
+    {
+        try
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(location);
+            Preferences.Set("last_known_location", json);
+        }
+        catch
+        {
+            // Non-critical, ignore persistence errors
+        }
+    }
+
     #endregion
 
     #region Callbacks
@@ -629,6 +691,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
 
     /// <summary>
     /// Creates a notification for the foreground service.
+    /// Tapping the notification opens the app. Only action is Check In.
     /// </summary>
     private Notification CreateNotification(string text)
     {
@@ -646,21 +709,6 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         var checkInPendingIntent = PendingIntent.GetBroadcast(
             this, 1, checkInIntent, pendingIntentFlags);
 
-        // Pause/Resume action (broadcast to NotificationActionReceiver)
-        var isPaused = _currentState == TrackingState.Paused;
-        var pauseIntent = new Intent(this, typeof(NotificationActionReceiver));
-        pauseIntent.SetAction(NotificationActionReceiver.ActionPauseResume);
-        pauseIntent.PutExtra("is_paused", isPaused);
-        var pausePendingIntent = PendingIntent.GetBroadcast(
-            this, 2, pauseIntent, pendingIntentFlags);
-        var pauseText = isPaused ? "Resume" : "Pause";
-
-        // Stop action (broadcast to NotificationActionReceiver)
-        var stopIntent = new Intent(this, typeof(NotificationActionReceiver));
-        stopIntent.SetAction(NotificationActionReceiver.ActionStop);
-        var stopPendingIntent = PendingIntent.GetBroadcast(
-            this, 3, stopIntent, pendingIntentFlags);
-
         var builder = new NotificationCompat.Builder(this, ChannelId);
         builder.SetContentTitle("WayfarerMobile");
         builder.SetContentText(text);
@@ -668,8 +716,6 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         builder.SetOngoing(true);
         builder.SetContentIntent(openAppPendingIntent);
         builder.AddAction(0, "Check In", checkInPendingIntent);
-        builder.AddAction(0, pauseText, pausePendingIntent);
-        builder.AddAction(0, "Stop", stopPendingIntent);
         builder.SetPriority(NotificationCompat.PriorityLow);
 
         return builder.Build()!;
@@ -708,6 +754,248 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
             $"[LocationTrackingService] Thresholds updated: {timeMinutes}min / {distanceMeters}m");
     }
 
+    #endregion
+
+    #region Settings Sync (Isolated - Never Affects Location Tracking)
+
+    /// <summary>
+    /// Response model for settings from server API.
+    /// </summary>
+    private class ServerSettingsResponse
+    {
+        [JsonPropertyName("location_time_threshold_minutes")]
+        public int LocationTimeThresholdMinutes { get; set; }
+
+        [JsonPropertyName("location_distance_threshold_meters")]
+        public int LocationDistanceThresholdMeters { get; set; }
+    }
+
+    /// <summary>
+    /// Starts the settings sync timer. Checks every hour, syncs if 6+ hours elapsed.
+    /// </summary>
+    private void StartSettingsSyncTimer()
+    {
+        try
+        {
+            // Timer fires after 5 minutes initially (give service time to stabilize),
+            // then every hour to check if sync is due
+            _settingsSyncTimer = new Timer(
+                OnSettingsSyncTimerElapsed,
+                null,
+                TimeSpan.FromMinutes(5),
+                TimeSpan.FromMilliseconds(SettingsSyncCheckIntervalMs));
+
+            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Settings sync timer started");
+        }
+        catch (Exception ex)
+        {
+            // Non-critical - location tracking continues without settings sync
+            System.Diagnostics.Debug.WriteLine(
+                $"[LocationTrackingService] Failed to start settings sync timer: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Stops the settings sync timer safely.
+    /// </summary>
+    private void StopSettingsSyncTimer()
+    {
+        try
+        {
+            _settingsSyncTimer?.Dispose();
+            _settingsSyncTimer = null;
+            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Settings sync timer stopped");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[LocationTrackingService] Error stopping settings sync timer: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Timer callback - checks if sync is due and triggers if needed.
+    /// Completely isolated - any failure is caught and logged, never propagates.
+    /// </summary>
+    private void OnSettingsSyncTimerElapsed(object? state)
+    {
+        // CRITICAL: Everything in try-catch - timer callbacks must never throw
+        try
+        {
+            // Skip if already syncing
+            if (_settingsSyncInProgress)
+            {
+                System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Settings sync already in progress, skipping");
+                return;
+            }
+
+            // Check if sync is due
+            if (!IsSettingsSyncDue())
+            {
+                return;
+            }
+
+            // Fire and forget - completely isolated async operation
+            _ = ExecuteSettingsSyncSafelyAsync();
+        }
+        catch (Exception ex)
+        {
+            // NEVER let timer callback crash the service
+            System.Diagnostics.Debug.WriteLine(
+                $"[LocationTrackingService] Settings sync timer error (safely caught): {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Checks if settings sync is due based on last sync time.
+    /// </summary>
+    private static bool IsSettingsSyncDue()
+    {
+        try
+        {
+            var lastSyncTicks = Preferences.Get(LastSettingsSyncKey, 0L);
+            if (lastSyncTicks == 0)
+                return true; // Never synced from foreground service
+
+            var lastSync = new DateTime(lastSyncTicks, DateTimeKind.Utc);
+            var timeSinceSync = DateTime.UtcNow - lastSync;
+
+            return timeSinceSync >= SettingsSyncInterval;
+        }
+        catch
+        {
+            return false; // If we can't read preferences, don't sync
+        }
+    }
+
+    /// <summary>
+    /// Executes settings sync with comprehensive error handling and timeout protection.
+    /// This method is completely isolated - any failure is caught and logged.
+    /// </summary>
+    private async Task ExecuteSettingsSyncSafelyAsync()
+    {
+        // Mark as in progress
+        _settingsSyncInProgress = true;
+
+        try
+        {
+            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Starting settings sync from foreground service");
+
+            // Validate prerequisites
+            var serverUrl = Preferences.Get("server_url", string.Empty);
+            var apiToken = Preferences.Get("api_token", string.Empty);
+
+            if (string.IsNullOrEmpty(serverUrl))
+            {
+                System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Settings sync skipped - no server URL configured");
+                return;
+            }
+
+            // Create HTTP client with strict timeout
+            using var httpClient = new HttpClient
+            {
+                Timeout = TimeSpan.FromSeconds(SettingsSyncTimeoutSeconds)
+            };
+
+            // Build request
+            var requestUrl = $"{serverUrl.TrimEnd('/')}/api/settings";
+            using var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
+
+            if (!string.IsNullOrEmpty(apiToken))
+            {
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
+            }
+
+            // Execute with cancellation token for additional safety
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(SettingsSyncTimeoutSeconds));
+
+            var response = await httpClient.SendAsync(request, cts.Token).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[LocationTrackingService] Settings sync failed: HTTP {(int)response.StatusCode}");
+                return;
+            }
+
+            // Parse response
+            var json = await response.Content.ReadAsStringAsync(cts.Token).ConfigureAwait(false);
+            var settings = JsonSerializer.Deserialize<ServerSettingsResponse>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            if (settings == null)
+            {
+                System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Settings sync failed: null response");
+                return;
+            }
+
+            // Validate values before applying
+            if (settings.LocationTimeThresholdMinutes <= 0 || settings.LocationDistanceThresholdMeters <= 0)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[LocationTrackingService] Settings sync: invalid values (time={settings.LocationTimeThresholdMinutes}, dist={settings.LocationDistanceThresholdMeters})");
+                return;
+            }
+
+            // Apply settings
+            ApplySettingsSafely(settings);
+
+            // Record successful sync time
+            Preferences.Set(LastSettingsSyncKey, DateTime.UtcNow.Ticks);
+
+            System.Diagnostics.Debug.WriteLine(
+                $"[LocationTrackingService] Settings synced: {settings.LocationTimeThresholdMinutes}min / {settings.LocationDistanceThresholdMeters}m");
+        }
+        catch (TaskCanceledException)
+        {
+            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Settings sync timed out");
+        }
+        catch (HttpRequestException ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[LocationTrackingService] Settings sync network error: {ex.Message}");
+        }
+        catch (JsonException ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[LocationTrackingService] Settings sync JSON error: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            // Catch-all for any unexpected errors
+            System.Diagnostics.Debug.WriteLine(
+                $"[LocationTrackingService] Settings sync unexpected error: {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            _settingsSyncInProgress = false;
+        }
+    }
+
+    /// <summary>
+    /// Applies synced settings safely to preferences and threshold filter.
+    /// </summary>
+    private void ApplySettingsSafely(ServerSettingsResponse settings)
+    {
+        try
+        {
+            // Update preferences (used by SettingsService and service restart)
+            Preferences.Set("location_time_threshold", settings.LocationTimeThresholdMinutes);
+            Preferences.Set("location_distance_threshold", settings.LocationDistanceThresholdMeters);
+
+            // Update live threshold filter
+            _thresholdFilter?.UpdateThresholds(
+                settings.LocationTimeThresholdMinutes,
+                settings.LocationDistanceThresholdMeters);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[LocationTrackingService] Error applying settings: {ex.Message}");
+        }
+    }
 
     #endregion
 }

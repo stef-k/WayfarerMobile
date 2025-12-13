@@ -68,13 +68,63 @@ public partial class App : Application
     {
         try
         {
+            // Start location sync service (server sync)
             var syncService = _serviceProvider.GetService<LocationSyncService>();
             syncService?.Start();
             System.Diagnostics.Debug.WriteLine("[App] Background sync service started");
+
+            // Note: Settings thresholds sync is handled by LocationTrackingService (foreground service)
+            // which runs 24/7 and syncs every 6 hours reliably
+
+            // Sync activity types if needed (UI data, fire-and-forget)
+            var activitySyncService = _serviceProvider.GetService<IActivitySyncService>();
+            _ = activitySyncService?.AutoSyncIfNeededAsync();
+
+            // Start location tracking service (GPS) if permissions are already granted
+            // This handles returning users who already completed onboarding
+            _ = StartLocationTrackingServiceAsync();
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[App] Failed to start background services: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Starts the location tracking service if permissions are granted.
+    /// The service runs 24/7 with context switching between high/normal performance modes.
+    /// </summary>
+    private async Task StartLocationTrackingServiceAsync()
+    {
+        try
+        {
+            var settings = _serviceProvider.GetService<ISettingsService>();
+            var permissions = _serviceProvider.GetService<IPermissionsService>();
+            var locationBridge = _serviceProvider.GetService<ILocationBridge>();
+
+            // Only start if user has completed onboarding and has permissions
+            if (settings == null || permissions == null || locationBridge == null)
+                return;
+
+            if (settings.IsFirstRun)
+            {
+                System.Diagnostics.Debug.WriteLine("[App] First run - skipping location service start (will start after onboarding)");
+                return;
+            }
+
+            var hasPermissions = await permissions.AreTrackingPermissionsGrantedAsync();
+            if (!hasPermissions)
+            {
+                System.Diagnostics.Debug.WriteLine("[App] Location permissions not granted - skipping location service start");
+                return;
+            }
+
+            await locationBridge.StartAsync();
+            System.Diagnostics.Debug.WriteLine("[App] Location tracking service started (24/7 mode)");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[App] Failed to start location tracking service: {ex.Message}");
         }
     }
 
@@ -115,16 +165,110 @@ public partial class App : Application
                 await ShowLockScreenAsync();
             }
 
+            // Check permissions health - user may have revoked in settings
+            await CheckPermissionsHealthAsync();
+
             // Handle app lifecycle (sync, state restoration)
             var lifecycleService = _serviceProvider.GetService<IAppLifecycleService>();
             if (lifecycleService != null)
             {
                 await lifecycleService.OnResumingAsync();
             }
+
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[App] Error in OnWindowResumed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Checks if permissions and configuration are still valid.
+    /// Redirects to onboarding if critical checks fail.
+    /// </summary>
+    private async Task CheckPermissionsHealthAsync()
+    {
+        try
+        {
+            var settings = _serviceProvider.GetService<ISettingsService>();
+            var permissions = _serviceProvider.GetService<IPermissionsService>();
+            var locationBridge = _serviceProvider.GetService<ILocationBridge>();
+
+            // Skip check if first run (onboarding will handle)
+            if (settings == null || permissions == null || settings.IsFirstRun)
+                return;
+
+            var hasLocationPermission = await permissions.IsLocationPermissionGrantedAsync();
+            var isConfigured = settings.IsConfigured;
+
+            // If permissions revoked or not configured, redirect to onboarding
+            if (!hasLocationPermission || !isConfigured)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] Health check failed - Permission: {hasLocationPermission}, Configured: {isConfigured}");
+
+                // Stop the location service if running
+                if (locationBridge != null && !hasLocationPermission)
+                {
+                    await locationBridge.StopAsync();
+                }
+
+                // Redirect to onboarding (only once per session)
+                await RedirectToOnboardingAsync(!hasLocationPermission, !isConfigured);
+            }
+            else
+            {
+                // All OK - ensure service is running
+                if (locationBridge != null && locationBridge.CurrentState != Core.Enums.TrackingState.Active)
+                {
+                    await locationBridge.StartAsync();
+                    System.Diagnostics.Debug.WriteLine("[App] Health check: Restarted location service");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[App] Permission health check error: {ex.Message}");
+        }
+    }
+
+    private bool _healthCheckRedirectShown;
+
+    /// <summary>
+    /// Redirects to onboarding when critical checks fail.
+    /// </summary>
+    private async Task RedirectToOnboardingAsync(bool permissionRevoked, bool notConfigured)
+    {
+        if (_healthCheckRedirectShown)
+            return;
+
+        _healthCheckRedirectShown = true;
+
+        try
+        {
+            var page = Windows.FirstOrDefault()?.Page;
+            if (page == null)
+                return;
+
+            string message = permissionRevoked && notConfigured
+                ? "Location permission was revoked and server configuration is missing. Please complete setup again."
+                : permissionRevoked
+                    ? "Location permission was revoked. Please grant permission to continue tracking."
+                    : "Server configuration is missing. Please configure your server to continue.";
+
+            var goToSetup = await page.DisplayAlertAsync(
+                "Setup Required",
+                message,
+                "Go to Setup",
+                "Later");
+
+            if (goToSetup)
+            {
+                await Shell.Current.GoToAsync("//onboarding");
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[App] Failed to redirect to onboarding: {ex.Message}");
         }
     }
 
