@@ -4,158 +4,342 @@
              xmlns:vm="clr-namespace:WayfarerMobile.ViewModels"
              xmlns:mapsui="clr-namespace:Mapsui.UI.Maui;assembly=Mapsui.UI.Maui"
              xmlns:controls="clr-namespace:WayfarerMobile.Views.Controls"
+             xmlns:shared="clr-namespace:WayfarerMobile.Shared.Controls"
+             xmlns:bottomSheet="clr-namespace:Syncfusion.Maui.Toolkit.BottomSheet;assembly=Syncfusion.Maui.Toolkit"
              x:Class="WayfarerMobile.MainPage"
              x:DataType="vm:MainViewModel"
-             Title="{Binding Title}"
-             Shell.NavBarIsVisible="False">
+             Title="Map">
 
-    <Grid RowDefinitions="Auto,*,Auto">
+    <Grid>
+        <!-- SfBottomSheet wraps the main content -->
+        <bottomSheet:SfBottomSheet x:Name="CheckInBottomSheet"
+                                   IsOpen="{Binding IsCheckInSheetOpen, Mode=TwoWay}"
+                                   State="FullExpanded"
+                                   AllowedState="All"
+                                   HalfExpandedRatio="0.7"
+                                   FullExpandedRatio="0.95"
+                                   EnableSwiping="True"
+                                   IsModal="True"
+                                   ShowGrabber="True"
+                                   GrabberWidth="40"
+                                   GrabberHeight="4"
+                                   CornerRadius="16"
+                                   Closed="OnCheckInSheetClosed"
+                                   BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
 
-        <!-- Offline Banner (auto-shows when no network) -->
-        <controls:OfflineBanner Grid.Row="0" />
+            <!-- Main Content: Map and overlays -->
+            <bottomSheet:SfBottomSheet.Content>
+                <Grid>
+                    <!-- Offline Banner (auto-shows when no network) -->
+                    <controls:OfflineBanner VerticalOptions="Start" ZIndex="10" />
 
-        <!-- Map takes full screen -->
-        <mapsui:MapControl x:Name="MapControl"
-                           Grid.Row="1"
-                           Map="{Binding Map}" />
+                    <!-- Map takes full screen -->
+                    <mapsui:MapControl x:Name="MapControl"
+                                       Map="{Binding Map}"
+                                       HorizontalOptions="Fill"
+                                       VerticalOptions="Fill"
+                                       ZIndex="0" />
 
-        <!-- Floating status overlay at top -->
-        <Frame Grid.Row="1"
-               VerticalOptions="Start"
-               HorizontalOptions="Center"
-               Margin="0,20,0,0"
-               Padding="15,10"
-               CornerRadius="20"
-               BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}"
-               Opacity="0.95">
-            <HorizontalStackLayout Spacing="15">
-                <VerticalStackLayout>
-                    <Label Text="{Binding StatusText}"
-                           FontSize="14"
-                           FontAttributes="Bold" />
-                    <Label Text="{Binding LocationText}"
-                           FontSize="12"
-                           TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-                </VerticalStackLayout>
-                <Label Text="{Binding LocationCount, StringFormat='{0} pts'}"
-                       FontSize="12"
-                       VerticalOptions="Center"
-                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-            </HorizontalStackLayout>
-        </Frame>
+                    <!-- Floating status overlay at top (2 rows, tappable to copy coords) -->
+                    <Frame VerticalOptions="Start"
+                           HorizontalOptions="Center"
+                           Margin="0,8,0,0"
+                           Padding="12,6"
+                           CornerRadius="16"
+                           BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}"
+                           Opacity="0.95"
+                           ZIndex="5">
+                        <Frame.GestureRecognizers>
+                            <TapGestureRecognizer Command="{Binding CopyCoordinatesCommand}" />
+                        </Frame.GestureRecognizers>
+                        <VerticalStackLayout Spacing="2">
+                            <!-- Row 1: Status + Coordinates -->
+                            <HorizontalStackLayout Spacing="8">
+                                <Label Text="{Binding StatusText}"
+                                       FontSize="13"
+                                       FontAttributes="Bold"
+                                       VerticalOptions="Center" />
+                                <Label Text="{Binding LocationText}"
+                                       FontSize="12"
+                                       VerticalOptions="Center"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                            </HorizontalStackLayout>
+                            <!-- Row 2: Accuracy, Heading, Altitude, Cache Health -->
+                            <HorizontalStackLayout Spacing="8">
+                                <Label Text="{Binding AccuracyText}"
+                                       FontSize="11"
+                                       IsVisible="{Binding HasAccuracy}"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+                                <Label Text="{Binding HeadingText}"
+                                       FontSize="11"
+                                       IsVisible="{Binding HasHeading}"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+                                <Label Text="{Binding AltitudeText, StringFormat='Alt: {0}'}"
+                                       FontSize="11"
+                                       IsVisible="{Binding HasAltitude}"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+                                <!-- Cache health indicator -->
+                                <HorizontalStackLayout Spacing="3" VerticalOptions="Center">
+                                    <Ellipse WidthRequest="7"
+                                             HeightRequest="7"
+                                             Fill="{Binding CacheHealthColor}"
+                                             VerticalOptions="Center" />
+                                    <Label Text="{Binding CacheHealthTooltip}"
+                                           FontSize="11"
+                                           TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}"
+                                           VerticalOptions="Center" />
+                                </HorizontalStackLayout>
+                            </HorizontalStackLayout>
+                        </VerticalStackLayout>
+                    </Frame>
 
-        <!-- Floating map controls on right side -->
-        <VerticalStackLayout Grid.Row="1"
-                             VerticalOptions="Center"
-                             HorizontalOptions="End"
-                             Margin="0,0,15,0"
-                             Spacing="10">
-            <Button Text="📍"
-                    Command="{Binding CenterOnLocationCommand}"
-                    WidthRequest="50"
-                    HeightRequest="50"
-                    CornerRadius="25"
-                    BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}"
-                    TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource Gray100}}"
-                    FontSize="20" />
-            <Button Text="🗺️"
-                    Command="{Binding ZoomToTrackCommand}"
-                    WidthRequest="50"
-                    HeightRequest="50"
-                    CornerRadius="25"
-                    BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}"
-                    TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource Gray100}}"
-                    FontSize="20" />
-            <Button Text="📋"
-                    Command="{Binding ToggleTripSidebarCommand}"
-                    WidthRequest="50"
-                    HeightRequest="50"
-                    CornerRadius="25"
-                    BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}"
-                    TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource Gray100}}"
-                    FontSize="20"
-                    ToolTipProperties.Text="Trip Sidebar" />
-        </VerticalStackLayout>
+                    <!-- Top Right: Reset North -->
+                    <ImageButton Source="explore_compass.png"
+                                 Command="{Binding ResetNorthCommand}"
+                                 VerticalOptions="Start"
+                                 HorizontalOptions="End"
+                                 Margin="0,8,15,0"
+                                 WidthRequest="44"
+                                 HeightRequest="44"
+                                 CornerRadius="22"
+                                 Padding="10"
+                                 BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}"
+                                 ZIndex="5" />
 
-        <!-- Check-in FAB at bottom right (hidden during navigation) -->
-        <Button Grid.Row="1"
-                Text="✓"
-                Command="{Binding CheckInCommand}"
-                IsVisible="{Binding IsNavigating, Converter={StaticResource InvertedBoolConverter}}"
-                WidthRequest="56"
-                HeightRequest="56"
-                CornerRadius="28"
-                BackgroundColor="{StaticResource Primary}"
-                TextColor="White"
-                FontSize="24"
-                FontAttributes="Bold"
-                VerticalOptions="End"
-                HorizontalOptions="End"
-                Margin="0,0,15,15"
-                ToolTipProperties.Text="Check In" />
+                    <!-- Bottom Right: Action FABs (vertical, top to bottom) -->
+                    <VerticalStackLayout VerticalOptions="End"
+                                         HorizontalOptions="End"
+                                         Margin="0,0,15,30"
+                                         Spacing="12"
+                                         ZIndex="5">
+                        <!-- 1. Drop Pin / Context Menu -->
+                        <ImageButton Source="add_location_alt.png"
+                                     Clicked="OnDropPinClicked"
+                                     WidthRequest="44"
+                                     HeightRequest="44"
+                                     CornerRadius="22"
+                                     Padding="10"
+                                     BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}" />
+                        <!-- 2. Recenter on user's location (MIDDLE) -->
+                        <ImageButton Source="crosshair.png"
+                                     Command="{Binding CenterOnLocationCommand}"
+                                     WidthRequest="44"
+                                     HeightRequest="44"
+                                     CornerRadius="22"
+                                     Padding="10"
+                                     BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}" />
+                        <!-- 3. Check-in -->
+                        <ImageButton Source="check.png"
+                                     Command="{Binding CheckInCommand}"
+                                     WidthRequest="44"
+                                     HeightRequest="44"
+                                     CornerRadius="22"
+                                     Padding="10"
+                                     BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}" />
+                    </VerticalStackLayout>
 
-        <!-- Navigation HUD (shown during navigation) -->
-        <controls:NavigationHud Grid.Row="1"
-                                BindingContext="{Binding NavigationHud}"
-                                VerticalOptions="End"
-                                HorizontalOptions="Fill"
-                                Margin="10,0,10,10" />
+                    <!-- Navigation HUD (shown during navigation) -->
+                    <controls:NavigationHud BindingContext="{Binding NavigationHud}"
+                                            VerticalOptions="End"
+                                            HorizontalOptions="Fill"
+                                            Margin="10,0,10,100"
+                                            ZIndex="5" />
+                </Grid>
+            </bottomSheet:SfBottomSheet.Content>
 
-        <!-- Bottom control panel -->
-        <Frame Grid.Row="2"
-               Padding="20,15"
-               CornerRadius="0"
-               BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
-            <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto" RowSpacing="10">
+            <!-- Bottom Sheet Content: Check-In Form -->
+            <bottomSheet:SfBottomSheet.BottomSheetContent>
+                <Grid RowDefinitions="Auto,*,Auto"
+                      BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
 
-                <!-- Main tracking button -->
-                <Button Grid.Row="0"
-                        Grid.ColumnSpan="2"
-                        Text="{Binding TrackingButtonText}"
-                        Command="{Binding ToggleTrackingCommand}"
-                        BackgroundColor="{StaticResource Primary}"
-                        TextColor="White"
-                        FontSize="18"
-                        HeightRequest="50"
-                        CornerRadius="25" />
+                    <!-- Header Section -->
+                    <Grid Grid.Row="0" Padding="16,8,16,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
 
-                <!-- Performance mode buttons -->
-                <HorizontalStackLayout Grid.Row="1"
-                                       Grid.Column="0"
-                                       Spacing="10">
-                    <Button Text="Normal"
-                            Command="{Binding SetPerformanceModeCommand}"
-                            CommandParameter="Normal"
-                            BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                            TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource Gray100}}"
-                            HeightRequest="36"
-                            CornerRadius="18"
-                            FontSize="12" />
-                    <Button Text="High Perf"
-                            Command="{Binding SetPerformanceModeCommand}"
-                            CommandParameter="HighPerformance"
-                            BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                            TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource Gray100}}"
-                            HeightRequest="36"
-                            CornerRadius="18"
-                            FontSize="12" />
-                </HorizontalStackLayout>
+                        <!-- Title -->
+                        <Label Text="Check In"
+                               Style="{StaticResource SubHeadline}"
+                               FontAttributes="Bold"
+                               VerticalOptions="Center" />
 
-                <!-- Pause button -->
-                <Button Grid.Row="1"
-                        Grid.Column="1"
-                        Text="Pause"
-                        Command="{Binding PauseTrackingCommand}"
-                        IsVisible="{Binding IsTracking}"
-                        BackgroundColor="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray600}}"
-                        TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource Gray100}}"
-                        HeightRequest="36"
-                        CornerRadius="18"
-                        FontSize="12" />
+                        <!-- Close Button -->
+                        <Button Grid.Column="1"
+                                Text="✕"
+                                FontSize="16"
+                                WidthRequest="36"
+                                HeightRequest="36"
+                                Padding="0"
+                                CornerRadius="18"
+                                BackgroundColor="Transparent"
+                                TextColor="{StaticResource TextSecondary}"
+                                Clicked="OnCheckInCloseClicked" />
+                    </Grid>
 
-            </Grid>
-        </Frame>
+                    <!-- Form Content -->
+                    <ScrollView Grid.Row="1"
+                                Padding="0,0,0,50">
+                        <VerticalStackLayout Spacing="16" Padding="16,0,16,100">
 
+                            <!-- Location Status with Share Options -->
+                            <Border Padding="12"
+                                    StrokeThickness="1"
+                                    Stroke="{StaticResource Gray200}"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}">
+                                <Border.StrokeShape>
+                                    <RoundRectangle CornerRadius="8" />
+                                </Border.StrokeShape>
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+                                    <Image Grid.Column="0"
+                                           Source="add_location.png"
+                                           WidthRequest="24"
+                                           HeightRequest="24"
+                                           VerticalOptions="Center" />
+                                    <VerticalStackLayout Grid.Column="1"
+                                                         VerticalOptions="Center"
+                                                         Spacing="2"
+                                                         Margin="12,0,0,0">
+                                        <Label Text="{Binding CheckInViewModel.LocationText}"
+                                               FontSize="13"
+                                               FontAttributes="Bold"
+                                               TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource White}}" />
+                                        <Label Text="Current Location"
+                                               FontSize="11"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource Gray400}}" />
+                                    </VerticalStackLayout>
+                                    <!-- Share to Google Maps -->
+                                    <ImageButton Grid.Column="2"
+                                                 Source="share_icon.png"
+                                                 Clicked="OnCheckInShareLocationClicked"
+                                                 WidthRequest="32"
+                                                 HeightRequest="32"
+                                                 Padding="6"
+                                                 BackgroundColor="Transparent"
+                                                 ToolTipProperties.Text="Share Location"
+                                                 IsEnabled="{Binding CheckInViewModel.HasLocation}" />
+                                    <!-- Copy Coordinates -->
+                                    <ImageButton Grid.Column="3"
+                                                 Source="info.png"
+                                                 Clicked="OnCheckInCopyCoordinatesClicked"
+                                                 WidthRequest="32"
+                                                 HeightRequest="32"
+                                                 Padding="6"
+                                                 BackgroundColor="Transparent"
+                                                 ToolTipProperties.Text="Copy Coordinates"
+                                                 IsEnabled="{Binding CheckInViewModel.HasLocation}" />
+                                    <ActivityIndicator Grid.Column="4"
+                                                       IsRunning="{Binding CheckInViewModel.IsBusy}"
+                                                       IsVisible="{Binding CheckInViewModel.IsBusy}"
+                                                       WidthRequest="20"
+                                                       HeightRequest="20"
+                                                       Color="{StaticResource Primary}" />
+                                </Grid>
+                            </Border>
+
+                            <!-- Activity Type -->
+                            <VerticalStackLayout Spacing="4">
+                                <Label Text="Activity Type"
+                                       Style="{StaticResource Caption}"
+                                       FontAttributes="Bold" />
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                    <shared:ComboBox Grid.Column="0"
+                                                     Placeholder="Select an Activity"
+                                                     ItemsSource="{Binding CheckInViewModel.ActivityTypes}"
+                                                     SelectedItem="{Binding CheckInViewModel.SelectedActivity, Mode=TwoWay}"
+                                                     DisplayMemberPath="Name"
+                                                     VisibleItemCount="5" />
+                                    <Button Grid.Column="1"
+                                            Text="↻"
+                                            FontSize="14"
+                                            WidthRequest="36"
+                                            HeightRequest="36"
+                                            CornerRadius="18"
+                                            Padding="0"
+                                            Command="{Binding CheckInViewModel.RefreshActivitiesCommand}"
+                                            IsEnabled="{Binding CheckInViewModel.IsLoadingActivities, Converter={StaticResource InvertedBoolConverter}}"
+                                            BackgroundColor="{StaticResource Gray200}"
+                                            TextColor="{StaticResource Gray600}"
+                                            VerticalOptions="Center" />
+                                </Grid>
+                            </VerticalStackLayout>
+
+                            <!-- Notes -->
+                            <VerticalStackLayout x:Name="NotesSection" Spacing="4">
+                                <Label Text="Notes (optional)"
+                                       Style="{StaticResource Caption}"
+                                       FontAttributes="Bold" />
+                                <Border Padding="8"
+                                        StrokeThickness="1"
+                                        Stroke="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray600}}"
+                                        BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}">
+                                    <Border.StrokeShape>
+                                        <RoundRectangle CornerRadius="8" />
+                                    </Border.StrokeShape>
+                                    <Editor x:Name="NotesEditor"
+                                            Text="{Binding CheckInViewModel.Notes}"
+                                            Placeholder="Add notes about this location..."
+                                            PlaceholderColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
+                                            TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource White}}"
+                                            BackgroundColor="Transparent"
+                                            HeightRequest="80"
+                                            AutoSize="TextChanges"
+                                            Focused="OnNotesEditorFocused" />
+                                </Border>
+                            </VerticalStackLayout>
+
+                        </VerticalStackLayout>
+                    </ScrollView>
+
+                    <!-- Check In Button -->
+                    <Grid Grid.Row="2"
+                          Padding="16"
+                          BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+                        <Button Text="Check In"
+                                Command="{Binding CheckInViewModel.SubmitCheckInCommand}"
+                                IsEnabled="{Binding CheckInViewModel.HasLocation}"
+                                BackgroundColor="{StaticResource Primary}"
+                                TextColor="White"
+                                CornerRadius="8"
+                                HeightRequest="48" />
+                    </Grid>
+
+                    <!-- Loading/Success Overlay -->
+                    <Border Grid.RowSpan="3"
+                            IsVisible="{Binding CheckInViewModel.ShowOverlay}"
+                            BackgroundColor="#80000000">
+                        <VerticalStackLayout VerticalOptions="Center"
+                                             HorizontalOptions="Center"
+                                             Spacing="16">
+                            <!-- Show spinner when submitting, checkmark when success -->
+                            <ActivityIndicator IsRunning="True"
+                                               IsVisible="{Binding CheckInViewModel.IsSubmitting}"
+                                               Color="{StaticResource Primary}"
+                                               WidthRequest="48"
+                                               HeightRequest="48" />
+                            <Label Text="✓"
+                                   IsVisible="{Binding CheckInViewModel.IsSuccess}"
+                                   TextColor="{StaticResource Success}"
+                                   FontSize="48"
+                                   HorizontalOptions="Center" />
+                            <Label Text="{Binding CheckInViewModel.OverlayMessage}"
+                                   TextColor="White"
+                                   FontSize="16" />
+                        </VerticalStackLayout>
+                    </Border>
+                </Grid>
+            </bottomSheet:SfBottomSheet.BottomSheetContent>
+        </bottomSheet:SfBottomSheet>
+
+        <!-- Place Context Menu (outside bottom sheet so it overlays everything) -->
+        <controls:PlaceContextMenu x:Name="ContextMenu"
+                                   IsVisible="{Binding IsContextMenuVisible}"
+                                   Latitude="{Binding ContextMenuLatitude}"
+                                   Longitude="{Binding ContextMenuLongitude}"
+                                   VerticalOptions="Center"
+                                   HorizontalOptions="Center"
+                                   ZIndex="20" />
     </Grid>
 
 </ContentPage>

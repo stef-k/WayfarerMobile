@@ -58,10 +58,30 @@
             <VerticalStackLayout Spacing="16" Padding="16">
 
                 <!-- Activity Type -->
-                <controls:SearchableDropdown Placeholder="Activity Type"
-                                             ItemsSource="{Binding ActivityTypes}"
-                                             SelectedItem="{Binding SelectedActivity, Mode=TwoWay}"
-                                             MinimumSearchLength="0" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <controls:ComboBox Grid.Column="0"
+                                       Placeholder="Select an Activity"
+                                       ItemsSource="{Binding ActivityTypes}"
+                                       SelectedItem="{Binding SelectedActivity, Mode=TwoWay}"
+                                       DisplayMemberPath="Name"
+                                       VisibleItemCount="5" />
+                    <Button Grid.Column="1"
+                            Text="↻"
+                            FontSize="14"
+                            WidthRequest="36"
+                            HeightRequest="36"
+                            CornerRadius="18"
+                            Padding="0"
+                            Command="{Binding RefreshActivitiesCommand}"
+                            IsEnabled="{Binding IsLoadingActivities, Converter={StaticResource InvertedBoolConverter}}"
+                            BackgroundColor="{StaticResource Gray200}"
+                            TextColor="{StaticResource Gray600}"
+                            VerticalOptions="Center" />
+                </Grid>
+                <Label Text="Syncs activities from server"
+                       FontSize="11"
+                       TextColor="{StaticResource Gray400}"
+                       Margin="0,-8,0,0" />
 
                 <!-- Notes -->
                 <VerticalStackLayout Spacing="4">

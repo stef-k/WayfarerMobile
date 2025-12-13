@@ -1,7 +1,9 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Data.Entities;
 using WayfarerMobile.Services;
 
 namespace WayfarerMobile.ViewModels;
@@ -14,6 +16,8 @@ public partial class CheckInViewModel : BaseViewModel
     private readonly ILocationBridge _locationBridge;
     private readonly IApiClient _apiClient;
     private readonly MapService _mapService;
+    private readonly IActivitySyncService _activitySyncService;
+    private readonly IToastService _toastService;
 
     #region Observable Properties
 
@@ -35,25 +39,33 @@ public partial class CheckInViewModel : BaseViewModel
     /// Gets or sets the selected activity type.
     /// </summary>
     [ObservableProperty]
-    private string _selectedActivity = "General";
+    private ActivityType? _selectedActivity;
 
     /// <summary>
     /// Gets or sets whether the check-in is being submitted.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowOverlay))]
     private bool _isSubmitting;
-
-    /// <summary>
-    /// Gets or sets the result message.
-    /// </summary>
-    [ObservableProperty]
-    private string? _resultMessage;
 
     /// <summary>
     /// Gets or sets whether the result is a success.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowOverlay))]
     private bool _isSuccess;
+
+    /// <summary>
+    /// Gets or sets the overlay message text.
+    /// </summary>
+    [ObservableProperty]
+    private string _overlayMessage = "Submitting check-in...";
+
+    /// <summary>
+    /// Gets or sets whether activities are loading.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isLoadingActivities;
 
     #endregion
 
@@ -65,11 +77,33 @@ public partial class CheckInViewModel : BaseViewModel
     public bool HasLocation => CurrentLocation != null;
 
     /// <summary>
-    /// Gets the formatted location text.
+    /// Gets whether the overlay should be shown (submitting or success).
     /// </summary>
-    public string LocationText => CurrentLocation != null
-        ? $"{CurrentLocation.Latitude:F6}, {CurrentLocation.Longitude:F6}"
-        : "Acquiring location...";
+    public bool ShowOverlay => IsSubmitting || IsSuccess;
+
+    /// <summary>
+    /// Gets the formatted location text with age indicator.
+    /// </summary>
+    public string LocationText
+    {
+        get
+        {
+            if (CurrentLocation == null)
+                return "No location available";
+
+            var age = DateTime.UtcNow - CurrentLocation.Timestamp;
+            var coords = $"{CurrentLocation.Latitude:F6}, {CurrentLocation.Longitude:F6}";
+
+            if (age.TotalSeconds < 30)
+                return coords;
+            if (age.TotalMinutes < 5)
+                return $"{coords} ({age.TotalSeconds:F0}s ago)";
+            if (age.TotalHours < 1)
+                return $"{coords} ({age.TotalMinutes:F0}m ago)";
+
+            return $"{coords} (stale)";
+        }
+    }
 
     /// <summary>
     /// Gets the map instance for binding.
@@ -79,18 +113,12 @@ public partial class CheckInViewModel : BaseViewModel
     /// <summary>
     /// Gets the available activity types.
     /// </summary>
-    public List<string> ActivityTypes { get; } = new()
-    {
-        "General",
-        "Work",
-        "Home",
-        "Restaurant",
-        "Shopping",
-        "Travel",
-        "Exercise",
-        "Social",
-        "Other"
-    };
+    public ObservableCollection<ActivityType> ActivityTypes { get; } = [];
+
+    /// <summary>
+    /// Event raised when check-in is successfully completed.
+    /// </summary>
+    public event EventHandler? CheckInCompleted;
 
     #endregion
 
@@ -102,11 +130,15 @@ public partial class CheckInViewModel : BaseViewModel
     public CheckInViewModel(
         ILocationBridge locationBridge,
         IApiClient apiClient,
-        MapService mapService)
+        MapService mapService,
+        IActivitySyncService activitySyncService,
+        IToastService toastService)
     {
         _locationBridge = locationBridge;
         _apiClient = apiClient;
         _mapService = mapService;
+        _activitySyncService = activitySyncService;
+        _toastService = toastService;
         Title = "Check In";
     }
 
@@ -115,31 +147,46 @@ public partial class CheckInViewModel : BaseViewModel
     #region Commands
 
     /// <summary>
-    /// Refreshes the current location.
+    /// Refreshes the current location from the bridge.
     /// </summary>
     [RelayCommand]
-    private async Task RefreshLocationAsync()
+    private void RefreshLocation()
     {
-        if (IsBusy)
+        // Get current location from the bridge (instant)
+        CurrentLocation = _locationBridge.LastLocation;
+
+        if (CurrentLocation != null)
+        {
+            _mapService.UpdateLocation(CurrentLocation, centerMap: true);
+        }
+    }
+
+    /// <summary>
+    /// Refreshes activities from server.
+    /// </summary>
+    [RelayCommand]
+    private async Task RefreshActivitiesAsync()
+    {
+        if (IsLoadingActivities)
             return;
 
         try
         {
-            IsBusy = true;
-            ResultMessage = null;
-
-            // Get current location from the bridge
-            CurrentLocation = _locationBridge.LastLocation;
-
-            if (CurrentLocation != null)
+            IsLoadingActivities = true;
+            var success = await _activitySyncService.SyncWithServerAsync();
+            if (success)
             {
-                _mapService.UpdateLocation(CurrentLocation, centerMap: true);
-                _mapService.SetDefaultZoom();
+                await LoadActivitiesAsync();
+                await _toastService.ShowSuccessAsync("Activities refreshed");
+            }
+            else
+            {
+                await _toastService.ShowWarningAsync("Could not refresh activities");
             }
         }
         finally
         {
-            IsBusy = false;
+            IsLoadingActivities = false;
         }
     }
 
@@ -151,8 +198,7 @@ public partial class CheckInViewModel : BaseViewModel
     {
         if (CurrentLocation == null)
         {
-            ResultMessage = "No location available. Please wait for GPS.";
-            IsSuccess = false;
+            await _toastService.ShowErrorAsync("No location available. Please wait for GPS.");
             return;
         }
 
@@ -162,7 +208,8 @@ public partial class CheckInViewModel : BaseViewModel
         try
         {
             IsSubmitting = true;
-            ResultMessage = null;
+            IsSuccess = false;
+            OverlayMessage = "Submitting check-in...";
 
             var request = new LocationLogRequest
             {
@@ -172,44 +219,47 @@ public partial class CheckInViewModel : BaseViewModel
                 Accuracy = CurrentLocation.Accuracy,
                 Speed = CurrentLocation.Speed,
                 Timestamp = DateTime.UtcNow,
-                Provider = "manual-checkin"
+                Provider = "manual-checkin",
+                ActivityTypeId = SelectedActivity?.Id,
+                Notes = string.IsNullOrWhiteSpace(Notes) ? null : Notes.Trim()
             };
 
             var result = await _apiClient.CheckInAsync(request);
 
+            IsSubmitting = false;
+
             if (result.Success)
             {
-                ResultMessage = "Check-in successful!";
+                // Show success state
                 IsSuccess = true;
+                OverlayMessage = "Check-in successful!";
 
-                // Navigate back after a short delay
+                // Keep success visible for 1.5s so users can see it, then close
                 await Task.Delay(1500);
-                await Shell.Current.GoToAsync("..");
+                CheckInCompleted?.Invoke(this, EventArgs.Empty);
             }
             else
             {
-                ResultMessage = $"Check-in failed: {result.Message}";
-                IsSuccess = false;
+                await _toastService.ShowErrorAsync($"Check-in failed: {result.Message}");
             }
         }
         catch (Exception ex)
         {
-            ResultMessage = $"Error: {ex.Message}";
-            IsSuccess = false;
-        }
-        finally
-        {
             IsSubmitting = false;
+            await _toastService.ShowErrorAsync($"Error: {ex.Message}");
         }
     }
 
     /// <summary>
-    /// Cancels and goes back.
+    /// Resets the form state for a new check-in.
     /// </summary>
-    [RelayCommand]
-    private async Task CancelAsync()
+    public void ResetForm()
     {
-        await Shell.Current.GoToAsync("..");
+        Notes = string.Empty;
+        SelectedActivity = null;
+        IsSuccess = false;
+        IsSubmitting = false;
+        OverlayMessage = "Submitting check-in...";
     }
 
     #endregion
@@ -222,10 +272,76 @@ public partial class CheckInViewModel : BaseViewModel
     public override async Task OnAppearingAsync()
     {
         await base.OnAppearingAsync();
-        await RefreshLocationAsync();
 
-        // Subscribe to location updates
+        // INSTANT: Use last known location immediately for responsiveness
+        CurrentLocation = _locationBridge.LastLocation;
+        if (CurrentLocation != null)
+        {
+            _mapService.UpdateLocation(CurrentLocation, centerMap: true);
+        }
+        else
+        {
+            // Fallback: Try MAUI Geolocation API for quick location
+            _ = TryGetQuickLocationAsync();
+        }
+
+        // Subscribe to location updates for fresh data
         _locationBridge.LocationReceived += OnLocationReceived;
+
+        // Load activities in background (don't block UI)
+        _ = LoadActivitiesAsync();
+
+        // Background sync of activities if needed
+        _ = _activitySyncService.AutoSyncIfNeededAsync();
+    }
+
+    /// <summary>
+    /// Tries to get a quick location using MAUI Geolocation API as fallback.
+    /// </summary>
+    private async Task TryGetQuickLocationAsync()
+    {
+        try
+        {
+            // First try cached location (instant)
+            var cachedLocation = await Geolocation.GetLastKnownLocationAsync();
+            if (cachedLocation != null)
+            {
+                CurrentLocation = new LocationData
+                {
+                    Latitude = cachedLocation.Latitude,
+                    Longitude = cachedLocation.Longitude,
+                    Altitude = cachedLocation.Altitude,
+                    Accuracy = cachedLocation.Accuracy,
+                    Speed = cachedLocation.Speed,
+                    Timestamp = cachedLocation.Timestamp.UtcDateTime,
+                    Provider = "maui-cached"
+                };
+                _mapService.UpdateLocation(CurrentLocation, centerMap: true);
+                return;
+            }
+
+            // If no cached location, try quick GPS fix (5 second timeout)
+            var request = new GeolocationRequest(GeolocationAccuracy.Medium, TimeSpan.FromSeconds(5));
+            var location = await Geolocation.GetLocationAsync(request);
+            if (location != null)
+            {
+                CurrentLocation = new LocationData
+                {
+                    Latitude = location.Latitude,
+                    Longitude = location.Longitude,
+                    Altitude = location.Altitude,
+                    Accuracy = location.Accuracy,
+                    Speed = location.Speed,
+                    Timestamp = location.Timestamp.UtcDateTime,
+                    Provider = "maui-gps"
+                };
+                _mapService.UpdateLocation(CurrentLocation, centerMap: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[CheckInViewModel] Quick location failed: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -247,6 +363,36 @@ public partial class CheckInViewModel : BaseViewModel
             CurrentLocation = location;
             _mapService.UpdateLocation(location, centerMap: CurrentLocation == null);
         });
+    }
+
+    #endregion
+
+    #region Private Methods
+
+    /// <summary>
+    /// Loads activity types from the sync service.
+    /// </summary>
+    private async Task LoadActivitiesAsync()
+    {
+        try
+        {
+            IsLoadingActivities = true;
+
+            var activities = await _activitySyncService.GetActivityTypesAsync();
+
+            ActivityTypes.Clear();
+            foreach (var activity in activities)
+            {
+                ActivityTypes.Add(activity);
+            }
+
+            // Don't auto-select any activity - user must choose or leave empty
+            // SelectedActivity remains null unless user selects one
+        }
+        finally
+        {
+            IsLoadingActivities = false;
+        }
     }
 
     #endregion
