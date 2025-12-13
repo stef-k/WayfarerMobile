@@ -9,7 +9,7 @@ namespace WayfarerMobile.Services;
 public class BatteryMonitorService : IDisposable
 {
     private readonly ILogger<BatteryMonitorService> _logger;
-    private readonly SettingsService _settingsService;
+    private readonly ISettingsService _settingsService;
     private readonly IToastService _toastService;
     private bool _disposed;
     private bool _lowBatteryWarningShown;
@@ -45,7 +45,7 @@ public class BatteryMonitorService : IDisposable
     /// </summary>
     public BatteryMonitorService(
         ILogger<BatteryMonitorService> logger,
-        SettingsService settingsService,
+        ISettingsService settingsService,
         IToastService toastService)
     {
         _logger = logger;

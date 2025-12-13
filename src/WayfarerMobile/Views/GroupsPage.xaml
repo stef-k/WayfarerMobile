@@ -6,9 +6,12 @@
              xmlns:mapsui="clr-namespace:Mapsui.UI.Maui;assembly=Mapsui.UI.Maui"
              xmlns:controls="clr-namespace:WayfarerMobile.Shared.Controls"
              xmlns:segmented="clr-namespace:Syncfusion.Maui.Toolkit.SegmentedControl;assembly=Syncfusion.Maui.Toolkit"
+             xmlns:picker="clr-namespace:Syncfusion.Maui.Toolkit.Picker;assembly=Syncfusion.Maui.Toolkit"
+             xmlns:sys="clr-namespace:System;assembly=netstandard"
              x:Class="WayfarerMobile.Views.GroupsPage"
              x:DataType="viewmodels:GroupsViewModel"
-             Title="{Binding Title}">
+             Title="{Binding Title}"
+             BackgroundColor="{StaticResource Background}">
 
     <Grid RowDefinitions="Auto,*">
 
@@ -32,7 +35,7 @@
         <!-- Main Content (when configured) -->
         <Grid Grid.Row="0" Grid.RowSpan="2"
               IsVisible="{Binding IsConfigured}"
-              RowDefinitions="Auto,Auto,*">
+              RowDefinitions="Auto,Auto,Auto,*">
 
             <!-- Group Selector -->
             <Frame Grid.Row="0"
@@ -67,10 +70,83 @@
                 </Grid>
             </Frame>
 
+            <!-- Date Navigation Header -->
+            <Border Grid.Row="1"
+                    BackgroundColor="{StaticResource Surface}"
+                    Padding="8,12"
+                    Margin="8,0"
+                    StrokeThickness="0"
+                    StrokeShape="RoundRectangle 8">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <!-- Previous Day Button -->
+                    <Button Grid.Column="0"
+                            Text="◀"
+                            Command="{Binding PreviousDayCommand}"
+                            BackgroundColor="Transparent"
+                            TextColor="{StaticResource Primary}"
+                            FontSize="18"
+                            WidthRequest="40"
+                            HeightRequest="40" />
+
+                    <!-- Current Date (tappable to open date picker) -->
+                    <VerticalStackLayout Grid.Column="1"
+                                         HorizontalOptions="Center"
+                                         VerticalOptions="Center"
+                                         Spacing="2">
+                        <VerticalStackLayout.GestureRecognizers>
+                            <TapGestureRecognizer Command="{Binding OpenDatePickerCommand}" />
+                        </VerticalStackLayout.GestureRecognizers>
+                        <HorizontalStackLayout HorizontalOptions="Center" Spacing="6">
+                            <Label Text="{Binding SelectedDateText}"
+                                   FontSize="16"
+                                   FontAttributes="Bold"
+                                   VerticalOptions="Center" />
+                            <Label Text="📅"
+                                   FontSize="14"
+                                   VerticalOptions="Center"
+                                   TextColor="{StaticResource Primary}" />
+                        </HorizontalStackLayout>
+                        <!-- Live indicator when viewing today -->
+                        <HorizontalStackLayout HorizontalOptions="Center"
+                                               Spacing="4"
+                                               IsVisible="{Binding IsToday}">
+                            <Ellipse WidthRequest="8"
+                                     HeightRequest="8"
+                                     Fill="{StaticResource Success}"
+                                     VerticalOptions="Center" />
+                            <Label Text="Live"
+                                   FontSize="11"
+                                   TextColor="{StaticResource Success}"
+                                   VerticalOptions="Center" />
+                        </HorizontalStackLayout>
+                    </VerticalStackLayout>
+
+                    <!-- Next Day / Today Button -->
+                    <HorizontalStackLayout Grid.Column="2" Spacing="2">
+                        <Button Text="Today"
+                                Command="{Binding TodayCommand}"
+                                BackgroundColor="{StaticResource Primary}"
+                                TextColor="White"
+                                FontSize="11"
+                                Padding="10,6"
+                                CornerRadius="14"
+                                HeightRequest="28"
+                                IsVisible="{Binding IsToday, Converter={StaticResource InvertedBoolConverter}}" />
+                        <Button Text="▶"
+                                Command="{Binding NextDayCommand}"
+                                BackgroundColor="Transparent"
+                                TextColor="{StaticResource Primary}"
+                                FontSize="18"
+                                WidthRequest="40"
+                                HeightRequest="40" />
+                    </HorizontalStackLayout>
+                </Grid>
+            </Border>
+
             <!-- View Toggle - Segmented Control -->
-            <segmented:SfSegmentedControl Grid.Row="1"
+            <segmented:SfSegmentedControl Grid.Row="2"
                                           HorizontalOptions="Center"
-                                          Margin="8,0"
+                                          Margin="8,8"
                                           SelectedIndex="{Binding ViewModeIndex, Mode=TwoWay}"
                                           CornerRadius="16"
                                           SegmentCornerRadius="14"
@@ -86,7 +162,7 @@
             </segmented:SfSegmentedControl>
 
             <!-- List View -->
-            <Grid Grid.Row="2" IsVisible="{Binding IsListView}">
+            <Grid Grid.Row="3" IsVisible="{Binding IsListView}">
                 <!-- Shimmer Loading Placeholder -->
                 <controls:ShimmerLoadingView IsActive="{Binding IsLoadingMembers}"
                                              IsVisible="{Binding IsLoadingMembers}" />
@@ -193,7 +269,7 @@
             </Grid>
 
             <!-- Map View -->
-            <Grid Grid.Row="2"
+            <Grid Grid.Row="3"
                   IsVisible="{Binding IsMapView}">
                 <mapsui:MapControl Map="{Binding Map}" />
 
@@ -233,7 +309,7 @@
             </Grid>
 
             <!-- Error Message -->
-            <Frame Grid.Row="2"
+            <Frame Grid.Row="3"
                   VerticalOptions="End"
                   Margin="8"
                   Padding="12"
@@ -250,5 +326,16 @@
         <controls:LoadingOverlay Grid.Row="0" Grid.RowSpan="2"
                                  IsVisible="{Binding IsBusy}"
                                  Message="Loading..." />
+
+        <!-- Date Picker Popup -->
+        <picker:SfDatePicker x:Name="DatePicker"
+                             Grid.RowSpan="2"
+                             IsOpen="{Binding IsDatePickerOpen, Mode=TwoWay}"
+                             Mode="Dialog"
+                             SelectedDate="{Binding SelectedDate}"
+                             MaximumDate="{x:Static sys:DateTime.Today}"
+                             Format="dd_MMM_yyyy"
+                             HeaderView="{picker:PickerHeaderView Height=40, Text='Select Date'}"
+                             FooterView="{picker:PickerFooterView ShowOkButton=True, ShowCancelButton=True}" />
     </Grid>
 </ContentPage>

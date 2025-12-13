@@ -141,8 +141,55 @@ public interface ISettingsService
 
     #endregion
 
+    #region UI Settings
+
+    /// <summary>
+    /// Gets or sets whether dark mode is enabled.
+    /// </summary>
+    bool DarkModeEnabled { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether offline map caching is enabled.
+    /// </summary>
+    bool MapOfflineCacheEnabled { get; set; }
+
+    #endregion
+
+    #region Battery Settings
+
+    /// <summary>
+    /// Gets or sets whether battery warnings are shown.
+    /// </summary>
+    bool ShowBatteryWarnings { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether tracking auto-pauses on critical battery.
+    /// </summary>
+    bool AutoPauseTrackingOnCriticalBattery { get; set; }
+
+    #endregion
+
+    #region User Info
+
+    /// <summary>
+    /// Gets or sets the user email.
+    /// </summary>
+    string? UserEmail { get; set; }
+
+    /// <summary>
+    /// Gets or sets the last sync time.
+    /// </summary>
+    DateTime? LastSyncTime { get; set; }
+
+    #endregion
+
     /// <summary>
     /// Clears all settings (for logout/reset).
     /// </summary>
     void Clear();
+
+    /// <summary>
+    /// Clears authentication data only (server URL and token).
+    /// </summary>
+    void ClearAuth();
 }

@@ -6,51 +6,99 @@
     xmlns:views="clr-namespace:WayfarerMobile.Views"
     xmlns:onboarding="clr-namespace:WayfarerMobile.Views.Onboarding"
     xmlns:local="clr-namespace:WayfarerMobile"
-    Title="WayfarerMobile">
+    Shell.FlyoutBehavior="Flyout"
+    Title="Wayfarer">
 
-    <!-- Onboarding (shown on first run) -->
-    <ShellContent
-        x:Name="OnboardingContent"
-        Route="onboarding"
-        Shell.TabBarIsVisible="False"
-        Shell.NavBarIsVisible="False" />
+    <!-- Flyout Header with App Name -->
+    <Shell.FlyoutHeader>
+        <Grid BackgroundColor="{StaticResource Primary}" Padding="20,50,20,20">
+            <VerticalStackLayout Spacing="5" VerticalOptions="Center">
+                <!-- App icon -->
+                <Image Source="appicon96.png"
+                       WidthRequest="48"
+                       HeightRequest="48"
+                       HorizontalOptions="Start" />
+                <Label Text="Wayfarer"
+                       TextColor="{StaticResource Secondary}"
+                       FontSize="24"
+                       FontAttributes="Bold" />
+                <Label Text="Your personal location timeline and trip companion"
+                       TextColor="White"
+                       FontSize="12"
+                       Opacity="0.9"
+                       LineBreakMode="WordWrap"
+                       MaxLines="2" />
+            </VerticalStackLayout>
+        </Grid>
+    </Shell.FlyoutHeader>
 
-    <!-- Main app tabs -->
-    <TabBar x:Name="MainTabBar" Route="main">
-        <!-- Map Tab -->
+    <!-- Flyout Item Template -->
+    <Shell.ItemTemplate>
+        <DataTemplate>
+            <Grid ColumnDefinitions="Auto,*" Padding="15,12" ColumnSpacing="15">
+                <Image Grid.Column="0"
+                       Source="{Binding FlyoutIcon}"
+                       WidthRequest="24"
+                       HeightRequest="24"
+                       VerticalOptions="Center" />
+                <Label Grid.Column="1"
+                       Text="{Binding Title}"
+                       FontSize="16"
+                       VerticalOptions="Center" />
+            </Grid>
+        </DataTemplate>
+    </Shell.ItemTemplate>
+
+    <!-- Main Flyout Items (Main is first so it's the default) -->
+    <FlyoutItem x:Name="MainFlyoutItem" Title="Map" Route="main" FlyoutIcon="map.png" FlyoutDisplayOptions="AsSingleItem">
         <ShellContent
             x:Name="MainContent"
             Title="Map"
-            Icon="{OnPlatform Android=map, iOS=map}"
             Route="MainPage" />
+    </FlyoutItem>
 
-        <!-- Timeline Tab -->
+    <FlyoutItem x:Name="TimelineFlyoutItem" Title="Timeline" Route="timeline" FlyoutIcon="calendar.png" FlyoutDisplayOptions="AsSingleItem">
         <ShellContent
             x:Name="TimelineContent"
             Title="Timeline"
-            Icon="{OnPlatform Android=timeline, iOS=timeline}"
             Route="TimelinePage" />
+    </FlyoutItem>
 
-        <!-- Trips Tab -->
+    <FlyoutItem x:Name="TripsFlyoutItem" Title="Trips" Route="trips" FlyoutIcon="map.png" FlyoutDisplayOptions="AsSingleItem">
         <ShellContent
             x:Name="TripsContent"
             Title="Trips"
-            Icon="{OnPlatform Android=trips, iOS=trips}"
             Route="TripsPage" />
+    </FlyoutItem>
 
-        <!-- Groups Tab -->
+    <FlyoutItem x:Name="GroupsFlyoutItem" Title="Groups" Route="groups" FlyoutIcon="group.png" FlyoutDisplayOptions="AsSingleItem">
         <ShellContent
             x:Name="GroupsContent"
             Title="Groups"
-            Icon="{OnPlatform Android=people, iOS=people}"
             Route="GroupsPage" />
+    </FlyoutItem>
 
-        <!-- Settings Tab -->
+    <FlyoutItem x:Name="SettingsFlyoutItem" Title="Settings" Route="settings" FlyoutIcon="settings.png" FlyoutDisplayOptions="AsSingleItem">
         <ShellContent
             x:Name="SettingsContent"
             Title="Settings"
-            Icon="{OnPlatform Android=settings, iOS=settings}"
             Route="SettingsPage" />
-    </TabBar>
+    </FlyoutItem>
+
+    <FlyoutItem x:Name="AboutFlyoutItem" Title="About" Route="about" FlyoutIcon="info.png" FlyoutDisplayOptions="AsSingleItem">
+        <ShellContent
+            x:Name="AboutContent"
+            Title="About"
+            Route="AboutPage" />
+    </FlyoutItem>
+
+    <!-- Onboarding (hidden from flyout, only accessible via navigation) -->
+    <ShellItem Route="onboarding" FlyoutItemIsVisible="False">
+        <ShellContent
+            x:Name="OnboardingContent"
+            Shell.FlyoutBehavior="Disabled"
+            Shell.TabBarIsVisible="False"
+            Shell.NavBarIsVisible="False" />
+    </ShellItem>
 
 </Shell>

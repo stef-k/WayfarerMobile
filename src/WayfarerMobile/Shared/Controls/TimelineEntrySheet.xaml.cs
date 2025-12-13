@@ -1,6 +1,5 @@
 using System.Text.RegularExpressions;
 using Syncfusion.Maui.Toolkit.BottomSheet;
-using WayfarerMobile.Core.Enums;
 using WayfarerMobile.ViewModels;
 
 namespace WayfarerMobile.Shared.Controls;
@@ -148,15 +147,9 @@ public partial class TimelineEntrySheet : ContentView
     public string SyncStatusIcon => Entry?.SyncStatusIcon ?? "?";
 
     /// <summary>
-    /// Gets the sync status text.
+    /// Gets the sync status text (server data is always synced).
     /// </summary>
-    public string SyncStatusText => Entry?.Location.SyncStatus switch
-    {
-        SyncStatus.Pending => "Pending",
-        SyncStatus.Synced => "Synced",
-        SyncStatus.Failed => "Failed",
-        _ => "Unknown"
-    };
+    public string SyncStatusText => "Synced";
 
     // Edit mode backing fields
     private DateTime _editDate;
@@ -408,9 +401,12 @@ public partial class TimelineEntrySheet : ContentView
 
             SaveRequested?.Invoke(this, updateArgs);
 
-            // Update local entry after save event
-            Entry.Location.Latitude = updateArgs.Latitude;
-            Entry.Location.Longitude = updateArgs.Longitude;
+            // Update local entry after save event (TimelineLocation stores coords in Coordinates)
+            if (Entry.Location.Coordinates != null)
+            {
+                Entry.Location.Coordinates.Y = updateArgs.Latitude;
+                Entry.Location.Coordinates.X = updateArgs.Longitude;
+            }
             Entry.Location.Notes = updateArgs.Notes;
 
             OnPropertyChanged(nameof(CoordinatesText));

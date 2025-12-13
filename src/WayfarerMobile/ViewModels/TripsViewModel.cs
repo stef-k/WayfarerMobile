@@ -15,7 +15,7 @@ namespace WayfarerMobile.ViewModels;
 /// </summary>
 public partial class TripsViewModel : BaseViewModel
 {
-    private readonly ApiClient _apiClient;
+    private readonly IApiClient _apiClient;
     private readonly ISettingsService _settingsService;
     private readonly MapService _mapService;
     private readonly TripDownloadService _downloadService;
@@ -25,7 +25,6 @@ public partial class TripsViewModel : BaseViewModel
     private readonly ITripSyncService _tripSyncService;
     private readonly IToastService _toastService;
     private readonly IDownloadNotificationService _downloadNotificationService;
-    private readonly HashSet<Guid> _downloadedTripIds = new();
     private IReadOnlyList<SegmentDisplayItem>? _cachedSegmentDisplayItems;
 
     #region Observable Properties
@@ -41,7 +40,6 @@ public partial class TripsViewModel : BaseViewModel
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelectedTrip))]
-    [NotifyPropertyChangedFor(nameof(IsSelectedTripDownloaded))]
     private TripSummary? _selectedTrip;
 
     /// <summary>
@@ -145,6 +143,12 @@ public partial class TripsViewModel : BaseViewModel
     [ObservableProperty]
     private bool _isPlaceDetailsOpen;
 
+    /// <summary>
+    /// Gets or sets whether the selected trip is downloaded for offline use.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isSelectedTripDownloaded;
+
     #endregion
 
     #region Computed Properties
@@ -175,12 +179,6 @@ public partial class TripsViewModel : BaseViewModel
     public IEnumerable<SegmentDisplayItem> SegmentDisplayItems => _cachedSegmentDisplayItems ??= BuildSegmentDisplayItems();
 
     /// <summary>
-    /// Gets whether the selected trip is downloaded.
-    /// </summary>
-    public bool IsSelectedTripDownloaded =>
-        SelectedTrip != null && _downloadedTripIds.Contains(SelectedTrip.Id);
-
-    /// <summary>
     /// Gets whether API is configured.
     /// </summary>
     public bool IsConfigured => _settingsService.IsConfigured;
@@ -203,7 +201,7 @@ public partial class TripsViewModel : BaseViewModel
     /// Creates a new instance of TripsViewModel.
     /// </summary>
     public TripsViewModel(
-        ApiClient apiClient,
+        IApiClient apiClient,
         ISettingsService settingsService,
         MapService mapService,
         TripDownloadService downloadService,
@@ -246,11 +244,40 @@ public partial class TripsViewModel : BaseViewModel
     #region Property Change Handlers
 
     /// <summary>
+    /// Called when SelectedTrip changes - updates download status.
+    /// </summary>
+    partial void OnSelectedTripChanged(TripSummary? value)
+    {
+        _ = UpdateDownloadStatusAsync(value);
+    }
+
+    /// <summary>
     /// Called when SelectedTripDetails changes - invalidates the segment display items cache.
     /// </summary>
     partial void OnSelectedTripDetailsChanged(TripDetails? value)
     {
         _cachedSegmentDisplayItems = null;
+    }
+
+    /// <summary>
+    /// Updates the download status for a trip asynchronously.
+    /// </summary>
+    private async Task UpdateDownloadStatusAsync(TripSummary? trip)
+    {
+        if (trip == null)
+        {
+            IsSelectedTripDownloaded = false;
+            return;
+        }
+
+        try
+        {
+            IsSelectedTripDownloaded = await _downloadService.IsTripDownloadedAsync(trip.Id);
+        }
+        catch
+        {
+            IsSelectedTripDownloaded = false;
+        }
     }
 
     #endregion
@@ -298,8 +325,9 @@ public partial class TripsViewModel : BaseViewModel
             return;
 
         SelectedTrip = trip;
-        await LoadTripDetailsAsync(trip.Id);
+        // Show details view immediately so loading overlay is visible
         ShowingDetails = true;
+        await LoadTripDetailsAsync(trip.Id);
     }
 
     /// <summary>
@@ -573,8 +601,7 @@ public partial class TripsViewModel : BaseViewModel
 
             if (result != null)
             {
-                _downloadedTripIds.Add(SelectedTrip.Id);
-                OnPropertyChanged(nameof(IsSelectedTripDownloaded));
+                IsSelectedTripDownloaded = true;
                 DownloadStatusMessage = "Download complete!";
 
                 // Show completion notification
@@ -643,8 +670,7 @@ public partial class TripsViewModel : BaseViewModel
         try
         {
             await _downloadService.DeleteTripAsync(SelectedTrip.Id);
-            _downloadedTripIds.Remove(SelectedTrip.Id);
-            OnPropertyChanged(nameof(IsSelectedTripDownloaded));
+            IsSelectedTripDownloaded = false;
         }
         catch (Exception ex)
         {
@@ -777,19 +803,6 @@ public partial class TripsViewModel : BaseViewModel
         });
     }
 
-    /// <summary>
-    /// Loads the list of downloaded trip IDs.
-    /// </summary>
-    private async Task LoadDownloadedTripIdsAsync()
-    {
-        var downloaded = await _downloadService.GetDownloadedTripsAsync();
-        _downloadedTripIds.Clear();
-        foreach (var trip in downloaded)
-        {
-            _downloadedTripIds.Add(trip.ServerId);
-        }
-    }
-
     #endregion
 
     #region Lifecycle
@@ -799,8 +812,11 @@ public partial class TripsViewModel : BaseViewModel
     /// </summary>
     public override async Task OnAppearingAsync()
     {
-        // Load downloaded trip IDs first
-        await LoadDownloadedTripIdsAsync();
+        // Refresh download status for selected trip
+        if (SelectedTrip != null)
+        {
+            await UpdateDownloadStatusAsync(SelectedTrip);
+        }
 
         if (!AvailableTrips.Any())
         {

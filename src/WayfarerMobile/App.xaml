@@ -3,7 +3,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:local="clr-namespace:WayfarerMobile"
              xmlns:converters="clr-namespace:WayfarerMobile.Converters"
-             xmlns:zxing="clr-namespace:ZXing.Net.Maui;assembly=ZXing.Net.MAUI.Controls"
              x:Class="WayfarerMobile.App">
     <Application.Resources>
         <ResourceDictionary>
@@ -28,12 +27,6 @@
             <converters:BoolToMuteIconConverter x:Key="BoolToMuteIconConverter" />
             <converters:BoolToOpacityConverter x:Key="BoolToOpacityConverter" />
             <converters:BoolToCheckConverter x:Key="BoolToCheckConverter" />
-
-            <!-- QR Scanner Options -->
-            <zxing:BarcodeReaderOptions x:Key="QrScannerOptions"
-                                         Formats="QrCode"
-                                         AutoRotate="True"
-                                         Multiple="False" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

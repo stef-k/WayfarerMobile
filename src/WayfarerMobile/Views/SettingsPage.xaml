@@ -99,7 +99,7 @@
             </sfExpander:SfExpander>
 
             <!-- Navigation Section -->
-            <sfExpander:SfExpander IsExpanded="False">
+            <sfExpander:SfExpander IsExpanded="True">
                 <sfExpander:SfExpander.Header>
                     <Grid HeightRequest="48" Padding="10,0">
                         <Label Text="Navigation"
@@ -187,7 +187,7 @@
             </sfExpander:SfExpander>
 
             <!-- Map Section -->
-            <sfExpander:SfExpander IsExpanded="False">
+            <sfExpander:SfExpander IsExpanded="True">
                 <sfExpander:SfExpander.Header>
                     <Grid HeightRequest="48" Padding="10,0">
                         <Label Text="Map"
@@ -215,7 +215,7 @@
             </sfExpander:SfExpander>
 
             <!-- Appearance Section -->
-            <sfExpander:SfExpander IsExpanded="False">
+            <sfExpander:SfExpander IsExpanded="True">
                 <sfExpander:SfExpander.Header>
                     <Grid HeightRequest="48" Padding="10,0">
                         <Label Text="Appearance"
@@ -243,7 +243,7 @@
             </sfExpander:SfExpander>
 
             <!-- Battery Section -->
-            <sfExpander:SfExpander IsExpanded="False">
+            <sfExpander:SfExpander IsExpanded="True">
                 <sfExpander:SfExpander.Header>
                     <Grid HeightRequest="48" Padding="10,0">
                         <Label Text="Battery"
@@ -356,11 +356,11 @@
                 </sfExpander:SfExpander.Content>
             </sfExpander:SfExpander>
 
-            <!-- About Section -->
+            <!-- Diagnostics Section -->
             <sfExpander:SfExpander IsExpanded="False">
                 <sfExpander:SfExpander.Header>
                     <Grid HeightRequest="48" Padding="10,0">
-                        <Label Text="About"
+                        <Label Text="Diagnostics"
                                FontSize="16"
                                FontAttributes="Bold"
                                VerticalOptions="Center" />
@@ -372,12 +372,7 @@
                                FontSize="14"
                                TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
 
-                        <Button Text="About WayfarerMobile"
-                                Command="{Binding ShowAboutCommand}"
-                                Style="{StaticResource DarkButton}"
-                                HeightRequest="44" />
-
-                        <Button Text="Diagnostics"
+                        <Button Text="View Diagnostics"
                                 Command="{Binding ShowDiagnosticsCommand}"
                                 Style="{StaticResource DarkButton}"
                                 HeightRequest="44" />

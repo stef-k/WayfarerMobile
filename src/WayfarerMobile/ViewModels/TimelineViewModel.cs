@@ -1,9 +1,8 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
-using WayfarerMobile.Data.Entities;
+using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Services;
 using WayfarerMobile.Services;
 using WayfarerMobile.Shared.Controls;
@@ -17,6 +16,7 @@ public partial class TimelineViewModel : BaseViewModel
 {
     #region Fields
 
+    private readonly IApiClient _apiClient;
     private readonly DatabaseService _database;
     private readonly ITimelineSyncService _timelineSyncService;
     private readonly IToastService _toastService;
@@ -101,10 +101,12 @@ public partial class TimelineViewModel : BaseViewModel
     /// Creates a new instance of TimelineViewModel.
     /// </summary>
     public TimelineViewModel(
+        IApiClient apiClient,
         DatabaseService database,
         ITimelineSyncService timelineSyncService,
         IToastService toastService)
     {
+        _apiClient = apiClient;
         _database = database;
         _timelineSyncService = timelineSyncService;
         _toastService = toastService;
@@ -121,7 +123,7 @@ public partial class TimelineViewModel : BaseViewModel
     #region Commands
 
     /// <summary>
-    /// Loads timeline data from the database.
+    /// Loads timeline data from the server API.
     /// </summary>
     [RelayCommand]
     private async Task LoadDataAsync()
@@ -134,20 +136,38 @@ public partial class TimelineViewModel : BaseViewModel
             IsBusy = true;
             IsRefreshing = true;
 
-            var locations = await _database.GetLocationsForDateAsync(SelectedDate);
+            // Fetch from server API
+            var response = await _apiClient.GetTimelineLocationsAsync(
+                dateType: "day",
+                year: SelectedDate.Year,
+                month: SelectedDate.Month,
+                day: SelectedDate.Day);
 
-            // Group by hour for better organization
-            var groups = locations
-                .GroupBy(l => l.Timestamp.Hour)
+            if (response?.Data == null || !response.Data.Any())
+            {
+                TimelineGroups = new ObservableCollection<TimelineGroup>();
+                TotalCount = 0;
+                IsEmpty = true;
+                return;
+            }
+
+            // Group by hour for better organization (use LocalTimestamp for grouping)
+            var groups = response.Data
+                .GroupBy(l => l.LocalTimestamp.Hour)
                 .OrderByDescending(g => g.Key)
                 .Select(g => new TimelineGroup(
                     $"{g.Key:00}:00 - {g.Key:00}:59",
-                    g.OrderByDescending(l => l.Timestamp).ToList()))
+                    g.OrderByDescending(l => l.LocalTimestamp).ToList()))
                 .ToList();
 
             TimelineGroups = new ObservableCollection<TimelineGroup>(groups);
-            TotalCount = locations.Count;
+            TotalCount = response.TotalItems;
             IsEmpty = !groups.Any();
+        }
+        catch (Exception ex)
+        {
+            await _toastService.ShowErrorAsync($"Failed to load timeline: {ex.Message}");
+            IsEmpty = true;
         }
         finally
         {
@@ -256,11 +276,11 @@ public partial class TimelineViewModel : BaseViewModel
     public async Task SaveEntryChangesAsync(TimelineEntryUpdateEventArgs e)
     {
         // Apply optimistic UI update to the local item
-        if (SelectedEntry != null)
+        if (SelectedEntry != null && SelectedEntry.Location.Coordinates != null)
         {
-            SelectedEntry.Location.Latitude = e.Latitude;
-            SelectedEntry.Location.Longitude = e.Longitude;
-            SelectedEntry.Location.Timestamp = e.LocalTimestamp;
+            SelectedEntry.Location.Coordinates.Y = e.Latitude;
+            SelectedEntry.Location.Coordinates.X = e.Longitude;
+            SelectedEntry.Location.LocalTimestamp = e.LocalTimestamp;
             SelectedEntry.Location.Notes = e.Notes;
         }
 
@@ -347,9 +367,9 @@ public class TimelineGroup : List<TimelineItem>
     public string Header { get; }
 
     /// <summary>
-    /// Creates a new timeline group.
+    /// Creates a new timeline group from server locations.
     /// </summary>
-    public TimelineGroup(string header, IEnumerable<QueuedLocation> locations) : base()
+    public TimelineGroup(string header, IEnumerable<TimelineLocation> locations) : base()
     {
         Header = header;
         AddRange(locations.Select(l => new TimelineItem(l)));
@@ -362,19 +382,46 @@ public class TimelineGroup : List<TimelineItem>
 public class TimelineItem
 {
     /// <summary>
-    /// Gets the underlying location data.
+    /// Gets the underlying location data from server.
     /// </summary>
-    public QueuedLocation Location { get; }
+    public TimelineLocation Location { get; }
+
+    /// <summary>
+    /// Gets the location ID.
+    /// </summary>
+    public int LocationId => Location.Id;
 
     /// <summary>
     /// Gets the formatted time.
     /// </summary>
-    public string TimeText => Location.Timestamp.ToLocalTime().ToString("HH:mm:ss");
+    public string TimeText => Location.LocalTimestamp.ToString("HH:mm:ss");
 
     /// <summary>
     /// Gets the formatted coordinates.
     /// </summary>
-    public string CoordinatesText => $"{Location.Latitude:F6}, {Location.Longitude:F6}";
+    public string CoordinatesText => Location.Coordinates != null
+        ? $"{Location.Coordinates.Y:F6}, {Location.Coordinates.X:F6}"
+        : "Unknown";
+
+    /// <summary>
+    /// Gets the latitude.
+    /// </summary>
+    public double? Latitude => Location.Coordinates?.Y;
+
+    /// <summary>
+    /// Gets the longitude.
+    /// </summary>
+    public double? Longitude => Location.Coordinates?.X;
+
+    /// <summary>
+    /// Gets the local timestamp.
+    /// </summary>
+    public DateTime LocalTimestamp => Location.LocalTimestamp;
+
+    /// <summary>
+    /// Gets the notes.
+    /// </summary>
+    public string? Notes => Location.Notes;
 
     /// <summary>
     /// Gets the accuracy text.
@@ -395,20 +442,14 @@ public class TimelineItem
     };
 
     /// <summary>
-    /// Gets the sync status icon.
+    /// Gets the sync status icon (always synced for server data).
     /// </summary>
-    public string SyncStatusIcon => Location.SyncStatus switch
-    {
-        SyncStatus.Pending => "⏳",
-        SyncStatus.Synced => "✓",
-        SyncStatus.Failed => "✗",
-        _ => "?"
-    };
+    public string SyncStatusIcon => "✓";
 
     /// <summary>
     /// Gets the provider text.
     /// </summary>
-    public string ProviderText => Location.Provider ?? "Unknown";
+    public string ProviderText => Location.LocationType ?? "Unknown";
 
     /// <summary>
     /// Gets the speed text if available.
@@ -418,9 +459,9 @@ public class TimelineItem
         : null;
 
     /// <summary>
-    /// Creates a new timeline item.
+    /// Creates a new timeline item from server location.
     /// </summary>
-    public TimelineItem(QueuedLocation location)
+    public TimelineItem(TimelineLocation location)
     {
         Location = location;
     }

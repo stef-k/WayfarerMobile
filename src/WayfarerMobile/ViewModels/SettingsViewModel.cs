@@ -1,7 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WayfarerMobile.Core.Interfaces;
-using WayfarerMobile.Services;
 
 namespace WayfarerMobile.ViewModels;
 
@@ -12,7 +11,7 @@ public partial class SettingsViewModel : BaseViewModel
 {
     #region Fields
 
-    private readonly SettingsService _settingsService;
+    private readonly ISettingsService _settingsService;
     private readonly IAppLockService _appLockService;
 
     #endregion
@@ -140,7 +139,7 @@ public partial class SettingsViewModel : BaseViewModel
     /// </summary>
     /// <param name="settingsService">The settings service.</param>
     /// <param name="appLockService">The app lock service.</param>
-    public SettingsViewModel(SettingsService settingsService, IAppLockService appLockService)
+    public SettingsViewModel(ISettingsService settingsService, IAppLockService appLockService)
     {
         _settingsService = settingsService;
         _appLockService = appLockService;

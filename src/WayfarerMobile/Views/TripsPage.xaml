@@ -97,9 +97,10 @@
                                         <!-- Trip Name -->
                                         <Label Grid.Row="0"
                                                Text="{Binding Name}"
-                                               Style="{StaticResource SubHeadline}"
+                                               FontSize="14"
                                                FontAttributes="Bold"
-                                               LineBreakMode="TailTruncation" />
+                                               LineBreakMode="WordWrap"
+                                               MaxLines="2" />
 
                                         <!-- Public Badge -->
                                         <Border Grid.Row="0" Grid.Column="1"
@@ -143,7 +144,7 @@
 
                 <!-- Drawer Settings -->
                 <navDrawer:SfNavigationDrawer.DrawerSettings>
-                    <navDrawer:DrawerSettings Position="Right"
+                    <navDrawer:DrawerSettings Position="Left"
                                               DrawerWidth="300"
                                               DrawerHeaderHeight="60"
                                               DrawerFooterHeight="0"
@@ -407,8 +408,8 @@
                                     Padding="16,8"
                                     CornerRadius="20"
                                     VerticalOptions="Start"
-                                    HorizontalOptions="End"
-                                    Margin="0,16,16,0" />
+                                    HorizontalOptions="Start"
+                                    Margin="16,16,0,0" />
                         </Grid>
                     </Grid>
                 </navDrawer:SfNavigationDrawer.ContentView>

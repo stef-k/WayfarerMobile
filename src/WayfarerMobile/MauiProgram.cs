@@ -11,6 +11,7 @@ using WayfarerMobile.Services.TileCache;
 using WayfarerMobile.ViewModels;
 using WayfarerMobile.Views;
 using WayfarerMobile.Views.Onboarding;
+using SkiaSharp.Views.Maui.Controls.Hosting;
 using ZXing.Net.Maui.Controls;
 
 namespace WayfarerMobile;
@@ -29,6 +30,7 @@ public static class MauiProgram
         var builder = MauiApp.CreateBuilder();
         builder
             .UseMauiApp<App>()
+            .UseSkiaSharp()
             .ConfigureSyncfusionToolkit()
             .UseBarcodeReader()
             .ConfigureFonts(fonts =>
@@ -96,20 +98,39 @@ public static class MauiProgram
         // Configure named HttpClient instances via IHttpClientFactory
         ConfigureHttpClients(services);
 
+        // Platform Services (must be registered first - many services depend on these)
+#if ANDROID
+        services.AddSingleton<ILocationBridge, WayfarerMobile.Platforms.Android.Services.LocationBridge>();
+        services.AddSingleton<IWakeLockService, WayfarerMobile.Platforms.Android.Services.WakeLockService>();
+#elif IOS
+        services.AddSingleton<ILocationBridge, WayfarerMobile.Platforms.iOS.Services.LocationBridge>();
+        services.AddSingleton<IWakeLockService, WayfarerMobile.Platforms.iOS.Services.WakeLockService>();
+#endif
+
         // Infrastructure Services
         services.AddSingleton<DatabaseService>();
-        services.AddSingleton<LocationIndicatorService>();
-        services.AddSingleton<MapService>();
         services.AddSingleton<ISettingsService, SettingsService>();
 
-        // API and Sync Services
+        // API and Sync Services (some needed by tile cache)
         services.AddSingleton<IApiClient, ApiClient>();
         services.AddSingleton<LocationSyncService>();
         services.AddSingleton<ITripSyncService, TripSyncService>();
         services.AddSingleton<ITimelineSyncService, TimelineSyncService>();
+        services.AddSingleton<IActivitySyncService, ActivitySyncService>();
+        services.AddSingleton<SettingsSyncService>(); // Syncs settings + activities every 6 hours
         services.AddSingleton<IGroupsService, GroupsService>();
         services.AddSingleton<NavigationService>();
         services.AddSingleton<TripDownloadService>();
+
+        // Tile Cache Services (depends on TripDownloadService, ILocationBridge)
+        services.AddSingleton<LiveTileCacheService>();
+        services.AddSingleton<UnifiedTileCacheService>();
+        services.AddSingleton<WayfarerTileSource>();
+        services.AddSingleton<Services.TileCache.CacheOverlayService>();
+
+        // Map Services (depends on tile cache)
+        services.AddSingleton<LocationIndicatorService>();
+        services.AddSingleton<MapService>();
 
         // Routing Services
         services.AddSingleton<OsrmRoutingService>();
@@ -154,20 +175,6 @@ public static class MauiProgram
 
         // SSE Client Factory (for real-time updates)
         services.AddSingleton<ISseClientFactory, SseClientFactory>();
-
-        // Tile Cache Services
-        services.AddSingleton<LiveTileCacheService>();
-        services.AddSingleton<UnifiedTileCacheService>();
-        services.AddSingleton<Services.TileCache.CacheOverlayService>();
-
-        // Platform Services (registered conditionally)
-#if ANDROID
-        services.AddSingleton<ILocationBridge, WayfarerMobile.Platforms.Android.Services.LocationBridge>();
-        services.AddSingleton<IWakeLockService, WayfarerMobile.Platforms.Android.Services.WakeLockService>();
-#elif IOS
-        services.AddSingleton<ILocationBridge, WayfarerMobile.Platforms.iOS.Services.LocationBridge>();
-        services.AddSingleton<IWakeLockService, WayfarerMobile.Platforms.iOS.Services.WakeLockService>();
-#endif
 
         // ViewModels
         services.AddTransient<MainViewModel>();

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
@@ -8,9 +9,16 @@ namespace WayfarerMobile.Platforms.iOS.Services;
 /// <summary>
 /// iOS implementation of ILocationBridge.
 /// Bridges between the iOS LocationTrackingService and the MAUI UI layer.
+/// Persists last location for instant availability on cold start.
 /// </summary>
 public class LocationBridge : ILocationBridge, IDisposable
 {
+    #region Constants
+
+    private const string LastLocationKey = "last_known_location";
+
+    #endregion
+
     #region Fields
 
     private bool _isRegistered;
@@ -66,10 +74,16 @@ public class LocationBridge : ILocationBridge, IDisposable
 
     /// <summary>
     /// Creates a new instance of LocationBridge and registers for callbacks.
+    /// Loads persisted location for instant availability.
     /// </summary>
     public LocationBridge()
     {
+        // Load persisted location for instant availability
+        LastLocation = LoadPersistedLocation();
+
         Register();
+
+        System.Diagnostics.Debug.WriteLine($"[iOS LocationBridge] Initialized, persisted location: {(LastLocation != null ? "available" : "none")}");
     }
 
     #endregion
@@ -78,10 +92,12 @@ public class LocationBridge : ILocationBridge, IDisposable
 
     /// <summary>
     /// Handles location updates from the service.
+    /// Persists location for instant availability on next app start.
     /// </summary>
     private void OnLocationReceived(object? sender, LocationData location)
     {
         LastLocation = location;
+        PersistLocation(location);
         LocationReceived?.Invoke(this, location);
     }
 
@@ -197,6 +213,45 @@ public class LocationBridge : ILocationBridge, IDisposable
 
         Unregister();
         _disposed = true;
+    }
+
+    #endregion
+
+    #region Location Persistence
+
+    /// <summary>
+    /// Persists location to preferences for instant availability on cold start.
+    /// </summary>
+    private static void PersistLocation(LocationData location)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(location);
+            Preferences.Set(LastLocationKey, json);
+        }
+        catch
+        {
+            // Non-critical, ignore persistence errors
+        }
+    }
+
+    /// <summary>
+    /// Loads persisted location from preferences.
+    /// </summary>
+    private static LocationData? LoadPersistedLocation()
+    {
+        try
+        {
+            var json = Preferences.Get(LastLocationKey, string.Empty);
+            if (string.IsNullOrEmpty(json))
+                return null;
+
+            return JsonSerializer.Deserialize<LocationData>(json);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     #endregion

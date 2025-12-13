@@ -11,7 +11,7 @@ namespace WayfarerMobile.Services;
 /// </summary>
 public class TripDownloadService
 {
-    private readonly ApiClient _apiClient;
+    private readonly IApiClient _apiClient;
     private readonly DatabaseService _databaseService;
     private readonly ISettingsService _settingsService;
     private readonly ILogger<TripDownloadService> _logger;
@@ -39,7 +39,7 @@ public class TripDownloadService
     /// Creates a new instance of TripDownloadService.
     /// </summary>
     public TripDownloadService(
-        ApiClient apiClient,
+        IApiClient apiClient,
         DatabaseService databaseService,
         ISettingsService settingsService,
         ILogger<TripDownloadService> logger)

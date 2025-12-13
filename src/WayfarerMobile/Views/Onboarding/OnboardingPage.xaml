@@ -71,7 +71,7 @@
                             HeightRequest="50"
                             CornerRadius="25" />
 
-                    <Label Text="- or -"
+                    <Label Text="- or enter manually -"
                            HorizontalOptions="Center"
                            TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
 
@@ -80,7 +80,12 @@
                            Keyboard="Url"
                            HeightRequest="50" />
 
-                    <Button Text="Save Server URL"
+                    <Entry Placeholder="API Token"
+                           Text="{Binding ApiToken}"
+                           IsPassword="True"
+                           HeightRequest="50" />
+
+                    <Button Text="Save Configuration"
                             Command="{Binding SaveServerUrlCommand}"
                             Style="{StaticResource DarkButton}"
                             HeightRequest="44"

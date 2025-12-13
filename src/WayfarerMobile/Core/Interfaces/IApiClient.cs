@@ -134,6 +134,49 @@ public interface IApiClient
 
     #endregion
 
+    #region Trip Operations
+
+    /// <summary>
+    /// Gets the list of trips from the server.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>List of trip summaries.</returns>
+    Task<List<TripSummary>> GetTripsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets trip details by ID.
+    /// </summary>
+    /// <param name="tripId">The trip ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Trip details or null if not found.</returns>
+    Task<TripDetails?> GetTripDetailsAsync(Guid tripId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets public trips with search and pagination.
+    /// </summary>
+    /// <param name="searchQuery">Optional search query.</param>
+    /// <param name="sort">Sort option (updated, newest, name, places).</param>
+    /// <param name="page">Page number (1-based).</param>
+    /// <param name="pageSize">Number of items per page.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Paginated public trips response.</returns>
+    Task<PublicTripsResponse?> GetPublicTripsAsync(
+        string? searchQuery = null,
+        string sort = "updated",
+        int page = 1,
+        int pageSize = 24,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Clones a public trip to the current user's account.
+    /// </summary>
+    /// <param name="tripId">The trip ID to clone.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Clone response with new trip ID.</returns>
+    Task<CloneTripResponse?> CloneTripAsync(Guid tripId, CancellationToken cancellationToken = default);
+
+    #endregion
+
     #region Timeline Operations
 
     /// <summary>

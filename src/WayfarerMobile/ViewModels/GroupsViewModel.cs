@@ -103,6 +103,7 @@ public partial class GroupsViewModel : BaseViewModel
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsToday))]
     [NotifyPropertyChangedFor(nameof(ShowHistoricalToggle))]
+    [NotifyPropertyChangedFor(nameof(SelectedDateText))]
     private DateTime _selectedDate = DateTime.Today;
 
     /// <summary>
@@ -112,9 +113,22 @@ public partial class GroupsViewModel : BaseViewModel
     private bool _showHistoricalLocations;
 
     /// <summary>
+    /// Gets or sets whether the date picker is open.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isDatePickerOpen;
+
+    /// <summary>
     /// Gets whether list view is active.
     /// </summary>
     public bool IsListView => !IsMapView;
+
+    /// <summary>
+    /// Gets the formatted selected date text.
+    /// </summary>
+    public string SelectedDateText => SelectedDate.Date == DateTime.Today
+        ? "Today"
+        : SelectedDate.ToString("ddd, MMM d, yyyy");
 
     /// <summary>
     /// Gets whether the selected date is today.
@@ -455,6 +469,45 @@ public partial class GroupsViewModel : BaseViewModel
     private void SelectDate(DateTime date)
     {
         SelectedDate = date;
+    }
+
+    /// <summary>
+    /// Navigates to the previous day.
+    /// </summary>
+    [RelayCommand]
+    private void PreviousDay()
+    {
+        SelectedDate = SelectedDate.AddDays(-1);
+    }
+
+    /// <summary>
+    /// Navigates to the next day (not beyond today).
+    /// </summary>
+    [RelayCommand]
+    private void NextDay()
+    {
+        if (SelectedDate.Date < DateTime.Today)
+        {
+            SelectedDate = SelectedDate.AddDays(1);
+        }
+    }
+
+    /// <summary>
+    /// Navigates to today (live mode).
+    /// </summary>
+    [RelayCommand]
+    private void Today()
+    {
+        SelectedDate = DateTime.Today;
+    }
+
+    /// <summary>
+    /// Opens the date picker dialog.
+    /// </summary>
+    [RelayCommand]
+    private void OpenDatePicker()
+    {
+        IsDatePickerOpen = true;
     }
 
     /// <summary>

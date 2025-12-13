@@ -12,7 +12,7 @@ public class DiagnosticService
 {
     private readonly ILogger<DiagnosticService> _logger;
     private readonly ILocationBridge _locationBridge;
-    private readonly SettingsService _settingsService;
+    private readonly ISettingsService _settingsService;
     private readonly IPermissionsService _permissionsService;
 
     /// <summary>
@@ -21,7 +21,7 @@ public class DiagnosticService
     public DiagnosticService(
         ILogger<DiagnosticService> logger,
         ILocationBridge locationBridge,
-        SettingsService settingsService,
+        ISettingsService settingsService,
         IPermissionsService permissionsService)
     {
         _logger = logger;
@@ -124,7 +124,7 @@ public class DiagnosticService
     /// <returns>System information object.</returns>
     public SystemInfo GetSystemInfo()
     {
-        return new SystemInfo
+        var info = new SystemInfo
         {
             Platform = DeviceInfo.Platform.ToString(),
             OsVersion = DeviceInfo.VersionString,
@@ -132,12 +132,27 @@ public class DiagnosticService
             DeviceManufacturer = DeviceInfo.Manufacturer,
             DeviceType = DeviceInfo.DeviceType.ToString(),
             AppVersion = AppInfo.Current.VersionString,
-            AppBuild = AppInfo.Current.BuildString,
-            BatteryLevel = Battery.Default.ChargeLevel,
-            BatteryState = Battery.Default.State.ToString(),
-            PowerSource = Battery.Default.PowerSource.ToString(),
-            IsEnergySaver = Battery.Default.EnergySaverStatus == EnergySaverStatus.On
+            AppBuild = AppInfo.Current.BuildString
         };
+
+        // Battery info may fail on some devices without BATTERY_STATS permission
+        try
+        {
+            info.BatteryLevel = Battery.Default.ChargeLevel;
+            info.BatteryState = Battery.Default.State.ToString();
+            info.PowerSource = Battery.Default.PowerSource.ToString();
+            info.IsEnergySaver = Battery.Default.EnergySaverStatus == EnergySaverStatus.On;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not read battery info");
+            info.BatteryLevel = -1;
+            info.BatteryState = "Unknown";
+            info.PowerSource = "Unknown";
+            info.IsEnergySaver = false;
+        }
+
+        return info;
     }
 
     /// <summary>
@@ -289,9 +304,18 @@ public class DiagnosticService
         report.AppendLine($"   Device: {info.DeviceManufacturer} {info.DeviceModel}");
         report.AppendLine($"   Device Type: {info.DeviceType}");
         report.AppendLine($"   App Version: {info.AppVersion} ({info.AppBuild})");
-        report.AppendLine($"   Battery: {info.BatteryLevel:P0} ({info.BatteryState})");
-        report.AppendLine($"   Power Source: {info.PowerSource}");
-        report.AppendLine($"   Energy Saver: {(info.IsEnergySaver ? "ON" : "OFF")}");
+
+        // Battery info may be unavailable on some devices
+        if (info.BatteryLevel >= 0)
+        {
+            report.AppendLine($"   Battery: {info.BatteryLevel:P0} ({info.BatteryState})");
+            report.AppendLine($"   Power Source: {info.PowerSource}");
+            report.AppendLine($"   Energy Saver: {(info.IsEnergySaver ? "ON" : "OFF")}");
+        }
+        else
+        {
+            report.AppendLine("   Battery: Not available");
+        }
     }
 
     private void AppendAppSettingsStatus(StringBuilder report)
@@ -480,4 +504,11 @@ public class LogFileInfo
 
     /// <summary>Gets or sets the last modified date.</summary>
     public DateTime LastModified { get; set; }
+
+    /// <summary>Gets the formatted size text.</summary>
+    public string SizeText => Size < 1024
+        ? $"{Size} B"
+        : Size < 1024 * 1024
+            ? $"{Size / 1024.0:F1} KB"
+            : $"{Size / (1024.0 * 1024):F1} MB";
 }

@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Services;
 
@@ -12,7 +13,7 @@ namespace WayfarerMobile.ViewModels;
 /// </summary>
 public partial class PublicTripsViewModel : BaseViewModel
 {
-    private readonly ApiClient _apiClient;
+    private readonly IApiClient _apiClient;
     private readonly ILogger<PublicTripsViewModel> _logger;
 
     private int _currentPage = 1;
@@ -72,7 +73,7 @@ public partial class PublicTripsViewModel : BaseViewModel
     /// <param name="apiClient">The API client.</param>
     /// <param name="logger">The logger instance.</param>
     public PublicTripsViewModel(
-        ApiClient apiClient,
+        IApiClient apiClient,
         ILogger<PublicTripsViewModel> logger)
     {
         _apiClient = apiClient;

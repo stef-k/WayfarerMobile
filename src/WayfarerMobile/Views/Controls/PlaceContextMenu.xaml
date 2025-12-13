@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView
+    x:Class="WayfarerMobile.Views.Controls.PlaceContextMenu"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    x:Name="ContextMenuRoot">
+
+    <!-- Dark themed context menu overlay -->
+    <Frame
+        Padding="12"
+        BackgroundColor="#2B2B2B"
+        CornerRadius="12"
+        HasShadow="True"
+        WidthRequest="280">
+
+        <VerticalStackLayout Spacing="8">
+
+            <!-- Header with coordinates and close button -->
+            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+                <VerticalStackLayout Grid.Column="0">
+                    <Label
+                        FontAttributes="Bold"
+                        FontSize="16"
+                        Text="Location Options"
+                        TextColor="White" />
+                    <Label
+                        FontSize="12"
+                        Text="{Binding CoordinatesText, Source={x:Reference ContextMenuRoot}}"
+                        TextColor="#AAAAAA" />
+                </VerticalStackLayout>
+
+                <ImageButton
+                    Grid.Column="1"
+                    BackgroundColor="Transparent"
+                    Clicked="OnCloseClicked"
+                    HeightRequest="28"
+                    WidthRequest="28"
+                    Padding="4"
+                    Source="close.png" />
+            </Grid>
+
+            <!-- Separator -->
+            <BoxView BackgroundColor="#505050" HeightRequest="1" />
+
+            <!-- Action Buttons -->
+            <VerticalStackLayout Spacing="6">
+
+                <!-- Navigate In-App -->
+                <Button
+                    BackgroundColor="Transparent"
+                    BorderColor="#666666"
+                    BorderWidth="1"
+                    Clicked="OnNavigateToClicked"
+                    ContentLayout="Left,10"
+                    FontSize="14"
+                    HeightRequest="44"
+                    HorizontalOptions="Fill"
+                    ImageSource="navigate.png"
+                    Text="Navigate (In-App)"
+                    TextColor="White" />
+
+                <!-- Navigate via Google Maps -->
+                <Button
+                    BackgroundColor="Transparent"
+                    BorderColor="#666666"
+                    BorderWidth="1"
+                    Clicked="OnNavigateGoogleMapsClicked"
+                    ContentLayout="Left,10"
+                    FontSize="14"
+                    HeightRequest="44"
+                    HorizontalOptions="Fill"
+                    ImageSource="maps_google.png"
+                    Text="Navigate (Google Maps)"
+                    TextColor="White" />
+
+                <!-- Share Location (Google Maps link) -->
+                <Button
+                    BackgroundColor="Transparent"
+                    BorderColor="#666666"
+                    BorderWidth="1"
+                    Clicked="OnShareLocationClicked"
+                    ContentLayout="Left,10"
+                    FontSize="14"
+                    HeightRequest="44"
+                    HorizontalOptions="Fill"
+                    ImageSource="share_icon.png"
+                    Text="Share Location"
+                    TextColor="White" />
+
+                <!-- Copy Coordinates -->
+                <Button
+                    BackgroundColor="Transparent"
+                    BorderColor="#666666"
+                    BorderWidth="1"
+                    Clicked="OnCopyCoordinatesClicked"
+                    ContentLayout="Left,10"
+                    FontSize="14"
+                    HeightRequest="44"
+                    HorizontalOptions="Fill"
+                    ImageSource="info.png"
+                    Text="Copy Coordinates"
+                    TextColor="White" />
+
+                <!-- Search Wikipedia -->
+                <Button
+                    BackgroundColor="Transparent"
+                    BorderColor="#666666"
+                    BorderWidth="1"
+                    Clicked="OnWikiSearchClicked"
+                    ContentLayout="Left,10"
+                    FontSize="14"
+                    HeightRequest="44"
+                    HorizontalOptions="Fill"
+                    ImageSource="wikipedia.png"
+                    Text="Search Wikipedia"
+                    TextColor="White" />
+
+                <!-- Delete Pin -->
+                <Button
+                    BackgroundColor="Transparent"
+                    BorderColor="#CC4444"
+                    BorderWidth="1"
+                    Clicked="OnDeletePinClicked"
+                    ContentLayout="Left,10"
+                    FontSize="14"
+                    HeightRequest="44"
+                    HorizontalOptions="Fill"
+                    ImageSource="delete.png"
+                    Text="Delete Pin"
+                    TextColor="#FF6666" />
+
+            </VerticalStackLayout>
+
+            <!-- Separator -->
+            <BoxView BackgroundColor="#505050" HeightRequest="1" />
+
+            <!-- Cancel Button -->
+            <Button
+                BackgroundColor="#404040"
+                Clicked="OnCloseClicked"
+                CornerRadius="6"
+                FontSize="14"
+                HeightRequest="44"
+                HorizontalOptions="Fill"
+                Text="Cancel"
+                TextColor="White" />
+
+        </VerticalStackLayout>
+    </Frame>
+</ContentView>

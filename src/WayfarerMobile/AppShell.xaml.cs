@@ -44,6 +44,9 @@ public partial class AppShell : Shell
         SettingsContent.ContentTemplate = new DataTemplate(() =>
             serviceProvider.GetRequiredService<SettingsPage>());
 
+        AboutContent.ContentTemplate = new DataTemplate(() =>
+            serviceProvider.GetRequiredService<AboutPage>());
+
         // Navigate to appropriate starting point
         Loaded += OnShellLoaded;
     }
@@ -62,10 +65,8 @@ public partial class AppShell : Shell
         }
         else
         {
-            // Go directly to main app
-            await GoToAsync("//main");
-
             // Show lock screen on cold start if protection is enabled
+            // (we're already on main since it's the default)
             if (!_appLockService.IsAccessAllowed())
             {
                 await GoToAsync("lockscreen");

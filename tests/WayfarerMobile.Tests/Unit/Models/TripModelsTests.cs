@@ -457,7 +457,7 @@ public class TripModelsTests
 
         // Assert - With nearly zero elapsed time, result depends on implementation
         // The implementation returns 0 when elapsed <= 0
-        result.Should().BeGreaterOrEqualTo(0);
+        result.Should().BeGreaterThanOrEqualTo(0);
     }
 
     [Fact]

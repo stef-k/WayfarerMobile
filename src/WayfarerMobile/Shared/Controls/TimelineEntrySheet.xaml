@@ -97,8 +97,7 @@
                                            FontAttributes="Bold"
                                            TextColor="{StaticResource TextSecondary}" />
                                     <Label Text="{Binding CoordinatesText, Source={x:Reference Root}}"
-                                           Style="{StaticResource Body}"
-                                           FontFamily="Consolas" />
+                                           Style="{StaticResource Body}" />
                                 </VerticalStackLayout>
                             </Grid>
                         </Frame>

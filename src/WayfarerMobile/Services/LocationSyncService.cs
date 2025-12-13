@@ -338,6 +338,9 @@ public class LocationSyncService : IDisposable
         {
             await _database.MarkLocationsSyncedAsync(successfulIds);
             _logger.LogDebug("Batch marked {Count} locations as synced", successfulIds.Count);
+
+            // Update last sync time in settings for UI display
+            _settings.LastSyncTime = DateTime.UtcNow;
         }
 
         _logger.LogInformation("Sync complete: {Success}/{Total} locations", successfulIds.Count, pending.Count);
@@ -377,16 +380,16 @@ public class LocationSyncService : IDisposable
 
             if (result.Success)
             {
-                // Note: Database status update is handled in batch by caller
                 if (result.Skipped)
                 {
-                    _logger.LogDebug("Location {Id} skipped by server (thresholds)", location.Id);
-                }
-                else
-                {
-                    _logger.LogDebug("Location {Id} synced successfully", location.Id);
+                    // Server received but did NOT store - mark as skipped, not synced
+                    // These won't appear on server timeline
+                    await _database.MarkLocationServerRejectedAsync(location.Id, "Skipped: distance/time threshold not met");
+                    _logger.LogDebug("Location {Id} skipped by server (thresholds) - not marking as synced", location.Id);
+                    return (false, true); // Not success (won't be marked synced), continue with next
                 }
 
+                _logger.LogDebug("Location {Id} synced successfully", location.Id);
                 return (true, true);
             }
 

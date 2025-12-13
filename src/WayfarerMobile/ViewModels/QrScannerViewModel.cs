@@ -3,7 +3,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
-using WayfarerMobile.Services;
 using ZXing.Net.Maui;
 
 namespace WayfarerMobile.ViewModels;
@@ -15,7 +14,7 @@ namespace WayfarerMobile.ViewModels;
 public partial class QrScannerViewModel : BaseViewModel
 {
     private readonly ISettingsService _settingsService;
-    private readonly ApiClient _apiClient;
+    private readonly IApiClient _apiClient;
     private readonly ILogger<QrScannerViewModel> _logger;
 
     /// <summary>
@@ -61,7 +60,7 @@ public partial class QrScannerViewModel : BaseViewModel
     /// <param name="logger">The logger instance.</param>
     public QrScannerViewModel(
         ISettingsService settingsService,
-        ApiClient apiClient,
+        IApiClient apiClient,
         ILogger<QrScannerViewModel> logger)
     {
         _settingsService = settingsService;
@@ -247,36 +246,37 @@ public partial class QrScannerViewModel : BaseViewModel
     /// </summary>
     private async Task<bool> TestConnectionAsync(string serverUrl, string apiToken)
     {
+        // Temporarily configure the API client for testing
+        var originalUrl = _settingsService.ServerUrl;
+        var originalToken = _settingsService.ApiToken;
+
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
-            // Temporarily configure the API client for testing
-            var originalUrl = _settingsService.ServerUrl;
-            var originalToken = _settingsService.ApiToken;
+            _settingsService.ServerUrl = serverUrl;
+            _settingsService.ApiToken = apiToken;
 
-            try
-            {
-                _settingsService.ServerUrl = serverUrl;
-                _settingsService.ApiToken = apiToken;
+            // Test the connection by calling the health endpoint or similar
+            var result = await _apiClient.TestConnectionAsync(cts.Token);
 
-                // Test the connection by calling the health endpoint or similar
-                var result = await _apiClient.TestConnectionAsync(cts.Token);
-                return result;
-            }
-            finally
+            if (!result)
             {
-                // Restore original settings if test fails
-                if (!await _apiClient.TestConnectionAsync(CancellationToken.None))
-                {
-                    _settingsService.ServerUrl = originalUrl;
-                    _settingsService.ApiToken = originalToken;
-                }
+                // Test failed - restore original settings
+                _settingsService.ServerUrl = originalUrl;
+                _settingsService.ApiToken = originalToken;
             }
+
+            return result;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Connection test failed");
+
+            // Restore original settings on error
+            _settingsService.ServerUrl = originalUrl;
+            _settingsService.ApiToken = originalToken;
+
             return false;
         }
     }

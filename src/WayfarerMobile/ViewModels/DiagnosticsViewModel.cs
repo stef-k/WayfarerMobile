@@ -333,6 +333,39 @@ public partial class DiagnosticsViewModel : BaseViewModel
         }
     }
 
+    /// <summary>
+    /// Shares an individual log file.
+    /// </summary>
+    /// <param name="logFile">The log file to share.</param>
+    [RelayCommand]
+    private async Task ShareLogFileAsync(LogFileInfo? logFile)
+    {
+        if (logFile == null || string.IsNullOrEmpty(logFile.FilePath))
+        {
+            return;
+        }
+
+        try
+        {
+            if (!File.Exists(logFile.FilePath))
+            {
+                await _toastService.ShowErrorAsync("Log file not found");
+                return;
+            }
+
+            await Share.Default.RequestAsync(new ShareFileRequest
+            {
+                Title = $"Share {logFile.FileName}",
+                File = new ShareFile(logFile.FilePath)
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sharing log file: {FileName}", logFile.FileName);
+            await _toastService.ShowErrorAsync("Failed to share log file");
+        }
+    }
+
     #endregion
 
     #region Update Methods
@@ -439,8 +472,18 @@ public partial class DiagnosticsViewModel : BaseViewModel
         OsVersion = info.OsVersion;
         DeviceInfo = $"{info.DeviceManufacturer} {info.DeviceModel}";
         AppVersion = $"{info.AppVersion} ({info.AppBuild})";
-        BatteryStatus = $"{info.BatteryLevel:P0} - {info.BatteryState} ({info.PowerSource})";
-        IsEnergySaverOn = info.IsEnergySaver;
+
+        // Battery info may be unavailable on some devices
+        if (info.BatteryLevel >= 0)
+        {
+            BatteryStatus = $"{info.BatteryLevel:P0} - {info.BatteryState} ({info.PowerSource})";
+            IsEnergySaverOn = info.IsEnergySaver;
+        }
+        else
+        {
+            BatteryStatus = "Not available";
+            IsEnergySaverOn = false;
+        }
     }
 
     private void UpdatePerformanceMetrics()

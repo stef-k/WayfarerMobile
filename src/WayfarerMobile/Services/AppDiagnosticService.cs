@@ -14,7 +14,7 @@ public class AppDiagnosticService
 {
     private readonly ILogger<AppDiagnosticService> _logger;
     private readonly ILocationBridge _locationBridge;
-    private readonly SettingsService _settingsService;
+    private readonly ISettingsService _settingsService;
     private readonly DatabaseService _databaseService;
     private readonly LiveTileCacheService _liveTileCache;
     private readonly IPermissionsService _permissionsService;
@@ -26,7 +26,7 @@ public class AppDiagnosticService
     public AppDiagnosticService(
         ILogger<AppDiagnosticService> logger,
         ILocationBridge locationBridge,
-        SettingsService settingsService,
+        ISettingsService settingsService,
         DatabaseService databaseService,
         LiveTileCacheService liveTileCache,
         IPermissionsService permissionsService,

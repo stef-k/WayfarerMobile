@@ -721,7 +721,9 @@ public class ApiClient : IApiClient
                 Accuracy = location.Accuracy,
                 Altitude = location.Altitude,
                 Speed = location.Speed,
-                LocationType = location.Provider
+                LocationType = location.Provider,
+                ActivityTypeId = location.ActivityTypeId,
+                Notes = location.Notes
             };
 
             var request = CreateRequest(HttpMethod.Post, endpoint);

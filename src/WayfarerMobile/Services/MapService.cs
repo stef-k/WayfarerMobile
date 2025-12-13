@@ -5,9 +5,11 @@ using Mapsui.Nts;
 using Mapsui.Projections;
 using Mapsui.Styles;
 using Mapsui.Tiling;
+using Mapsui.Tiling.Layers;
 using NetTopologySuite.Geometries;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Core.Helpers;
+using WayfarerMobile.Services.TileCache;
 using Color = Mapsui.Styles.Color;
 using Map = Mapsui.Map;
 using Brush = Mapsui.Styles.Brush;
@@ -48,11 +50,13 @@ public class MapService : IDisposable
     private WritableLayer? _navigationRouteLayer;
     private WritableLayer? _navigationRouteCompletedLayer;
     private WritableLayer? _tripSegmentsLayer;
+    private WritableLayer? _droppedPinLayer;
     private readonly List<MPoint> _trackPoints = new();
     private List<NavigationWaypoint>? _currentRouteWaypoints;
     private readonly Dictionary<string, string> _iconImageCache = new();
     private readonly ILogger<MapService>? _logger;
     private readonly LocationIndicatorService? _indicatorService;
+    private readonly WayfarerTileSource? _tileSource;
 
     // Feature reuse for location indicator
     private GeometryFeature? _accuracyFeature;
@@ -70,21 +74,19 @@ public class MapService : IDisposable
     #endregion
 
     /// <summary>
-    /// Creates a new instance of MapService.
-    /// </summary>
-    public MapService()
-    {
-    }
-
-    /// <summary>
-    /// Creates a new instance of MapService with logging and indicator service.
+    /// Creates a new instance of MapService with all dependencies.
     /// </summary>
     /// <param name="logger">The logger instance.</param>
     /// <param name="indicatorService">The location indicator service.</param>
-    public MapService(ILogger<MapService> logger, LocationIndicatorService indicatorService)
+    /// <param name="tileSource">The custom tile source for offline caching.</param>
+    public MapService(
+        ILogger<MapService> logger,
+        LocationIndicatorService indicatorService,
+        WayfarerTileSource tileSource)
     {
         _logger = logger;
         _indicatorService = indicatorService;
+        _tileSource = tileSource;
     }
 
     #region Properties
@@ -99,7 +101,7 @@ public class MapService : IDisposable
     #region Map Creation
 
     /// <summary>
-    /// Creates and configures the map with OpenStreetMap tiles.
+    /// Creates and configures the map with tile layer (cached or online).
     /// </summary>
     private Map CreateMap()
     {
@@ -108,8 +110,22 @@ public class MapService : IDisposable
             CRS = "EPSG:3857" // Web Mercator
         };
 
-        // Add OpenStreetMap tile layer
-        map.Layers.Add(OpenStreetMap.CreateTileLayer());
+        // Add tile layer - use custom cached source if available, otherwise fallback to OSM
+        // Only ONE tile layer to avoid rendering conflicts
+        if (_tileSource != null)
+        {
+            var tileLayer = new TileLayer(_tileSource)
+            {
+                Name = "WayfarerTiles"
+            };
+            map.Layers.Add(tileLayer);
+            _logger?.LogInformation("Map using WayfarerTileSource with offline caching");
+        }
+        else
+        {
+            map.Layers.Add(OpenStreetMap.CreateTileLayer());
+            _logger?.LogWarning("Map using default OSM tiles - offline caching disabled");
+        }
 
         // Add track layer (below location marker)
         _trackLayer = new WritableLayer
@@ -167,6 +183,14 @@ public class MapService : IDisposable
         };
         map.Layers.Add(_navigationRouteLayer);
 
+        // Add dropped pin layer (for drop pin mode)
+        _droppedPinLayer = new WritableLayer
+        {
+            Name = "DroppedPin",
+            Style = null // Style is set per feature
+        };
+        map.Layers.Add(_droppedPinLayer);
+
         return map;
     }
 
@@ -222,9 +246,9 @@ public class MapService : IDisposable
         var color = ParseColor(hexColor);
         return new SymbolStyle
         {
-            SymbolScale = 0.5,
+            SymbolScale = 0.85,
             Fill = new Brush(color),
-            Outline = new Pen(Color.White, 3),
+            Outline = new Pen(Color.White, 4),
             SymbolType = SymbolType.Ellipse
         };
     }
@@ -705,17 +729,45 @@ public class MapService : IDisposable
     /// <param name="zoomLevel">Optional zoom level (resolution).</param>
     public void CenterOnLocation(LocationData location, double? zoomLevel = null)
     {
-        if (_map == null)
+        if (_map?.Navigator == null)
+        {
+            _logger?.LogWarning("Cannot center - map or navigator is null");
             return;
+        }
 
         var (x, y) = SphericalMercator.FromLonLat(location.Longitude, location.Latitude);
         var point = new MPoint(x, y);
 
-        _map.Navigator.CenterOn(point);
-
-        if (zoomLevel.HasValue)
+        try
         {
-            _map.Navigator.ZoomTo(zoomLevel.Value);
+            // Use resolution index 17 for street level (approximately web map zoom 17)
+            if (zoomLevel.HasValue)
+            {
+                _map.Navigator.CenterOnAndZoomTo(point, zoomLevel.Value);
+            }
+            else if (_map.Navigator.Resolutions != null && _map.Navigator.Resolutions.Count > 17)
+            {
+                // Default to street level zoom when centering on location
+                _map.Navigator.CenterOnAndZoomTo(point, _map.Navigator.Resolutions[17]);
+            }
+            else if (_map.Navigator.Resolutions != null && _map.Navigator.Resolutions.Count > 0)
+            {
+                // Fallback to middle resolution if 17 doesn't exist
+                var midIndex = _map.Navigator.Resolutions.Count / 2;
+                _map.Navigator.CenterOnAndZoomTo(point, _map.Navigator.Resolutions[midIndex]);
+            }
+            else
+            {
+                _map.Navigator.CenterOn(point);
+            }
+
+            _logger?.LogDebug("Centered map on {Lat:F6}, {Lon:F6}", location.Latitude, location.Longitude);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Error centering map");
+            // Fallback to simple center
+            _map.Navigator.CenterOn(point);
         }
     }
 
@@ -740,11 +792,24 @@ public class MapService : IDisposable
     }
 
     /// <summary>
+    /// Resets the map rotation to north (0 degrees).
+    /// </summary>
+    public void ResetMapRotation()
+    {
+        _map?.Navigator.RotateTo(0);
+    }
+
+    /// <summary>
     /// Sets the default zoom level for street-level viewing.
     /// </summary>
     public void SetDefaultZoom()
     {
-        _map?.Navigator.ZoomTo(2); // Approximately street level
+        // Use resolution index 15 for city overview when no location available
+        // Index 15 corresponds approximately to web map zoom level 15
+        if (_map?.Navigator.Resolutions != null && _map.Navigator.Resolutions.Count > 15)
+        {
+            _map.Navigator.ZoomTo(_map.Navigator.Resolutions[15]);
+        }
     }
 
     #endregion
@@ -1169,6 +1234,94 @@ public class MapService : IDisposable
             // Default - gray solid line
             _ => (Color.FromArgb(200, 158, 158, 158), 3, null)
         };
+    }
+
+    #endregion
+
+    #region Dropped Pin
+
+    /// <summary>
+    /// Shows a dropped pin marker at the specified location.
+    /// </summary>
+    /// <param name="latitude">The latitude.</param>
+    /// <param name="longitude">The longitude.</param>
+    public void ShowDroppedPin(double latitude, double longitude)
+    {
+        if (_droppedPinLayer == null || _map == null)
+            return;
+
+        // Clear any existing pin
+        _droppedPinLayer.Clear();
+
+        // Convert to Web Mercator
+        var (x, y) = SphericalMercator.FromLonLat(longitude, latitude);
+        var point = new Point(x, y);
+
+        // Create red pin marker
+        var pinFeature = new GeometryFeature(point)
+        {
+            Styles = new[] { CreateDroppedPinStyle() }
+        };
+
+        _droppedPinLayer.Add(pinFeature);
+        _droppedPinLayer.DataHasChanged();
+
+        _logger?.LogDebug("Dropped pin at {Lat:F6}, {Lon:F6}", latitude, longitude);
+    }
+
+    /// <summary>
+    /// Clears the dropped pin marker.
+    /// </summary>
+    public void ClearDroppedPin()
+    {
+        _droppedPinLayer?.Clear();
+        _droppedPinLayer?.DataHasChanged();
+    }
+
+    /// <summary>
+    /// Creates the style for a dropped pin (red marker).
+    /// </summary>
+    private static IStyle CreateDroppedPinStyle()
+    {
+        return new SymbolStyle
+        {
+            SymbolScale = 0.7,
+            Fill = new Brush(Color.FromArgb(255, 244, 67, 54)), // Material Red
+            Outline = new Pen(Color.White, 3),
+            SymbolType = SymbolType.Ellipse
+        };
+    }
+
+    #endregion
+
+    #region Map Utilities
+
+    /// <summary>
+    /// Refreshes the map display. Call this after the map control becomes visible again.
+    /// </summary>
+    public void RefreshMap()
+    {
+        _map?.RefreshGraphics();
+        _locationLayer?.DataHasChanged();
+        _trackLayer?.DataHasChanged();
+        _droppedPinLayer?.DataHasChanged();
+
+        _logger?.LogDebug("Map refreshed");
+    }
+
+    /// <summary>
+    /// Ensures the map is properly initialized with default view.
+    /// </summary>
+    public void EnsureInitialized()
+    {
+        // Force map creation if not already done
+        _ = Map;
+
+        // Set default zoom if no location
+        if (_lastMapPoint == null)
+        {
+            SetDefaultZoom();
+        }
     }
 
     #endregion

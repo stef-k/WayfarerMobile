@@ -170,7 +170,7 @@ public class GeoMathTests
             double bearing = GeoMath.CalculateBearing(lat1, lon1, lat2, lon2);
 
             // Assert
-            bearing.Should().BeGreaterOrEqualTo(0);
+            bearing.Should().BeGreaterThanOrEqualTo(0);
             bearing.Should().BeLessThan(360);
         }
     }
@@ -392,8 +392,8 @@ public class GeoMathTests
                 double diff = GeoMath.BearingDifference(b1, b2);
 
                 // Assert
-                diff.Should().BeGreaterOrEqualTo(-180);
-                diff.Should().BeLessOrEqualTo(180);
+                diff.Should().BeGreaterThanOrEqualTo(-180);
+                diff.Should().BeLessThanOrEqualTo(180);
             }
         }
     }
@@ -465,7 +465,7 @@ public class GeoMathTests
             double bearing = GeoMath.CalculateBearing(poleLat, poleLon, targetLat, targetLon);
 
             // Assert - Should be approximately south (180) for most, varies based on longitude
-            bearing.Should().BeGreaterOrEqualTo(0);
+            bearing.Should().BeGreaterThanOrEqualTo(0);
             bearing.Should().BeLessThan(360);
         }
     }
@@ -637,7 +637,7 @@ public class GeoMathTests
         double bearing = GeoMath.CalculateBearing(lat1, lon1, lat2, lon2);
 
         // Assert - Should return a valid bearing (any direction works for antipodal)
-        bearing.Should().BeGreaterOrEqualTo(0);
+        bearing.Should().BeGreaterThanOrEqualTo(0);
         bearing.Should().BeLessThan(360);
     }
 
@@ -670,7 +670,7 @@ public class GeoMathTests
         double bearing = GeoMath.CalculateBearing(lat, lon, lat, lon);
 
         // Assert - With identical points, bearing is undefined but should return 0 or valid value
-        bearing.Should().BeGreaterOrEqualTo(0);
+        bearing.Should().BeGreaterThanOrEqualTo(0);
         bearing.Should().BeLessThan(360);
     }
 
@@ -973,7 +973,7 @@ public class GeoMathTests
         double distance = GeoMath.CalculateDistance(0, 0, lat, lon);
 
         // Assert - Should return a non-negative finite value
-        distance.Should().BeGreaterOrEqualTo(0);
+        distance.Should().BeGreaterThanOrEqualTo(0);
         double.IsFinite(distance).Should().BeTrue();
     }
 
@@ -997,7 +997,7 @@ public class GeoMathTests
         double bearing = GeoMath.CalculateBearing(originLat, originLon, lat, lon);
 
         // Assert
-        bearing.Should().BeGreaterOrEqualTo(0);
+        bearing.Should().BeGreaterThanOrEqualTo(0);
         bearing.Should().BeLessThan(360);
     }
 

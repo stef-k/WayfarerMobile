@@ -517,17 +517,20 @@ public class TimelineLocation
 
 /// <summary>
 /// Coordinates structure for timeline locations.
+/// Matches server response format with latitude/longitude properties.
 /// </summary>
 public class TimelineCoordinates
 {
     /// <summary>
-    /// Gets or sets the X coordinate (longitude).
+    /// Gets or sets the longitude.
     /// </summary>
+    [JsonPropertyName("longitude")]
     public double X { get; set; }
 
     /// <summary>
-    /// Gets or sets the Y coordinate (latitude).
+    /// Gets or sets the latitude.
     /// </summary>
+    [JsonPropertyName("latitude")]
     public double Y { get; set; }
 }
 
@@ -744,6 +747,16 @@ public class LocationLogRequest
     /// Gets or sets the location provider (GPS, Network, etc.).
     /// </summary>
     public string? Provider { get; set; }
+
+    /// <summary>
+    /// Gets or sets the activity type ID for manual check-ins.
+    /// </summary>
+    public int? ActivityTypeId { get; set; }
+
+    /// <summary>
+    /// Gets or sets notes for this location.
+    /// </summary>
+    public string? Notes { get; set; }
 }
 
 #endregion
@@ -1075,6 +1088,18 @@ public class PublicTripSummary
     public string? OwnerName { get; set; }
 
     /// <summary>
+    /// Gets the author name (alias for OwnerName for UI binding).
+    /// </summary>
+    [JsonIgnore]
+    public string? AuthorName => OwnerName;
+
+    /// <summary>
+    /// Gets the number of regions (countries) in the trip.
+    /// </summary>
+    [JsonIgnore]
+    public int RegionCount => Countries.Count;
+
+    /// <summary>
     /// Gets or sets whether the current user owns this trip.
     /// </summary>
     public bool IsOwner { get; set; }
@@ -1118,8 +1143,9 @@ public class PublicTripSummary
 public class PublicTripsResponse
 {
     /// <summary>
-    /// Gets or sets the list of trips.
+    /// Gets or sets the list of trips (server sends as "items").
     /// </summary>
+    [JsonPropertyName("items")]
     public List<PublicTripSummary> Trips { get; set; } = new();
 
     /// <summary>

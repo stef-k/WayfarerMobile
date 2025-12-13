@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Services;
 
 namespace WayfarerMobile.ViewModels;
 
@@ -13,6 +14,9 @@ public partial class OnboardingViewModel : BaseViewModel
 
     private readonly IPermissionsService _permissionsService;
     private readonly ISettingsService _settingsService;
+    private readonly ILocationBridge _locationBridge;
+    private readonly IApiClient _apiClient;
+    private readonly IActivitySyncService _activitySyncService;
 
     #endregion
 
@@ -68,6 +72,12 @@ public partial class OnboardingViewModel : BaseViewModel
     /// </summary>
     [ObservableProperty]
     private string _serverUrl = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the API token for manual entry.
+    /// </summary>
+    [ObservableProperty]
+    private string _apiToken = string.Empty;
 
     #endregion
 
@@ -188,10 +198,16 @@ public partial class OnboardingViewModel : BaseViewModel
     /// </summary>
     public OnboardingViewModel(
         IPermissionsService permissionsService,
-        ISettingsService settingsService)
+        ISettingsService settingsService,
+        ILocationBridge locationBridge,
+        IApiClient apiClient,
+        IActivitySyncService activitySyncService)
     {
         _permissionsService = permissionsService;
         _settingsService = settingsService;
+        _locationBridge = locationBridge;
+        _apiClient = apiClient;
+        _activitySyncService = activitySyncService;
         Title = "Setup";
 
         // Check current permission states
@@ -285,16 +301,41 @@ public partial class OnboardingViewModel : BaseViewModel
     [RelayCommand]
     private async Task ScanQrCodeAsync()
     {
-        // TODO: Implement QR scanning with ZXing
-        var page = Application.Current?.Windows.FirstOrDefault()?.Page;
-        if (page != null)
+        try
         {
-            await page.DisplayAlertAsync("QR Scanner", "QR scanning will be implemented with ZXing.", "OK");
+            // First check/request camera permission
+            var cameraStatus = await Permissions.CheckStatusAsync<Permissions.Camera>();
+            if (cameraStatus != PermissionStatus.Granted)
+            {
+                cameraStatus = await Permissions.RequestAsync<Permissions.Camera>();
+                if (cameraStatus != PermissionStatus.Granted)
+                {
+                    var page = Application.Current?.Windows.FirstOrDefault()?.Page;
+                    if (page != null)
+                    {
+                        await page.DisplayAlertAsync("Camera Permission Required",
+                            "Please grant camera permission to scan QR codes.", "OK");
+                    }
+                    return;
+                }
+            }
+
+            // Navigate to QR scanner page (use absolute route since we're in onboarding shell)
+            await Shell.Current.GoToAsync($"//onboarding/QrScanner");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Onboarding] Failed to navigate to QR scanner: {ex}");
+            var page = Application.Current?.Windows.FirstOrDefault()?.Page;
+            if (page != null)
+            {
+                await page.DisplayAlertAsync("Error", $"Could not open QR scanner: {ex.Message}", "OK");
+            }
         }
     }
 
     /// <summary>
-    /// Saves the manually entered server URL.
+    /// Saves the manually entered server URL and API token.
     /// </summary>
     [RelayCommand]
     private async Task SaveServerUrlAsync()
@@ -305,6 +346,16 @@ public partial class OnboardingViewModel : BaseViewModel
             if (page != null)
             {
                 await page.DisplayAlertAsync("Error", "Please enter a server URL.", "OK");
+            }
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(ApiToken))
+        {
+            var page = Application.Current?.Windows.FirstOrDefault()?.Page;
+            if (page != null)
+            {
+                await page.DisplayAlertAsync("Error", "Please enter an API token.", "OK");
             }
             return;
         }
@@ -322,7 +373,37 @@ public partial class OnboardingViewModel : BaseViewModel
         }
 
         _settingsService.ServerUrl = ServerUrl;
+        _settingsService.ApiToken = ApiToken;
         ServerConfigured = true;
+
+        // Fetch settings and activities from server in background
+        _ = FetchServerDataAsync();
+    }
+
+    /// <summary>
+    /// Fetches settings and activities from server after configuration.
+    /// </summary>
+    private async Task FetchServerDataAsync()
+    {
+        try
+        {
+            // Fetch server settings (time/distance thresholds)
+            var serverSettings = await _apiClient.GetSettingsAsync();
+            if (serverSettings != null)
+            {
+                _settingsService.LocationTimeThresholdMinutes = serverSettings.LocationTimeThresholdMinutes;
+                _settingsService.LocationDistanceThresholdMeters = serverSettings.LocationDistanceThresholdMeters;
+                System.Diagnostics.Debug.WriteLine($"[Onboarding] Fetched settings: {serverSettings.LocationTimeThresholdMinutes}min, {serverSettings.LocationDistanceThresholdMeters}m");
+            }
+
+            // Sync activities from server
+            var activitySuccess = await _activitySyncService.SyncWithServerAsync();
+            System.Diagnostics.Debug.WriteLine($"[Onboarding] Activities sync: {(activitySuccess ? "success" : "failed")}");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Onboarding] Failed to fetch server data: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -332,6 +413,16 @@ public partial class OnboardingViewModel : BaseViewModel
     private void OpenSettings()
     {
         _permissionsService.OpenAppSettings();
+    }
+
+    /// <summary>
+    /// Refreshes all permission and configuration states.
+    /// Called when the page appears to update UI after returning from other screens.
+    /// </summary>
+    [RelayCommand]
+    private async Task RefreshStateAsync()
+    {
+        await CheckPermissionStatesAsync();
     }
 
     #endregion
@@ -347,8 +438,9 @@ public partial class OnboardingViewModel : BaseViewModel
         BackgroundLocationGranted = await _permissionsService.IsBackgroundLocationPermissionGrantedAsync();
         NotificationPermissionGranted = await _permissionsService.IsNotificationPermissionGrantedAsync();
         BatteryOptimizationDisabled = await IsBatteryOptimizationDisabledAsync();
-        ServerConfigured = !string.IsNullOrEmpty(_settingsService.ServerUrl);
+        ServerConfigured = !string.IsNullOrEmpty(_settingsService.ServerUrl) && !string.IsNullOrEmpty(_settingsService.ApiToken);
         ServerUrl = _settingsService.ServerUrl ?? string.Empty;
+        ApiToken = _settingsService.ApiToken ?? string.Empty;
 
         // Notify computed properties
         OnPropertyChanged(nameof(RequestButtonText));
@@ -377,18 +469,75 @@ public partial class OnboardingViewModel : BaseViewModel
     private async Task RequestBatteryOptimizationExemptionAsync()
     {
 #if ANDROID
-        await Task.CompletedTask;
         try
         {
-            var context = Android.App.Application.Context;
+            var packageName = Android.App.Application.Context.PackageName;
             var intent = new Android.Content.Intent(Android.Provider.Settings.ActionRequestIgnoreBatteryOptimizations);
-            intent.SetData(Android.Net.Uri.Parse($"package:{context.PackageName}"));
-            intent.AddFlags(Android.Content.ActivityFlags.NewTask);
-            context.StartActivity(intent);
+            intent.SetData(Android.Net.Uri.Parse($"package:{packageName}"));
+
+            if (Platform.CurrentActivity != null)
+            {
+                // Use activity context for proper dialog display
+                Platform.CurrentActivity.StartActivity(intent);
+            }
+            else
+            {
+                // Fallback to application context with NewTask flag
+                intent.AddFlags(Android.Content.ActivityFlags.NewTask);
+                Android.App.Application.Context.StartActivity(intent);
+            }
+
+            // Poll for the change since the system dialog doesn't trigger app lifecycle events
+            // The dialog typically takes 1-3 seconds for user interaction
+            await PollForBatteryOptimizationChangeAsync();
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[Onboarding] Failed to request battery optimization exemption: {ex.Message}");
+
+            // Fallback: open general battery settings
+            try
+            {
+                var fallbackIntent = new Android.Content.Intent(Android.Provider.Settings.ActionIgnoreBatteryOptimizationSettings);
+                fallbackIntent.AddFlags(Android.Content.ActivityFlags.NewTask);
+                Android.App.Application.Context.StartActivity(fallbackIntent);
+            }
+            catch
+            {
+                // Last resort: open general settings
+                AppInfo.ShowSettingsUI();
+            }
+        }
+#else
+        await Task.CompletedTask;
+#endif
+    }
+
+    /// <summary>
+    /// Polls for battery optimization status change after the system dialog is shown.
+    /// </summary>
+    private async Task PollForBatteryOptimizationChangeAsync()
+    {
+#if ANDROID
+        var initialState = BatteryOptimizationDisabled;
+
+        // Poll every 500ms for up to 30 seconds (user might take time to read and decide)
+        for (int i = 0; i < 60; i++)
+        {
+            await Task.Delay(500);
+
+            var currentState = await IsBatteryOptimizationDisabledAsync();
+            if (currentState != initialState)
+            {
+                // State changed - update UI on main thread
+                await MainThread.InvokeOnMainThreadAsync(async () =>
+                {
+                    BatteryOptimizationDisabled = currentState;
+                    OnPropertyChanged(nameof(RequestButtonText));
+                    OnPropertyChanged(nameof(CurrentPermissionGranted));
+                });
+                return;
+            }
         }
 #else
         await Task.CompletedTask;
@@ -402,6 +551,20 @@ public partial class OnboardingViewModel : BaseViewModel
     {
         // Mark onboarding as complete
         _settingsService.IsFirstRun = false;
+
+        // Start the 24/7 location tracking service if permissions were granted
+        if (LocationPermissionGranted)
+        {
+            try
+            {
+                await _locationBridge.StartAsync();
+                System.Diagnostics.Debug.WriteLine("[Onboarding] Location tracking service started (24/7 mode)");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Onboarding] Failed to start location service: {ex.Message}");
+            }
+        }
 
         // Navigate to main app
         if (Application.Current?.Windows.FirstOrDefault()?.Page is Shell shell)

@@ -308,7 +308,7 @@ public class SseEventModelsTests
 
         // Assert
         args.Attempt.Should().Be(1);
-        args.DelayMs.Should().BeLessOrEqualTo(5000);
+        args.DelayMs.Should().BeLessThanOrEqualTo(5000);
     }
 
     [Fact]

@@ -20,6 +20,14 @@ public partial class QrScannerPage : ContentPage
         _viewModel = viewModel;
         BindingContext = viewModel;
 
+        // Configure barcode reader options (must be set in code-behind, not XAML)
+        BarcodeReader.Options = new BarcodeReaderOptions
+        {
+            Formats = BarcodeFormat.QrCode,
+            AutoRotate = true,
+            Multiple = false
+        };
+
         // Subscribe to barcode detection
         BarcodeReader.BarcodesDetected += OnBarcodesDetected;
 

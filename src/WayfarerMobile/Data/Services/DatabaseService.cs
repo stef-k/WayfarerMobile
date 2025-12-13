@@ -78,6 +78,7 @@ public class DatabaseService : IAsyncDisposable
             await _database.CreateTableAsync<OfflineSegmentEntity>();
             await _database.CreateTableAsync<OfflineAreaEntity>();
             await _database.CreateTableAsync<LiveTileEntity>();
+            await _database.CreateTableAsync<ActivityType>();
 
             _initialized = true;
             System.Diagnostics.Debug.WriteLine($"[DatabaseService] Initialized: {DatabasePath}");

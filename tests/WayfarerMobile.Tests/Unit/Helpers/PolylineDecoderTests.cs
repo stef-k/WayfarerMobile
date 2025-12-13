@@ -141,7 +141,7 @@ public class PolylineDecoderTests
         var result = PolylineDecoder.Decode(encoded);
 
         // Assert
-        result.Should().HaveCountGreaterOrEqualTo(1);
+        result.Should().HaveCountGreaterThanOrEqualTo(1);
     }
 
     #endregion

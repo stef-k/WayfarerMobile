@@ -258,14 +258,31 @@
                     </sfExpander:SfExpander.Header>
                     <sfExpander:SfExpander.Content>
                         <VerticalStackLayout Padding="15" Spacing="8">
-                            <CollectionView ItemsSource="{Binding LogFiles}" HeightRequest="150">
+                            <CollectionView ItemsSource="{Binding LogFiles}" HeightRequest="200">
                                 <CollectionView.ItemTemplate>
                                     <DataTemplate x:DataType="services:LogFileInfo">
-                                        <Grid Padding="0,5" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
-                                            <Label Grid.Column="0" Text="{Binding FileName}" FontSize="12" />
-                                            <Label Grid.Column="1" Text="{Binding Size, StringFormat='{0:N0} B'}" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-                                            <Label Grid.Column="2" Text="{Binding LastModified, StringFormat='{0:MM/dd HH:mm}'}" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-                                        </Grid>
+                                        <Border Padding="8" Margin="0,2" StrokeThickness="0" BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                                <VerticalStackLayout Grid.Column="0" Spacing="2">
+                                                    <Label Text="{Binding FileName}" FontSize="13" FontAttributes="Bold" />
+                                                    <HorizontalStackLayout Spacing="10">
+                                                        <Label Text="{Binding SizeText}" FontSize="11" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                                        <Label Text="{Binding LastModified, StringFormat='{0:MMM d, HH:mm}'}" FontSize="11" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                                    </HorizontalStackLayout>
+                                                </VerticalStackLayout>
+                                                <Button Grid.Column="1"
+                                                        Text="Share"
+                                                        FontSize="11"
+                                                        Padding="10,4"
+                                                        HeightRequest="32"
+                                                        CornerRadius="4"
+                                                        BackgroundColor="{StaticResource Primary}"
+                                                        TextColor="White"
+                                                        VerticalOptions="Center"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:DiagnosticsViewModel}}, Path=ShareLogFileCommand}"
+                                                        CommandParameter="{Binding .}" />
+                                            </Grid>
+                                        </Border>
                                     </DataTemplate>
                                 </CollectionView.ItemTemplate>
                                 <CollectionView.EmptyView>
@@ -286,7 +303,7 @@
                     </sfExpander:SfExpander.Header>
                     <sfExpander:SfExpander.Content>
                         <ScrollView HeightRequest="300" Orientation="Both">
-                            <Label Text="{Binding RecentLogs}" FontFamily="Consolas" FontSize="10" Padding="15" />
+                            <Label Text="{Binding RecentLogs}" FontSize="10" Padding="15" />
                         </ScrollView>
                     </sfExpander:SfExpander.Content>
                 </sfExpander:SfExpander>

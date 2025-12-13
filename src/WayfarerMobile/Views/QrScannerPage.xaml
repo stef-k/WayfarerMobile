@@ -13,8 +13,7 @@
         <!-- Camera Preview -->
         <zxing:CameraBarcodeReaderView
             x:Name="BarcodeReader"
-            IsDetecting="{Binding IsScannerActive}"
-            Options="{StaticResource QrScannerOptions}" />
+            IsDetecting="{Binding IsScannerActive}" />
 
         <!-- Scanning Overlay -->
         <Grid BackgroundColor="#80000000"
@@ -22,7 +21,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" />
                 <RowDefinition Height="250" />
-                <RowDefinition Height="*" />
+                <RowDefinition Height="1.4*" />
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
