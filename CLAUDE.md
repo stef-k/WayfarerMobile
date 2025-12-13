@@ -22,10 +22,19 @@
 - ✅ PlaceDetailsSheet (SfBottomSheet) - trip place details with edit mode
 - ✅ TimelineEntrySheet (SfBottomSheet) - timeline entry details with edit mode
 - ✅ NotesEditorControl - Rich text editing with Quill.js
-- ✅ SearchableDropdown - Custom autocomplete control with SfTextInputLayout
+- ✅ ComboBox - Custom dropdown with lazy keyboard activation (replaces SearchableDropdown)
 - ✅ SfSegmentedControl on GroupsPage - List/Map toggle
 - ✅ SfShimmer loading placeholders on TripsPage, TimelinePage, GroupsPage
 - ✅ SfDatePicker on TimelinePage - Date navigation
+
+**Completed December 13, 2025:**
+
+- ✅ ActivitySyncService - Server sync with local caching (6-hour interval)
+- ✅ Settings sync in foreground service - Robust periodic sync (6-hour interval)
+- ✅ Notification simplification - Check In action only (removed Pause/Resume/Stop)
+- ✅ Notification text - Shows "Timeline: ON/OFF ±Xm" instead of fix count
+- ✅ CheckInSheet improvements - Proper lifecycle management, bottom sheet state fixes
+- ✅ ComboBox lazy keyboard - Keyboard only appears when user taps search field
 
 **Completed Features:**
 
@@ -74,6 +83,28 @@
 **Design Decision:** No fallback connections between trip places. Direct route is more honest than fake multi-hop routes through trip sequence.
 
 See `docs/reference/NAVIGATION_SYSTEM.md` for full documentation.
+
+---
+
+## Settings & Activity Sync Architecture
+
+**Settings Thresholds** (location_time_threshold, location_distance_threshold):
+
+- Synced by **LocationTrackingService** (foreground service) - guaranteed every 6 hours
+- Timer checks hourly, syncs if 6+ hours elapsed
+- Completely isolated - sync failures never affect GPS tracking
+- Timeout protection (15s max for network operations)
+
+**Activity Types** (for check-in dropdown):
+
+- Synced by **ActivitySyncService** on app startup (opportunistic)
+- Local caching in SQLite with seeded defaults for offline
+- Fire-and-forget - doesn't block app startup
+
+**Key Design Decision:** Settings sync runs in foreground service because:
+- App UI doesn't run 24/7, only the location service does
+- Guarantees threshold updates even if user rarely opens app
+- Isolated implementation ensures GPS tracking is never affected
 
 ---
 
