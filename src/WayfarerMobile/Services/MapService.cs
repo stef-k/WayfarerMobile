@@ -238,7 +238,7 @@ public class MapService : IDisposable
     }
 
     /// <summary>
-    /// Creates the style for the location marker.
+    /// Creates the style for the location marker (Google Maps style blue dot).
     /// </summary>
     /// <param name="hexColor">The marker color in hex format.</param>
     private static IStyle CreateLocationMarkerStyle(string hexColor = "#4285F4")
@@ -246,9 +246,9 @@ public class MapService : IDisposable
         var color = ParseColor(hexColor);
         return new SymbolStyle
         {
-            SymbolScale = 0.85,
+            SymbolScale = 0.6, // Smaller dot similar to Google Maps
             Fill = new Brush(color),
-            Outline = new Pen(Color.White, 4),
+            Outline = new Pen(Color.White, 3),
             SymbolType = SymbolType.Ellipse
         };
     }
@@ -325,8 +325,9 @@ public class MapService : IDisposable
         // Update features using reuse pattern
         UpdateLocationFeatures(point, accuracy, heading);
 
-        // Add to track
-        AddTrackPoint(point);
+        // Track line disabled - clutters the map without adding value
+        // User's historical track is not useful for real-time navigation
+        // AddTrackPoint(point);
 
         // Center map if requested
         if (centerMap)
@@ -619,7 +620,8 @@ public class MapService : IDisposable
 
     /// <summary>
     /// Creates a heading cone (wedge) pointing in the direction of travel.
-    /// Google Maps style - cone width varies with compass calibration quality.
+    /// Google Maps style - open cone that widens away from the center, indicating
+    /// approximate heading direction with uncertainty (not an exact arrow).
     /// </summary>
     /// <param name="center">Center point in map coordinates.</param>
     /// <param name="bearingDegrees">Bearing in degrees (0-360, 0 = North).</param>
@@ -627,58 +629,57 @@ public class MapService : IDisposable
     private static Polygon CreateHeadingCone(MPoint center, double bearingDegrees, double coneAngleDegrees = 45.0)
     {
         // Cone dimensions in map units (meters in Web Mercator at equator)
-        const double coneLength = 40.0;      // Length from center to tip
-
-        // Calculate base width from cone angle (trigonometry)
-        // For a cone with angle θ and length L, base width = 2 * L * tan(θ/2)
-        var halfAngleRad = (coneAngleDegrees / 2) * Math.PI / 180;
-        var coneBaseWidth = 2 * coneLength * Math.Tan(halfAngleRad);
-
-        // Clamp base width to reasonable range (15-80 map units)
-        coneBaseWidth = Math.Clamp(coneBaseWidth, 15.0, 80.0);
+        const double coneLength = 35.0;       // Length from center to outer arc
+        const double innerRadius = 12.0;      // Inner radius (gap from center dot)
+        const int arcSegments = 12;           // Smoothness of the arc
 
         // Convert bearing to radians (bearing 0 = North, clockwise)
         // In map coordinates: X = East, Y = North
         // So bearing 0 (North) = 90° in standard math (pointing up +Y)
-        var angleRad = (90 - bearingDegrees) * Math.PI / 180;
+        var centerAngleRad = (90 - bearingDegrees) * Math.PI / 180;
+        var halfConeAngleRad = (coneAngleDegrees / 2) * Math.PI / 180;
 
-        // Calculate tip point (in direction of bearing)
-        var tipX = center.X + coneLength * Math.Cos(angleRad);
-        var tipY = center.Y + coneLength * Math.Sin(angleRad);
+        // Build the cone shape: inner arc -> outer arc -> close
+        var coordinates = new List<Coordinate>();
 
-        // Calculate base points (perpendicular to bearing direction)
-        var perpAngle1 = angleRad + Math.PI / 2;
-        var perpAngle2 = angleRad - Math.PI / 2;
-        var halfBase = coneBaseWidth / 2;
+        // Start angle and end angle for the cone
+        var startAngle = centerAngleRad - halfConeAngleRad;
+        var endAngle = centerAngleRad + halfConeAngleRad;
 
-        var base1X = center.X + halfBase * Math.Cos(perpAngle1);
-        var base1Y = center.Y + halfBase * Math.Sin(perpAngle1);
-
-        var base2X = center.X + halfBase * Math.Cos(perpAngle2);
-        var base2Y = center.Y + halfBase * Math.Sin(perpAngle2);
-
-        // Create cone polygon (triangle): tip -> base1 -> base2 -> tip
-        var coordinates = new[]
+        // Inner arc (from start to end, close to center)
+        for (int i = 0; i <= arcSegments; i++)
         {
-            new Coordinate(tipX, tipY),
-            new Coordinate(base1X, base1Y),
-            new Coordinate(base2X, base2Y),
-            new Coordinate(tipX, tipY) // Close the ring
-        };
+            var angle = startAngle + (endAngle - startAngle) * i / arcSegments;
+            var x = center.X + innerRadius * Math.Cos(angle);
+            var y = center.Y + innerRadius * Math.Sin(angle);
+            coordinates.Add(new Coordinate(x, y));
+        }
 
-        var ring = new LinearRing(coordinates);
+        // Outer arc (from end back to start, further from center)
+        for (int i = arcSegments; i >= 0; i--)
+        {
+            var angle = startAngle + (endAngle - startAngle) * i / arcSegments;
+            var x = center.X + coneLength * Math.Cos(angle);
+            var y = center.Y + coneLength * Math.Sin(angle);
+            coordinates.Add(new Coordinate(x, y));
+        }
+
+        // Close the ring
+        coordinates.Add(coordinates[0]);
+
+        var ring = new LinearRing(coordinates.ToArray());
         return new Polygon(ring);
     }
 
     /// <summary>
-    /// Creates the style for the heading cone (darker blue with white outline).
+    /// Creates the style for the heading cone (semi-transparent blue, Google Maps style).
     /// </summary>
     private static IStyle CreateHeadingConeStyle()
     {
         return new VectorStyle
         {
-            Fill = new Brush(Color.FromArgb(255, 13, 71, 161)), // Darker blue (#0D47A1)
-            Outline = new Pen(Color.White, 1)
+            Fill = new Brush(Color.FromArgb(80, 66, 133, 244)), // Semi-transparent Google Blue
+            Outline = null // No outline for cleaner look
         };
     }
 
