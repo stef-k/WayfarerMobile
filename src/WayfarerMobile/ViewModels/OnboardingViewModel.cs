@@ -552,13 +552,21 @@ public partial class OnboardingViewModel : BaseViewModel
         // Mark onboarding as complete
         _settingsService.IsFirstRun = false;
 
-        // Start the 24/7 location tracking service if permissions were granted
+        // Store user's background tracking choice for health check comparison
+        // This allows us to alert users if they had 24/7 tracking but revoked permission
+        _settingsService.BackgroundTrackingEnabled = BackgroundLocationGranted;
+        System.Diagnostics.Debug.WriteLine($"[Onboarding] BackgroundTrackingEnabled set to: {BackgroundLocationGranted}");
+
+        // Start the location tracking service if basic location permission was granted
+        // - With background permission: runs 24/7
+        // - Without background permission: runs only while app is in foreground (casual use)
         if (LocationPermissionGranted)
         {
             try
             {
                 await _locationBridge.StartAsync();
-                System.Diagnostics.Debug.WriteLine("[Onboarding] Location tracking service started (24/7 mode)");
+                var mode = BackgroundLocationGranted ? "24/7 background" : "foreground only";
+                System.Diagnostics.Debug.WriteLine($"[Onboarding] Location tracking service started ({mode} mode)");
             }
             catch (Exception ex)
             {

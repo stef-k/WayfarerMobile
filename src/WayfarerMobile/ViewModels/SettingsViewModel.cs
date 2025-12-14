@@ -130,6 +130,12 @@ public partial class SettingsViewModel : BaseViewModel
     /// </summary>
     public string AppVersion => $"Version {AppInfo.VersionString} ({AppInfo.BuildString})";
 
+    /// <summary>
+    /// Gets or sets a description of the current tracking mode based on BackgroundTrackingEnabled setting.
+    /// </summary>
+    [ObservableProperty]
+    private string _trackingModeDescription = string.Empty;
+
     #endregion
 
     #region Constructor
@@ -181,6 +187,11 @@ public partial class SettingsViewModel : BaseViewModel
         LastSyncText = lastSync.HasValue
             ? lastSync.Value.ToLocalTime().ToString("g")
             : "Never";
+
+        // Tracking mode description based on user's onboarding choice
+        TrackingModeDescription = _settingsService.BackgroundTrackingEnabled
+            ? "24/7 Background Tracking - Your location is tracked even when the app is closed."
+            : "Foreground Only - Location is only tracked while the app is open.";
     }
 
     /// <summary>
@@ -347,6 +358,28 @@ public partial class SettingsViewModel : BaseViewModel
     private async Task ShowDiagnosticsAsync()
     {
         await Shell.Current.GoToAsync("diagnostics");
+    }
+
+    /// <summary>
+    /// Reruns the onboarding setup wizard to change permissions or tracking mode.
+    /// </summary>
+    [RelayCommand]
+    private async Task RerunSetupAsync()
+    {
+        var confirm = await Shell.Current.DisplayAlertAsync(
+            "Rerun Setup",
+            "This will take you through the setup wizard again where you can change your permissions and tracking mode. Continue?",
+            "Continue",
+            "Cancel");
+
+        if (confirm)
+        {
+            // Mark as first run so onboarding shows all steps
+            _settingsService.IsFirstRun = true;
+
+            // Navigate to onboarding
+            await Shell.Current.GoToAsync("//onboarding");
+        }
     }
 
     #endregion

@@ -11,6 +11,12 @@ public partial class App : Application
     private readonly IServiceProvider _serviceProvider;
 
     /// <summary>
+    /// Tracks if this is the initial cold start. Set to false after first OnWindowResumed.
+    /// Used to skip health check during cold start since StartBackgroundServices handles it.
+    /// </summary>
+    private bool _isColdStart = true;
+
+    /// <summary>
     /// Creates a new instance of the application.
     /// </summary>
     /// <param name="serviceProvider">The service provider for DI.</param>
@@ -200,8 +206,18 @@ public partial class App : Application
                 await ShowLockScreenAsync();
             }
 
-            // Check permissions health - user may have revoked in settings
-            await CheckPermissionsHealthAsync();
+            // Skip health check on cold start - StartBackgroundServices already handles service startup.
+            // This prevents race conditions and duplicate startForegroundService() calls.
+            if (_isColdStart)
+            {
+                _isColdStart = false;
+                System.Diagnostics.Debug.WriteLine("[App] Skipping health check on cold start");
+            }
+            else
+            {
+                // Check permissions health - user may have revoked in settings while app was in background
+                await CheckPermissionsHealthAsync();
+            }
 
             // Handle app lifecycle (sync, state restoration)
             var lifecycleService = _serviceProvider.GetService<IAppLifecycleService>();
@@ -221,6 +237,17 @@ public partial class App : Application
     /// Checks if permissions and configuration are still valid.
     /// Redirects to onboarding if critical checks fail.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method only DETECTS permission/configuration issues and redirects to onboarding.
+    /// It does NOT start the location service - onboarding is the single authority for that.
+    /// This design eliminates race conditions during cold start.
+    /// </para>
+    /// <para>
+    /// The check compares the user's stored choice (BackgroundTrackingEnabled) against
+    /// actual runtime permissions to detect if a 24/7 tracking user revoked background permission.
+    /// </para>
+    /// </remarks>
     private async Task CheckPermissionsHealthAsync()
     {
         try
@@ -234,14 +261,15 @@ public partial class App : Application
                 return;
 
             var hasLocationPermission = await permissions.IsLocationPermissionGrantedAsync();
+            var hasBackgroundPermission = await permissions.IsBackgroundLocationPermissionGrantedAsync();
             var isConfigured = settings.IsConfigured;
 
-            // If permissions revoked or not configured, redirect to onboarding
+            // Check 1: Basic location permission or configuration missing
             if (!hasLocationPermission || !isConfigured)
             {
                 System.Diagnostics.Debug.WriteLine($"[App] Health check failed - Permission: {hasLocationPermission}, Configured: {isConfigured}");
 
-                // Stop the location service if running
+                // Stop the location service if running (permission revoked)
                 if (locationBridge != null && !hasLocationPermission)
                 {
                     await locationBridge.StopAsync();
@@ -249,16 +277,24 @@ public partial class App : Application
 
                 // Redirect to onboarding (only once per session)
                 await RedirectToOnboardingAsync(!hasLocationPermission, !isConfigured);
+                return;
             }
-            else
+
+            // Check 2: User had 24/7 tracking but background permission was revoked
+            if (settings.BackgroundTrackingEnabled && !hasBackgroundPermission)
             {
-                // All OK - ensure service is running
-                if (locationBridge != null && locationBridge.CurrentState != Core.Enums.TrackingState.Active)
-                {
-                    await locationBridge.StartAsync();
-                    System.Diagnostics.Debug.WriteLine("[App] Health check: Restarted location service");
-                }
+                System.Diagnostics.Debug.WriteLine("[App] Health check: Background permission revoked by 24/7 tracking user");
+
+                // Redirect to onboarding to re-grant or downgrade to casual use
+                await RedirectToOnboardingAsync(backgroundPermissionRevoked: true, notConfigured: false);
+                return;
             }
+
+            // All OK - do NOT restart service here to avoid race conditions
+            // Service is started by:
+            // 1. Onboarding (when user completes setup)
+            // 2. StartBackgroundServices() on cold start (if already configured)
+            System.Diagnostics.Debug.WriteLine("[App] Health check passed");
         }
         catch (Exception ex)
         {
@@ -271,7 +307,10 @@ public partial class App : Application
     /// <summary>
     /// Redirects to onboarding when critical checks fail.
     /// </summary>
-    private async Task RedirectToOnboardingAsync(bool permissionRevoked, bool notConfigured)
+    /// <param name="permissionRevoked">True if basic location permission was revoked.</param>
+    /// <param name="notConfigured">True if server configuration is missing.</param>
+    /// <param name="backgroundPermissionRevoked">True if background permission was revoked by a 24/7 tracking user.</param>
+    private async Task RedirectToOnboardingAsync(bool permissionRevoked = false, bool notConfigured = false, bool backgroundPermissionRevoked = false)
     {
         if (_healthCheckRedirectShown)
             return;
@@ -284,11 +323,27 @@ public partial class App : Application
             if (page == null)
                 return;
 
-            string message = permissionRevoked && notConfigured
-                ? "Location permission was revoked and server configuration is missing. Please complete setup again."
-                : permissionRevoked
-                    ? "Location permission was revoked. Please grant permission to continue tracking."
-                    : "Server configuration is missing. Please configure your server to continue.";
+            string message;
+            if (permissionRevoked && notConfigured)
+            {
+                message = "Location permission was revoked and server configuration is missing. Please complete setup again.";
+            }
+            else if (permissionRevoked)
+            {
+                message = "Location permission was revoked. Please grant permission to continue using location features.";
+            }
+            else if (backgroundPermissionRevoked)
+            {
+                message = "Background location permission was revoked. Your timeline won't track while the app is closed. Would you like to re-enable 24/7 tracking or continue with foreground-only mode?";
+            }
+            else if (notConfigured)
+            {
+                message = "Server configuration is missing. Please configure your server to continue.";
+            }
+            else
+            {
+                return; // No issue detected
+            }
 
             var goToSetup = await page.DisplayAlertAsync(
                 "Setup Required",

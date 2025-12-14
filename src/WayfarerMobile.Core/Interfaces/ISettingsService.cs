@@ -16,6 +16,13 @@ public interface ISettingsService
     bool TimelineTrackingEnabled { get; set; }
 
     /// <summary>
+    /// Gets or sets whether the user chose 24/7 background tracking during onboarding.
+    /// When true, the app expects background location permission to be granted.
+    /// If permission is revoked, the health check will redirect to onboarding.
+    /// </summary>
+    bool BackgroundTrackingEnabled { get; set; }
+
+    /// <summary>
     /// Gets or sets the server URL for API calls.
     /// </summary>
     string? ServerUrl { get; set; }

@@ -3,7 +3,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:WayfarerMobile.ViewModels"
              xmlns:sfExpander="clr-namespace:Syncfusion.Maui.Toolkit.Expander;assembly=Syncfusion.Maui.Toolkit"
-             xmlns:sfSwitch="clr-namespace:Syncfusion.Maui.Toolkit.Switch;assembly=Syncfusion.Maui.Toolkit"
              x:Class="WayfarerMobile.Views.SettingsPage"
              x:DataType="vm:SettingsViewModel"
              Title="{Binding Title}">
@@ -51,6 +50,45 @@
                 </sfExpander:SfExpander.Content>
             </sfExpander:SfExpander>
 
+            <!-- Permissions & Setup Section -->
+            <sfExpander:SfExpander IsExpanded="False">
+                <sfExpander:SfExpander.Header>
+                    <Grid HeightRequest="48" Padding="10,0">
+                        <Label Text="Permissions &amp; Setup"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               VerticalOptions="Center" />
+                    </Grid>
+                </sfExpander:SfExpander.Header>
+                <sfExpander:SfExpander.Content>
+                    <VerticalStackLayout Padding="15" Spacing="15">
+                        <!-- Current Status -->
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="Tracking Mode"
+                                   FontSize="14"
+                                   FontAttributes="Bold" />
+                            <Label Text="{Binding TrackingModeDescription}"
+                                   FontSize="12"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        </VerticalStackLayout>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+
+                        <!-- Rerun Setup Button -->
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="Change your permissions or tracking mode by running the setup wizard again."
+                                   FontSize="12"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            <Button Text="Rerun Setup Wizard"
+                                    Command="{Binding RerunSetupCommand}"
+                                    Style="{StaticResource DarkButton}"
+                                    HeightRequest="44" />
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </sfExpander:SfExpander.Content>
+            </sfExpander:SfExpander>
+
             <!-- Timeline Tracking Section -->
             <sfExpander:SfExpander IsExpanded="True">
                 <sfExpander:SfExpander.Header>
@@ -71,9 +109,9 @@
                                        FontSize="12"
                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                             </VerticalStackLayout>
-                            <sfSwitch:SfSwitch Grid.Column="1"
-                                               IsOn="{Binding TimelineTrackingEnabled}"
-                                               VisualType="Cupertino" />
+                            <Switch Grid.Column="1"
+                                        IsToggled="{Binding TimelineTrackingEnabled}"
+                                        OnColor="{StaticResource Primary}" />
                         </Grid>
 
                         <BoxView HeightRequest="1"
@@ -119,9 +157,9 @@
                                        FontSize="12"
                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                             </VerticalStackLayout>
-                            <sfSwitch:SfSwitch Grid.Column="1"
-                                               IsOn="{Binding NavigationAudioEnabled}"
-                                               VisualType="Cupertino" />
+                            <Switch Grid.Column="1"
+                                        IsToggled="{Binding NavigationAudioEnabled}"
+                                        OnColor="{StaticResource Primary}" />
                         </Grid>
 
                         <BoxView HeightRequest="1"
@@ -136,9 +174,9 @@
                                        FontSize="12"
                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                             </VerticalStackLayout>
-                            <sfSwitch:SfSwitch Grid.Column="1"
-                                               IsOn="{Binding NavigationVibrationEnabled}"
-                                               VisualType="Cupertino" />
+                            <Switch Grid.Column="1"
+                                        IsToggled="{Binding NavigationVibrationEnabled}"
+                                        OnColor="{StaticResource Primary}" />
                         </Grid>
 
                         <BoxView HeightRequest="1"
@@ -153,9 +191,9 @@
                                        FontSize="12"
                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                             </VerticalStackLayout>
-                            <sfSwitch:SfSwitch Grid.Column="1"
-                                               IsOn="{Binding AutoRerouteEnabled}"
-                                               VisualType="Cupertino" />
+                            <Switch Grid.Column="1"
+                                        IsToggled="{Binding AutoRerouteEnabled}"
+                                        OnColor="{StaticResource Primary}" />
                         </Grid>
 
                         <BoxView HeightRequest="1"
@@ -206,9 +244,9 @@
                                        FontSize="12"
                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                             </VerticalStackLayout>
-                            <sfSwitch:SfSwitch Grid.Column="1"
-                                               IsOn="{Binding MapOfflineCacheEnabled}"
-                                               VisualType="Cupertino" />
+                            <Switch Grid.Column="1"
+                                        IsToggled="{Binding MapOfflineCacheEnabled}"
+                                        OnColor="{StaticResource Primary}" />
                         </Grid>
                     </VerticalStackLayout>
                 </sfExpander:SfExpander.Content>
@@ -234,9 +272,9 @@
                                        FontSize="12"
                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                             </VerticalStackLayout>
-                            <sfSwitch:SfSwitch Grid.Column="1"
-                                               IsOn="{Binding DarkModeEnabled}"
-                                               VisualType="Cupertino" />
+                            <Switch Grid.Column="1"
+                                        IsToggled="{Binding DarkModeEnabled}"
+                                        OnColor="{StaticResource Primary}" />
                         </Grid>
                     </VerticalStackLayout>
                 </sfExpander:SfExpander.Content>
@@ -263,9 +301,9 @@
                                        FontSize="12"
                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                             </VerticalStackLayout>
-                            <sfSwitch:SfSwitch Grid.Column="1"
-                                               IsOn="{Binding ShowBatteryWarnings}"
-                                               VisualType="Cupertino" />
+                            <Switch Grid.Column="1"
+                                        IsToggled="{Binding ShowBatteryWarnings}"
+                                        OnColor="{StaticResource Primary}" />
                         </Grid>
 
                         <BoxView HeightRequest="1"
@@ -280,9 +318,9 @@
                                        FontSize="12"
                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                             </VerticalStackLayout>
-                            <sfSwitch:SfSwitch Grid.Column="1"
-                                               IsOn="{Binding AutoPauseTrackingOnCriticalBattery}"
-                                               VisualType="Cupertino" />
+                            <Switch Grid.Column="1"
+                                        IsToggled="{Binding AutoPauseTrackingOnCriticalBattery}"
+                                        OnColor="{StaticResource Primary}" />
                         </Grid>
                     </VerticalStackLayout>
                 </sfExpander:SfExpander.Content>
@@ -309,10 +347,10 @@
                                        FontSize="12"
                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                             </VerticalStackLayout>
-                            <sfSwitch:SfSwitch Grid.Column="1"
-                                               IsOn="{Binding PinSecurity.IsPinLockEnabled}"
-                                               IsEnabled="{Binding PinSecurity.IsBusy, Converter={StaticResource InvertedBoolConverter}}"
-                                               VisualType="Cupertino" />
+                            <Switch Grid.Column="1"
+                                        IsToggled="{Binding PinSecurity.IsPinLockEnabled}"
+                                        IsEnabled="{Binding PinSecurity.IsBusy, Converter={StaticResource InvertedBoolConverter}}"
+                                        OnColor="{StaticResource Primary}" />
                         </Grid>
 
                         <BoxView HeightRequest="1"

@@ -11,6 +11,7 @@ public class SettingsService : ISettingsService
 
     private const string KeyIsFirstRun = "is_first_run";
     private const string KeyTimelineTrackingEnabled = "timeline_tracking_enabled";
+    private const string KeyBackgroundTrackingEnabled = "background_tracking_enabled";
     private const string KeyServerUrl = "server_url";
     private const string KeyApiToken = "api_token";
     private const string KeyLocationTimeThreshold = "location_time_threshold";
@@ -63,6 +64,18 @@ public class SettingsService : ISettingsService
     {
         get => Preferences.Get(KeyTimelineTrackingEnabled, true);
         set => Preferences.Set(KeyTimelineTrackingEnabled, value);
+    }
+
+    /// <summary>
+    /// Gets or sets whether the user chose 24/7 background tracking during onboarding.
+    /// When true, the app expects background location permission to be granted.
+    /// If permission is revoked, the health check will redirect to onboarding.
+    /// Default is false - user must explicitly enable during onboarding.
+    /// </summary>
+    public bool BackgroundTrackingEnabled
+    {
+        get => Preferences.Get(KeyBackgroundTrackingEnabled, false);
+        set => Preferences.Set(KeyBackgroundTrackingEnabled, value);
     }
 
     /// <summary>
