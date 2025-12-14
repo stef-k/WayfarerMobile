@@ -264,6 +264,10 @@ public partial class TimelineEntrySheet : ContentView
     public TimelineEntrySheet()
     {
         InitializeComponent();
+
+        // Wire up bottom sheet StateChanged event (done in code-behind for XamlC compatibility)
+        // SfBottomSheet uses StateChanged, not Closed - we detect closure via Hidden state
+        BottomSheet.StateChanged += OnBottomSheetStateChanged;
     }
 
     #region Public Methods
@@ -350,11 +354,19 @@ public partial class TimelineEntrySheet : ContentView
         }
     }
 
-    private void OnBottomSheetClosed(object? sender, EventArgs e)
+    /// <summary>
+    /// Handles the bottom sheet state changes.
+    /// Detects when sheet is closed (Hidden state) to run cleanup logic.
+    /// </summary>
+    private void OnBottomSheetStateChanged(object? sender, Syncfusion.Maui.Toolkit.BottomSheet.StateChangedEventArgs e)
     {
-        IsOpen = false;
-        IsEditing = false;
-        Closed?.Invoke(this, EventArgs.Empty);
+        // Only handle when sheet becomes hidden (closed)
+        if (e.NewState == BottomSheetState.Hidden)
+        {
+            IsOpen = false;
+            IsEditing = false;
+            Closed?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private void OnEditClicked(object? sender, EventArgs e)

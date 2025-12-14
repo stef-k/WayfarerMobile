@@ -36,6 +36,10 @@ public partial class MainPage : ContentPage
 
         // Subscribe to ViewModel property changes to reset sheet state
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+
+        // Wire up bottom sheet StateChanged event (done in code-behind for XamlC compatibility)
+        // SfBottomSheet uses StateChanged, not Closed - we detect closure via Hidden state
+        CheckInBottomSheet.StateChanged += OnCheckInSheetStateChanged;
     }
 
     #region Context Menu Event Handlers
@@ -175,12 +179,17 @@ public partial class MainPage : ContentPage
     }
 
     /// <summary>
-    /// Handles the check-in sheet being closed.
+    /// Handles the check-in sheet state changes.
+    /// Detects when sheet is closed (Hidden state) to run cleanup logic.
     /// </summary>
-    private async void OnCheckInSheetClosed(object? sender, EventArgs e)
+    private async void OnCheckInSheetStateChanged(object? sender, Syncfusion.Maui.Toolkit.BottomSheet.StateChangedEventArgs e)
     {
-        _viewModel.IsCheckInSheetOpen = false;
-        await _viewModel.OnCheckInSheetClosedAsync();
+        // Only handle when sheet becomes hidden (closed)
+        if (e.NewState == Syncfusion.Maui.Toolkit.BottomSheet.BottomSheetState.Hidden)
+        {
+            _viewModel.IsCheckInSheetOpen = false;
+            await _viewModel.OnCheckInSheetClosedAsync();
+        }
     }
 
     /// <summary>

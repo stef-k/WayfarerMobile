@@ -130,6 +130,18 @@ public partial class CacheStatusSheet : ContentView
         CloseCommand?.Execute(null);
     }
 
+    /// <summary>
+    /// Handles overlay switch toggle - executes the ViewModel's toggle command.
+    /// </summary>
+    private void OnOverlaySwitchToggled(object? sender, ToggledEventArgs e)
+    {
+        // Execute the ViewModel command when switch is toggled
+        if (ViewModel?.ToggleOverlayCommand.CanExecute(null) == true)
+        {
+            ViewModel.ToggleOverlayCommand.Execute(null);
+        }
+    }
+
     #endregion
 
     #region Public Methods

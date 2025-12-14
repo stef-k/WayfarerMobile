@@ -217,9 +217,14 @@
                              SelectedDate="{Binding SelectedDate}"
                              MaximumDate="{x:Static sys:DateTime.Today}"
                              Format="dd_MMM_yyyy"
-                             HeaderView="{picker:PickerHeaderView Height=40, Text='Select Date'}"
-                             FooterView="{picker:PickerFooterView ShowOkButton=True, ShowCancelButton=True}"
                              OkButtonClicked="OnDatePickerOkClicked"
-                             CancelButtonClicked="OnDatePickerCancelClicked" />
+                             CancelButtonClicked="OnDatePickerCancelClicked">
+            <picker:SfDatePicker.HeaderView>
+                <picker:PickerHeaderView Height="40" Text="Select Date" />
+            </picker:SfDatePicker.HeaderView>
+            <picker:SfDatePicker.FooterView>
+                <picker:PickerFooterView Height="40" />
+            </picker:SfDatePicker.FooterView>
+        </picker:SfDatePicker>
     </Grid>
 </ContentPage>

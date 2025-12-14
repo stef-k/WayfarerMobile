@@ -17,7 +17,6 @@
                                IsModal="False"
                                ShowGrabber="True"
                                CornerRadius="16"
-                               Closed="OnBottomSheetClosed"
                                BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
 
         <!-- Main Content (placeholder) -->

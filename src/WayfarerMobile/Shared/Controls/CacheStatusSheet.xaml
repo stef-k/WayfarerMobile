@@ -162,14 +162,11 @@
                                        FontSize="14"
                                        VerticalOptions="Center" />
                                 <Switch Grid.Column="2"
+                                        x:Name="OverlaySwitch"
                                         IsToggled="{Binding IsOverlayEnabled}"
                                         OnColor="{StaticResource Primary}"
-                                        VerticalOptions="Center">
-                                    <Switch.Behaviors>
-                                        <EventToCommandBehavior EventName="Toggled"
-                                                                Command="{Binding ToggleOverlayCommand}" />
-                                    </Switch.Behaviors>
-                                </Switch>
+                                        VerticalOptions="Center"
+                                        Toggled="OnOverlaySwitchToggled" />
                             </Grid>
                         </Border>
 

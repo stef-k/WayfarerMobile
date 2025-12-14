@@ -24,7 +24,6 @@
                                    GrabberWidth="40"
                                    GrabberHeight="4"
                                    CornerRadius="16"
-                                   Closed="OnCheckInSheetClosed"
                                    BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
 
             <!-- Main Content: Map and overlays -->

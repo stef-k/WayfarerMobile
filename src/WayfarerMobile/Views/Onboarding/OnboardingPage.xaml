@@ -3,7 +3,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:WayfarerMobile.ViewModels"
              xmlns:sfProgress="clr-namespace:Syncfusion.Maui.Toolkit.ProgressBar;assembly=Syncfusion.Maui.Toolkit"
-             xmlns:sfBusy="clr-namespace:Syncfusion.Maui.Toolkit.BusyIndicator;assembly=Syncfusion.Maui.Toolkit"
              x:Class="WayfarerMobile.Views.Onboarding.OnboardingPage"
              x:DataType="vm:OnboardingViewModel"
              Shell.NavBarIsVisible="False"
@@ -155,12 +154,14 @@
         </Grid>
 
         <!-- Loading overlay -->
-        <sfBusy:SfBusyIndicator Grid.RowSpan="3"
-                                IsRunning="{Binding IsBusy}"
-                                IsVisible="{Binding IsBusy}"
-                                AnimationType="CircularMaterial"
-                                IndicatorColor="{StaticResource Primary}"
-                                OverlayFill="{AppThemeBinding Light=#80FFFFFF, Dark=#80000000}" />
+        <Grid Grid.RowSpan="3"
+              IsVisible="{Binding IsBusy}"
+              BackgroundColor="{AppThemeBinding Light=#80FFFFFF, Dark=#80000000}">
+            <ActivityIndicator IsRunning="{Binding IsBusy}"
+                               Color="{StaticResource Primary}"
+                               HorizontalOptions="Center"
+                               VerticalOptions="Center" />
+        </Grid>
 
     </Grid>
 
