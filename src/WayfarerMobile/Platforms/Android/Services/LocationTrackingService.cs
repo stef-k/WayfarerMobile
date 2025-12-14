@@ -108,13 +108,106 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     #region Service Lifecycle
 
     /// <summary>
-    /// Called when the service is created.
+    /// Called when the service is created. Initializes all service dependencies and starts foreground mode.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>CRITICAL: Foreground Service 5-Second Rule</strong>
+    /// </para>
+    /// <para>
+    /// Android 8.0+ (API 26+) requires that after calling <c>Context.startForegroundService()</c>,
+    /// the service MUST call <c>startForeground()</c> within 5 seconds, or Android will throw
+    /// <c>RemoteServiceException</c> and crash the app. This is a strict system requirement.
+    /// </para>
+    /// <para>
+    /// <strong>Initialization Order (DO NOT REORDER WITHOUT UNDERSTANDING):</strong>
+    /// </para>
+    /// <list type="number">
+    ///   <item>
+    ///     <description>
+    ///       <strong>Phase 1 - Foreground Setup (MUST complete within 5 seconds):</strong>
+    ///       <list type="bullet">
+    ///         <item><c>_notificationManager</c> - Required by CreateNotification()</item>
+    ///         <item><c>CreateNotificationChannel()</c> - Required before posting notifications on API 26+</item>
+    ///         <item><c>StartForeground()</c> - MUST be called here, before any blocking operations</item>
+    ///       </list>
+    ///     </description>
+    ///   </item>
+    ///   <item>
+    ///     <description>
+    ///       <strong>Phase 2 - Service Dependencies (can take time, runs after foreground is established):</strong>
+    ///       <list type="bullet">
+    ///         <item><c>DatabaseService</c> - May involve I/O, table creation on first run</item>
+    ///         <item><c>ThresholdFilter</c> - Fast, but logically belongs with database service</item>
+    ///         <item>Preferences loading - Fast, reads from shared preferences</item>
+    ///         <item><c>GoogleApiAvailability</c> check - Can be slow (system IPC call)</item>
+    ///         <item><c>FusedLocationProviderClient</c> setup - Depends on Google Play check</item>
+    ///         <item>Settings sync timer - Background operation, no rush</item>
+    ///       </list>
+    ///     </description>
+    ///   </item>
+    /// </list>
+    /// <para>
+    /// <strong>Why This Order Matters:</strong>
+    /// </para>
+    /// <para>
+    /// The Phase 2 operations (especially DatabaseService and GoogleApiAvailability) can take
+    /// 100-500ms+ on slower devices or during first-run scenarios. If StartForeground() is called
+    /// after these operations, the cumulative time may exceed 5 seconds, causing a crash.
+    /// </para>
+    /// <para>
+    /// <strong>Location Tracking Dependencies:</strong>
+    /// </para>
+    /// <para>
+    /// The actual location tracking (GPS updates) starts in <c>OnStartCommand()</c> → <c>StartTracking()</c>
+    /// → <c>StartLocationUpdates()</c>. Android guarantees that <c>OnStartCommand()</c> is called only
+    /// AFTER <c>OnCreate()</c> completes, so all Phase 2 dependencies (<c>_hasPlayServices</c>,
+    /// <c>_fusedClient</c>, <c>_databaseService</c>, etc.) will be fully initialized before
+    /// location updates begin.
+    /// </para>
+    /// </remarks>
     public override void OnCreate()
     {
         base.OnCreate();
 
-        _notificationManager = (NotificationManager?)GetSystemService(NotificationService);
+        // ═══════════════════════════════════════════════════════════════════════════════════════
+        // PHASE 1: FOREGROUND SETUP - Must complete within 5 seconds of startForegroundService()
+        // DO NOT add blocking operations before StartForeground() call!
+        // ═══════════════════════════════════════════════════════════════════════════════════════
+
+        try
+        {
+            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] OnCreate starting - initiating foreground");
+
+            _notificationManager = (NotificationManager?)GetSystemService(NotificationService);
+            if (_notificationManager == null)
+            {
+                System.Diagnostics.Debug.WriteLine("[LocationTrackingService] WARNING: NotificationManager is null!");
+            }
+
+            CreateNotificationChannel();
+            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Notification channel created");
+
+            // CRITICAL: Start foreground IMMEDIATELY to satisfy Android's 5-second requirement.
+            var notification = CreateNotification("Initializing...");
+            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Notification created, calling StartForeground");
+
+            StartForeground(NotificationId, notification);
+            _currentState = TrackingState.Ready;
+            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Foreground started successfully in OnCreate");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] CRITICAL ERROR in Phase 1: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] Stack trace: {ex.StackTrace}");
+            throw; // Re-throw to see the real error
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════════════════════
+        // PHASE 2: SERVICE DEPENDENCIES - Safe to take time now, foreground is established
+        // These are needed by StartLocationUpdates() which runs later in OnStartCommand()
+        // ═══════════════════════════════════════════════════════════════════════════════════════
+
         _databaseService = new DatabaseService();
         _thresholdFilter = new ThresholdFilter();
 
@@ -129,7 +222,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         _thresholdFilter.UpdateThresholds(timeThreshold, distanceThreshold);
         System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] Thresholds: {timeThreshold}min / {distanceThreshold}m");
 
-        // Check for Google Play Services availability
+        // Check for Google Play Services availability (can be slow - system IPC call)
         _hasPlayServices = GoogleApiAvailability.Instance
             .IsGooglePlayServicesAvailable(this) == ConnectionResult.Success;
 
@@ -147,8 +240,6 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
             System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Using fallback LocationManager (no Play Services)");
         }
 
-        CreateNotificationChannel();
-
         // Start settings sync timer (checks every hour, syncs if 6+ hours elapsed)
         // Completely isolated - failures never affect location tracking
         StartSettingsSyncTimer();
@@ -159,24 +250,15 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     /// <summary>
     /// Called when a component starts the service.
     /// </summary>
+    /// <remarks>
+    /// Note: StartForeground() is already called in OnCreate(), so we don't need to call it here.
+    /// Android guarantees OnCreate() completes before OnStartCommand() is called.
+    /// </remarks>
     public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
     {
         var action = intent?.Action ?? ActionStart;
 
         System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] OnStartCommand: {action}");
-
-        // CRITICAL: If service is not initialized and we're not stopping,
-        // we must call StartForeground within 5 seconds to avoid ANR/crash.
-        // This handles cases where service is restarted by Android or control commands
-        // are sent when service wasn't running.
-        if (_currentState == TrackingState.NotInitialized && action != ActionStop)
-        {
-            var notification = CreateNotification("Initializing...");
-            StartForeground(NotificationId, notification);
-            _currentState = TrackingState.Ready;
-            SendStateChangeBroadcast();
-            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Foreground started for non-Start action");
-        }
 
         switch (action)
         {
@@ -213,16 +295,46 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     /// <summary>
     /// Called when the service is destroyed.
     /// </summary>
+    /// <remarks>
+    /// We must call StopForeground() before the service is destroyed to properly
+    /// signal to Android that we're done with foreground mode. This prevents
+    /// Android from throwing RemoteServiceException if the service is unexpectedly
+    /// destroyed while Android is still tracking the foreground state.
+    /// </remarks>
     public override void OnDestroy()
     {
-        System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Service destroyed");
+        System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Service destroying - stopping foreground");
 
         // Stop settings sync timer safely
         StopSettingsSyncTimer();
 
         StopLocationUpdates();
+
+        // CRITICAL: Stop foreground mode before destruction to clear Android's tracking state.
+        // Use RemoveNotification flag to remove the notification.
+        try
+        {
+            if (OperatingSystem.IsAndroidVersionAtLeast(24))
+            {
+                StopForeground(StopForegroundFlags.Remove);
+            }
+            else
+            {
+                #pragma warning disable CA1422 // Validate platform compatibility
+                StopForeground(true);
+                #pragma warning restore CA1422
+            }
+            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Foreground stopped");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] Error stopping foreground: {ex.Message}");
+        }
+
         _currentState = TrackingState.NotInitialized;
         SendStateChangeBroadcast();
+
+        System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Service destroyed");
 
         base.OnDestroy();
     }
@@ -242,6 +354,10 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     /// <summary>
     /// Starts location tracking.
     /// </summary>
+    /// <remarks>
+    /// Note: StartForeground() is already called in OnCreate(), so we only need to
+    /// update the notification text here. The service is already in foreground mode.
+    /// </remarks>
     private void StartTracking()
     {
         lock (_lock)
@@ -255,9 +371,8 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
             _currentState = TrackingState.Starting;
             SendStateChangeBroadcast();
 
-            // CRITICAL: Start foreground within 5 seconds of service start!
-            var notification = CreateNotification("Starting...");
-            StartForeground(NotificationId, notification);
+            // Update notification to show we're starting (foreground already established in OnCreate)
+            UpdateNotification("Starting...");
 
             // Start location updates
             StartLocationUpdates();

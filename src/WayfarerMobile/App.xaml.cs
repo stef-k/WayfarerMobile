@@ -94,6 +94,27 @@ public partial class App : Application
     /// Starts the location tracking service if permissions are granted.
     /// The service runs 24/7 with context switching between high/normal performance modes.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>CRITICAL: Android Foreground Service Timing</strong>
+    /// </para>
+    /// <para>
+    /// On Android 8.0+, after calling startForegroundService(), the service MUST call
+    /// startForeground() within 5 seconds. However, during MAUI app startup, the main
+    /// thread is heavily blocked loading assemblies and initializing UI components.
+    /// </para>
+    /// <para>
+    /// If we call startForegroundService() during app construction, Android queues the
+    /// service creation, but the main thread may remain blocked for 10+ seconds. When
+    /// Android finally processes the service creation, the 5-second window has expired,
+    /// causing a RemoteServiceException crash.
+    /// </para>
+    /// <para>
+    /// <strong>Solution:</strong> Use MainThread.BeginInvokeOnMainThread() to queue the
+    /// service start. This ensures startForegroundService() is called only after the
+    /// current main thread work completes, so Android can process it immediately.
+    /// </para>
+    /// </remarks>
     private async Task StartLocationTrackingServiceAsync()
     {
         try
@@ -119,8 +140,22 @@ public partial class App : Application
                 return;
             }
 
-            await locationBridge.StartAsync();
-            System.Diagnostics.Debug.WriteLine("[App] Location tracking service started (24/7 mode)");
+            // CRITICAL: Queue the service start to run after current main thread work completes.
+            // This ensures startForegroundService() is called when the main thread is free,
+            // allowing Android to immediately process OnCreate and call StartForeground()
+            // within the required 5-second window.
+            MainThread.BeginInvokeOnMainThread(async () =>
+            {
+                try
+                {
+                    await locationBridge.StartAsync();
+                    System.Diagnostics.Debug.WriteLine("[App] Location tracking service started (24/7 mode)");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[App] Failed to start location tracking service: {ex.Message}");
+                }
+            });
         }
         catch (Exception ex)
         {
