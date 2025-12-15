@@ -19,7 +19,8 @@ public class SettingsService : ISettingsService
     private const string KeyLastSyncTime = "last_sync_time";
     private const string KeyUserId = "user_id";
     private const string KeyUserEmail = "user_email";
-    private const string KeyDarkModeEnabled = "dark_mode_enabled";
+    private const string KeyThemePreference = "theme_preference";
+    private const string KeyLanguagePreference = "language_preference";
     private const string KeyMapOfflineCacheEnabled = "map_offline_cache_enabled";
     private const string KeyMaxConcurrentTileDownloads = "max_concurrent_tile_downloads";
     private const string KeyMinTileRequestDelayMs = "min_tile_request_delay_ms";
@@ -180,12 +181,24 @@ public class SettingsService : ISettingsService
     }
 
     /// <summary>
-    /// Gets or sets whether dark mode is enabled.
+    /// Gets or sets the theme preference: "System", "Light", or "Dark".
+    /// Default is "System" which follows the device's theme setting.
     /// </summary>
-    public bool DarkModeEnabled
+    public string ThemePreference
     {
-        get => Preferences.Get(KeyDarkModeEnabled, false);
-        set => Preferences.Set(KeyDarkModeEnabled, value);
+        get => Preferences.Get(KeyThemePreference, "System");
+        set => Preferences.Set(KeyThemePreference, value ?? "System");
+    }
+
+    /// <summary>
+    /// Gets or sets the app language preference.
+    /// Empty string or "System" means use device language.
+    /// Otherwise, a culture code like "en", "fr", "de", etc.
+    /// </summary>
+    public string LanguagePreference
+    {
+        get => Preferences.Get(KeyLanguagePreference, "System");
+        set => Preferences.Set(KeyLanguagePreference, value ?? "System");
     }
 
     /// <summary>

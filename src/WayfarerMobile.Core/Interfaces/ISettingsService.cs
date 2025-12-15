@@ -151,9 +151,17 @@ public interface ISettingsService
     #region UI Settings
 
     /// <summary>
-    /// Gets or sets whether dark mode is enabled.
+    /// Gets or sets the theme preference: "System", "Light", or "Dark".
+    /// "System" follows the device's theme setting.
     /// </summary>
-    bool DarkModeEnabled { get; set; }
+    string ThemePreference { get; set; }
+
+    /// <summary>
+    /// Gets or sets the app language preference.
+    /// Empty string or "System" means use device language.
+    /// Otherwise, a culture code like "en", "fr", "de", etc.
+    /// </summary>
+    string LanguagePreference { get; set; }
 
     /// <summary>
     /// Gets or sets whether offline map caching is enabled.

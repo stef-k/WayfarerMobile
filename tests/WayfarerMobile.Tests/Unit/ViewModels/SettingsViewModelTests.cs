@@ -288,27 +288,53 @@ public class SettingsViewModelTests
     }
 
     /// <summary>
-    /// Documents that OnDarkModeEnabledChanged updates settings service.
+    /// Documents that OnThemePreferenceChanged updates settings service.
     /// </summary>
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void OnDarkModeEnabledChanged_UpdatesSettingsService(bool value)
+    [InlineData("System")]
+    [InlineData("Light")]
+    [InlineData("Dark")]
+    public void OnThemePreferenceChanged_UpdatesSettingsService(string value)
     {
         // The SettingsViewModel has this partial method:
-        // partial void OnDarkModeEnabledChanged(bool value)
+        // partial void OnThemePreferenceChanged(string value)
         // {
-        //     _settingsService.DarkModeEnabled = value;
+        //     _settingsService.ThemePreference = value;
         //     ApplyTheme(value);
         // }
 
         var mockSettings = new Mock<ISettingsService>();
-        mockSettings.SetupProperty(s => s.DarkModeEnabled);
+        mockSettings.SetupProperty(s => s.ThemePreference);
 
-        mockSettings.Object.DarkModeEnabled = value;
+        mockSettings.Object.ThemePreference = value;
 
-        mockSettings.Object.DarkModeEnabled.Should().Be(value,
-            "Settings service should be updated when DarkModeEnabled changes");
+        mockSettings.Object.ThemePreference.Should().Be(value,
+            "Settings service should be updated when ThemePreference changes");
+    }
+
+    /// <summary>
+    /// Documents that OnSelectedLanguageOptionChanged updates settings service.
+    /// </summary>
+    [Theory]
+    [InlineData("System")]
+    [InlineData("en")]
+    [InlineData("fr")]
+    public void OnSelectedLanguageOptionChanged_UpdatesSettingsService(string code)
+    {
+        // The SettingsViewModel has this partial method:
+        // partial void OnSelectedLanguageOptionChanged(LanguageOption? value)
+        // {
+        //     _settingsService.LanguagePreference = value.Code;
+        //     ApplyLanguage(value.Code);
+        // }
+
+        var mockSettings = new Mock<ISettingsService>();
+        mockSettings.SetupProperty(s => s.LanguagePreference);
+
+        mockSettings.Object.LanguagePreference = code;
+
+        mockSettings.Object.LanguagePreference.Should().Be(code,
+            "Settings service should be updated when LanguagePreference changes");
     }
 
     /// <summary>
@@ -882,8 +908,10 @@ public class SettingsViewModelTests
             .Should().NotBeNull("LocationTimeThresholdMinutes is required");
         interfaceType.GetProperty(nameof(ISettingsService.LocationDistanceThresholdMeters))
             .Should().NotBeNull("LocationDistanceThresholdMeters is required");
-        interfaceType.GetProperty(nameof(ISettingsService.DarkModeEnabled))
-            .Should().NotBeNull("DarkModeEnabled is required");
+        interfaceType.GetProperty(nameof(ISettingsService.ThemePreference))
+            .Should().NotBeNull("ThemePreference is required");
+        interfaceType.GetProperty(nameof(ISettingsService.LanguagePreference))
+            .Should().NotBeNull("LanguagePreference is required");
         interfaceType.GetProperty(nameof(ISettingsService.MapOfflineCacheEnabled))
             .Should().NotBeNull("MapOfflineCacheEnabled is required");
         interfaceType.GetProperty(nameof(ISettingsService.NavigationAudioEnabled))
@@ -956,7 +984,8 @@ public class SettingsViewModelTests
         mockSettings.Setup(s => s.ServerUrl).Returns("https://api.example.com");
         mockSettings.Setup(s => s.LocationTimeThresholdMinutes).Returns(5);
         mockSettings.Setup(s => s.LocationDistanceThresholdMeters).Returns(50);
-        mockSettings.Setup(s => s.DarkModeEnabled).Returns(false);
+        mockSettings.Setup(s => s.ThemePreference).Returns("System");
+        mockSettings.Setup(s => s.LanguagePreference).Returns("System");
         mockSettings.Setup(s => s.MapOfflineCacheEnabled).Returns(true);
         mockSettings.Setup(s => s.NavigationAudioEnabled).Returns(true);
         mockSettings.Setup(s => s.NavigationVibrationEnabled).Returns(true);
@@ -993,12 +1022,14 @@ public class SettingsViewModelTests
 
         // Simulate property changes
         mockSettings.Object.TimelineTrackingEnabled = true;
-        mockSettings.Object.DarkModeEnabled = true;
+        mockSettings.Object.ThemePreference = "Dark";
+        mockSettings.Object.LanguagePreference = "en";
         mockSettings.Object.DistanceUnits = "miles";
 
         // Verify setter was called
         mockSettings.VerifySet(s => s.TimelineTrackingEnabled = true, Times.Once);
-        mockSettings.VerifySet(s => s.DarkModeEnabled = true, Times.Once);
+        mockSettings.VerifySet(s => s.ThemePreference = "Dark", Times.Once);
+        mockSettings.VerifySet(s => s.LanguagePreference = "en", Times.Once);
         mockSettings.VerifySet(s => s.DistanceUnits = "miles", Times.Once);
     }
 

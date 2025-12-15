@@ -325,7 +325,8 @@ public class DiagnosticService
         report.AppendLine($"   Time Threshold: {_settingsService.LocationTimeThresholdMinutes} min");
         report.AppendLine($"   Distance Threshold: {_settingsService.LocationDistanceThresholdMeters} m");
         report.AppendLine($"   Offline Cache: {(_settingsService.MapOfflineCacheEnabled ? "Enabled" : "Disabled")}");
-        report.AppendLine($"   Dark Mode: {(_settingsService.DarkModeEnabled ? "Enabled" : "Disabled")}");
+        report.AppendLine($"   Theme: {_settingsService.ThemePreference}");
+        report.AppendLine($"   Language: {_settingsService.LanguagePreference}");
     }
 
     private void AppendLogFileInfo(StringBuilder report)
