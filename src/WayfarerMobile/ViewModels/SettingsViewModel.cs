@@ -7,7 +7,8 @@ using WayfarerMobile.Data.Services;
 namespace WayfarerMobile.ViewModels;
 
 /// <summary>
-/// Represents a language option for the settings picker.
+/// Represents a language option for the navigation voice guidance settings picker.
+/// This is used for turn-by-turn voice navigation, not for changing the app display language.
 /// </summary>
 /// <param name="Code">The culture code (e.g., "en", "fr") or "System" for device default.</param>
 /// <param name="DisplayName">The display name shown in the picker.</param>
@@ -75,18 +76,21 @@ public partial class SettingsViewModel : BaseViewModel
     public List<string> ThemeOptions { get; } = ["System", "Light", "Dark"];
 
     /// <summary>
-    /// Gets or sets the language preference.
+    /// Gets or sets the navigation voice guidance language preference.
+    /// This is used for turn-by-turn voice guidance, not the app display language.
     /// </summary>
     [ObservableProperty]
     private string _languagePreference = "System";
 
     /// <summary>
-    /// Gets the available language options dynamically from device-supported cultures.
+    /// Gets the available language options for navigation voice guidance,
+    /// dynamically retrieved from device-supported cultures.
     /// </summary>
     public List<LanguageOption> LanguageOptions { get; } = BuildLanguageOptions();
 
     /// <summary>
     /// Builds the list of available language options from device-supported cultures.
+    /// These are used for navigation voice guidance language selection.
     /// </summary>
     private static List<LanguageOption> BuildLanguageOptions()
     {
@@ -103,7 +107,7 @@ public partial class SettingsViewModel : BaseViewModel
 
         foreach (var culture in cultures)
         {
-            // Use native name for display (e.g., "Deutsch" for German, "日本語" for Japanese)
+            // Use native name for display (e.g., "Deutsch" for German, "Japanese" for Japanese)
             // Include English name in parentheses for clarity
             var displayName = culture.NativeName == culture.EnglishName
                 ? culture.NativeName
@@ -116,7 +120,7 @@ public partial class SettingsViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Gets or sets the selected language option.
+    /// Gets or sets the selected language option for navigation voice guidance.
     /// </summary>
     [ObservableProperty]
     private LanguageOption? _selectedLanguageOption;
@@ -280,7 +284,10 @@ public partial class SettingsViewModel : BaseViewModel
         MapOfflineCacheEnabled = _settingsService.MapOfflineCacheEnabled;
 
         // Theme and language settings
-        ThemePreference = _settingsService.ThemePreference;
+        // Use the string instance from ThemeOptions list to ensure Picker binding works correctly
+        var savedTheme = _settingsService.ThemePreference;
+        ThemePreference = ThemeOptions.Find(t => t == savedTheme) ?? ThemeOptions[0]; // Default to "System"
+
         LanguagePreference = _settingsService.LanguagePreference;
         SelectedLanguageOption = LanguageOptions.Find(l => l.Code == LanguagePreference)
             ?? LanguageOptions[0]; // Default to "System"
@@ -442,31 +449,17 @@ public partial class SettingsViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Applies the language change.
+    /// Stores the navigation language preference. This setting is used for turn-by-turn
+    /// voice guidance only, not for changing the app's display language.
+    /// The actual voice synthesis uses this preference when generating navigation instructions.
     /// </summary>
     /// <param name="languageCode">The language code (e.g., "en", "fr") or "System" for device default.</param>
     private static void ApplyLanguage(string languageCode)
     {
-        try
-        {
-            if (languageCode == "System" || string.IsNullOrEmpty(languageCode))
-            {
-                // Reset to system default
-                CultureInfo.CurrentCulture = CultureInfo.InstalledUICulture;
-                CultureInfo.CurrentUICulture = CultureInfo.InstalledUICulture;
-            }
-            else
-            {
-                var culture = new CultureInfo(languageCode);
-                CultureInfo.CurrentCulture = culture;
-                CultureInfo.CurrentUICulture = culture;
-            }
-        }
-        catch (CultureNotFoundException)
-        {
-            // If the culture is not found, fall back to system default
-            System.Diagnostics.Debug.WriteLine($"[SettingsViewModel] Culture '{languageCode}' not found, using system default");
-        }
+        // Note: This preference is stored and will be used by the navigation voice service
+        // when generating turn-by-turn instructions. We do NOT change CultureInfo here
+        // as this setting is only for navigation voice guidance, not the app UI.
+        System.Diagnostics.Debug.WriteLine($"[SettingsViewModel] Navigation voice language set to: {languageCode}");
     }
 
     #endregion
