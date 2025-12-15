@@ -77,15 +77,15 @@ public class OnboardingViewModelTests
 
         if (!locationPermissionGranted)
         {
-            shouldStartService.Should().BeFalse($"service requires basic location permission ({expectedMode})");
+            shouldStartService.Should().BeFalse($"service requires basic location permission - expected mode: {expectedMode}");
         }
         else if (backgroundLocationGranted)
         {
-            isBackground24x7.Should().BeTrue($"service should run in {expectedMode}");
+            isBackground24x7.Should().BeTrue($"service should run in 24/7 mode with background permission - expected mode: {expectedMode}");
         }
         else
         {
-            isBackground24x7.Should().BeFalse($"service should run in {expectedMode}");
+            isBackground24x7.Should().BeFalse($"service should run in foreground-only mode without background permission - expected mode: {expectedMode}");
         }
     }
 

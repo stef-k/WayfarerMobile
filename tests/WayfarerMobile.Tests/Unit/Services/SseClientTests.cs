@@ -334,7 +334,7 @@ public sealed class TestSseClient : ISseClient
     public event EventHandler<SseMembershipEventArgs>? MembershipReceived;
     public event EventHandler? HeartbeatReceived;
     public event EventHandler? Connected;
-#pragma warning disable CS0067 // Event is never used (required by ISseClient interface)
+#pragma warning disable CS0067 // Event is never used - required by ISseClient interface
     public event EventHandler<SseReconnectEventArgs>? Reconnecting;
 #pragma warning restore CS0067
 
