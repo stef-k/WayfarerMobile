@@ -81,23 +81,39 @@ public partial class SettingsViewModel : BaseViewModel
     private string _languagePreference = "System";
 
     /// <summary>
-    /// Gets the available language options with display names.
+    /// Gets the available language options dynamically from device-supported cultures.
     /// </summary>
-    public List<LanguageOption> LanguageOptions { get; } =
-    [
-        new("System", "System Default"),
-        new("en", "English"),
-        new("el", "Greek"),
-        new("es", "Spanish"),
-        new("fr", "French"),
-        new("de", "German"),
-        new("it", "Italian"),
-        new("pt", "Portuguese"),
-        new("nl", "Dutch"),
-        new("ja", "Japanese"),
-        new("zh", "Chinese"),
-        new("ko", "Korean"),
-    ];
+    public List<LanguageOption> LanguageOptions { get; } = BuildLanguageOptions();
+
+    /// <summary>
+    /// Builds the list of available language options from device-supported cultures.
+    /// </summary>
+    private static List<LanguageOption> BuildLanguageOptions()
+    {
+        var options = new List<LanguageOption>
+        {
+            new("System", "System Default")
+        };
+
+        // Get all neutral cultures (languages without region specifics)
+        var cultures = CultureInfo.GetCultures(CultureTypes.NeutralCultures)
+            .Where(c => !string.IsNullOrEmpty(c.Name) && c.Name != "iv") // Exclude invariant culture
+            .OrderBy(c => c.NativeName)
+            .ToList();
+
+        foreach (var culture in cultures)
+        {
+            // Use native name for display (e.g., "Deutsch" for German, "日本語" for Japanese)
+            // Include English name in parentheses for clarity
+            var displayName = culture.NativeName == culture.EnglishName
+                ? culture.NativeName
+                : $"{culture.NativeName} ({culture.EnglishName})";
+
+            options.Add(new LanguageOption(culture.Name, displayName));
+        }
+
+        return options;
+    }
 
     /// <summary>
     /// Gets or sets the selected language option.
