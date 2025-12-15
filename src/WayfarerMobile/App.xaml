@@ -27,6 +27,7 @@
             <converters:BoolToMuteIconConverter x:Key="BoolToMuteIconConverter" />
             <converters:BoolToOpacityConverter x:Key="BoolToOpacityConverter" />
             <converters:BoolToCheckConverter x:Key="BoolToCheckConverter" />
+            <converters:IndexToColorConverter x:Key="IndexToColorConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>
