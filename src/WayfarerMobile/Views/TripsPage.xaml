@@ -282,7 +282,7 @@
 
                 <!-- Main Content View -->
                 <navDrawer:SfNavigationDrawer.ContentView>
-                    <Grid RowDefinitions="Auto,Auto,*">
+                    <Grid RowDefinitions="Auto,Auto,Auto,*">
                         <!-- Header with Back Button and Actions -->
                         <Grid Grid.Row="0"
                               ColumnDefinitions="Auto,*,Auto,Auto"
@@ -359,8 +359,60 @@
                             </Grid>
                         </Grid>
 
+                        <!-- Trip Info Panel -->
+                        <Border Grid.Row="2"
+                                IsVisible="{Binding ShowingDetails}"
+                                BackgroundColor="{StaticResource Surface}"
+                                Padding="12,8">
+                            <VerticalStackLayout Spacing="8">
+                                <!-- Stats row - tap to toggle expansion -->
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Grid.GestureRecognizers>
+                                        <TapGestureRecognizer Command="{Binding ToggleTripInfoCommand}" />
+                                    </Grid.GestureRecognizers>
+                                    <HorizontalStackLayout Spacing="12">
+                                        <Label Text="{Binding PlacesCount, StringFormat='{0} places'}"
+                                               Style="{StaticResource Caption}" />
+                                        <Label Text="{Binding SegmentsCount, StringFormat='{0} segments'}"
+                                               Style="{StaticResource Caption}"
+                                               IsVisible="{Binding HasSegments}" />
+                                        <Label Text="{Binding RegionsCount, StringFormat='{0} regions'}"
+                                               Style="{StaticResource Caption}" />
+                                    </HorizontalStackLayout>
+                                    <Label Grid.Column="1"
+                                           Text="v"
+                                           FontSize="12"
+                                           TextColor="{StaticResource TextSecondary}"
+                                           IsVisible="{Binding IsTripInfoExpanded, Converter={StaticResource InvertedBoolConverter}}" />
+                                    <Label Grid.Column="1"
+                                           Text="^"
+                                           FontSize="12"
+                                           TextColor="{StaticResource TextSecondary}"
+                                           IsVisible="{Binding IsTripInfoExpanded}" />
+                                </Grid>
+
+                                <!-- Expanded content -->
+                                <VerticalStackLayout IsVisible="{Binding IsTripInfoExpanded}" Spacing="8">
+                                    <!-- Notes section -->
+                                    <VerticalStackLayout IsVisible="{Binding HasTripNotes}" Spacing="4">
+                                        <Label Text="Notes"
+                                               Style="{StaticResource Caption}"
+                                               FontAttributes="Bold" />
+                                        <Label Text="{Binding TripNotesPlainText}"
+                                               Style="{StaticResource Body}"
+                                               MaxLines="5"
+                                               LineBreakMode="TailTruncation" />
+                                    </VerticalStackLayout>
+                                    <!-- Last updated -->
+                                    <Label Text="{Binding SelectedTripDetails.UpdatedAt, StringFormat='Updated: {0:MMM d, yyyy}'}"
+                                           Style="{StaticResource Caption}"
+                                           TextColor="{StaticResource Gray400}" />
+                                </VerticalStackLayout>
+                            </VerticalStackLayout>
+                        </Border>
+
                         <!-- Full Map View -->
-                        <Grid Grid.Row="2">
+                        <Grid Grid.Row="3">
                             <mapsui:MapControl Map="{Binding Map}" />
 
                             <!-- Loading overlay -->

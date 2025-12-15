@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WayfarerMobile.Core.Enums;
@@ -51,6 +52,12 @@ public partial class TripsViewModel : BaseViewModel
     [NotifyPropertyChangedFor(nameof(HasPlaces))]
     [NotifyPropertyChangedFor(nameof(HasSegments))]
     [NotifyPropertyChangedFor(nameof(SegmentDisplayItems))]
+    [NotifyPropertyChangedFor(nameof(PlacesCount))]
+    [NotifyPropertyChangedFor(nameof(SegmentsCount))]
+    [NotifyPropertyChangedFor(nameof(RegionsCount))]
+    [NotifyPropertyChangedFor(nameof(HasTripNotes))]
+    [NotifyPropertyChangedFor(nameof(TripNotesPreview))]
+    [NotifyPropertyChangedFor(nameof(TripNotesPlainText))]
     private TripDetails? _selectedTripDetails;
 
     /// <summary>
@@ -151,6 +158,18 @@ public partial class TripsViewModel : BaseViewModel
     [ObservableProperty]
     private bool _isSelectedTripDownloaded;
 
+    /// <summary>
+    /// Gets or sets whether the trip info panel is expanded.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isTripInfoExpanded = true;
+
+    /// <summary>
+    /// Gets or sets whether the trip notes section is expanded.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isTripNotesExpanded;
+
     #endregion
 
     #region Computed Properties
@@ -174,6 +193,36 @@ public partial class TripsViewModel : BaseViewModel
     /// Gets whether the selected trip has segments.
     /// </summary>
     public bool HasSegments => SelectedTripDetails?.Segments.Any() ?? false;
+
+    /// <summary>
+    /// Gets the count of places in the selected trip.
+    /// </summary>
+    public int PlacesCount => SelectedTripDetails?.AllPlaces?.Count ?? 0;
+
+    /// <summary>
+    /// Gets the count of segments in the selected trip.
+    /// </summary>
+    public int SegmentsCount => SelectedTripDetails?.Segments?.Count ?? 0;
+
+    /// <summary>
+    /// Gets the count of regions in the selected trip.
+    /// </summary>
+    public int RegionsCount => SelectedTripDetails?.Regions?.Count ?? 0;
+
+    /// <summary>
+    /// Gets whether the selected trip has notes.
+    /// </summary>
+    public bool HasTripNotes => !string.IsNullOrWhiteSpace(SelectedTripDetails?.Notes);
+
+    /// <summary>
+    /// Gets a preview of the trip notes (first 100 characters).
+    /// </summary>
+    public string TripNotesPreview => GetNotesPreview();
+
+    /// <summary>
+    /// Gets the trip notes with HTML stripped.
+    /// </summary>
+    public string TripNotesPlainText => StripHtml(SelectedTripDetails?.Notes ?? string.Empty);
 
     /// <summary>
     /// Gets the segment display items for the sidebar, using cached value when available.
@@ -405,6 +454,24 @@ public partial class TripsViewModel : BaseViewModel
     private void CloseSidebar()
     {
         IsSidebarOpen = false;
+    }
+
+    /// <summary>
+    /// Toggles the trip info panel expansion state.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleTripInfo()
+    {
+        IsTripInfoExpanded = !IsTripInfoExpanded;
+    }
+
+    /// <summary>
+    /// Toggles the trip notes section expansion state.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleTripNotes()
+    {
+        IsTripNotesExpanded = !IsTripNotesExpanded;
     }
 
     /// <summary>
@@ -880,6 +947,26 @@ public partial class TripsViewModel : BaseViewModel
     #endregion
 
     #region Private Helpers
+
+    /// <summary>
+    /// Gets a preview of the trip notes (first 100 characters).
+    /// </summary>
+    private string GetNotesPreview()
+    {
+        var plainText = StripHtml(SelectedTripDetails?.Notes ?? string.Empty);
+        return plainText.Length > 100 ? plainText[..100] + "..." : plainText;
+    }
+
+    /// <summary>
+    /// Strips HTML tags from a string.
+    /// </summary>
+    /// <param name="html">The HTML string to process.</param>
+    /// <returns>Plain text with HTML removed.</returns>
+    private static string StripHtml(string html)
+    {
+        if (string.IsNullOrEmpty(html)) return string.Empty;
+        return Regex.Replace(html, "<[^>]*>", "").Trim();
+    }
 
     /// <summary>
     /// Builds the segment display items from the current trip details.
