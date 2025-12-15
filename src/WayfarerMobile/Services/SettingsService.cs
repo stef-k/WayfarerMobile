@@ -273,12 +273,12 @@ public class SettingsService : ISettingsService
     /// <summary>
     /// Prefetch radius in tiles for live cache around user location.
     /// Radius of N means (2N+1)x(2N+1) grid of tiles per zoom level.
-    /// Default: 5 (11x11 grid). Range: 1-9 tiles.
+    /// Default: 5 (11x11 grid). Range: 1-10 tiles.
     /// </summary>
     public int LiveCachePrefetchRadius
     {
         get => Preferences.Get(KeyLiveCachePrefetchRadius, 5);
-        set => Preferences.Set(KeyLiveCachePrefetchRadius, Math.Clamp(value, 1, 9));
+        set => Preferences.Set(KeyLiveCachePrefetchRadius, Math.Clamp(value, 1, 10));
     }
 
     /// <summary>
