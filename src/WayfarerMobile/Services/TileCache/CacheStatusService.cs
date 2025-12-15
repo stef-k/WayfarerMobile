@@ -371,7 +371,7 @@ public class CacheStatusService
     /// </summary>
     public string FormatStatusMessage(DetailedCacheInfo info)
     {
-        return $"Status: {info.Status} ({info.CoveragePercentage:P0})\n\n" +
+        return $"Status: {info.Status} ({(int)(info.CoveragePercentage * 100)}%)\n\n" +
                $"Tiles: {info.CachedTiles} / {info.TotalTiles}\n" +
                $"  Live: {info.LiveCachedTiles}\n" +
                $"  Trip: {info.TripCachedTiles}\n\n" +
