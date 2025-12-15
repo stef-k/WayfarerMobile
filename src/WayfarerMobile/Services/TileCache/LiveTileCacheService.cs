@@ -131,10 +131,8 @@ public class LiveTileCacheService
         int radius = _settingsService.LiveCachePrefetchRadius;
         int maxConcurrent = _settingsService.MaxConcurrentTileDownloads;
 
-        // Zoom levels ordered by importance:
-        // 1. Current view (15), one up (14), one down (16) - most crucial
-        // 2. Rest for full coverage: 13, 12, 11, 10, 17
-        int[] zoomLevels = { 15, 14, 16, 13, 12, 11, 10, 17 };
+        // Use centralized zoom levels (8-17) ordered by importance
+        int[] zoomLevels = TileCacheConstants.AllZoomLevels;
 
         // Collect all tile coordinates to download
         var tilesToFetch = new List<(int zoom, int x, int y)>();

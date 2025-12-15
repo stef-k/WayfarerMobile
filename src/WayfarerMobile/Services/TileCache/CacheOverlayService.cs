@@ -88,8 +88,8 @@ public class CacheOverlayService
             _overlayLayer = new WritableLayer { Name = CacheOverlayLayerName, Style = null };
             _labelsLayer = new WritableLayer { Name = CacheLabelsLayerName, Style = null };
 
-            // Zoom levels to check
-            var zoomLevels = new[] { 15, 14, 16, 13, 12, 11, 10, 17 };
+            // Use centralized zoom levels (8-17)
+            var zoomLevels = TileCacheConstants.AllZoomLevels;
 
             // Calculate all coverages in parallel for speed (direct file checks, no DB)
             var coverageTasks = zoomLevels.Select(zoom =>
@@ -312,9 +312,11 @@ public class CacheOverlayService
 
     private static double GetRadiusForZoom(int zoom)
     {
-        // Radius decreases with higher zoom levels (covers all prefetch zoom levels 10-17)
+        // Radius decreases with higher zoom levels (covers all prefetch zoom levels 8-17)
         return zoom switch
         {
+            8 => 12000,
+            9 => 9000,
             10 => 6000,
             11 => 4500,
             12 => 3000,

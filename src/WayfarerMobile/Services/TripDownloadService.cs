@@ -3,6 +3,7 @@ using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
 using WayfarerMobile.Data.Services;
+using WayfarerMobile.Services.TileCache;
 
 namespace WayfarerMobile.Services;
 
@@ -16,10 +17,10 @@ public class TripDownloadService
     private readonly ISettingsService _settingsService;
     private readonly ILogger<TripDownloadService> _logger;
 
-    // Tile download configuration
-    private static readonly int[] DownloadZoomLevels = { 10, 11, 12, 13, 14, 15, 16 };
-    private const int TileTimeoutMs = 10000;
-    private const long EstimatedTileSizeBytes = 15000; // ~15KB average
+    // Tile download configuration - use centralized constants for consistency
+    private static int[] DownloadZoomLevels => TileCacheConstants.AllZoomLevels;
+    private const int TileTimeoutMs = TileCacheConstants.TileTimeoutMs;
+    private const long EstimatedTileSizeBytes = TileCacheConstants.EstimatedTileSizeBytes;
     private const long MinRequiredSpaceMB = 50; // Minimum free space required
 
     // Rate limiting state
@@ -745,8 +746,8 @@ public class TripDownloadService
         var areaSquareDegrees = (bbox.North - bbox.South) * (bbox.East - bbox.West);
         var recommendedMaxZoom = GetRecommendedMaxZoom(areaSquareDegrees);
 
-        const int minZoom = 10;
-        var effectiveMaxZoom = Math.Min(recommendedMaxZoom, DownloadZoomLevels.Max());
+        int minZoom = TileCacheConstants.MinZoomLevel;
+        var effectiveMaxZoom = Math.Min(recommendedMaxZoom, TileCacheConstants.MaxZoomLevel);
 
         _logger.LogInformation("Area: {Area:F2} sq degrees, using zoom levels {Min}-{Max}",
             areaSquareDegrees, minZoom, effectiveMaxZoom);

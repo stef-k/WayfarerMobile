@@ -22,12 +22,7 @@ public class CacheStatusService
     private DetailedCacheInfo? _lastDetailedInfo;
     private readonly object _statusLock = new();
 
-    // Zoom levels ordered by importance (matches LiveTileCacheService prefetch order)
-    // Quick check uses crucial 3: current view (15), one up (14), one down (16)
-    private static readonly int[] QuickCheckZoomLevels = { 15, 14, 16 };
-
-    // Full check uses all 8 levels for parity with prefetch
-    private static readonly int[] FullCheckZoomLevels = { 15, 14, 16, 13, 12, 11, 10, 17 };
+    // Use centralized zoom level constants for consistency across services
 
     // Debounce: only check every 30 seconds or 100m movement
     private static readonly TimeSpan MinCheckInterval = TimeSpan.FromSeconds(30);
@@ -167,7 +162,7 @@ public class CacheStatusService
                 tripDirs = Directory.GetDirectories(_tripCacheDirectory);
             }
 
-            foreach (var zoom in QuickCheckZoomLevels)
+            foreach (var zoom in TileCacheConstants.QuickCheckZoomLevels)
             {
                 var (centerX, centerY) = LatLonToTile(latitude, longitude, zoom);
 
@@ -287,7 +282,7 @@ public class CacheStatusService
 
                 var zoomDetails = new List<ZoomLevelCoverage>();
 
-                foreach (var zoom in FullCheckZoomLevels)
+                foreach (var zoom in TileCacheConstants.AllZoomLevels)
                 {
                     var (centerX, centerY) = LatLonToTile(latitude, longitude, zoom);
                     int zoomTotal = 0;
