@@ -1,230 +1,222 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
              xmlns:viewmodels="clr-namespace:WayfarerMobile.ViewModels"
-             xmlns:controls="clr-namespace:WayfarerMobile.Shared.Controls"
-             xmlns:offlineBanner="clr-namespace:WayfarerMobile.Views.Controls"
-             xmlns:picker="clr-namespace:Syncfusion.Maui.Toolkit.Picker;assembly=Syncfusion.Maui.Toolkit"
+             xmlns:mapsui="clr-namespace:Mapsui.UI.Maui;assembly=Mapsui.UI.Maui"
+             xmlns:bottomSheet="clr-namespace:Syncfusion.Maui.Toolkit.BottomSheet;assembly=Syncfusion.Maui.Toolkit"
              xmlns:sys="clr-namespace:System;assembly=netstandard"
              x:Class="WayfarerMobile.Views.TimelinePage"
              x:DataType="viewmodels:TimelineViewModel"
-             Title="Timeline"
-             BackgroundColor="{StaticResource Background}">
+             Title="Timeline">
 
-    <Grid RowDefinitions="Auto,Auto,*">
-        <!-- Offline Banner -->
-        <offlineBanner:OfflineBanner Grid.Row="0" />
+    <Grid>
+        <bottomSheet:SfBottomSheet x:Name="BottomSheet"
+                                   IsOpen="{Binding IsLocationSheetOpen, Mode=TwoWay}"
+                                   State="FullExpanded"
+                                   AllowedState="All"
+                                   HalfExpandedRatio="0.7"
+                                   FullExpandedRatio="0.95"
+                                   EnableSwiping="True"
+                                   IsModal="True"
+                                   ShowGrabber="True"
+                                   GrabberWidth="40"
+                                   GrabberHeight="4"
+                                   CornerRadius="16"
+                                   BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
 
-        <!-- Date Navigation Header -->
-        <Border Grid.Row="1"
-                BackgroundColor="{StaticResource Surface}"
-                Padding="16"
-                StrokeThickness="0">
-            <Grid ColumnDefinitions="Auto,*,Auto">
-                <!-- Previous Day Button -->
-                <Button Grid.Column="0"
-                        Text="◀"
-                        Command="{Binding PreviousDayCommand}"
-                        BackgroundColor="Transparent"
-                        TextColor="{StaticResource Primary}"
-                        FontSize="20"
-                        WidthRequest="44"
-                        HeightRequest="44" />
+            <bottomSheet:SfBottomSheet.Content>
+                <Grid RowDefinitions="Auto,*">
+                    <!-- Hidden DatePicker (triggered programmatically) -->
+                    <DatePicker x:Name="HiddenDatePicker"
+                                Date="{Binding SelectedDate}"
+                                MaximumDate="{x:Static sys:DateTime.Today}"
+                                IsVisible="False"
+                                DateSelected="OnDateSelected" />
 
-                <!-- Current Date (tappable to open date picker) -->
-                <VerticalStackLayout Grid.Column="1"
-                                     HorizontalOptions="Center"
-                                     VerticalOptions="Center"
-                                     Spacing="4">
-                    <VerticalStackLayout.GestureRecognizers>
-                        <TapGestureRecognizer Command="{Binding OpenDatePickerCommand}" />
-                    </VerticalStackLayout.GestureRecognizers>
-                    <HorizontalStackLayout HorizontalOptions="Center" Spacing="6">
-                        <Label Text="{Binding SelectedDateText}"
-                               Style="{StaticResource Headline}"
-                               VerticalOptions="Center" />
-                        <Label Text="📅"
-                               FontSize="16"
-                               VerticalOptions="Center"
-                               TextColor="{StaticResource Primary}" />
-                    </HorizontalStackLayout>
-                    <Label Text="{Binding TotalCount, StringFormat='{0} locations'}"
-                           Style="{StaticResource Caption}"
-                           HorizontalOptions="Center"
-                           TextColor="{StaticResource TextSecondary}" />
-                </VerticalStackLayout>
+                    <!-- Date Navigation Bar (inside SfBottomSheet.Content to avoid blank page) -->
+                    <Border Grid.Row="0"
+                            Padding="8,4"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}"
+                            StrokeThickness="0">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                            <!-- Previous Day Button -->
+                            <ImageButton Grid.Column="0"
+                                         Source="arrow_left.png"
+                                         WidthRequest="40"
+                                         HeightRequest="40"
+                                         Padding="8"
+                                         CornerRadius="8"
+                                         BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                         Command="{Binding PreviousCommand}" />
 
-                <!-- Next Day / Today Button -->
-                <HorizontalStackLayout Grid.Column="2" Spacing="4">
-                    <Button Text="Today"
-                            Command="{Binding TodayCommand}"
-                            BackgroundColor="{StaticResource Primary}"
-                            TextColor="White"
-                            FontSize="12"
-                            Padding="12,8"
-                            CornerRadius="16"
-                            HeightRequest="32" />
-                    <Button Text="▶"
-                            Command="{Binding NextDayCommand}"
-                            BackgroundColor="Transparent"
-                            TextColor="{StaticResource Primary}"
-                            FontSize="20"
-                            WidthRequest="44"
-                            HeightRequest="44" />
-                </HorizontalStackLayout>
-            </Grid>
-        </Border>
+                            <!-- Date Button (shows current date, opens picker on tap) -->
+                            <Button Grid.Column="1"
+                                    Text="{Binding DateButtonText}"
+                                    FontSize="14"
+                                    HeightRequest="40"
+                                    Padding="16,0"
+                                    CornerRadius="8"
+                                    HorizontalOptions="Center"
+                                    BackgroundColor="{StaticResource Primary}"
+                                    TextColor="White"
+                                    Clicked="OnDateButtonClicked" />
 
-        <!-- Timeline Content -->
-        <Grid Grid.Row="2">
-            <!-- Shimmer Loading Placeholder -->
-            <controls:ShimmerLoadingView IsActive="{Binding IsBusy}"
-                                         IsVisible="{Binding IsBusy}" />
+                            <!-- Next Day Button (disabled on today) -->
+                            <ImageButton Grid.Column="2"
+                                         Source="arrow_right.png"
+                                         WidthRequest="40"
+                                         HeightRequest="40"
+                                         Padding="8"
+                                         CornerRadius="8"
+                                         BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                         Command="{Binding NextCommand}"
+                                         IsEnabled="{Binding CanGoNext}" />
+                        </Grid>
+                    </Border>
 
-            <RefreshView IsRefreshing="{Binding IsRefreshing}"
-                         Command="{Binding RefreshCommand}"
-                         IsVisible="{Binding IsBusy, Converter={StaticResource InvertedBoolConverter}}">
-                <Grid>
-                    <!-- Empty State -->
-                <VerticalStackLayout IsVisible="{Binding IsEmpty}"
-                                     VerticalOptions="Center"
-                                     HorizontalOptions="Center"
-                                     Spacing="16"
-                                     Padding="32">
-                    <Label Text="📍"
-                           FontSize="64"
-                           HorizontalOptions="Center" />
-                    <Label Text="No locations recorded"
-                           Style="{StaticResource Headline}"
-                           HorizontalOptions="Center" />
-                    <Label Text="Location data for this day will appear here once tracking is active."
-                           Style="{StaticResource Body}"
-                           HorizontalOptions="Center"
-                           HorizontalTextAlignment="Center"
-                           TextColor="{StaticResource TextSecondary}" />
-                </VerticalStackLayout>
-
-                <!-- Timeline List with Grouping -->
-                <CollectionView x:Name="TimelineCollectionView"
-                                ItemsSource="{Binding TimelineGroups}"
-                                IsVisible="{Binding IsEmpty, Converter={StaticResource InvertedBoolConverter}}"
-                                IsGrouped="True"
-                                SelectionMode="None">
-
-                    <!-- Group Header Template -->
-                    <CollectionView.GroupHeaderTemplate>
-                        <DataTemplate x:DataType="viewmodels:TimelineGroup">
-                            <Border BackgroundColor="{StaticResource SurfaceVariant}"
-                                    Padding="16,12"
-                                    StrokeThickness="0">
-                                <HorizontalStackLayout Spacing="8">
-                                    <Label Text="🕐"
-                                           FontSize="16"
-                                           VerticalOptions="Center" />
-                                    <Label Text="{Binding Header}"
-                                           Style="{StaticResource SubHeadline}"
-                                           VerticalOptions="Center" />
-                                    <Label Text="{Binding Count, StringFormat='({0})'}"
-                                           Style="{StaticResource Caption}"
-                                           TextColor="{StaticResource TextSecondary}"
-                                           VerticalOptions="Center" />
-                                </HorizontalStackLayout>
-                            </Border>
-                        </DataTemplate>
-                    </CollectionView.GroupHeaderTemplate>
-
-                    <!-- Item Template -->
-                    <CollectionView.ItemTemplate>
-                        <DataTemplate x:DataType="viewmodels:TimelineItem">
-                            <Border BackgroundColor="{StaticResource Surface}"
-                                    Padding="16,12"
-                                    Margin="0,0,0,1"
-                                    StrokeThickness="0">
-                                <Border.GestureRecognizers>
-                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TimelineViewModel}}, Path=ShowEntryDetailsCommand}"
-                                                          CommandParameter="{Binding .}" />
-                                </Border.GestureRecognizers>
-                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
-                                    <!-- Time Column -->
-                                    <VerticalStackLayout Grid.Column="0"
-                                                         VerticalOptions="Center"
-                                                         WidthRequest="70">
-                                        <Label Text="{Binding TimeText}"
-                                               Style="{StaticResource SubHeadline}"
-                                               FontAttributes="Bold" />
-                                        <Label Text="{Binding ProviderText}"
-                                               Style="{StaticResource Caption}"
-                                               TextColor="{StaticResource TextSecondary}" />
-                                    </VerticalStackLayout>
-
-                                    <!-- Location Details -->
-                                    <VerticalStackLayout Grid.Column="1"
-                                                         VerticalOptions="Center"
-                                                         Spacing="2">
-                                        <Label Text="{Binding CoordinatesText}"
-                                               Style="{StaticResource Body}" />
-                                        <HorizontalStackLayout Spacing="8">
-                                            <HorizontalStackLayout Spacing="4">
-                                                <Ellipse WidthRequest="8"
-                                                         HeightRequest="8"
-                                                         Fill="{Binding AccuracyColor}"
-                                                         VerticalOptions="Center" />
-                                                <Label Text="{Binding AccuracyText}"
-                                                       Style="{StaticResource Caption}"
-                                                       TextColor="{StaticResource TextSecondary}" />
-                                            </HorizontalStackLayout>
-                                            <Label Text="{Binding SpeedText}"
-                                                   Style="{StaticResource Caption}"
-                                                   TextColor="{StaticResource TextSecondary}"
-                                                   IsVisible="{Binding SpeedText, Converter={StaticResource IsNotNullConverter}}" />
-                                        </HorizontalStackLayout>
-                                    </VerticalStackLayout>
-
-                                    <!-- Sync Status -->
-                                    <Label Grid.Column="2"
-                                           Text="{Binding SyncStatusIcon}"
-                                           FontSize="18"
-                                           VerticalOptions="Center"
-                                           HorizontalOptions="End" />
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </CollectionView.ItemTemplate>
-                </CollectionView>
+                    <!-- Map Control -->
+                    <mapsui:MapControl Grid.Row="1"
+                                       x:Name="MapControl"
+                                       Map="{Binding Map}"
+                                       HorizontalOptions="Fill"
+                                       VerticalOptions="Fill" />
                 </Grid>
-            </RefreshView>
-        </Grid>
+            </bottomSheet:SfBottomSheet.Content>
 
-        <!-- Loading Overlay -->
-        <controls:LoadingOverlay Grid.RowSpan="3"
-                                 IsVisible="{Binding IsBusy}"
-                                 Message="Loading timeline..." />
+            <bottomSheet:SfBottomSheet.BottomSheetContent>
+                <Grid RowDefinitions="Auto,*,Auto" BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+                    <!-- Header with close button -->
+                    <Grid Grid.Row="0" Padding="16,12" ColumnDefinitions="*,Auto">
+                        <VerticalStackLayout Spacing="4">
+                            <Label Text="{Binding SelectedLocation.TimeText}"
+                                   Style="{StaticResource Headline}"
+                                   FontAttributes="Bold" />
+                            <Label Text="{Binding SelectedLocation.DateText}"
+                                   Style="{StaticResource Caption}"
+                                   TextColor="{StaticResource TextSecondary}" />
+                        </VerticalStackLayout>
+                        <Button Grid.Column="1"
+                                Text="✕"
+                                FontSize="16"
+                                WidthRequest="36"
+                                HeightRequest="36"
+                                Padding="0"
+                                CornerRadius="18"
+                                BackgroundColor="Transparent"
+                                TextColor="{StaticResource TextSecondary}"
+                                Command="{Binding CloseLocationSheetCommand}" />
+                    </Grid>
 
-        <!-- Entry Details Bottom Sheet -->
-        <controls:TimelineEntrySheet x:Name="EntryDetailsSheet"
-                                     Grid.RowSpan="3"
-                                     Entry="{Binding SelectedEntry}"
-                                     IsOpen="{Binding IsEntryDetailsOpen, Mode=TwoWay}"
-                                     Closed="OnEntryDetailsSheetClosed"
-                                     SaveRequested="OnEntryDetailsSaveRequested" />
+                    <!-- Content -->
+                    <ScrollView Grid.Row="1" Padding="16,0">
+                        <VerticalStackLayout Spacing="12">
+                            <Frame Padding="12"
+                                   BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                                   BorderColor="Transparent"
+                                   CornerRadius="8"
+                                   HasShadow="False">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="Coordinates" Style="{StaticResource Caption}" FontAttributes="Bold" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedLocation.CoordinatesText}" Style="{StaticResource Body}" />
+                                </VerticalStackLayout>
+                            </Frame>
 
-        <!-- Date Picker Popup -->
-        <picker:SfDatePicker x:Name="DatePicker"
-                             Grid.RowSpan="3"
-                             IsOpen="{Binding IsDatePickerOpen, Mode=TwoWay}"
-                             Mode="Dialog"
-                             SelectedDate="{Binding SelectedDate}"
-                             MaximumDate="{x:Static sys:DateTime.Today}"
-                             Format="dd_MMM_yyyy"
-                             OkButtonClicked="OnDatePickerOkClicked"
-                             CancelButtonClicked="OnDatePickerCancelClicked">
-            <picker:SfDatePicker.HeaderView>
-                <picker:PickerHeaderView Height="40" Text="Select Date" />
-            </picker:SfDatePicker.HeaderView>
-            <picker:SfDatePicker.FooterView>
-                <picker:PickerFooterView Height="40" />
-            </picker:SfDatePicker.FooterView>
-        </picker:SfDatePicker>
+                            <Frame Padding="12"
+                                   BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                                   BorderColor="Transparent"
+                                   CornerRadius="8"
+                                   HasShadow="False">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="Accuracy" Style="{StaticResource Caption}" FontAttributes="Bold" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedLocation.AccuracyText}" Style="{StaticResource Body}" />
+                                </VerticalStackLayout>
+                            </Frame>
+
+                            <Frame Padding="12"
+                                   BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                                   BorderColor="Transparent"
+                                   CornerRadius="8"
+                                   HasShadow="False"
+                                   IsVisible="{Binding SelectedLocation.HasSpeed}">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="Speed" Style="{StaticResource Caption}" FontAttributes="Bold" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedLocation.SpeedText}" Style="{StaticResource Body}" />
+                                </VerticalStackLayout>
+                            </Frame>
+
+                            <Frame Padding="12"
+                                   BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                                   BorderColor="Transparent"
+                                   CornerRadius="8"
+                                   HasShadow="False"
+                                   IsVisible="{Binding SelectedLocation.HasAltitude}">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="Altitude" Style="{StaticResource Caption}" FontAttributes="Bold" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedLocation.AltitudeText}" Style="{StaticResource Body}" />
+                                </VerticalStackLayout>
+                            </Frame>
+
+                            <Frame Padding="12"
+                                   BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                                   BorderColor="Transparent"
+                                   CornerRadius="8"
+                                   HasShadow="False"
+                                   IsVisible="{Binding SelectedLocation.HasAddress}">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="Address" Style="{StaticResource Caption}" FontAttributes="Bold" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedLocation.Address}" Style="{StaticResource Body}" />
+                                </VerticalStackLayout>
+                            </Frame>
+                        </VerticalStackLayout>
+                    </ScrollView>
+
+                    <!-- Action Buttons -->
+                    <ScrollView Grid.Row="2" Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
+                        <HorizontalStackLayout Padding="16,12" Spacing="8">
+                            <Button Text="Maps"
+                                    Command="{Binding OpenInMapsCommand}"
+                                    BackgroundColor="{StaticResource Primary}"
+                                    TextColor="White"
+                                    FontSize="14"
+                                    HeightRequest="40"
+                                    CornerRadius="8"
+                                    Padding="16,0" />
+                            <Button Text="Wikipedia"
+                                    Command="{Binding SearchWikipediaCommand}"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                    TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
+                                    FontSize="14"
+                                    HeightRequest="40"
+                                    CornerRadius="8"
+                                    Padding="16,0" />
+                            <Button Text="Copy"
+                                    Command="{Binding CopyCoordinatesCommand}"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                    TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
+                                    FontSize="14"
+                                    HeightRequest="40"
+                                    CornerRadius="8"
+                                    Padding="16,0" />
+                            <Button Text="Share"
+                                    Command="{Binding ShareLocationCommand}"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                    TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
+                                    FontSize="14"
+                                    HeightRequest="40"
+                                    CornerRadius="8"
+                                    Padding="16,0" />
+                            <Button Text="Edit"
+                                    Clicked="OnEditLocationClicked"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                    TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
+                                    FontSize="14"
+                                    HeightRequest="40"
+                                    CornerRadius="8"
+                                    Padding="16,0" />
+                        </HorizontalStackLayout>
+                    </ScrollView>
+                </Grid>
+            </bottomSheet:SfBottomSheet.BottomSheetContent>
+        </bottomSheet:SfBottomSheet>
     </Grid>
 </ContentPage>

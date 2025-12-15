@@ -1,74 +1,77 @@
-using WayfarerMobile.Shared.Controls;
+using Mapsui;
+using Mapsui.UI.Maui;
+using Syncfusion.Maui.Toolkit.BottomSheet;
 using WayfarerMobile.ViewModels;
 
 namespace WayfarerMobile.Views;
 
-/// <summary>
-/// Page displaying location history timeline with date filtering.
-/// </summary>
 public partial class TimelinePage : ContentPage
 {
     private readonly TimelineViewModel _viewModel;
 
-    /// <summary>
-    /// Creates a new instance of TimelinePage.
-    /// </summary>
-    /// <param name="viewModel">The timeline view model.</param>
     public TimelinePage(TimelineViewModel viewModel)
     {
         InitializeComponent();
+
         _viewModel = viewModel;
         BindingContext = viewModel;
+
+        Loaded += OnPageLoaded;
     }
 
-    /// <summary>
-    /// Called when the page appears.
-    /// </summary>
+    private void OnPageLoaded(object? sender, EventArgs e)
+    {
+        MapControl.Info += OnMapInfo;
+
+        if (MapControl.Map == null)
+        {
+            MapControl.Map = _viewModel.Map;
+        }
+    }
+
+    private void OnMapInfo(object? sender, MapInfoEventArgs e)
+    {
+        var map = MapControl.Map;
+        if (map == null) return;
+
+        var mapInfo = e.GetMapInfo(map.Layers);
+        var feature = mapInfo?.Feature;
+        if (feature == null) return;
+
+        if (feature["LocationId"] is int locationId)
+        {
+            _viewModel.ShowLocationDetails(locationId);
+            BottomSheet.State = BottomSheetState.FullExpanded;
+        }
+    }
+
+    private async void OnEditLocationClicked(object? sender, EventArgs e)
+    {
+        if (_viewModel.SelectedLocation == null) return;
+        await DisplayAlertAsync("Edit Location", "Notes editor coming soon", "OK");
+    }
+
+    private void OnDateButtonClicked(object? sender, EventArgs e)
+    {
+        // Focus the hidden DatePicker to show the native date picker
+        HiddenDatePicker.Focus();
+    }
+
+    private void OnDateSelected(object? sender, DateChangedEventArgs e)
+    {
+        _viewModel.DateSelectedCommand.Execute(e.NewDate);
+    }
+
     protected override async void OnAppearing()
     {
         base.OnAppearing();
         await _viewModel.OnAppearingAsync();
     }
 
-    /// <summary>
-    /// Called when the page disappears.
-    /// </summary>
     protected override async void OnDisappearing()
     {
         base.OnDisappearing();
+        MapControl.Info -= OnMapInfo;
         await _viewModel.OnDisappearingAsync();
-    }
-
-    /// <summary>
-    /// Called when the entry details sheet is closed.
-    /// </summary>
-    private void OnEntryDetailsSheetClosed(object? sender, EventArgs e)
-    {
-        _viewModel.CloseEntryDetails();
-    }
-
-    /// <summary>
-    /// Called when entry details save is requested.
-    /// </summary>
-    private async void OnEntryDetailsSaveRequested(object? sender, TimelineEntryUpdateEventArgs e)
-    {
-        await _viewModel.SaveEntryChangesAsync(e);
-    }
-
-    /// <summary>
-    /// Called when the date picker OK button is clicked.
-    /// </summary>
-    private async void OnDatePickerOkClicked(object? sender, EventArgs e)
-    {
-        var selectedDate = DatePicker.SelectedDate;
-        await _viewModel.DateSelectedCommand.ExecuteAsync(selectedDate);
-    }
-
-    /// <summary>
-    /// Called when the date picker Cancel button is clicked.
-    /// </summary>
-    private void OnDatePickerCancelClicked(object? sender, EventArgs e)
-    {
-        _viewModel.CloseDatePickerCommand.Execute(null);
     }
 }
