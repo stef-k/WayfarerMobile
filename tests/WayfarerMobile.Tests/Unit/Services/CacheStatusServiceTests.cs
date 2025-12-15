@@ -185,7 +185,7 @@ public class CacheStatusServiceTests
         int tripCachedTiles,
         long localSizeBytes)
     {
-        return $"Status: {status} ({coveragePercentage:P0})\n\n" +
+        return $"Status: {status} ({(int)(coveragePercentage * 100)}%)\n\n" +
                $"Tiles: {cachedTiles} / {totalTiles}\n" +
                $"  Live: {liveCachedTiles}\n" +
                $"  Trip: {tripCachedTiles}\n\n" +
