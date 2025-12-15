@@ -252,6 +252,151 @@
                 </sfExpander:SfExpander.Content>
             </sfExpander:SfExpander>
 
+            <!-- Cache Settings Section -->
+            <sfExpander:SfExpander IsExpanded="False">
+                <sfExpander:SfExpander.Header>
+                    <Grid HeightRequest="48" Padding="10,0">
+                        <Label Text="Cache Settings"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               VerticalOptions="Center" />
+                    </Grid>
+                </sfExpander:SfExpander.Header>
+                <sfExpander:SfExpander.Content>
+                    <VerticalStackLayout Padding="15" Spacing="15">
+                        <!-- Prefetch Radius Slider -->
+                        <VerticalStackLayout Spacing="8">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Label Text="Prefetch Radius"
+                                       FontSize="14"
+                                       Grid.Column="0" />
+                                <Label Text="{Binding PrefetchRadiusGridSize}"
+                                       FontSize="14"
+                                       FontAttributes="Bold"
+                                       Grid.Column="1" />
+                            </Grid>
+                            <Slider Minimum="1"
+                                    Maximum="10"
+                                    Value="{Binding LiveCachePrefetchRadius}" />
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <Label Text="1"
+                                       FontSize="10"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
+                                       Grid.Column="0" />
+                                <Label Text="{Binding LiveCachePrefetchRadius}"
+                                       FontSize="14"
+                                       FontAttributes="Bold"
+                                       HorizontalOptions="Center"
+                                       Grid.Column="1" />
+                                <Label Text="10"
+                                       FontSize="10"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
+                                       Grid.Column="2" />
+                            </Grid>
+                            <Label FontSize="11"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
+                                   Text="Controls how many map tiles are downloaded around your location. Higher values give better offline coverage but use more data and storage.&#x0a;&#x0a;• Radius 1: ~10 MB, 3×3 tiles, ~1 km coverage&#x0a;• Radius 5: ~70 MB, 11×11 tiles, ~9 km coverage&#x0a;• Radius 10: ~280 MB, 21×21 tiles, ~17 km coverage&#x0a;&#x0a;Cached tiles are reused (LRU) - moving nearby won't re-download." />
+                        </VerticalStackLayout>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+
+                        <!-- Live Cache Size -->
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="Live Cache Size"
+                                   FontSize="14" />
+                            <Grid ColumnDefinitions="*,80">
+                                <Slider Minimum="100"
+                                        Maximum="2000"
+                                        Value="{Binding MaxLiveCacheSizeMB}"
+                                        Grid.Column="0" />
+                                <Label Text="{Binding MaxLiveCacheSizeMB, StringFormat='{0} MB'}"
+                                       FontSize="14"
+                                       FontAttributes="Bold"
+                                       HorizontalOptions="End"
+                                       VerticalOptions="Center"
+                                       Grid.Column="1" />
+                            </Grid>
+                            <Label Text="Maximum storage for tiles from map browsing. Old tiles are automatically removed when limit is reached."
+                                   FontSize="11"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        </VerticalStackLayout>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+
+                        <!-- Trip Cache Size -->
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="Trip Cache Size"
+                                   FontSize="14" />
+                            <Grid ColumnDefinitions="*,80">
+                                <Slider Minimum="500"
+                                        Maximum="5000"
+                                        Value="{Binding MaxTripCacheSizeMB}"
+                                        Grid.Column="0" />
+                                <Label Text="{Binding MaxTripCacheSizeMB, StringFormat='{0} MB'}"
+                                       FontSize="14"
+                                       FontAttributes="Bold"
+                                       HorizontalOptions="End"
+                                       VerticalOptions="Center"
+                                       Grid.Column="1" />
+                            </Grid>
+                            <Label Text="Maximum storage for downloaded trip tiles. These are preserved longer for offline trip navigation."
+                                   FontSize="11"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </sfExpander:SfExpander.Content>
+            </sfExpander:SfExpander>
+
+            <!-- Location Queue Section -->
+            <sfExpander:SfExpander IsExpanded="False">
+                <sfExpander:SfExpander.Header>
+                    <Grid HeightRequest="48" Padding="10,0">
+                        <Label Text="Location Queue"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               VerticalOptions="Center" />
+                    </Grid>
+                </sfExpander:SfExpander.Header>
+                <sfExpander:SfExpander.Content>
+                    <VerticalStackLayout Padding="15" Spacing="15">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <VerticalStackLayout Grid.Column="0">
+                                <Label Text="Pending Locations"
+                                       FontSize="14" />
+                                <Label Text="Locations waiting to sync to server"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            </VerticalStackLayout>
+                            <Label Text="{Binding PendingQueueCount}"
+                                   FontSize="20"
+                                   FontAttributes="Bold"
+                                   VerticalOptions="Center"
+                                   Grid.Column="1" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                            <Button Text="Refresh"
+                                    Command="{Binding RefreshQueueCountCommand}"
+                                    Style="{StaticResource DarkButton}"
+                                    HeightRequest="40"
+                                    Grid.Column="0" />
+                            <Button Text="Clear Queue"
+                                    Command="{Binding ClearQueueCommand}"
+                                    IsEnabled="{Binding IsClearingQueue, Converter={StaticResource InvertedBoolConverter}}"
+                                    Style="{StaticResource DangerButton}"
+                                    HeightRequest="40"
+                                    Grid.Column="1" />
+                        </Grid>
+
+                        <Label Text="Warning: Clearing the queue will permanently delete locations that haven't been synced to the server."
+                               FontSize="11"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                    </VerticalStackLayout>
+                </sfExpander:SfExpander.Content>
+            </sfExpander:SfExpander>
+
             <!-- Appearance Section -->
             <sfExpander:SfExpander IsExpanded="True">
                 <sfExpander:SfExpander.Header>

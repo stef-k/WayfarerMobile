@@ -291,6 +291,19 @@ public class DatabaseService : IAsyncDisposable
     }
 
     /// <summary>
+    /// Clears all pending locations from the queue.
+    /// </summary>
+    /// <returns>The number of locations deleted.</returns>
+    public async Task<int> ClearPendingQueueAsync()
+    {
+        await EnsureInitializedAsync();
+
+        return await _database!.ExecuteAsync(
+            "DELETE FROM QueuedLocations WHERE SyncStatus = ?",
+            (int)SyncStatus.Pending);
+    }
+
+    /// <summary>
     /// Gets all locations for a specific date.
     /// </summary>
     /// <param name="date">The date to retrieve locations for.</param>

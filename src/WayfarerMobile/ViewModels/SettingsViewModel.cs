@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Data.Services;
 
 namespace WayfarerMobile.ViewModels;
 
@@ -13,6 +14,7 @@ public partial class SettingsViewModel : BaseViewModel
 
     private readonly ISettingsService _settingsService;
     private readonly IAppLockService _appLockService;
+    private readonly DatabaseService _databaseService;
 
     #endregion
 
@@ -138,6 +140,46 @@ public partial class SettingsViewModel : BaseViewModel
 
     #endregion
 
+    #region Cache Settings Properties
+
+    /// <summary>
+    /// Gets or sets the prefetch radius (1-10).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PrefetchRadiusGridSize))]
+    private int _liveCachePrefetchRadius;
+
+    /// <summary>
+    /// Gets the grid size description for the current prefetch radius.
+    /// </summary>
+    public string PrefetchRadiusGridSize => $"{2 * LiveCachePrefetchRadius + 1}×{2 * LiveCachePrefetchRadius + 1} tiles";
+
+    /// <summary>
+    /// Gets or sets the maximum live cache size in MB.
+    /// </summary>
+    [ObservableProperty]
+    private int _maxLiveCacheSizeMB;
+
+    /// <summary>
+    /// Gets or sets the maximum trip cache size in MB.
+    /// </summary>
+    [ObservableProperty]
+    private int _maxTripCacheSizeMB;
+
+    /// <summary>
+    /// Gets or sets the pending queue count.
+    /// </summary>
+    [ObservableProperty]
+    private int _pendingQueueCount;
+
+    /// <summary>
+    /// Gets or sets whether the queue is being cleared.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isClearingQueue;
+
+    #endregion
+
     #region Constructor
 
     /// <summary>
@@ -145,10 +187,12 @@ public partial class SettingsViewModel : BaseViewModel
     /// </summary>
     /// <param name="settingsService">The settings service.</param>
     /// <param name="appLockService">The app lock service.</param>
-    public SettingsViewModel(ISettingsService settingsService, IAppLockService appLockService)
+    /// <param name="databaseService">The database service.</param>
+    public SettingsViewModel(ISettingsService settingsService, IAppLockService appLockService, DatabaseService databaseService)
     {
         _settingsService = settingsService;
         _appLockService = appLockService;
+        _databaseService = databaseService;
         PinSecurity = new PinSecurityViewModel(appLockService);
         Title = "Settings";
         LoadSettings();
@@ -179,6 +223,11 @@ public partial class SettingsViewModel : BaseViewModel
         // Battery settings
         ShowBatteryWarnings = _settingsService.ShowBatteryWarnings;
         AutoPauseTrackingOnCriticalBattery = _settingsService.AutoPauseTrackingOnCriticalBattery;
+
+        // Cache settings
+        LiveCachePrefetchRadius = _settingsService.LiveCachePrefetchRadius;
+        MaxLiveCacheSizeMB = _settingsService.MaxLiveCacheSizeMB;
+        MaxTripCacheSizeMB = _settingsService.MaxTripCacheSizeMB;
 
         UserEmail = _settingsService.UserEmail ?? string.Empty;
         IsLoggedIn = _settingsService.IsConfigured;
@@ -265,6 +314,30 @@ public partial class SettingsViewModel : BaseViewModel
     partial void OnAutoPauseTrackingOnCriticalBatteryChanged(bool value)
     {
         _settingsService.AutoPauseTrackingOnCriticalBattery = value;
+    }
+
+    /// <summary>
+    /// Saves prefetch radius setting.
+    /// </summary>
+    partial void OnLiveCachePrefetchRadiusChanged(int value)
+    {
+        _settingsService.LiveCachePrefetchRadius = value;
+    }
+
+    /// <summary>
+    /// Saves max live cache size setting.
+    /// </summary>
+    partial void OnMaxLiveCacheSizeMBChanged(int value)
+    {
+        _settingsService.MaxLiveCacheSizeMB = value;
+    }
+
+    /// <summary>
+    /// Saves max trip cache size setting.
+    /// </summary>
+    partial void OnMaxTripCacheSizeMBChanged(int value)
+    {
+        _settingsService.MaxTripCacheSizeMB = value;
     }
 
     /// <summary>
@@ -382,6 +455,49 @@ public partial class SettingsViewModel : BaseViewModel
         }
     }
 
+    /// <summary>
+    /// Clears the pending location queue.
+    /// </summary>
+    [RelayCommand]
+    private async Task ClearQueueAsync()
+    {
+        if (PendingQueueCount == 0)
+        {
+            await Shell.Current.DisplayAlertAsync("Queue Empty", "There are no pending locations to clear.", "OK");
+            return;
+        }
+
+        var confirm = await Shell.Current.DisplayAlertAsync(
+            "Clear Queue",
+            $"This will delete {PendingQueueCount} pending locations that haven't been synced to the server. This cannot be undone.",
+            "Clear",
+            "Cancel");
+
+        if (confirm)
+        {
+            IsClearingQueue = true;
+            try
+            {
+                var deleted = await _databaseService.ClearPendingQueueAsync();
+                PendingQueueCount = 0;
+                await Shell.Current.DisplayAlertAsync("Queue Cleared", $"{deleted} pending locations have been deleted.", "OK");
+            }
+            finally
+            {
+                IsClearingQueue = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Refreshes the pending queue count.
+    /// </summary>
+    [RelayCommand]
+    private async Task RefreshQueueCountAsync()
+    {
+        PendingQueueCount = await _databaseService.GetPendingCountAsync();
+    }
+
     #endregion
 
     #region Lifecycle
@@ -393,6 +509,7 @@ public partial class SettingsViewModel : BaseViewModel
     {
         LoadSettings();
         await PinSecurity.LoadSettingsAsync();
+        await RefreshQueueCountAsync();
         await base.OnAppearingAsync();
     }
 
