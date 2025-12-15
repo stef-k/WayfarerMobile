@@ -82,6 +82,31 @@ jobs:
         recreate: true
         path: code-coverage-results.md
 
+    - name: Extract coverage percentage
+      id: coverage
+      if: always()
+      run: |
+        # Extract line coverage from cobertura XML
+        COVERAGE=$(grep -oP 'line-rate="\K[^"]+' tests/WayfarerMobile.Tests/coverage/coverage.cobertura.xml | head -1)
+        COVERAGE_PCT=$(echo "scale=0; $COVERAGE * 100 / 1" | bc)
+        echo "percentage=$COVERAGE_PCT" >> $GITHUB_OUTPUT
+        echo "Coverage: $COVERAGE_PCT%"
+
+    - name: Update coverage badge
+      uses: schneegans/dynamic-badges-action@v1.7.0
+      if: github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main'
+      continue-on-error: true
+      with:
+        auth: ${{ secrets.GIST_TOKEN }}
+        gistID: ${{ vars.COVERAGE_GIST_ID }}
+        filename: coverage.json
+        label: Code Coverage
+        message: ${{ steps.coverage.outputs.percentage }}%
+        valColorRange: ${{ steps.coverage.outputs.percentage }}
+        minColorRange: 50
+        maxColorRange: 90
+        namedLogo: dotnet
+
   build-maui:
     name: Build MAUI App
     runs-on: windows-latest
