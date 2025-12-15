@@ -6,10 +6,12 @@ namespace WayfarerMobile.Services;
 /// <summary>
 /// Cross-platform text-to-speech service for navigation announcements.
 /// Provides queuing, muting, and cancellation support.
+/// Uses the user's voice language preference for TTS locale.
 /// </summary>
 public class TextToSpeechService : ITextToSpeechService
 {
     private readonly ILogger<TextToSpeechService> _logger;
+    private readonly ISettingsService _settingsService;
     private readonly SemaphoreSlim _speechLock = new(1, 1);
     private readonly Queue<string> _speechQueue = new();
     private CancellationTokenSource? _currentSpeechCts;
@@ -29,9 +31,11 @@ public class TextToSpeechService : ITextToSpeechService
     /// Creates a new instance of TextToSpeechService.
     /// </summary>
     /// <param name="logger">The logger instance.</param>
-    public TextToSpeechService(ILogger<TextToSpeechService> logger)
+    /// <param name="settingsService">The settings service for language preference.</param>
+    public TextToSpeechService(ILogger<TextToSpeechService> logger, ISettingsService settingsService)
     {
         _logger = logger;
+        _settingsService = settingsService;
     }
 
     /// <summary>
@@ -60,12 +64,14 @@ public class TextToSpeechService : ITextToSpeechService
             _currentSpeechCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             _isSpeaking = true;
 
-            _logger.LogDebug("Speaking: {Text}", text);
+            var locale = GetPreferredLocale();
+            _logger.LogDebug("Speaking: {Text} (locale: {Locale})", text, locale?.Language ?? "system");
 
             var options = new SpeechOptions
             {
                 Pitch = 1.0f,
-                Volume = 1.0f
+                Volume = 1.0f,
+                Locale = locale
             };
 
             await TextToSpeech.Default.SpeakAsync(text, options, _currentSpeechCts.Token);
@@ -170,6 +176,55 @@ public class TextToSpeechService : ITextToSpeechService
         if (nextText != null)
         {
             await SpeakAsync(nextText, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Gets the preferred locale for TTS based on user's voice language setting.
+    /// Returns null for "System" preference (uses platform default).
+    /// </summary>
+    private Locale? GetPreferredLocale()
+    {
+        var languagePreference = _settingsService.LanguagePreference;
+
+        // "System" or empty means use platform default
+        if (string.IsNullOrEmpty(languagePreference) ||
+            languagePreference.Equals("System", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        try
+        {
+            // Try to find a matching locale from available TTS voices
+            var locales = TextToSpeech.Default.GetLocalesAsync().GetAwaiter().GetResult();
+
+            // First try exact match (e.g., "en-US")
+            var exactMatch = locales.FirstOrDefault(l =>
+                l.Language.Equals(languagePreference, StringComparison.OrdinalIgnoreCase) ||
+                l.Id.Equals(languagePreference, StringComparison.OrdinalIgnoreCase));
+
+            if (exactMatch != null)
+            {
+                return exactMatch;
+            }
+
+            // Try language-only match (e.g., "en" matches "en-US", "en-GB", etc.)
+            var languageMatch = locales.FirstOrDefault(l =>
+                l.Language.StartsWith(languagePreference, StringComparison.OrdinalIgnoreCase));
+
+            if (languageMatch != null)
+            {
+                return languageMatch;
+            }
+
+            _logger.LogWarning("No TTS locale found for preference: {Preference}", languagePreference);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get TTS locale for preference: {Preference}", languagePreference);
+            return null;
         }
     }
 }

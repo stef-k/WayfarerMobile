@@ -1,4 +1,3 @@
-using System.Globalization;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Services;
 using WayfarerMobile.ViewModels;
@@ -56,7 +55,8 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Applies saved theme and language settings on app startup.
+    /// Applies saved theme settings on app startup.
+    /// Note: Language preference is only used for navigation voice guidance, not app UI.
     /// </summary>
     private void ApplySavedSettings()
     {
@@ -70,22 +70,9 @@ public partial class App : Application
             SettingsViewModel.ApplyTheme(settings.ThemePreference);
             System.Diagnostics.Debug.WriteLine($"[App] Applied theme: {settings.ThemePreference}");
 
-            // Apply language preference
-            var languageCode = settings.LanguagePreference;
-            if (!string.IsNullOrEmpty(languageCode) && languageCode != "System")
-            {
-                try
-                {
-                    var culture = new CultureInfo(languageCode);
-                    CultureInfo.CurrentCulture = culture;
-                    CultureInfo.CurrentUICulture = culture;
-                    System.Diagnostics.Debug.WriteLine($"[App] Applied language: {languageCode}");
-                }
-                catch (CultureNotFoundException)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[App] Culture '{languageCode}' not found, using system default");
-                }
-            }
+            // Note: Language preference (LanguagePreference) is only for navigation voice guidance,
+            // not for changing the app's display language. The navigation service will read this
+            // setting when generating voice instructions.
         }
         catch (Exception ex)
         {

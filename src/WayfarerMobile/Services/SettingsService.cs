@@ -191,8 +191,9 @@ public class SettingsService : ISettingsService
     }
 
     /// <summary>
-    /// Gets or sets the app language preference.
-    /// Empty string or "System" means use device language.
+    /// Gets or sets the navigation voice guidance language preference.
+    /// This is used for turn-by-turn voice navigation, not for changing the app display language.
+    /// "System" means use device default language.
     /// Otherwise, a culture code like "en", "fr", "de", etc.
     /// </summary>
     public string LanguagePreference
