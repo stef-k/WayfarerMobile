@@ -27,6 +27,7 @@ public partial class MainViewModel : BaseViewModel
     private readonly UnifiedTileCacheService _tileCacheService;
     private readonly CacheStatusService _cacheStatusService;
     private readonly CacheOverlayService _cacheOverlayService;
+    private readonly LocationIndicatorService _indicatorService;
 
     #endregion
 
@@ -259,16 +260,18 @@ public partial class MainViewModel : BaseViewModel
 
     /// <summary>
     /// Gets the heading/bearing text to display.
+    /// Uses smoothed heading from LocationIndicatorService to match map indicator.
     /// </summary>
     public string HeadingText
     {
         get
         {
-            if (CurrentLocation?.Bearing == null)
+            // Use smoothed heading from LocationIndicatorService (same as map indicator)
+            var heading = _indicatorService?.CurrentHeading ?? -1;
+            if (heading < 0)
                 return string.Empty;
 
-            var bearing = CurrentLocation.Bearing.Value;
-            var direction = bearing switch
+            var direction = heading switch
             {
                 >= 337.5 or < 22.5 => "N",
                 >= 22.5 and < 67.5 => "NE",
@@ -279,7 +282,7 @@ public partial class MainViewModel : BaseViewModel
                 >= 247.5 and < 292.5 => "W",
                 _ => "NW"
             };
-            return $"{bearing:F0}° {direction}";
+            return $"{heading:F0}° {direction}";
         }
     }
 
@@ -304,8 +307,9 @@ public partial class MainViewModel : BaseViewModel
 
     /// <summary>
     /// Gets whether heading is available.
+    /// Uses smoothed heading from LocationIndicatorService to match map indicator.
     /// </summary>
-    public bool HasHeading => CurrentLocation?.Bearing != null;
+    public bool HasHeading => _indicatorService?.HasValidHeading ?? false;
 
     /// <summary>
     /// Gets whether altitude is available.
@@ -369,6 +373,7 @@ public partial class MainViewModel : BaseViewModel
     /// <param name="tileCacheService">The tile cache service.</param>
     /// <param name="cacheStatusService">The cache status service.</param>
     /// <param name="cacheOverlayService">The cache overlay service.</param>
+    /// <param name="indicatorService">The location indicator service for smoothed heading.</param>
     public MainViewModel(
         ILocationBridge locationBridge,
         MapService mapService,
@@ -379,7 +384,8 @@ public partial class MainViewModel : BaseViewModel
         CheckInViewModel checkInViewModel,
         UnifiedTileCacheService tileCacheService,
         CacheStatusService cacheStatusService,
-        CacheOverlayService cacheOverlayService)
+        CacheOverlayService cacheOverlayService,
+        LocationIndicatorService indicatorService)
     {
         _locationBridge = locationBridge;
         _mapService = mapService;
@@ -391,6 +397,7 @@ public partial class MainViewModel : BaseViewModel
         _tileCacheService = tileCacheService;
         _cacheStatusService = cacheStatusService;
         _cacheOverlayService = cacheOverlayService;
+        _indicatorService = indicatorService;
         Title = "WayfarerMobile";
 
         // Subscribe to location events
@@ -422,8 +429,13 @@ public partial class MainViewModel : BaseViewModel
         CurrentLocation = location;
         LocationCount++;
 
-        // Update map
+        // Update map (this also updates _indicatorService.CurrentHeading via CalculateBestHeading)
         _mapService.UpdateLocation(location, centerMap: IsFollowingLocation && !IsNavigating);
+
+        // Notify heading properties after MapService updates the indicator service
+        // This ensures HeadingText uses the smoothed heading calculated by LocationIndicatorService
+        OnPropertyChanged(nameof(HeadingText));
+        OnPropertyChanged(nameof(HasHeading));
 
         // Update navigation if active
         if (IsNavigating)
