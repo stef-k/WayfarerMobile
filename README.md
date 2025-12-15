@@ -6,7 +6,6 @@
 
 <p align="center">
   <a href="https://github.com/stef-k/WayfarerMobile/actions/workflows/ci.yml"><img src="https://github.com/stef-k/WayfarerMobile/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/stef-k/9361b6aaa8c346069ce1e1c0581b41b1/raw/coverage.json" alt="Code Coverage">
   <img src="https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet" alt=".NET 10">
   <img src="https://img.shields.io/badge/MAUI-Cross--Platform-512BD4?style=flat-square" alt="MAUI">
   <img src="https://img.shields.io/badge/Platform-Android%20%7C%20iOS-green?style=flat-square" alt="Platforms">
