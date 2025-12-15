@@ -1,9 +1,23 @@
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Data.Services;
 
 namespace WayfarerMobile.ViewModels;
+
+/// <summary>
+/// Represents a language option for the settings picker.
+/// </summary>
+/// <param name="Code">The culture code (e.g., "en", "fr") or "System" for device default.</param>
+/// <param name="DisplayName">The display name shown in the picker.</param>
+public record LanguageOption(string Code, string DisplayName)
+{
+    /// <summary>
+    /// Returns the display name for use in UI bindings.
+    /// </summary>
+    public override string ToString() => DisplayName;
+}
 
 /// <summary>
 /// ViewModel for the settings page.
@@ -50,10 +64,46 @@ public partial class SettingsViewModel : BaseViewModel
     private int _locationDistanceThreshold;
 
     /// <summary>
-    /// Gets or sets whether dark mode is enabled.
+    /// Gets or sets the theme preference: "System", "Light", or "Dark".
     /// </summary>
     [ObservableProperty]
-    private bool _darkModeEnabled;
+    private string _themePreference = "System";
+
+    /// <summary>
+    /// Gets the available theme options.
+    /// </summary>
+    public List<string> ThemeOptions { get; } = ["System", "Light", "Dark"];
+
+    /// <summary>
+    /// Gets or sets the language preference.
+    /// </summary>
+    [ObservableProperty]
+    private string _languagePreference = "System";
+
+    /// <summary>
+    /// Gets the available language options with display names.
+    /// </summary>
+    public List<LanguageOption> LanguageOptions { get; } =
+    [
+        new("System", "System Default"),
+        new("en", "English"),
+        new("el", "Greek"),
+        new("es", "Spanish"),
+        new("fr", "French"),
+        new("de", "German"),
+        new("it", "Italian"),
+        new("pt", "Portuguese"),
+        new("nl", "Dutch"),
+        new("ja", "Japanese"),
+        new("zh", "Chinese"),
+        new("ko", "Korean"),
+    ];
+
+    /// <summary>
+    /// Gets or sets the selected language option.
+    /// </summary>
+    [ObservableProperty]
+    private LanguageOption? _selectedLanguageOption;
 
     /// <summary>
     /// Gets or sets whether offline map cache is enabled.
@@ -211,8 +261,13 @@ public partial class SettingsViewModel : BaseViewModel
         ServerUrl = _settingsService.ServerUrl ?? string.Empty;
         LocationTimeThreshold = _settingsService.LocationTimeThresholdMinutes;
         LocationDistanceThreshold = _settingsService.LocationDistanceThresholdMeters;
-        DarkModeEnabled = _settingsService.DarkModeEnabled;
         MapOfflineCacheEnabled = _settingsService.MapOfflineCacheEnabled;
+
+        // Theme and language settings
+        ThemePreference = _settingsService.ThemePreference;
+        LanguagePreference = _settingsService.LanguagePreference;
+        SelectedLanguageOption = LanguageOptions.Find(l => l.Code == LanguagePreference)
+            ?? LanguageOptions[0]; // Default to "System"
 
         // Navigation settings
         NavigationAudioEnabled = _settingsService.NavigationAudioEnabled;
@@ -252,12 +307,25 @@ public partial class SettingsViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Saves dark mode setting.
+    /// Saves theme preference setting and applies it immediately.
     /// </summary>
-    partial void OnDarkModeEnabledChanged(bool value)
+    partial void OnThemePreferenceChanged(string value)
     {
-        _settingsService.DarkModeEnabled = value;
+        _settingsService.ThemePreference = value;
         ApplyTheme(value);
+    }
+
+    /// <summary>
+    /// Saves language preference setting when the selected option changes.
+    /// </summary>
+    partial void OnSelectedLanguageOptionChanged(LanguageOption? value)
+    {
+        if (value != null)
+        {
+            LanguagePreference = value.Code;
+            _settingsService.LanguagePreference = value.Code;
+            ApplyLanguage(value.Code);
+        }
     }
 
     /// <summary>
@@ -341,13 +409,47 @@ public partial class SettingsViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Applies the theme change.
+    /// Applies the theme change based on preference.
     /// </summary>
-    private static void ApplyTheme(bool darkMode)
+    /// <param name="themePreference">The theme preference: "System", "Light", or "Dark".</param>
+    public static void ApplyTheme(string themePreference)
     {
-        if (Application.Current != null)
+        if (Application.Current == null)
+            return;
+
+        Application.Current.UserAppTheme = themePreference switch
         {
-            Application.Current.UserAppTheme = darkMode ? AppTheme.Dark : AppTheme.Light;
+            "Light" => AppTheme.Light,
+            "Dark" => AppTheme.Dark,
+            _ => AppTheme.Unspecified // "System" - follows device theme
+        };
+    }
+
+    /// <summary>
+    /// Applies the language change.
+    /// </summary>
+    /// <param name="languageCode">The language code (e.g., "en", "fr") or "System" for device default.</param>
+    private static void ApplyLanguage(string languageCode)
+    {
+        try
+        {
+            if (languageCode == "System" || string.IsNullOrEmpty(languageCode))
+            {
+                // Reset to system default
+                CultureInfo.CurrentCulture = CultureInfo.InstalledUICulture;
+                CultureInfo.CurrentUICulture = CultureInfo.InstalledUICulture;
+            }
+            else
+            {
+                var culture = new CultureInfo(languageCode);
+                CultureInfo.CurrentCulture = culture;
+                CultureInfo.CurrentUICulture = culture;
+            }
+        }
+        catch (CultureNotFoundException)
+        {
+            // If the culture is not found, fall back to system default
+            System.Diagnostics.Debug.WriteLine($"[SettingsViewModel] Culture '{languageCode}' not found, using system default");
         }
     }
 

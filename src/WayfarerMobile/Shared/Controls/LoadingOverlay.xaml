@@ -5,7 +5,6 @@
              x:Name="thisControl">
 
     <Border BackgroundColor="#80000000"
-            IsVisible="{Binding IsVisible, Source={x:Reference thisControl}}"
             InputTransparent="False"
             ZIndex="100">
 

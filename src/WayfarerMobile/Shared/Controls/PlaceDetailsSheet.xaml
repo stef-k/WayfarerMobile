@@ -4,9 +4,12 @@
              xmlns:bottomSheet="clr-namespace:Syncfusion.Maui.Toolkit.BottomSheet;assembly=Syncfusion.Maui.Toolkit"
              xmlns:controls="clr-namespace:WayfarerMobile.Shared.Controls"
              x:Class="WayfarerMobile.Shared.Controls.PlaceDetailsSheet"
-             x:Name="Root">
+             x:Name="Root"
+             InputTransparent="{Binding IsOpen, Source={x:Reference Root}, Converter={StaticResource InvertedBoolConverter}}">
 
-    <bottomSheet:SfBottomSheet x:Name="BottomSheet"
+    <!-- Grid wrapper to allow multiple children in ContentView -->
+    <Grid>
+        <bottomSheet:SfBottomSheet x:Name="BottomSheet"
                                IsOpen="{Binding IsOpen, Source={x:Reference Root}}"
                                AllowedState="All"
                                State="{Binding SheetState, Source={x:Reference Root}, Mode=TwoWay}"
@@ -259,12 +262,13 @@
             </Grid>
         </bottomSheet:SfBottomSheet.BottomSheetContent>
 
-    </bottomSheet:SfBottomSheet>
+        </bottomSheet:SfBottomSheet>
 
-    <!-- Notes Editor Overlay (appears above bottom sheet when editing notes) -->
-    <controls:NotesEditorControl x:Name="NotesEditor"
-                                 EditorTitle="{Binding Place.Name, Source={x:Reference Root}}"
-                                 NotesSaved="OnNotesSaved"
-                                 EditorClosed="OnNotesEditorClosed" />
+        <!-- Notes Editor Overlay (appears above bottom sheet when editing notes) -->
+        <controls:NotesEditorControl x:Name="NotesEditor"
+                                     EditorTitle="{Binding Place.Name, Source={x:Reference Root}}"
+                                     NotesSaved="OnNotesSaved"
+                                     EditorClosed="OnNotesEditorClosed" />
+    </Grid>
 
 </ContentView>

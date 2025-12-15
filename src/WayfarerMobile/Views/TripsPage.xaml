@@ -11,7 +11,7 @@
              x:DataType="viewmodels:TripsViewModel"
              x:Name="ThisPage"
              Title="Trips"
-             BackgroundColor="{StaticResource Background}">
+             BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}">
 
     <ContentPage.ToolbarItems>
         <ToolbarItem Text="Public"
@@ -38,7 +38,7 @@
             <Label Text="Please configure your server URL and API token in Settings to view your trips."
                    FontSize="14"
                    HorizontalTextAlignment="Center"
-                   TextColor="{StaticResource Gray500}" />
+                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
         </VerticalStackLayout>
 
         <!-- Main Content (when configured) -->
@@ -72,7 +72,7 @@
                                        Style="{StaticResource Body}"
                                        HorizontalOptions="Center"
                                        HorizontalTextAlignment="Center"
-                                       TextColor="{StaticResource TextSecondary}" />
+                                       TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
                                 <Button Text="Browse Public Trips"
                                         Command="{Binding BrowsePublicTripsCommand}"
                                         HorizontalOptions="Center"
@@ -87,7 +87,7 @@
                                 <Border Margin="8,4"
                                         Padding="16"
                                         StrokeThickness="0"
-                                        BackgroundColor="{StaticResource Surface}">
+                                        BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
                                     <Border.GestureRecognizers>
                                         <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=SelectTripCommand}"
                                                               CommandParameter="{Binding .}" />
@@ -100,7 +100,8 @@
                                                FontSize="14"
                                                FontAttributes="Bold"
                                                LineBreakMode="WordWrap"
-                                               MaxLines="2" />
+                                               MaxLines="2"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}" />
 
                                         <!-- Public Badge -->
                                         <Border Grid.Row="0" Grid.Column="1"
@@ -120,14 +121,13 @@
                                         <Label Grid.Row="1" Grid.ColumnSpan="2"
                                                Text="{Binding LocationsText}"
                                                Style="{StaticResource Caption}"
-                                               TextColor="{StaticResource TextSecondary}"
+                                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
                                                Margin="0,4,0,0" />
 
                                         <!-- Last Updated -->
                                         <Label Grid.Row="2" Grid.ColumnSpan="2"
                                                Text="{Binding UpdatedAt, StringFormat='Updated {0:MMM d, yyyy}'}"
                                                Style="{StaticResource Caption}"
-                                               TextColor="{StaticResource Gray400}"
                                                Margin="0,4,0,0" />
                                     </Grid>
                                 </Border>
@@ -153,7 +153,7 @@
 
                         <!-- Drawer Header -->
                         <navDrawer:DrawerSettings.DrawerHeaderView>
-                            <Grid BackgroundColor="{StaticResource Surface}"
+                            <Grid BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}"
                                   Padding="16,12">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -171,20 +171,20 @@
                                         Padding="0"
                                         CornerRadius="18"
                                         BackgroundColor="Transparent"
-                                        TextColor="{StaticResource TextSecondary}"
+                                        TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
                                         Command="{Binding CloseSidebarCommand}" />
                             </Grid>
                         </navDrawer:DrawerSettings.DrawerHeaderView>
 
                         <!-- Drawer Content - Places & Segments -->
                         <navDrawer:DrawerSettings.DrawerContentView>
-                            <ScrollView BackgroundColor="{StaticResource Background}">
+                            <ScrollView BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}">
                                 <VerticalStackLayout>
                                     <!-- Places Section -->
                                     <Label Text="Places"
                                            Style="{StaticResource Caption}"
                                            FontAttributes="Bold"
-                                           TextColor="{StaticResource TextSecondary}"
+                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
                                            Margin="12,8,12,4" />
 
                                     <CollectionView ItemsSource="{Binding SelectedTripDetails.AllPlaces}"
@@ -192,7 +192,7 @@
                                         <CollectionView.EmptyView>
                                             <Label Text="No places in this trip"
                                                    Style="{StaticResource Caption}"
-                                                   TextColor="{StaticResource TextSecondary}"
+                                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
                                                    HorizontalOptions="Center"
                                                    Margin="16" />
                                         </CollectionView.EmptyView>
@@ -202,7 +202,7 @@
                                                 <Border Margin="8,2"
                                                         Padding="12"
                                                         StrokeThickness="0"
-                                                        BackgroundColor="{StaticResource Surface}">
+                                                        BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
                                                     <Border.GestureRecognizers>
                                                         <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=ShowPlaceDetailsCommand}"
                                                                               CommandParameter="{Binding .}" />
@@ -215,6 +215,7 @@
                                                         <Label Grid.Column="1"
                                                                Text="{Binding Name}"
                                                                Style="{StaticResource Body}"
+                                                               TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
                                                                VerticalOptions="Center"
                                                                LineBreakMode="TailTruncation" />
                                                         <Button Grid.Column="2"
@@ -238,7 +239,7 @@
                                     <Label Text="Segments"
                                            Style="{StaticResource Caption}"
                                            FontAttributes="Bold"
-                                           TextColor="{StaticResource TextSecondary}"
+                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
                                            Margin="12,16,12,4"
                                            IsVisible="{Binding HasSegments}" />
 
@@ -250,7 +251,7 @@
                                                 <Border Margin="8,2"
                                                         Padding="12"
                                                         StrokeThickness="0"
-                                                        BackgroundColor="{StaticResource Surface}">
+                                                        BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
                                                     <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*" ColumnSpacing="12" RowSpacing="4">
                                                         <!-- Transport Mode Icon -->
                                                         <Label Text="{Binding TransportIcon}"
@@ -261,13 +262,14 @@
                                                         <Label Grid.Column="1"
                                                                Text="{Binding Description}"
                                                                Style="{StaticResource Body}"
+                                                               TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
                                                                LineBreakMode="TailTruncation" />
                                                         <!-- Distance & Duration -->
                                                         <Label Grid.Row="1"
                                                                Grid.Column="1"
                                                                Text="{Binding DistanceAndDuration}"
                                                                Style="{StaticResource Caption}"
-                                                               TextColor="{StaticResource TextSecondary}" />
+                                                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
                                                     </Grid>
                                                 </Border>
                                             </DataTemplate>
@@ -286,7 +288,7 @@
                         <!-- Header with Back Button and Actions -->
                         <Grid Grid.Row="0"
                               ColumnDefinitions="Auto,*,Auto,Auto"
-                              BackgroundColor="{StaticResource Surface}"
+                              BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}"
                               Padding="8">
                             <Button Text="&lt;"
                                     Command="{Binding BackToListCommand}"
@@ -339,7 +341,7 @@
 
                         <!-- Download Progress -->
                         <Grid Grid.Row="1"
-                              BackgroundColor="{StaticResource Surface}"
+                              BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}"
                               Padding="16,8"
                               IsVisible="{Binding IsDownloading}">
                             <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto">
@@ -349,12 +351,12 @@
                                 <Label Grid.Column="1"
                                        Text="{Binding DownloadProgress, StringFormat='{0}%'}"
                                        FontSize="12"
-                                       TextColor="{StaticResource TextSecondary}"
+                                       TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
                                        Margin="8,0,0,0" />
                                 <Label Grid.Row="1" Grid.ColumnSpan="2"
                                        Text="{Binding DownloadStatusMessage}"
                                        FontSize="12"
-                                       TextColor="{StaticResource TextSecondary}"
+                                       TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
                                        Margin="0,4,0,0" />
                             </Grid>
                         </Grid>
@@ -362,7 +364,7 @@
                         <!-- Trip Info Panel -->
                         <Border Grid.Row="2"
                                 IsVisible="{Binding ShowingDetails}"
-                                BackgroundColor="{StaticResource Surface}"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}"
                                 Padding="12,8">
                             <VerticalStackLayout Spacing="8">
                                 <!-- Stats row - tap to toggle expansion -->
@@ -382,12 +384,12 @@
                                     <Label Grid.Column="1"
                                            Text="v"
                                            FontSize="12"
-                                           TextColor="{StaticResource TextSecondary}"
+                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
                                            IsVisible="{Binding IsTripInfoExpanded, Converter={StaticResource InvertedBoolConverter}}" />
                                     <Label Grid.Column="1"
                                            Text="^"
                                            FontSize="12"
-                                           TextColor="{StaticResource TextSecondary}"
+                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
                                            IsVisible="{Binding IsTripInfoExpanded}" />
                                 </Grid>
 
@@ -405,8 +407,7 @@
                                     </VerticalStackLayout>
                                     <!-- Last updated -->
                                     <Label Text="{Binding SelectedTripDetails.UpdatedAt, StringFormat='Updated: {0:MMM d, yyyy}'}"
-                                           Style="{StaticResource Caption}"
-                                           TextColor="{StaticResource Gray400}" />
+                                           Style="{StaticResource Caption}" />
                                 </VerticalStackLayout>
                             </VerticalStackLayout>
                         </Border>
@@ -425,7 +426,7 @@
                                     HorizontalOptions="Fill"
                                     Margin="16,0,16,16"
                                     Padding="16"
-                                    BackgroundColor="{StaticResource Surface}"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}"
                                     StrokeThickness="0">
                                 <Border.StrokeShape>
                                     <RoundRectangle CornerRadius="12" />
@@ -437,7 +438,7 @@
                                     <Label Grid.Row="1"
                                            Text="{Binding NavigationState.DistanceText}"
                                            Style="{StaticResource Caption}"
-                                           TextColor="{StaticResource TextSecondary}" />
+                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
                                     <Button Grid.Column="1" Grid.RowSpan="2"
                                             Text="Stop"
                                             Command="{Binding StopNavigationCommand}"
@@ -472,11 +473,14 @@
             <Border VerticalOptions="End"
                     Margin="8"
                     Padding="12"
-                    BackgroundColor="#FFEBEE"
+                    BackgroundColor="{AppThemeBinding Light=#FFEBEE, Dark=#4A1414}"
                     StrokeThickness="0"
                     IsVisible="{Binding ErrorMessage, Converter={StaticResource IsNotNullConverter}}">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="8" />
+                </Border.StrokeShape>
                 <Label Text="{Binding ErrorMessage}"
-                       TextColor="#C62828"
+                       TextColor="{AppThemeBinding Light=#C62828, Dark=#FF8A80}"
                        FontSize="14" />
             </Border>
 

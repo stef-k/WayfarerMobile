@@ -11,7 +11,7 @@
              x:Class="WayfarerMobile.Views.GroupsPage"
              x:DataType="viewmodels:GroupsViewModel"
              Title="{Binding Title}"
-             BackgroundColor="{StaticResource Background}">
+             BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}">
 
     <Grid RowDefinitions="Auto,*">
 
@@ -25,11 +25,12 @@
             <Label Text="Not Configured"
                    FontSize="24"
                    FontAttributes="Bold"
-                   HorizontalTextAlignment="Center" />
+                   HorizontalTextAlignment="Center"
+                   TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}" />
             <Label Text="Please configure your server URL and API token in Settings to view your groups."
                    FontSize="14"
                    HorizontalTextAlignment="Center"
-                   TextColor="{StaticResource Gray500}" />
+                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
         </VerticalStackLayout>
 
         <!-- Main Content (when configured) -->
@@ -151,8 +152,11 @@
                                           CornerRadius="16"
                                           SegmentCornerRadius="14"
                                           SegmentHeight="36"
-                                          SegmentWidth="100"
-                                          SelectionIndicatorSettings="{segmented:SelectionIndicatorSettings Background={StaticResource Primary}, SelectionIndicatorPlacement=Fill}">
+                                          SegmentWidth="100">
+                <segmented:SfSegmentedControl.SelectionIndicatorSettings>
+                    <segmented:SelectionIndicatorSettings Background="{StaticResource Primary}"
+                                                          SelectionIndicatorPlacement="Fill" />
+                </segmented:SfSegmentedControl.SelectionIndicatorSettings>
                 <segmented:SfSegmentedControl.ItemsSource>
                     <x:Array Type="{x:Type segmented:SfSegmentItem}">
                         <segmented:SfSegmentItem Text="List" />

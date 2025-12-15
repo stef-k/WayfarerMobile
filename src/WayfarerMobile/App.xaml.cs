@@ -1,5 +1,7 @@
+using System.Globalization;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Services;
+using WayfarerMobile.ViewModels;
 
 namespace WayfarerMobile;
 
@@ -25,6 +27,9 @@ public partial class App : Application
         InitializeComponent();
         _serviceProvider = serviceProvider;
 
+        // Apply saved theme and language settings on startup
+        ApplySavedSettings();
+
         // Initialize global exception handler first
         InitializeExceptionHandler();
 
@@ -48,6 +53,44 @@ public partial class App : Application
         window.Stopped += OnWindowStopped;
 
         return window;
+    }
+
+    /// <summary>
+    /// Applies saved theme and language settings on app startup.
+    /// </summary>
+    private void ApplySavedSettings()
+    {
+        try
+        {
+            var settings = _serviceProvider.GetService<ISettingsService>();
+            if (settings == null)
+                return;
+
+            // Apply theme preference
+            SettingsViewModel.ApplyTheme(settings.ThemePreference);
+            System.Diagnostics.Debug.WriteLine($"[App] Applied theme: {settings.ThemePreference}");
+
+            // Apply language preference
+            var languageCode = settings.LanguagePreference;
+            if (!string.IsNullOrEmpty(languageCode) && languageCode != "System")
+            {
+                try
+                {
+                    var culture = new CultureInfo(languageCode);
+                    CultureInfo.CurrentCulture = culture;
+                    CultureInfo.CurrentUICulture = culture;
+                    System.Diagnostics.Debug.WriteLine($"[App] Applied language: {languageCode}");
+                }
+                catch (CultureNotFoundException)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[App] Culture '{languageCode}' not found, using system default");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[App] Failed to apply saved settings: {ex.Message}");
+        }
     }
 
     /// <summary>
