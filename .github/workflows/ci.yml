@@ -15,6 +15,9 @@ jobs:
   build-and-test:
     name: Build & Test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
 
     steps:
     - name: Checkout
@@ -76,6 +79,7 @@ jobs:
     - name: Add coverage PR comment
       uses: marocchino/sticky-pull-request-comment@v2
       if: github.event_name == 'pull_request'
+      continue-on-error: true
       with:
         recreate: true
         path: code-coverage-results.md
