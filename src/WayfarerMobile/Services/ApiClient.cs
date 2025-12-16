@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Polly;
@@ -26,6 +27,9 @@ public class ApiClient : IApiClient
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
+        // Use relaxed encoding to prevent HTML characters (<, >) from being escaped to \u003C, \u003E
+        // This is needed for notes HTML content to be stored correctly on the server
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         Converters = { new UtcDateTimeConverter() }
     };
 

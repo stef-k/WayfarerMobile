@@ -4,6 +4,7 @@
              xmlns:viewmodels="clr-namespace:WayfarerMobile.ViewModels"
              xmlns:mapsui="clr-namespace:Mapsui.UI.Maui;assembly=Mapsui.UI.Maui"
              xmlns:bottomSheet="clr-namespace:Syncfusion.Maui.Toolkit.BottomSheet;assembly=Syncfusion.Maui.Toolkit"
+             xmlns:picker="clr-namespace:Syncfusion.Maui.Toolkit.Picker;assembly=Syncfusion.Maui.Toolkit"
              xmlns:sys="clr-namespace:System;assembly=netstandard"
              x:Class="WayfarerMobile.Views.TimelinePage"
              x:DataType="viewmodels:TimelineViewModel"
@@ -16,6 +17,7 @@
                                    AllowedState="All"
                                    HalfExpandedRatio="0.7"
                                    FullExpandedRatio="0.95"
+                                   CollapsedHeight="28"
                                    EnableSwiping="True"
                                    IsModal="True"
                                    ShowGrabber="True"
@@ -26,19 +28,43 @@
 
             <bottomSheet:SfBottomSheet.Content>
                 <Grid RowDefinitions="Auto,*">
-                    <!-- Hidden DatePicker (triggered programmatically) -->
-                    <DatePicker x:Name="HiddenDatePicker"
-                                Date="{Binding SelectedDate}"
-                                MaximumDate="{x:Static sys:DateTime.Today}"
-                                IsVisible="False"
-                                DateSelected="OnDateSelected" />
+                    <!-- SfDatePicker for date navigation (inside SfBottomSheet.Content, NO Grid.Row to work as modal) -->
+                    <picker:SfDatePicker x:Name="DatePicker"
+                                         IsOpen="{Binding IsDatePickerOpen, Mode=TwoWay}"
+                                         Mode="Dialog"
+                                         SelectedDate="{Binding SelectedDate}"
+                                         MaximumDate="{x:Static sys:DateTime.Today}"
+                                         Format="dd_MMM_yyyy"
+                                         OkButtonClicked="OnDatePickerOkClicked"
+                                         CancelButtonClicked="OnDatePickerCancelClicked">
+                        <picker:SfDatePicker.HeaderView>
+                            <picker:PickerHeaderView Height="40" Text="Select Date" />
+                        </picker:SfDatePicker.HeaderView>
+                        <picker:SfDatePicker.FooterView>
+                            <picker:PickerFooterView Height="40" />
+                        </picker:SfDatePicker.FooterView>
+                    </picker:SfDatePicker>
 
-                    <!-- Date Navigation Bar (inside SfBottomSheet.Content to avoid blank page) -->
+                    <!-- SfDateTimePicker for editing location date/time (NO Grid.Row to work as modal) -->
+                    <picker:SfDateTimePicker x:Name="EditDateTimePicker"
+                                             IsOpen="{Binding IsEditDateTimePickerOpen, Mode=TwoWay}"
+                                             Mode="Dialog"
+                                             SelectedDate="{Binding EditDateTime, Mode=TwoWay}"
+                                             DateFormat="dd_MMM_yyyy"
+                                             TimeFormat="hh_mm_ss_tt"
+                                             OkButtonClicked="OnEditDateTimePickerOkClicked"
+                                             CancelButtonClicked="OnEditDateTimePickerCancelClicked">
+                        <picker:SfDateTimePicker.FooterView>
+                            <picker:PickerFooterView Height="40" />
+                        </picker:SfDateTimePicker.FooterView>
+                    </picker:SfDateTimePicker>
+
+                    <!-- Date Navigation Bar -->
                     <Border Grid.Row="0"
                             Padding="8,4"
                             BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}"
                             StrokeThickness="0">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
                             <!-- Previous Day Button -->
                             <ImageButton Grid.Column="0"
                                          Source="arrow_left.png"
@@ -47,7 +73,8 @@
                                          Padding="8"
                                          CornerRadius="8"
                                          BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                                         Command="{Binding PreviousCommand}" />
+                                         Command="{Binding PreviousCommand}"
+                                         IsEnabled="{Binding CanNavigateDate}" />
 
                             <!-- Date Button (shows current date, opens picker on tap) -->
                             <Button Grid.Column="1"
@@ -59,10 +86,23 @@
                                     HorizontalOptions="Center"
                                     BackgroundColor="{StaticResource Primary}"
                                     TextColor="White"
-                                    Clicked="OnDateButtonClicked" />
+                                    Command="{Binding OpenDatePickerCommand}"
+                                    IsEnabled="{Binding CanNavigateDate}" />
 
-                            <!-- Next Day Button (disabled on today) -->
-                            <ImageButton Grid.Column="2"
+                            <!-- Today Button -->
+                            <Button Grid.Column="2"
+                                    Text="Today"
+                                    FontSize="12"
+                                    HeightRequest="40"
+                                    Padding="12,0"
+                                    CornerRadius="8"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                    TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource Gray100}}"
+                                    Command="{Binding GoToTodayCommand}"
+                                    IsEnabled="{Binding CanNavigateDate}" />
+
+                            <!-- Next Day Button (disabled on today or during editing) -->
+                            <ImageButton Grid.Column="3"
                                          Source="arrow_right.png"
                                          WidthRequest="40"
                                          HeightRequest="40"
@@ -80,6 +120,51 @@
                                        Map="{Binding Map}"
                                        HorizontalOptions="Fill"
                                        VerticalOptions="Fill" />
+
+                    <!-- Coordinate Picking Overlay -->
+                    <Border Grid.Row="1"
+                            IsVisible="{Binding IsCoordinatePickingMode}"
+                            VerticalOptions="Start"
+                            HorizontalOptions="Fill"
+                            Margin="16,16"
+                            Padding="16"
+                            StrokeShape="RoundRectangle 12"
+                            Stroke="{StaticResource Primary}"
+                            StrokeThickness="2"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+                        <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="12">
+                            <Label Grid.Row="0"
+                                   Text="Tap on map to set new location"
+                                   FontSize="14"
+                                   FontAttributes="Bold"
+                                   HorizontalTextAlignment="Center"
+                                   TextColor="{StaticResource Primary}" />
+                            <Label Grid.Row="1"
+                                   Text="{Binding PendingCoordinatesText}"
+                                   FontSize="12"
+                                   HorizontalTextAlignment="Center"
+                                   TextColor="{StaticResource TextSecondary}" />
+                            <HorizontalStackLayout Grid.Row="2" Spacing="12" HorizontalOptions="Center">
+                                <Button Text="Cancel"
+                                        FontSize="14"
+                                        HeightRequest="40"
+                                        Padding="20,0"
+                                        CornerRadius="8"
+                                        BackgroundColor="{StaticResource Gray500}"
+                                        TextColor="White"
+                                        Command="{Binding CancelCoordinatePickingCommand}" />
+                                <Button Text="Save"
+                                        FontSize="14"
+                                        HeightRequest="40"
+                                        Padding="20,0"
+                                        CornerRadius="8"
+                                        BackgroundColor="{StaticResource Primary}"
+                                        TextColor="White"
+                                        Command="{Binding SaveCoordinatesCommand}"
+                                        IsEnabled="{Binding HasPendingCoordinates}" />
+                            </HorizontalStackLayout>
+                        </Grid>
+                    </Border>
                 </Grid>
             </bottomSheet:SfBottomSheet.Content>
 
@@ -167,54 +252,62 @@
                                     <Label Text="{Binding SelectedLocation.Address}" Style="{StaticResource Body}" />
                                 </VerticalStackLayout>
                             </Frame>
+
+                            <!-- Notes Section -->
+                            <Frame Padding="12"
+                                   BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                                   BorderColor="Transparent"
+                                   CornerRadius="8"
+                                   HasShadow="False"
+                                   IsVisible="{Binding SelectedLocation.HasNotes}">
+                                <VerticalStackLayout Spacing="8">
+                                    <Label Text="Notes" Style="{StaticResource Caption}" FontAttributes="Bold" TextColor="{StaticResource TextSecondary}" />
+                                    <WebView Source="{Binding SelectedLocation.NotesHtmlSource}"
+                                             HeightRequest="150"
+                                             HorizontalOptions="Fill" />
+                                </VerticalStackLayout>
+                            </Frame>
                         </VerticalStackLayout>
                     </ScrollView>
 
                     <!-- Action Buttons -->
-                    <ScrollView Grid.Row="2" Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
-                        <HorizontalStackLayout Padding="16,12" Spacing="8">
-                            <Button Text="Maps"
-                                    Command="{Binding OpenInMapsCommand}"
-                                    BackgroundColor="{StaticResource Primary}"
-                                    TextColor="White"
-                                    FontSize="14"
-                                    HeightRequest="40"
-                                    CornerRadius="8"
-                                    Padding="16,0" />
-                            <Button Text="Wikipedia"
-                                    Command="{Binding SearchWikipediaCommand}"
-                                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                                    TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
-                                    FontSize="14"
-                                    HeightRequest="40"
-                                    CornerRadius="8"
-                                    Padding="16,0" />
-                            <Button Text="Copy"
-                                    Command="{Binding CopyCoordinatesCommand}"
-                                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                                    TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
-                                    FontSize="14"
-                                    HeightRequest="40"
-                                    CornerRadius="8"
-                                    Padding="16,0" />
-                            <Button Text="Share"
-                                    Command="{Binding ShareLocationCommand}"
-                                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                                    TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
-                                    FontSize="14"
-                                    HeightRequest="40"
-                                    CornerRadius="8"
-                                    Padding="16,0" />
-                            <Button Text="Edit"
-                                    Clicked="OnEditLocationClicked"
-                                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                                    TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
-                                    FontSize="14"
-                                    HeightRequest="40"
-                                    CornerRadius="8"
-                                    Padding="16,0" />
-                        </HorizontalStackLayout>
-                    </ScrollView>
+                    <HorizontalStackLayout Grid.Row="2" Padding="16,12" Spacing="12" HorizontalOptions="Center">
+                        <ImageButton Source="maps.png"
+                                     Command="{Binding OpenInMapsCommand}"
+                                     WidthRequest="44"
+                                     HeightRequest="44"
+                                     CornerRadius="22"
+                                     Padding="10"
+                                     BackgroundColor="{StaticResource Gray900}" />
+                        <ImageButton Source="wikipedia.png"
+                                     Command="{Binding SearchWikipediaCommand}"
+                                     WidthRequest="44"
+                                     HeightRequest="44"
+                                     CornerRadius="22"
+                                     Padding="10"
+                                     BackgroundColor="{StaticResource Gray900}" />
+                        <ImageButton Source="copy.png"
+                                     Command="{Binding CopyCoordinatesCommand}"
+                                     WidthRequest="44"
+                                     HeightRequest="44"
+                                     CornerRadius="22"
+                                     Padding="10"
+                                     BackgroundColor="{StaticResource Gray900}" />
+                        <ImageButton Source="share.png"
+                                     Command="{Binding ShareLocationCommand}"
+                                     WidthRequest="44"
+                                     HeightRequest="44"
+                                     CornerRadius="22"
+                                     Padding="10"
+                                     BackgroundColor="{StaticResource Gray900}" />
+                        <ImageButton Source="edit.png"
+                                     Clicked="OnEditLocationClicked"
+                                     WidthRequest="44"
+                                     HeightRequest="44"
+                                     CornerRadius="22"
+                                     Padding="10"
+                                     BackgroundColor="{StaticResource Gray900}" />
+                    </HorizontalStackLayout>
                 </Grid>
             </bottomSheet:SfBottomSheet.BottomSheetContent>
         </bottomSheet:SfBottomSheet>
