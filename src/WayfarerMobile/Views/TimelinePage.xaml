@@ -53,14 +53,7 @@
                                              DateFormat="dd_MMM_yyyy"
                                              TimeFormat="hh_mm_ss_tt"
                                              OkButtonClicked="OnEditDateTimePickerOkClicked"
-                                             CancelButtonClicked="OnEditDateTimePickerCancelClicked">
-                        <picker:SfDateTimePicker.HeaderView>
-                            <picker:PickerHeaderView Height="40" Text="Edit Date &amp; Time" />
-                        </picker:SfDateTimePicker.HeaderView>
-                        <picker:SfDateTimePicker.FooterView>
-                            <picker:PickerFooterView Height="40" />
-                        </picker:SfDateTimePicker.FooterView>
-                    </picker:SfDateTimePicker>
+                                             CancelButtonClicked="OnEditDateTimePickerCancelClicked" />
 
                     <!-- Date Navigation Bar -->
                     <Border Grid.Row="0"
