@@ -1,6 +1,7 @@
 using Mapsui;
 using Mapsui.UI.Maui;
 using Syncfusion.Maui.Toolkit.BottomSheet;
+using Syncfusion.Maui.Toolkit.Picker;
 using WayfarerMobile.ViewModels;
 
 namespace WayfarerMobile.Views;
@@ -51,15 +52,15 @@ public partial class TimelinePage : ContentPage
         await DisplayAlertAsync("Edit Location", "Notes editor coming soon", "OK");
     }
 
-    private void OnDateButtonClicked(object? sender, EventArgs e)
+    private void OnDatePickerOkClicked(object? sender, EventArgs e)
     {
-        // Focus the hidden DatePicker to show the native date picker
-        HiddenDatePicker.Focus();
+        var selectedDate = DatePicker.SelectedDate;
+        _viewModel.DateSelectedCommand.Execute(selectedDate);
     }
 
-    private void OnDateSelected(object? sender, DateChangedEventArgs e)
+    private void OnDatePickerCancelClicked(object? sender, EventArgs e)
     {
-        _viewModel.DateSelectedCommand.Execute(e.NewDate);
+        _viewModel.IsDatePickerOpen = false;
     }
 
     protected override async void OnAppearing()

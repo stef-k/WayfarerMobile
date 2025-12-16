@@ -4,6 +4,7 @@
              xmlns:viewmodels="clr-namespace:WayfarerMobile.ViewModels"
              xmlns:mapsui="clr-namespace:Mapsui.UI.Maui;assembly=Mapsui.UI.Maui"
              xmlns:bottomSheet="clr-namespace:Syncfusion.Maui.Toolkit.BottomSheet;assembly=Syncfusion.Maui.Toolkit"
+             xmlns:picker="clr-namespace:Syncfusion.Maui.Toolkit.Picker;assembly=Syncfusion.Maui.Toolkit"
              xmlns:sys="clr-namespace:System;assembly=netstandard"
              x:Class="WayfarerMobile.Views.TimelinePage"
              x:DataType="viewmodels:TimelineViewModel"
@@ -26,12 +27,22 @@
 
             <bottomSheet:SfBottomSheet.Content>
                 <Grid RowDefinitions="Auto,*">
-                    <!-- Hidden DatePicker (triggered programmatically) -->
-                    <DatePicker x:Name="HiddenDatePicker"
-                                Date="{Binding SelectedDate}"
-                                MaximumDate="{x:Static sys:DateTime.Today}"
-                                IsVisible="False"
-                                DateSelected="OnDateSelected" />
+                    <!-- SfDatePicker (inside SfBottomSheet.Content to avoid blank page) -->
+                    <picker:SfDatePicker x:Name="DatePicker"
+                                         IsOpen="{Binding IsDatePickerOpen, Mode=TwoWay}"
+                                         Mode="Dialog"
+                                         SelectedDate="{Binding SelectedDate}"
+                                         MaximumDate="{x:Static sys:DateTime.Today}"
+                                         Format="dd_MMM_yyyy"
+                                         OkButtonClicked="OnDatePickerOkClicked"
+                                         CancelButtonClicked="OnDatePickerCancelClicked">
+                        <picker:SfDatePicker.HeaderView>
+                            <picker:PickerHeaderView Height="40" Text="Select Date" />
+                        </picker:SfDatePicker.HeaderView>
+                        <picker:SfDatePicker.FooterView>
+                            <picker:PickerFooterView Height="40" />
+                        </picker:SfDatePicker.FooterView>
+                    </picker:SfDatePicker>
 
                     <!-- Date Navigation Bar (inside SfBottomSheet.Content to avoid blank page) -->
                     <Border Grid.Row="0"
@@ -59,7 +70,7 @@
                                     HorizontalOptions="Center"
                                     BackgroundColor="{StaticResource Primary}"
                                     TextColor="White"
-                                    Clicked="OnDateButtonClicked" />
+                                    Command="{Binding OpenDatePickerCommand}" />
 
                             <!-- Next Day Button (disabled on today) -->
                             <ImageButton Grid.Column="2"

@@ -319,18 +319,31 @@ public partial class TimelineViewModel : BaseViewModel
 
         _timelineLayer.DataHasChanged();
 
-        // Zoom to fit all locations
-        if (points.Count > 1)
+        // Zoom to fit all locations with delay to ensure map is ready
+        if (points.Count >= 1)
         {
-            ZoomToPoints(points);
-        }
-        else if (points.Count == 1)
-        {
-            _map.Navigator.CenterOn(points[0]);
-            if (_map.Navigator.Resolutions?.Count > 15)
+            MainThread.BeginInvokeOnMainThread(async () =>
             {
-                _map.Navigator.ZoomTo(_map.Navigator.Resolutions[15]);
-            }
+                await Task.Delay(100);
+                if (points.Count > 1)
+                {
+                    var minX = points.Min(p => p.X);
+                    var maxX = points.Max(p => p.X);
+                    var minY = points.Min(p => p.Y);
+                    var maxY = points.Max(p => p.Y);
+                    var padding = Math.Max(maxX - minX, maxY - minY) * 0.2;
+                    var extent = new MRect(minX - padding, minY - padding, maxX + padding, maxY + padding);
+                    _map?.Navigator.ZoomToBox(extent, MBoxFit.Fit);
+                }
+                else
+                {
+                    _map?.Navigator.CenterOn(points[0]);
+                    if (_map?.Navigator.Resolutions?.Count > 15)
+                    {
+                        _map.Navigator.ZoomTo(_map.Navigator.Resolutions[15]);
+                    }
+                }
+            });
         }
     }
 
@@ -346,26 +359,6 @@ public partial class TimelineViewModel : BaseViewModel
             Outline = new Pen(Color.White, 2),
             SymbolType = SymbolType.Ellipse
         };
-    }
-
-    /// <summary>
-    /// Zooms to fit all points.
-    /// </summary>
-    private void ZoomToPoints(List<MPoint> points)
-    {
-        if (_map == null || points.Count < 2)
-            return;
-
-        var minX = points.Min(p => p.X);
-        var maxX = points.Max(p => p.X);
-        var minY = points.Min(p => p.Y);
-        var maxY = points.Max(p => p.Y);
-
-        // Add padding
-        var padding = Math.Max(maxX - minX, maxY - minY) * 0.2;
-        var extent = new MRect(minX - padding, minY - padding, maxX + padding, maxY + padding);
-
-        _map.Navigator.ZoomToBox(extent);
     }
 
     /// <summary>
