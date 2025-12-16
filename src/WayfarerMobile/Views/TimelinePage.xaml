@@ -50,7 +50,8 @@
                                              IsOpen="{Binding IsEditDateTimePickerOpen, Mode=TwoWay}"
                                              Mode="Dialog"
                                              SelectedDate="{Binding EditDateTime, Mode=TwoWay}"
-                                             Format="dd_MMM_yyyy_hh_mm_tt"
+                                             DateFormat="dd_MMM_yyyy"
+                                             TimeFormat="hh_mm_ss_tt"
                                              OkButtonClicked="OnEditDateTimePickerOkClicked"
                                              CancelButtonClicked="OnEditDateTimePickerCancelClicked">
                         <picker:SfDateTimePicker.HeaderView>
