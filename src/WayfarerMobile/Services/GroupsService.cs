@@ -268,16 +268,23 @@ public class GroupsService : IGroupsService
 
                     var location = new MemberLocation();
 
-                    if (element.TryGetProperty("coordinates", out var coords))
-                    {
-                        if (coords.TryGetProperty("y", out var lat))
-                            location.Latitude = lat.GetDouble();
-                        if (coords.TryGetProperty("x", out var lon))
-                            location.Longitude = lon.GetDouble();
-                    }
+                    // Try direct latitude/longitude properties first (preferred format)
+                    if (element.TryGetProperty("latitude", out var latProp))
+                        location.Latitude = latProp.GetDouble();
+                    else if (element.TryGetProperty("coordinates", out var coords) &&
+                             coords.TryGetProperty("y", out var coordLat))
+                        location.Latitude = coordLat.GetDouble();
+
+                    if (element.TryGetProperty("longitude", out var lonProp))
+                        location.Longitude = lonProp.GetDouble();
+                    else if (element.TryGetProperty("coordinates", out var coordsLon) &&
+                             coordsLon.TryGetProperty("x", out var coordLon))
+                        location.Longitude = coordLon.GetDouble();
 
                     if (element.TryGetProperty("localTimestamp", out var timestamp))
                         location.Timestamp = timestamp.GetDateTime();
+                    else if (element.TryGetProperty("timestampUtc", out var timestampUtc))
+                        location.Timestamp = timestampUtc.GetDateTime();
 
                     if (element.TryGetProperty("isLive", out var isLive))
                         location.IsLive = isLive.GetBoolean();

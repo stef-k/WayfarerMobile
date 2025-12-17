@@ -737,7 +737,19 @@ public partial class GroupsViewModel : BaseViewModel
                 SelectedDate = DateTime.Today;
             }
 
-            // Reload data for new date (this happens automatically via OnSelectedDateChanged)
+            // Explicitly load data for new date
+            if (SelectedGroup != null)
+            {
+                if (IsToday)
+                {
+                    await StartSseSubscriptionsAsync();
+                }
+                else
+                {
+                    StopSseSubscriptions();
+                    await LoadHistoricalLocationsAsync();
+                }
+            }
         }
 
         _dateBeforePickerOpened = null;
@@ -997,6 +1009,13 @@ public partial class GroupsViewModel : BaseViewModel
     {
         try
         {
+            // Skip live updates when viewing historical data
+            if (!IsToday)
+            {
+                _logger.LogDebug("SSE update skipped - viewing historical date");
+                return;
+            }
+
             var userId = e.Location.UserId;
             var now = DateTime.UtcNow;
 
