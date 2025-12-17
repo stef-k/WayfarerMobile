@@ -395,9 +395,11 @@ public partial class GroupsViewModel : BaseViewModel
 
             // Load members
             var members = await _groupsService.GetGroupMembersAsync(groupId);
+            _logger.LogDebug("[Groups] Loaded {Count} members for group {GroupId}", members.Count, groupId);
 
             // Load latest locations
             var locations = await _groupsService.GetLatestLocationsAsync(groupId);
+            _logger.LogDebug("[Groups] Loaded {Count} locations for group {GroupId}", locations.Count, groupId);
 
             // Find current user and update visibility state
             var currentUser = members.FirstOrDefault(m => m.IsSelf);
@@ -407,13 +409,22 @@ public partial class GroupsViewModel : BaseViewModel
             }
 
             // Merge locations into members
+            var membersWithLocation = 0;
             foreach (var member in members)
             {
                 if (locations.TryGetValue(member.UserId, out var location))
                 {
                     member.LastLocation = location;
+                    membersWithLocation++;
+                    _logger.LogDebug("[Groups] Member {UserId} has location: {Lat},{Lon} IsLive={IsLive}",
+                        member.UserId, location.Latitude, location.Longitude, location.IsLive);
+                }
+                else
+                {
+                    _logger.LogDebug("[Groups] Member {UserId} ({Name}) has NO location", member.UserId, member.DisplayText);
                 }
             }
+            _logger.LogDebug("[Groups] {Count}/{Total} members have locations", membersWithLocation, members.Count);
 
             Members.ReplaceRange(members.OrderByDescending(m => m.LastLocation?.IsLive ?? false)
                                         .ThenBy(m => m.DisplayText));
@@ -854,6 +865,14 @@ public partial class GroupsViewModel : BaseViewModel
     /// </summary>
     private void UpdateMapMarkers()
     {
+        var total = Members.Count;
+        var withLocation = Members.Count(m => m.LastLocation != null);
+        var visible = Members.Count(m => m.IsVisibleOnMap);
+        var filtered = Members.Count(m => m.LastLocation != null && m.IsVisibleOnMap);
+
+        _logger.LogDebug("[Groups] UpdateMapMarkers: total={Total}, withLocation={WithLocation}, visible={Visible}, filtered={Filtered}",
+            total, withLocation, visible, filtered);
+
         var memberLocations = Members
             .Where(m => m.LastLocation != null && m.IsVisibleOnMap)
             .Select(m => new GroupMemberLocation
@@ -864,8 +883,10 @@ public partial class GroupsViewModel : BaseViewModel
                 Longitude = m.LastLocation.Longitude,
                 ColorHex = m.ColorHex,
                 IsLive = m.LastLocation.IsLive
-            });
+            })
+            .ToList();
 
+        _logger.LogDebug("[Groups] Passing {Count} member locations to map", memberLocations.Count);
         _mapService.UpdateGroupMembers(memberLocations);
     }
 

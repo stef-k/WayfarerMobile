@@ -23,8 +23,26 @@ public partial class GroupsPage : ContentPage
         _viewModel = viewModel;
         BindingContext = viewModel;
 
+        // Subscribe to page loaded event for map initialization (like TimelinePage)
+        Loaded += OnPageLoaded;
+
         // Subscribe to property changes for bottom sheet state management
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+    }
+
+    /// <summary>
+    /// Called when the page is loaded and controls are initialized.
+    /// </summary>
+    private void OnPageLoaded(object? sender, EventArgs e)
+    {
+        // Subscribe to map info events for tap handling after page is loaded
+        MapControl.Info += OnMapInfo;
+
+        // Ensure map is set
+        if (MapControl.Map == null)
+        {
+            MapControl.Map = _viewModel.Map;
+        }
     }
 
     /// <summary>
@@ -33,16 +51,6 @@ public partial class GroupsPage : ContentPage
     protected override async void OnAppearing()
     {
         base.OnAppearing();
-
-        // Subscribe to map info events for tap handling
-        MapControl.Info += OnMapInfo;
-
-        // Ensure map is set
-        if (MapControl.Map == null)
-        {
-            MapControl.Map = _viewModel.Map;
-        }
-
         await _viewModel.OnAppearingAsync();
     }
 

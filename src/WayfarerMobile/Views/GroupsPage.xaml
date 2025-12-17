@@ -339,52 +339,12 @@
                     </Grid>
 
                     <!-- Row 1: Map View (when not expanded and map mode) -->
-                    <Grid Grid.Row="1" IsVisible="{Binding ShowMapView}">
-                        <mapsui:MapControl x:Name="MapControl" Map="{Binding Map}" />
-
-                        <!-- Member Legend Overlay -->
-                        <Frame Margin="8"
-                               Padding="6"
-                               CornerRadius="8"
-                               VerticalOptions="End"
-                               HorizontalOptions="Start"
-                               BackgroundColor="#E8FFFFFF"
-                               BorderColor="{StaticResource Gray300}"
-                               MaximumWidthRequest="180"
-                               HasShadow="False">
-                            <VerticalStackLayout Spacing="4">
-                                <Label Text="Members" FontSize="11" FontAttributes="Bold" TextColor="{StaticResource Gray600}" />
-                                <CollectionView ItemsSource="{Binding Members}"
-                                               SelectionMode="None"
-                                               MaximumHeightRequest="150">
-                                    <CollectionView.ItemTemplate>
-                                        <DataTemplate x:DataType="models:GroupMember">
-                                            <HorizontalStackLayout Spacing="6" Padding="2">
-                                                <CheckBox IsChecked="{Binding IsVisibleOnMap}"
-                                                          Scale="0.8"
-                                                          VerticalOptions="Center"
-                                                          Color="{StaticResource Primary}" />
-                                                <Ellipse WidthRequest="10"
-                                                         HeightRequest="10"
-                                                         Fill="{Binding ColorHex}"
-                                                         VerticalOptions="Center" />
-                                                <Label Text="{Binding DisplayText}"
-                                                       FontSize="11"
-                                                       VerticalOptions="Center"
-                                                       LineBreakMode="TailTruncation"
-                                                       MaximumWidthRequest="100" />
-                                                <Label Text="●"
-                                                       FontSize="8"
-                                                       TextColor="{StaticResource Success}"
-                                                       VerticalOptions="Center"
-                                                       IsVisible="{Binding LastLocation.IsLive}" />
-                                            </HorizontalStackLayout>
-                                        </DataTemplate>
-                                    </CollectionView.ItemTemplate>
-                                </CollectionView>
-                            </VerticalStackLayout>
-                        </Frame>
-                    </Grid>
+                    <mapsui:MapControl Grid.Row="1"
+                                       x:Name="MapControl"
+                                       Map="{Binding Map}"
+                                       IsVisible="{Binding ShowMapView}"
+                                       VerticalOptions="Fill"
+                                       HorizontalOptions="Fill" />
 
                     <!-- Error Message Overlay -->
                     <Frame Grid.Row="1"
