@@ -2,6 +2,8 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.ApplicationModel;
+using Microsoft.Maui.ApplicationModel.DataTransfer;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Services;
@@ -89,7 +91,17 @@ public partial class GroupsViewModel : BaseViewModel
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsListView))]
     [NotifyPropertyChangedFor(nameof(ViewModeIndex))]
+    [NotifyPropertyChangedFor(nameof(ShowListView))]
+    [NotifyPropertyChangedFor(nameof(ShowMapView))]
     private bool _isMapView;
+
+    /// <summary>
+    /// Gets or sets whether the header is expanded.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowListView))]
+    [NotifyPropertyChangedFor(nameof(ShowMapView))]
+    private bool _isHeaderExpanded;
 
     /// <summary>
     /// Gets or sets whether the current user's peer visibility is disabled.
@@ -104,6 +116,7 @@ public partial class GroupsViewModel : BaseViewModel
     [NotifyPropertyChangedFor(nameof(IsToday))]
     [NotifyPropertyChangedFor(nameof(ShowHistoricalToggle))]
     [NotifyPropertyChangedFor(nameof(SelectedDateText))]
+    [NotifyPropertyChangedFor(nameof(DateButtonText))]
     private DateTime _selectedDate = DateTime.Today;
 
     /// <summary>
@@ -119,9 +132,43 @@ public partial class GroupsViewModel : BaseViewModel
     private bool _isDatePickerOpen;
 
     /// <summary>
+    /// Gets or sets whether the member details sheet is open.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isMemberSheetOpen;
+
+    /// <summary>
+    /// Gets or sets the selected member for the details sheet.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedMemberCoordinates))]
+    [NotifyPropertyChangedFor(nameof(SelectedMemberLocationTime))]
+    private GroupMember? _selectedMember;
+
+    /// <summary>
+    /// Date before the picker was opened (for cancel restoration).
+    /// </summary>
+    private DateTime? _dateBeforePickerOpened;
+
+    /// <summary>
     /// Gets whether list view is active.
     /// </summary>
     public bool IsListView => !IsMapView;
+
+    /// <summary>
+    /// Gets whether to show the list view (list mode and header not expanded).
+    /// </summary>
+    public bool ShowListView => IsListView && !IsHeaderExpanded;
+
+    /// <summary>
+    /// Gets whether to show the map view (map mode and header not expanded).
+    /// </summary>
+    public bool ShowMapView => IsMapView && !IsHeaderExpanded;
+
+    /// <summary>
+    /// Gets the count of members visible on the map.
+    /// </summary>
+    public int VisibleMemberCount => Members.Count(m => m.IsVisibleOnMap);
 
     /// <summary>
     /// Gets the formatted selected date text.
@@ -144,6 +191,27 @@ public partial class GroupsViewModel : BaseViewModel
     /// Gets whether the selected group is a Friends group (shows peer visibility toggle).
     /// </summary>
     public bool IsFriendsGroup => string.Equals(SelectedGroup?.GroupType, "Friends", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Gets the date button text (for consistency with TimelinePage).
+    /// </summary>
+    public string DateButtonText => SelectedDate.Date == DateTime.Today
+        ? "Today"
+        : SelectedDate.ToString("MMM d, yyyy");
+
+    /// <summary>
+    /// Gets the selected member's coordinates as text.
+    /// </summary>
+    public string SelectedMemberCoordinates => SelectedMember?.LastLocation != null
+        ? $"{SelectedMember.LastLocation.Latitude:F6}, {SelectedMember.LastLocation.Longitude:F6}"
+        : "N/A";
+
+    /// <summary>
+    /// Gets the selected member's location time as text.
+    /// </summary>
+    public string SelectedMemberLocationTime => SelectedMember?.LastLocation != null
+        ? SelectedMember.LastLocation.Timestamp.ToLocalTime().ToString("ddd, MMM d yyyy HH:mm")
+        : "N/A";
 
     /// <summary>
     /// Gets or sets the view mode index (0=List, 1=Map) for SfSegmentedControl binding.
@@ -507,6 +575,7 @@ public partial class GroupsViewModel : BaseViewModel
     [RelayCommand]
     private void OpenDatePicker()
     {
+        _dateBeforePickerOpened = SelectedDate;
         IsDatePickerOpen = true;
     }
 
@@ -566,12 +635,227 @@ public partial class GroupsViewModel : BaseViewModel
     }
 
     /// <summary>
+    /// Toggles the header expansion state.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleHeaderExpanded()
+    {
+        IsHeaderExpanded = !IsHeaderExpanded;
+    }
+
+    /// <summary>
+    /// Selects all members to show on map.
+    /// </summary>
+    [RelayCommand]
+    private void SelectAllMembers()
+    {
+        foreach (var member in Members)
+        {
+            member.IsVisibleOnMap = true;
+        }
+        OnPropertyChanged(nameof(VisibleMemberCount));
+        UpdateMapMarkers();
+    }
+
+    /// <summary>
+    /// Deselects all members from map.
+    /// </summary>
+    [RelayCommand]
+    private void DeselectAllMembers()
+    {
+        foreach (var member in Members)
+        {
+            member.IsVisibleOnMap = false;
+        }
+        OnPropertyChanged(nameof(VisibleMemberCount));
+        UpdateMapMarkers();
+    }
+
+    #region Member Details Sheet Commands
+
+    /// <summary>
+    /// Shows member details in the bottom sheet.
+    /// </summary>
+    /// <param name="member">The member to show details for.</param>
+    [RelayCommand]
+    private void ShowMemberDetails(GroupMember? member)
+    {
+        if (member == null) return;
+
+        SelectedMember = member;
+        IsMemberSheetOpen = true;
+    }
+
+    /// <summary>
+    /// Shows member details by user ID (called from map tap handler).
+    /// </summary>
+    /// <param name="userId">The user ID to show details for.</param>
+    public void ShowMemberDetailsByUserId(string userId)
+    {
+        var member = Members.FirstOrDefault(m => m.UserId == userId);
+        if (member != null)
+        {
+            ShowMemberDetails(member);
+        }
+    }
+
+    /// <summary>
+    /// Closes the member details sheet.
+    /// </summary>
+    [RelayCommand]
+    private void CloseMemberSheet()
+    {
+        IsMemberSheetOpen = false;
+        SelectedMember = null;
+    }
+
+    /// <summary>
+    /// Handles date selection from picker.
+    /// </summary>
+    [RelayCommand]
+    private async Task DateSelectedAsync()
+    {
+        IsDatePickerOpen = false;
+
+        // Compare against date before picker was opened
+        if (_dateBeforePickerOpened.HasValue && SelectedDate.Date != _dateBeforePickerOpened.Value.Date)
+        {
+            // Limit to today at most
+            if (SelectedDate.Date > DateTime.Today)
+            {
+                SelectedDate = DateTime.Today;
+            }
+
+            // Reload data for new date (this happens automatically via OnSelectedDateChanged)
+        }
+
+        _dateBeforePickerOpened = null;
+    }
+
+    /// <summary>
+    /// Cancels date picker and restores original date.
+    /// </summary>
+    [RelayCommand]
+    private void CancelDatePicker()
+    {
+        if (_dateBeforePickerOpened.HasValue)
+        {
+            SelectedDate = _dateBeforePickerOpened.Value;
+        }
+        IsDatePickerOpen = false;
+        _dateBeforePickerOpened = null;
+    }
+
+    /// <summary>
+    /// Opens the selected member's location in Google Maps.
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenInMapsAsync()
+    {
+        if (SelectedMember?.LastLocation == null) return;
+
+        try
+        {
+            var location = new Microsoft.Maui.Devices.Sensors.Location(
+                SelectedMember.LastLocation.Latitude,
+                SelectedMember.LastLocation.Longitude);
+            var options = new MapLaunchOptions { Name = SelectedMember.DisplayText };
+            await Microsoft.Maui.ApplicationModel.Map.Default.OpenAsync(location, options);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to open maps");
+        }
+    }
+
+    /// <summary>
+    /// Searches Wikipedia for nearby places.
+    /// </summary>
+    [RelayCommand]
+    private async Task SearchWikipediaAsync()
+    {
+        if (SelectedMember?.LastLocation == null) return;
+
+        try
+        {
+            var url = $"https://en.wikipedia.org/wiki/Special:Nearby#/coord/{SelectedMember.LastLocation.Latitude},{SelectedMember.LastLocation.Longitude}";
+            await Launcher.OpenAsync(new Uri(url));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to open Wikipedia");
+        }
+    }
+
+    /// <summary>
+    /// Copies coordinates to clipboard.
+    /// </summary>
+    [RelayCommand]
+    private async Task CopyCoordinatesAsync()
+    {
+        if (SelectedMember?.LastLocation == null) return;
+
+        try
+        {
+            var coords = $"{SelectedMember.LastLocation.Latitude:F6}, {SelectedMember.LastLocation.Longitude:F6}";
+            await Clipboard.SetTextAsync(coords);
+            _logger.LogInformation("Coordinates copied to clipboard: {Coords}", coords);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to copy coordinates");
+        }
+    }
+
+    /// <summary>
+    /// Shares the member's location.
+    /// </summary>
+    [RelayCommand]
+    private async Task ShareLocationAsync()
+    {
+        if (SelectedMember?.LastLocation == null) return;
+
+        try
+        {
+            var googleMapsUrl = $"https://www.google.com/maps?q={SelectedMember.LastLocation.Latitude:F6},{SelectedMember.LastLocation.Longitude:F6}";
+            var text = $"{SelectedMember.DisplayText}'s location:\n{googleMapsUrl}";
+
+            await Share.Default.RequestAsync(new ShareTextRequest
+            {
+                Title = "Share Location",
+                Text = text
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to share location");
+        }
+    }
+
+    /// <summary>
+    /// Navigates to the member's location using internal navigation.
+    /// </summary>
+    [RelayCommand]
+    private void NavigateToMember()
+    {
+        if (SelectedMember?.LastLocation == null) return;
+
+        // TODO: Integrate with TripNavigationService when available
+        _logger.LogInformation("Navigate to {Member} at {Lat},{Lon}",
+            SelectedMember.DisplayText,
+            SelectedMember.LastLocation.Latitude,
+            SelectedMember.LastLocation.Longitude);
+    }
+
+    #endregion
+
+    /// <summary>
     /// Updates the map markers with current member locations.
     /// </summary>
     private void UpdateMapMarkers()
     {
         var memberLocations = Members
-            .Where(m => m.LastLocation != null)
+            .Where(m => m.LastLocation != null && m.IsVisibleOnMap)
             .Select(m => new GroupMemberLocation
             {
                 UserId = m.UserId,

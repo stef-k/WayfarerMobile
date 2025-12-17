@@ -51,6 +51,11 @@ public class GroupMember
     public bool OrgPeerVisibilityAccessDisabled { get; set; }
 
     /// <summary>
+    /// Gets or sets whether this member is visible on the map.
+    /// </summary>
+    public bool IsVisibleOnMap { get; set; } = true;
+
+    /// <summary>
     /// Gets the display name to show (falls back to username).
     /// </summary>
     public string DisplayText => !string.IsNullOrEmpty(DisplayName) ? DisplayName : UserName;

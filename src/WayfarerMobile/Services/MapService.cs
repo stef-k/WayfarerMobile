@@ -829,11 +829,19 @@ public class MapService : IDisposable
         _groupMembersLayer.Clear();
 
         var points = new List<MPoint>();
+        var memberList = members.ToList();
 
-        foreach (var member in members)
+        System.Diagnostics.Debug.WriteLine($"[MapService] UpdateGroupMembers called with {memberList.Count} members");
+
+        foreach (var member in memberList)
         {
+            System.Diagnostics.Debug.WriteLine($"[MapService] Processing member: {member.DisplayName}, Lat={member.Latitude}, Lon={member.Longitude}, Color={member.ColorHex}");
+
             if (member.Latitude == 0 && member.Longitude == 0)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MapService] Skipping member {member.DisplayName} - zero coordinates");
                 continue;
+            }
 
             var (x, y) = SphericalMercator.FromLonLat(member.Longitude, member.Latitude);
             var point = new MPoint(x, y);
@@ -842,15 +850,24 @@ public class MapService : IDisposable
             // Parse member color
             var color = ParseColor(member.ColorHex);
 
-            // Add marker
+            // Add marker with properties for tap handling
             var markerPoint = new Point(point.X, point.Y);
-            _groupMembersLayer.Add(new GeometryFeature(markerPoint)
+            var feature = new GeometryFeature(markerPoint)
             {
                 Styles = new[] { CreateMemberMarkerStyle(color) }
-            });
+            };
+
+            // Add properties for tap identification
+            feature["UserId"] = member.UserId;
+            feature["DisplayName"] = member.DisplayName;
+            feature["IsLive"] = member.IsLive;
+
+            _groupMembersLayer.Add(feature);
+            System.Diagnostics.Debug.WriteLine($"[MapService] Added marker for {member.DisplayName} at ({x}, {y})");
         }
 
         _groupMembersLayer.DataHasChanged();
+        System.Diagnostics.Debug.WriteLine($"[MapService] Added {points.Count} markers to map");
 
         // Auto-zoom to fit all members if there are multiple
         if (points.Count > 1)
