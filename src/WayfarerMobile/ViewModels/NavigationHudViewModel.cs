@@ -12,8 +12,9 @@ namespace WayfarerMobile.ViewModels;
 /// ViewModel for the navigation heads-up display (HUD).
 /// Displays real-time navigation information including distance, direction, and ETA.
 /// </summary>
-public partial class NavigationHudViewModel : ObservableObject
+public partial class NavigationHudViewModel : ObservableObject, IDisposable
 {
+    private bool _disposed;
     private readonly TripNavigationService _navigationService;
     private readonly INavigationAudioService _audioService;
     private readonly IWakeLockService _wakeLockService;
@@ -112,12 +113,20 @@ public partial class NavigationHudViewModel : ObservableObject
     [ObservableProperty]
     private bool _isMuted;
 
+    /// <summary>
+    /// Gets or sets the source page route for returning after navigation ends.
+    /// Example: "//groups" to return to the Groups tab.
+    /// </summary>
+    [ObservableProperty]
+    private string? _sourcePageRoute;
+
     #endregion
 
     /// <summary>
     /// Event raised when navigation should be stopped.
+    /// The string parameter contains the source page route to return to (or null).
     /// </summary>
-    public event EventHandler? StopNavigationRequested;
+    public event EventHandler<string?>? StopNavigationRequested;
 
     /// <summary>
     /// Creates a new instance of NavigationHudViewModel.
@@ -169,9 +178,11 @@ public partial class NavigationHudViewModel : ObservableObject
     [RelayCommand]
     private async Task StopNavigationAsync()
     {
-        _logger.LogInformation("Stop navigation requested from HUD");
+        _logger.LogInformation("Stop navigation requested from HUD, returning to: {SourcePage}", SourcePageRoute ?? "(main)");
         await _audioService.StopAsync();
-        StopNavigationRequested?.Invoke(this, EventArgs.Empty);
+        var returnRoute = SourcePageRoute;
+        SourcePageRoute = null; // Clear for next navigation
+        StopNavigationRequested?.Invoke(this, returnRoute);
     }
 
     /// <summary>
@@ -426,6 +437,27 @@ public partial class NavigationHudViewModel : ObservableObject
         {
             EtaText = "< 1 min";
         }
+    }
+
+    #endregion
+
+    #region IDisposable
+
+    /// <summary>
+    /// Disposes resources and unsubscribes from events.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+
+        _disposed = true;
+
+        _navigationService.StateChanged -= OnNavigationStateChanged;
+        _navigationService.Rerouted -= OnRerouted;
+
+        // Ensure wake lock is released
+        _wakeLockService.ReleaseWakeLock();
     }
 
     #endregion

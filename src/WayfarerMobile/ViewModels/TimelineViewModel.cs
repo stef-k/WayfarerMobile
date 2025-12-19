@@ -15,6 +15,7 @@ using WayfarerMobile.Services;
 using WayfarerMobile.Shared.Controls;
 using Color = Mapsui.Styles.Color;
 using Brush = Mapsui.Styles.Brush;
+using Pen = Mapsui.Styles.Pen;
 using Map = Mapsui.Map;
 using Point = NetTopologySuite.Geometries.Point;
 
@@ -52,6 +53,8 @@ public partial class TimelineViewModel : BaseViewModel
     private readonly ITimelineSyncService _timelineSyncService;
     private readonly IToastService _toastService;
     private readonly ISettingsService _settingsService;
+    private readonly IMapBuilder _mapBuilder;
+    private readonly ITimelineLayerService _timelineLayerService;
     private Map? _map;
     private WritableLayer? _timelineLayer;
     private WritableLayer? _tempMarkerLayer;
@@ -226,18 +229,24 @@ public partial class TimelineViewModel : BaseViewModel
     /// <param name="timelineSyncService">The timeline sync service.</param>
     /// <param name="toastService">The toast service.</param>
     /// <param name="settingsService">The settings service.</param>
+    /// <param name="mapBuilder">The map builder for creating isolated map instances.</param>
+    /// <param name="timelineLayerService">The timeline layer service for rendering markers.</param>
     public TimelineViewModel(
         IApiClient apiClient,
         DatabaseService database,
         ITimelineSyncService timelineSyncService,
         IToastService toastService,
-        ISettingsService settingsService)
+        ISettingsService settingsService,
+        IMapBuilder mapBuilder,
+        ITimelineLayerService timelineLayerService)
     {
         _apiClient = apiClient;
         _database = database;
         _timelineSyncService = timelineSyncService;
         _toastService = toastService;
         _settingsService = settingsService;
+        _mapBuilder = mapBuilder;
+        _timelineLayerService = timelineLayerService;
         Title = "Timeline";
 
         // Subscribe to sync events
@@ -255,35 +264,16 @@ public partial class TimelineViewModel : BaseViewModel
     #region Map Creation
 
     /// <summary>
-    /// Creates and configures the map instance.
+    /// Creates and configures the map instance using IMapBuilder for proper tile caching.
     /// </summary>
     private Map CreateMap()
     {
-        var map = new Map
-        {
-            CRS = "EPSG:3857" // Web Mercator
-        };
+        // Create layers using layer service for consistent naming
+        _timelineLayer = _mapBuilder.CreateLayer(_timelineLayerService.TimelineLayerName);
+        _tempMarkerLayer = _mapBuilder.CreateLayer(TempMarkerLayerName);
 
-        // Add OSM tile layer
-        map.Layers.Add(Mapsui.Tiling.OpenStreetMap.CreateTileLayer());
-
-        // Add timeline locations layer
-        _timelineLayer = new WritableLayer
-        {
-            Name = TimelineLayerName,
-            Style = null // Style is set per feature
-        };
-        map.Layers.Add(_timelineLayer);
-
-        // Add temp marker layer (for coordinate picking)
-        _tempMarkerLayer = new WritableLayer
-        {
-            Name = TempMarkerLayerName,
-            Style = null // Style is set per feature
-        };
-        map.Layers.Add(_tempMarkerLayer);
-
-        return map;
+        // Create map with tile source (includes offline caching) and our layers
+        return _mapBuilder.CreateMap(_timelineLayer, _tempMarkerLayer);
     }
 
     /// <summary>
@@ -338,7 +328,7 @@ public partial class TimelineViewModel : BaseViewModel
     /// <summary>
     /// Ensures the map is initialized.
     /// </summary>
-    public void EnsureMapInitialized()
+    private void EnsureMapInitialized()
     {
         _ = Map;
     }
@@ -414,46 +404,21 @@ public partial class TimelineViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Updates the map layer with current locations.
+    /// Updates the map layer with current locations using the timeline layer service.
     /// </summary>
     private void UpdateMapLocations()
     {
         if (_timelineLayer == null || _map == null)
             return;
 
-        _timelineLayer.Clear();
-
         if (!_allLocations.Any())
         {
-            _timelineLayer.DataHasChanged();
+            _timelineLayerService.ClearTimelineMarkers(_timelineLayer);
             return;
         }
 
-        var points = new List<MPoint>();
-
-        foreach (var location in _allLocations)
-        {
-            if (location.Coordinates == null)
-                continue;
-
-            var (x, y) = SphericalMercator.FromLonLat(location.Longitude, location.Latitude);
-            var point = new MPoint(x, y);
-            points.Add(point);
-
-            // Create marker
-            var markerPoint = new Point(point.X, point.Y);
-            var feature = new GeometryFeature(markerPoint)
-            {
-                Styles = new[] { CreateLocationMarkerStyle() }
-            };
-
-            // Store location ID for tap handling
-            feature["LocationId"] = location.Id;
-
-            _timelineLayer.Add(feature);
-        }
-
-        _timelineLayer.DataHasChanged();
+        // Use timeline layer service to render markers
+        var points = _timelineLayerService.UpdateTimelineMarkers(_timelineLayer, _allLocations);
 
         // Zoom to fit all locations with delay to ensure map is ready
         if (points.Count >= 1)
@@ -463,13 +428,7 @@ public partial class TimelineViewModel : BaseViewModel
                 await Task.Delay(100);
                 if (points.Count > 1)
                 {
-                    var minX = points.Min(p => p.X);
-                    var maxX = points.Max(p => p.X);
-                    var minY = points.Min(p => p.Y);
-                    var maxY = points.Max(p => p.Y);
-                    var padding = Math.Max(maxX - minX, maxY - minY) * 0.2;
-                    var extent = new MRect(minX - padding, minY - padding, maxX + padding, maxY + padding);
-                    _map?.Navigator.ZoomToBox(extent, MBoxFit.Fit);
+                    _mapBuilder.ZoomToPoints(_map, points);
                 }
                 else
                 {
@@ -481,20 +440,6 @@ public partial class TimelineViewModel : BaseViewModel
                 }
             });
         }
-    }
-
-    /// <summary>
-    /// Creates the style for location markers.
-    /// </summary>
-    private static IStyle CreateLocationMarkerStyle()
-    {
-        return new SymbolStyle
-        {
-            SymbolScale = 0.5,
-            Fill = new Brush(Color.FromArgb(255, 33, 150, 243)), // Blue
-            Outline = new Pen(Color.White, 2),
-            SymbolType = SymbolType.Ellipse
-        };
     }
 
     /// <summary>
@@ -1030,6 +975,20 @@ public partial class TimelineViewModel : BaseViewModel
     }
 
     /// <summary>
+    /// Called when the view disappears.
+    /// </summary>
+    public override Task OnDisappearingAsync()
+    {
+        // Clear timeline markers to release memory
+        if (_timelineLayer != null)
+        {
+            _timelineLayerService.ClearTimelineMarkers(_timelineLayer);
+        }
+
+        return base.OnDisappearingAsync();
+    }
+
+    /// <summary>
     /// Sets a location ID to reopen when returning to this page.
     /// Used when navigating to notes editor and back.
     /// </summary>
@@ -1051,6 +1010,10 @@ public partial class TimelineViewModel : BaseViewModel
 
         // Unsubscribe from connectivity events
         Connectivity.ConnectivityChanged -= OnConnectivityChanged;
+
+        // Dispose map to release native resources
+        _map?.Dispose();
+        _map = null;
 
         base.Cleanup();
     }

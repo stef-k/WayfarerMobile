@@ -1,6 +1,9 @@
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Mapsui.Layers;
+using Map = Mapsui.Map;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.ApplicationModel.DataTransfer;
@@ -19,9 +22,30 @@ public partial class GroupsViewModel : BaseViewModel
 {
     private readonly IGroupsService _groupsService;
     private readonly ISettingsService _settingsService;
-    private readonly MapService _mapService;
     private readonly ISseClientFactory _sseClientFactory;
+    private readonly IToastService _toastService;
     private readonly ILogger<GroupsViewModel> _logger;
+    private readonly TripNavigationService _tripNavigationService;
+    private readonly ILocationBridge _locationBridge;
+    private readonly NavigationHudViewModel _navigationHudViewModel;
+    private readonly IMapBuilder _mapBuilder;
+    private readonly IGroupLayerService _groupLayerService;
+
+    /// <summary>
+    /// This ViewModel's private map instance.
+    /// Each map-based page owns its own map to avoid layer conflicts.
+    /// </summary>
+    private Map? _map;
+
+    /// <summary>
+    /// Layer for displaying group member markers (live/latest locations).
+    /// </summary>
+    private WritableLayer? _groupMembersLayer;
+
+    /// <summary>
+    /// Layer for displaying historical location breadcrumbs.
+    /// </summary>
+    private WritableLayer? _historicalLocationsLayer;
 
     /// <summary>
     /// SSE client for location updates.
@@ -40,13 +64,25 @@ public partial class GroupsViewModel : BaseViewModel
 
     /// <summary>
     /// Dictionary tracking last update time per user for throttling.
+    /// Thread-safe for concurrent SSE event handling.
     /// </summary>
-    private readonly Dictionary<string, DateTime> _lastUpdateTimes = new();
+    private readonly ConcurrentDictionary<string, DateTime> _lastUpdateTimes = new();
 
     /// <summary>
     /// Throttle interval in milliseconds for SSE updates.
     /// </summary>
     private const int ThrottleIntervalMs = 2000;
+
+    /// <summary>
+    /// Flag indicating a historical query is currently in progress.
+    /// Prevents overlapping queries.
+    /// </summary>
+    private bool _isQueryInProgress;
+
+    /// <summary>
+    /// Cached viewport bounds. Updated only when map pans/zooms, not on date navigation.
+    /// </summary>
+    private (double MinLon, double MinLat, double MaxLon, double MaxLat, double ZoomLevel)? _cachedViewportBounds;
 
     /// <summary>
     /// Gets the collection of groups.
@@ -86,22 +122,20 @@ public partial class GroupsViewModel : BaseViewModel
     private string? _errorMessage;
 
     /// <summary>
-    /// Gets or sets whether map view is active.
+    /// Gets or sets whether map view is active (default: true - map is the primary view).
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsListView))]
     [NotifyPropertyChangedFor(nameof(ViewModeIndex))]
     [NotifyPropertyChangedFor(nameof(ShowListView))]
     [NotifyPropertyChangedFor(nameof(ShowMapView))]
-    private bool _isMapView;
+    private bool _isMapView = true;
 
     /// <summary>
-    /// Gets or sets whether the header is expanded.
+    /// Gets or sets whether the group picker popup is open.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowListView))]
-    [NotifyPropertyChangedFor(nameof(ShowMapView))]
-    private bool _isHeaderExpanded;
+    private bool _isGroupPickerOpen;
 
     /// <summary>
     /// Gets or sets whether the current user's peer visibility is disabled.
@@ -156,14 +190,14 @@ public partial class GroupsViewModel : BaseViewModel
     public bool IsListView => !IsMapView;
 
     /// <summary>
-    /// Gets whether to show the list view (list mode and header not expanded).
+    /// Gets whether to show the list view.
     /// </summary>
-    public bool ShowListView => IsListView && !IsHeaderExpanded;
+    public bool ShowListView => IsListView;
 
     /// <summary>
-    /// Gets whether to show the map view (map mode and header not expanded).
+    /// Gets whether to show the map view.
     /// </summary>
-    public bool ShowMapView => IsMapView && !IsHeaderExpanded;
+    public bool ShowMapView => IsMapView;
 
     /// <summary>
     /// Gets the count of members visible on the map.
@@ -235,8 +269,9 @@ public partial class GroupsViewModel : BaseViewModel
 
     /// <summary>
     /// Gets the map instance for binding.
+    /// Groups owns its own map instance to avoid layer conflicts with other pages.
     /// </summary>
-    public Mapsui.Map Map => _mapService.Map;
+    public Map Map => _map ??= CreateMap();
 
     /// <summary>
     /// Gets whether API is configured.
@@ -258,22 +293,57 @@ public partial class GroupsViewModel : BaseViewModel
     /// </summary>
     /// <param name="groupsService">Service for group operations.</param>
     /// <param name="settingsService">Service for application settings.</param>
-    /// <param name="mapService">Service for map operations.</param>
     /// <param name="sseClientFactory">Factory for creating SSE clients.</param>
+    /// <param name="toastService">Toast notification service.</param>
+    /// <param name="tripNavigationService">Navigation service for routing.</param>
+    /// <param name="locationBridge">Location bridge for current position.</param>
+    /// <param name="navigationHudViewModel">Navigation HUD for display.</param>
+    /// <param name="mapBuilder">Map builder for creating isolated map instances.</param>
+    /// <param name="groupLayerService">Service for group layer rendering.</param>
     /// <param name="logger">Logger instance.</param>
     public GroupsViewModel(
         IGroupsService groupsService,
         ISettingsService settingsService,
-        MapService mapService,
         ISseClientFactory sseClientFactory,
+        IToastService toastService,
+        TripNavigationService tripNavigationService,
+        ILocationBridge locationBridge,
+        NavigationHudViewModel navigationHudViewModel,
+        IMapBuilder mapBuilder,
+        IGroupLayerService groupLayerService,
         ILogger<GroupsViewModel> logger)
     {
         _groupsService = groupsService;
         _settingsService = settingsService;
-        _mapService = mapService;
         _sseClientFactory = sseClientFactory;
+        _toastService = toastService;
+        _tripNavigationService = tripNavigationService;
+        _locationBridge = locationBridge;
+        _navigationHudViewModel = navigationHudViewModel;
+        _mapBuilder = mapBuilder;
+        _groupLayerService = groupLayerService;
         _logger = logger;
         Title = "Groups";
+    }
+
+    /// <summary>
+    /// Creates and configures this ViewModel's private map instance.
+    /// </summary>
+    private Map CreateMap()
+    {
+        // Create layers for Groups-specific features using layer service names
+        _groupMembersLayer = _mapBuilder.CreateLayer(_groupLayerService.GroupMembersLayerName);
+        _historicalLocationsLayer = _mapBuilder.CreateLayer(_groupLayerService.HistoricalLocationsLayerName);
+
+        // Create map with tile source and our layers
+        var map = _mapBuilder.CreateMap(
+            _historicalLocationsLayer,  // Historical first (below members)
+            _groupMembersLayer);         // Members on top
+
+        _logger.LogDebug("Created Groups map with layers: {Layers}",
+            string.Join(", ", map.Layers.Select(l => l.Name)));
+
+        return map;
     }
 
     /// <summary>
@@ -283,43 +353,104 @@ public partial class GroupsViewModel : BaseViewModel
     {
         if (value != null)
         {
+            // Update page title to show group name
+            Title = value.Name;
+
             // Persist the selection
             _settingsService.LastSelectedGroupId = value.Id.ToString();
             _settingsService.LastSelectedGroupName = value.Name;
 
-            // Stop existing SSE subscriptions before loading new group
-            StopSseSubscriptions();
+            // Abandon old SSE (don't stop - it blocks for 10+ seconds)
+            // Old connections will timeout naturally; new ones start fresh
+            AbandonSseClients();
 
-            _ = LoadMembersAndStartSseAsync();
+            SafeFireAndForget(LoadMembersAndStartSseAsync(), "LoadMembersAndStartSse");
         }
         else
         {
-            StopSseSubscriptions();
+            Title = "Groups";
+            AbandonSseClients();
             Members.Clear();
         }
     }
 
     /// <summary>
     /// Called when the selected date changes.
+    /// Updates computed properties only - data loading is handled by commands.
     /// </summary>
     partial void OnSelectedDateChanged(DateTime value)
     {
         OnPropertyChanged(nameof(IsToday));
         OnPropertyChanged(nameof(ShowHistoricalToggle));
+        // Data loading is now handled directly by PreviousDayAsync/NextDayAsync/TodayAsync
+        // to provide proper loading state and visual feedback
 
-        if (SelectedGroup != null)
+        // Reset historical toggle when date changes (only relevant for today)
+        if (!IsToday && ShowHistoricalLocations)
         {
-            if (IsToday)
-            {
-                // Switch to live mode - start SSE
-                _ = StartSseSubscriptionsAsync();
-            }
-            else
-            {
-                // Switch to historical mode - stop SSE and load historical data
-                StopSseSubscriptions();
-                _ = LoadHistoricalLocationsAsync();
-            }
+            ShowHistoricalLocations = false;
+        }
+    }
+
+    /// <summary>
+    /// Called when the ShowHistoricalLocations toggle changes.
+    /// Loads or clears historical locations for today's view.
+    /// </summary>
+    partial void OnShowHistoricalLocationsChanged(bool value)
+    {
+        if (!IsToday)
+            return;
+
+        if (value)
+        {
+            // Toggle ON: Load today's historical locations
+            _logger.LogInformation("[Groups] Historical toggle ON - loading today's historical locations");
+            SafeFireAndForget(LoadHistoricalLocationsAsync(), "LoadTodayHistoricalLocations");
+        }
+        else
+        {
+            // Toggle OFF: Clear historical locations and show only live markers
+            _logger.LogInformation("[Groups] Historical toggle OFF - clearing historical locations");
+            ClearHistoricalLocations();
+        }
+    }
+
+    /// <summary>
+    /// Clears historical location markers from the map.
+    /// </summary>
+    private void ClearHistoricalLocations()
+    {
+        _historicalLocationsLayer?.Clear();
+        _historicalLocationsLayer?.DataHasChanged();
+    }
+
+    /// <summary>
+    /// Clears group member markers from the map.
+    /// </summary>
+    private void ClearGroupMembers()
+    {
+        _groupMembersLayer?.Clear();
+        _groupMembersLayer?.DataHasChanged();
+    }
+
+    /// <summary>
+    /// Executes an async task in fire-and-forget mode with error logging.
+    /// </summary>
+    /// <param name="task">The task to execute.</param>
+    /// <param name="operationName">Name of the operation for logging.</param>
+    private async void SafeFireAndForget(Task task, string operationName)
+    {
+        try
+        {
+            await task;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogDebug("{Operation} was cancelled", operationName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in {Operation}", operationName);
         }
     }
 
@@ -369,7 +500,7 @@ public partial class GroupsViewModel : BaseViewModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to load groups");
-            ErrorMessage = $"Failed to load groups: {ex.Message}";
+            ErrorMessage = "Failed to load groups. Please check your connection and try again.";
         }
         finally
         {
@@ -395,11 +526,21 @@ public partial class GroupsViewModel : BaseViewModel
 
             // Load members
             var members = await _groupsService.GetGroupMembersAsync(groupId);
-            _logger.LogDebug("[Groups] Loaded {Count} members for group {GroupId}", members.Count, groupId);
+            _logger.LogInformation("[Groups] Loaded {Count} members for group {GroupId}", members.Count, groupId);
+            foreach (var m in members)
+            {
+                _logger.LogInformation("[Groups] Member: {UserId} - {DisplayName}, IsSelf={IsSelf}, Color={Color}",
+                    m.UserId, m.DisplayText, m.IsSelf, m.ColorHex);
+            }
 
             // Load latest locations
             var locations = await _groupsService.GetLatestLocationsAsync(groupId);
-            _logger.LogDebug("[Groups] Loaded {Count} locations for group {GroupId}", locations.Count, groupId);
+            _logger.LogInformation("[Groups] Loaded {Count} locations for group {GroupId}", locations.Count, groupId);
+            foreach (var kvp in locations)
+            {
+                _logger.LogInformation("[Groups] Location for {UserId}: Lat={Lat}, Lon={Lon}, IsLive={IsLive}",
+                    kvp.Key, kvp.Value.Latitude, kvp.Value.Longitude, kvp.Value.IsLive);
+            }
 
             // Find current user and update visibility state
             var currentUser = members.FirstOrDefault(m => m.IsSelf);
@@ -438,7 +579,7 @@ public partial class GroupsViewModel : BaseViewModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to load members for group {GroupId}", SelectedGroup?.Id);
-            ErrorMessage = $"Failed to load members: {ex.Message}";
+            ErrorMessage = "Failed to load members. Please check your connection and try again.";
         }
         finally
         {
@@ -448,6 +589,7 @@ public partial class GroupsViewModel : BaseViewModel
 
     /// <summary>
     /// Refreshes member locations without full reload.
+    /// Thread-safe: can be called from background thread.
     /// </summary>
     [RelayCommand]
     private async Task RefreshLocationsAsync()
@@ -457,29 +599,35 @@ public partial class GroupsViewModel : BaseViewModel
 
         try
         {
-            var locations = await _groupsService.GetLatestLocationsAsync(SelectedGroup.Id);
+            // Do I/O on background (safe from any thread)
+            var groupId = SelectedGroup.Id;
+            var locations = await _groupsService.GetLatestLocationsAsync(groupId).ConfigureAwait(false);
 
-            // Update existing members with new locations
-            foreach (var member in Members)
+            // Update UI on main thread to avoid cross-thread collection access
+            MainThread.BeginInvokeOnMainThread(() =>
             {
-                if (locations.TryGetValue(member.UserId, out var location))
+                // Update existing members with new locations
+                foreach (var member in Members)
                 {
-                    member.LastLocation = location;
+                    if (locations.TryGetValue(member.UserId, out var location))
+                    {
+                        member.LastLocation = location;
+                    }
                 }
-            }
 
-            // Trigger UI refresh by re-sorting using batch operation
-            var sorted = Members.OrderByDescending(m => m.LastLocation?.IsLive ?? false)
-                               .ThenBy(m => m.DisplayText)
-                               .ToList();
+                // Trigger UI refresh by re-sorting using batch operation
+                var sorted = Members.OrderByDescending(m => m.LastLocation?.IsLive ?? false)
+                                   .ThenBy(m => m.DisplayText)
+                                   .ToList();
 
-            Members.ReplaceRange(sorted);
+                Members.ReplaceRange(sorted);
 
-            // Update map markers if in map view
-            if (IsMapView)
-            {
-                UpdateMapMarkers();
-            }
+                // Update map markers if in map view
+                if (IsMapView)
+                {
+                    UpdateMapMarkers();
+                }
+            });
         }
         catch (Exception ex)
         {
@@ -488,47 +636,121 @@ public partial class GroupsViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Loads historical locations for the selected date.
+    /// Loads historical locations for the selected date using current viewport bounds.
+    /// Uses query-in-progress guard to prevent overlapping queries.
+    /// IMPORTANT: This method must be called from main thread to capture viewport bounds synchronously.
     /// </summary>
+    /// <param name="cancellationToken">Optional cancellation token.</param>
     [RelayCommand]
-    private async Task LoadHistoricalLocationsAsync()
+    private async Task LoadHistoricalLocationsAsync(CancellationToken cancellationToken = default)
     {
+        _logger.LogDebug("LoadHistoricalLocationsAsync START");
+
         if (SelectedGroup == null)
+        {
+            _logger.LogDebug("LoadHistoricalLocationsAsync - No group, returning");
             return;
+        }
+
+        // Prevent overlapping queries - critical for preventing UI freeze
+        if (_isQueryInProgress)
+        {
+            _logger.LogDebug("LoadHistoricalLocationsAsync - Query in progress, skipping");
+            return;
+        }
+
+        _isQueryInProgress = true;
+        // NOTE: Intentionally NOT setting IsBusy here - loading overlay causes map re-render
+        // which triggers ViewportChanged and blocks the UI for seconds.
+        // The old app didn't use loading indicators for date navigation and was instant.
+
+        // Use cached viewport bounds - no Mapsui access during date navigation
+        // Bounds are updated by page when map pans/zooms
+        double minLng = -180, minLat = -90, maxLng = 180, maxLat = 90;
+        double zoomLevel = 10;
+
+        if (_cachedViewportBounds.HasValue)
+        {
+            minLng = _cachedViewportBounds.Value.MinLon;
+            minLat = _cachedViewportBounds.Value.MinLat;
+            maxLng = _cachedViewportBounds.Value.MaxLon;
+            maxLat = _cachedViewportBounds.Value.MaxLat;
+            zoomLevel = _cachedViewportBounds.Value.ZoomLevel;
+            _logger.LogDebug("Using cached viewport bounds: ({MinLng},{MinLat}) to ({MaxLng},{MaxLat}) zoom {Zoom}",
+                minLng, minLat, maxLng, maxLat, zoomLevel);
+        }
+        else
+        {
+            _logger.LogDebug("No cached bounds, using world extent");
+        }
+
+        // Capture all values needed for background work while still on main thread
+        var visibleUserIds = Members
+            .Where(m => m.IsVisibleOnMap)
+            .Select(m => m.UserId)
+            .ToList();
+
+        var groupId = SelectedGroup.Id;
+        var selectedDate = SelectedDate;
+        var isMapView = IsMapView;
+        var memberColors = Members.ToDictionary(m => m.UserId, m => m.ColorHex ?? "#4285F4");
+
+        var request = new GroupLocationsQueryRequest
+        {
+            MinLng = minLng,
+            MaxLng = maxLng,
+            MinLat = minLat,
+            MaxLat = maxLat,
+            ZoomLevel = zoomLevel,
+            UserIds = visibleUserIds.Count > 0 ? visibleUserIds : null,
+            DateType = "day",
+            Year = selectedDate.Year,
+            Month = selectedDate.Month,
+            Day = selectedDate.Day,
+            PageSize = 500
+        };
+
+        _logger.LogInformation("Loading historical locations for {Date}", selectedDate);
 
         try
         {
-            _logger.LogInformation("Loading historical locations for {Date}", SelectedDate);
-
-            var request = new GroupLocationsQueryRequest
-            {
-                MinLng = -180,
-                MaxLng = 180,
-                MinLat = -90,
-                MaxLat = 90,
-                ZoomLevel = 10,
-                DateType = "day",
-                Year = SelectedDate.Year,
-                Month = SelectedDate.Month,
-                Day = SelectedDate.Day
-            };
-
-            var response = await _groupsService.QueryLocationsAsync(SelectedGroup.Id, request);
+            // Now do the async I/O - this yields to let UI respond
+            _logger.LogDebug("LoadHistoricalLocationsAsync - Calling API");
+            var response = await _groupsService.QueryLocationsAsync(groupId, request, cancellationToken).ConfigureAwait(false);
+            _logger.LogDebug("LoadHistoricalLocationsAsync - API returned");
 
             if (response != null)
             {
-                _logger.LogInformation("Loaded {Count} historical locations", response.TotalItems);
-                // Update map markers with historical data
-                if (IsMapView)
+                _logger.LogInformation("Loaded {Count}/{Total} historical locations",
+                    response.ReturnedItems, response.TotalItems);
+
+                // Update map on main thread (fire-and-forget)
+                if (isMapView && _historicalLocationsLayer != null)
                 {
-                    UpdateMapMarkers();
+                    MainThread.BeginInvokeOnMainThread(() =>
+                    {
+                        _groupLayerService.UpdateHistoricalLocationMarkers(
+                            _historicalLocationsLayer, response.Results, memberColors);
+                    });
                 }
             }
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogDebug("LoadHistoricalLocationsAsync - Cancelled");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to load historical locations");
-            ErrorMessage = "Failed to load historical locations";
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                ErrorMessage = "Failed to load historical locations";
+            });
+        }
+        finally
+        {
+            _isQueryInProgress = false;
+            _logger.LogDebug("LoadHistoricalLocationsAsync END");
         }
     }
 
@@ -552,11 +774,19 @@ public partial class GroupsViewModel : BaseViewModel
 
     /// <summary>
     /// Navigates to the previous day.
+    /// Runs on background thread to prevent UI freeze.
     /// </summary>
     [RelayCommand]
     private void PreviousDay()
     {
-        SelectedDate = SelectedDate.AddDays(-1);
+        var newDate = SelectedDate.AddDays(-1);
+        _logger.LogDebug("PreviousDay - changing to {Date}", newDate.ToString("yyyy-MM-dd"));
+
+        // Capture data on main thread to avoid cross-thread collection access
+        var navigationData = CaptureNavigationData(newDate);
+
+        // Fire and forget on background thread - frees UI immediately
+        _ = Task.Run(() => NavigateToDateAsync(navigationData));
     }
 
     /// <summary>
@@ -567,7 +797,10 @@ public partial class GroupsViewModel : BaseViewModel
     {
         if (SelectedDate.Date < DateTime.Today)
         {
-            SelectedDate = SelectedDate.AddDays(1);
+            var newDate = SelectedDate.AddDays(1);
+            _logger.LogDebug("NextDay - changing to {Date}", newDate.ToString("yyyy-MM-dd"));
+            var navigationData = CaptureNavigationData(newDate);
+            _ = Task.Run(() => NavigateToDateAsync(navigationData));
         }
     }
 
@@ -577,7 +810,270 @@ public partial class GroupsViewModel : BaseViewModel
     [RelayCommand]
     private void Today()
     {
-        SelectedDate = DateTime.Today;
+        _logger.LogDebug("Today - changing to {Date}", DateTime.Today.ToString("yyyy-MM-dd"));
+        var navigationData = CaptureNavigationData(DateTime.Today);
+        _ = Task.Run(() => NavigateToDateAsync(navigationData));
+    }
+
+    /// <summary>
+    /// Data captured on main thread for date navigation.
+    /// Avoids cross-thread collection access issues.
+    /// </summary>
+    private sealed record NavigationData(
+        DateTime NewDate,
+        Guid GroupId,
+        List<string> VisibleUserIds,
+        Dictionary<string, string> MemberColors,
+        (double MinLon, double MinLat, double MaxLon, double MaxLat, double ZoomLevel)? ViewportBounds);
+
+    /// <summary>
+    /// Captures all data needed for navigation on the main thread.
+    /// This avoids cross-thread access to ObservableCollection which causes delays.
+    /// </summary>
+    private NavigationData? CaptureNavigationData(DateTime newDate)
+    {
+        if (SelectedGroup == null) return null;
+
+        var visibleUserIds = Members
+            .Where(m => m.IsVisibleOnMap)
+            .Select(m => m.UserId)
+            .ToList();
+
+        var memberColors = Members
+            .ToDictionary(m => m.UserId, m => m.ColorHex ?? "#4285F4");
+
+        return new NavigationData(
+            newDate,
+            SelectedGroup.Id,
+            visibleUserIds,
+            memberColors,
+            _cachedViewportBounds);
+    }
+
+    /// <summary>
+    /// Core date navigation - runs on background thread via Task.Run.
+    /// All UI updates via MainThread.BeginInvokeOnMainThread (fire-and-forget).
+    /// Uses pre-captured data to avoid cross-thread collection access.
+    /// SSE stays running but events are ignored when viewing historical dates.
+    /// </summary>
+    private async Task NavigateToDateAsync(NavigationData? data)
+    {
+        if (data == null) return;
+
+        var newDate = data.NewDate;
+        bool isToday = newDate.Date == DateTime.Today;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        _logger.LogDebug("[Timing] NavigateToDate START");
+
+        // Update UI properties first - this sets IsToday which controls SSE event processing
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            SelectedDate = newDate;
+            OnPropertyChanged(nameof(IsToday));
+            OnPropertyChanged(nameof(SelectedDateText));
+            OnPropertyChanged(nameof(DateButtonText));
+        });
+
+        if (isToday)
+        {
+            // Clear historical markers on main thread (fire-and-forget)
+            MainThread.BeginInvokeOnMainThread(ClearHistoricalLocations);
+
+            // Ensure SSE is running - fire and forget, don't wait for connection
+            // SSE will reconnect automatically if needed
+            _ = EnsureSseConnectedAsync();
+
+            // Refresh locations immediately - don't wait for SSE
+            await RefreshLocationsAsync().ConfigureAwait(false);
+
+            _logger.LogDebug("[Timing] NavigateToDate completed in {Ms}ms (today mode)", sw.ElapsedMilliseconds);
+        }
+        else
+        {
+            // Historical mode: SSE stays running but events are ignored (IsToday check in handlers)
+            // Load historical data
+            _logger.LogDebug("[Timing] Starting LoadHistoricalLocationsWithDataAsync at {Ms}ms", sw.ElapsedMilliseconds);
+            await LoadHistoricalLocationsWithDataAsync(data).ConfigureAwait(false);
+            _logger.LogDebug("[Timing] NavigateToDate completed in {Ms}ms (historical mode)", sw.ElapsedMilliseconds);
+        }
+    }
+
+    /// <summary>
+    /// Loads historical locations for a specific date without triggering property changes.
+    /// Thread-safe: designed to be called from background thread.
+    /// </summary>
+    private async Task LoadHistoricalLocationsForDateAsync(DateTime date)
+    {
+        if (SelectedGroup == null || _isQueryInProgress) return;
+
+        _isQueryInProgress = true;
+
+        try
+        {
+            // Capture all values needed - quick property/field reads
+            var groupId = SelectedGroup.Id;
+            double minLng = -180, minLat = -90, maxLng = 180, maxLat = 90;
+            double zoomLevel = 10;
+
+            if (_cachedViewportBounds.HasValue)
+            {
+                minLng = _cachedViewportBounds.Value.MinLon;
+                minLat = _cachedViewportBounds.Value.MinLat;
+                maxLng = _cachedViewportBounds.Value.MaxLon;
+                maxLat = _cachedViewportBounds.Value.MaxLat;
+                zoomLevel = _cachedViewportBounds.Value.ZoomLevel;
+            }
+
+            // Snapshot collection data (ToList/ToDictionary creates a copy)
+            var visibleUserIds = Members.Where(m => m.IsVisibleOnMap).Select(m => m.UserId).ToList();
+            var memberColors = Members.ToDictionary(m => m.UserId, m => m.ColorHex ?? "#4285F4");
+
+            var request = new GroupLocationsQueryRequest
+            {
+                MinLng = minLng, MaxLng = maxLng,
+                MinLat = minLat, MaxLat = maxLat,
+                ZoomLevel = zoomLevel,
+                UserIds = visibleUserIds.Count > 0 ? visibleUserIds : null,
+                DateType = "day",
+                Year = date.Year, Month = date.Month, Day = date.Day,
+                PageSize = 500
+            };
+
+            var apiSw = System.Diagnostics.Stopwatch.StartNew();
+            _logger.LogInformation("[Timing] Starting API call for historical locations for {Date}", date);
+
+            // Do I/O - this is the slow part
+            var response = await _groupsService.QueryLocationsAsync(groupId, request).ConfigureAwait(false);
+            _logger.LogInformation("[Timing] API call completed in {Ms}ms", apiSw.ElapsedMilliseconds);
+
+            if (response != null && _historicalLocationsLayer != null)
+            {
+                _logger.LogInformation("Loaded {Count}/{Total} historical locations", response.ReturnedItems, response.TotalItems);
+
+                // Update map on main thread (fire-and-forget, no waiting)
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    _groupLayerService.UpdateHistoricalLocationMarkers(
+                        _historicalLocationsLayer, response.Results, memberColors);
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load historical locations for {Date}", date);
+        }
+        finally
+        {
+            _isQueryInProgress = false;
+        }
+    }
+
+    /// <summary>
+    /// Loads historical locations using pre-captured navigation data.
+    /// No cross-thread collection access - all data was captured on main thread.
+    /// </summary>
+    private async Task LoadHistoricalLocationsWithDataAsync(NavigationData data)
+    {
+        if (_isQueryInProgress) return;
+
+        _isQueryInProgress = true;
+
+        try
+        {
+            var date = data.NewDate;
+            double minLng = -180, minLat = -90, maxLng = 180, maxLat = 90;
+            double zoomLevel = 10;
+
+            if (data.ViewportBounds.HasValue)
+            {
+                var bounds = data.ViewportBounds.Value;
+                minLng = bounds.MinLon;
+                minLat = bounds.MinLat;
+                maxLng = bounds.MaxLon;
+                maxLat = bounds.MaxLat;
+                zoomLevel = bounds.ZoomLevel;
+            }
+
+            var request = new GroupLocationsQueryRequest
+            {
+                MinLng = minLng, MaxLng = maxLng,
+                MinLat = minLat, MaxLat = maxLat,
+                ZoomLevel = zoomLevel,
+                UserIds = data.VisibleUserIds.Count > 0 ? data.VisibleUserIds : null,
+                DateType = "day",
+                Year = date.Year, Month = date.Month, Day = date.Day,
+                PageSize = 500
+            };
+
+            var apiSw = System.Diagnostics.Stopwatch.StartNew();
+            _logger.LogInformation("[Timing] Starting API call for historical locations for {Date}", date);
+
+            // Do I/O - now no longer blocked by collection access
+            var response = await _groupsService.QueryLocationsAsync(data.GroupId, request).ConfigureAwait(false);
+            _logger.LogInformation("[Timing] API call completed in {Ms}ms", apiSw.ElapsedMilliseconds);
+
+            if (response != null && _historicalLocationsLayer != null)
+            {
+                _logger.LogInformation("Loaded {Count}/{Total} historical locations", response.ReturnedItems, response.TotalItems);
+
+                // Capture colors for main thread use
+                var memberColors = data.MemberColors;
+
+                // Update map on main thread (fire-and-forget, no waiting)
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    _groupLayerService.UpdateHistoricalLocationMarkers(
+                        _historicalLocationsLayer, response.Results, memberColors);
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load historical locations for {Date}", data.NewDate);
+        }
+        finally
+        {
+            _isQueryInProgress = false;
+        }
+    }
+
+    /// <summary>
+    /// Handles date change by loading appropriate data with visual feedback.
+    /// Follows the Timeline page pattern: load data once per date change, no viewport-based requerying.
+    /// Runs heavy work on background thread to avoid UI freeze.
+    /// SSE stays running but events are ignored when viewing historical dates.
+    /// </summary>
+    private async Task HandleDateChangeAsync()
+    {
+        _logger.LogDebug("HandleDateChangeAsync START - SelectedGroup: {Group}, IsToday: {IsToday}",
+            SelectedGroup?.Name ?? "null", IsToday);
+
+        if (SelectedGroup == null)
+        {
+            _logger.LogDebug("HandleDateChangeAsync - No group selected, returning");
+            return;
+        }
+
+        if (IsToday)
+        {
+            _logger.LogDebug("HandleDateChangeAsync - Switching to live mode");
+            // Switch to live mode - clear historical markers
+            ClearHistoricalLocations();
+            // Ensure SSE is running - fire and forget
+            _ = EnsureSseConnectedAsync();
+            // Refresh live locations immediately
+            await RefreshLocationsAsync();
+        }
+        else
+        {
+            _logger.LogDebug("HandleDateChangeAsync - Switching to historical mode");
+            // Historical mode: SSE stays running but events are ignored (IsToday check in handlers)
+            // Load historical data
+            await LoadHistoricalLocationsAsync().ConfigureAwait(false);
+        }
+
+        _logger.LogDebug("HandleDateChangeAsync END");
     }
 
     /// <summary>
@@ -646,20 +1142,53 @@ public partial class GroupsViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Toggles the header expansion state.
+    /// Opens the group picker popup.
     /// </summary>
     [RelayCommand]
-    private void ToggleHeaderExpanded()
+    private void OpenGroupPicker()
     {
-        IsHeaderExpanded = !IsHeaderExpanded;
+        IsGroupPickerOpen = true;
     }
 
     /// <summary>
-    /// Selects all members to show on map.
+    /// Closes the group picker popup.
     /// </summary>
     [RelayCommand]
-    private void SelectAllMembers()
+    private void CloseGroupPicker()
     {
+        IsGroupPickerOpen = false;
+    }
+
+    /// <summary>
+    /// Confirmation threshold for select all operation.
+    /// If more members than this, user will be prompted to confirm.
+    /// </summary>
+    private const int SelectAllConfirmationThreshold = 10;
+
+    /// <summary>
+    /// Selects all members to show on map.
+    /// Shows confirmation dialog if member count exceeds threshold.
+    /// </summary>
+    [RelayCommand]
+    private async Task SelectAllMembersAsync()
+    {
+        // Check if confirmation is needed
+        if (Members.Count > SelectAllConfirmationThreshold)
+        {
+            var currentPage = Application.Current?.Windows.FirstOrDefault()?.Page;
+            if (currentPage != null)
+            {
+                var confirmed = await currentPage.DisplayAlertAsync(
+                    "Select All Members",
+                    $"You're about to show {Members.Count} members on the map. This may affect performance. Continue?",
+                    "Yes",
+                    "Cancel");
+
+                if (!confirmed)
+                    return;
+            }
+        }
+
         foreach (var member in Members)
         {
             member.IsVisibleOnMap = true;
@@ -680,6 +1209,19 @@ public partial class GroupsViewModel : BaseViewModel
         }
         OnPropertyChanged(nameof(VisibleMemberCount));
         UpdateMapMarkers();
+    }
+
+    /// <summary>
+    /// Refreshes map markers (called when member visibility changes via checkbox).
+    /// </summary>
+    [RelayCommand]
+    private void RefreshMapMarkers()
+    {
+        OnPropertyChanged(nameof(VisibleMemberCount));
+        if (IsMapView)
+        {
+            UpdateMapMarkers();
+        }
     }
 
     #region Member Details Sheet Commands
@@ -724,7 +1266,7 @@ public partial class GroupsViewModel : BaseViewModel
     /// Handles date selection from picker.
     /// </summary>
     [RelayCommand]
-    private async Task DateSelectedAsync()
+    private void DateSelected()
     {
         IsDatePickerOpen = false;
 
@@ -732,24 +1274,12 @@ public partial class GroupsViewModel : BaseViewModel
         if (_dateBeforePickerOpened.HasValue && SelectedDate.Date != _dateBeforePickerOpened.Value.Date)
         {
             // Limit to today at most
-            if (SelectedDate.Date > DateTime.Today)
-            {
-                SelectedDate = DateTime.Today;
-            }
+            var newDate = SelectedDate.Date > DateTime.Today ? DateTime.Today : SelectedDate;
 
-            // Explicitly load data for new date
-            if (SelectedGroup != null)
-            {
-                if (IsToday)
-                {
-                    await StartSseSubscriptionsAsync();
-                }
-                else
-                {
-                    StopSseSubscriptions();
-                    await LoadHistoricalLocationsAsync();
-                }
-            }
+            _logger.LogDebug("DateSelected - Date changed to {Date}", newDate.ToString("yyyy-MM-dd"));
+            // Capture data on main thread, then run on background thread
+            var navigationData = CaptureNavigationData(newDate);
+            _ = Task.Run(() => NavigateToDateAsync(navigationData));
         }
 
         _dateBeforePickerOpened = null;
@@ -811,22 +1341,28 @@ public partial class GroupsViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Copies coordinates to clipboard.
+    /// Copies coordinates to clipboard with feedback.
     /// </summary>
     [RelayCommand]
     private async Task CopyCoordinatesAsync()
     {
-        if (SelectedMember?.LastLocation == null) return;
+        if (SelectedMember?.LastLocation == null)
+        {
+            await _toastService.ShowWarningAsync("No location available");
+            return;
+        }
 
         try
         {
             var coords = $"{SelectedMember.LastLocation.Latitude:F6}, {SelectedMember.LastLocation.Longitude:F6}";
             await Clipboard.SetTextAsync(coords);
+            await _toastService.ShowAsync("Coordinates copied");
             _logger.LogInformation("Coordinates copied to clipboard: {Coords}", coords);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to copy coordinates");
+            await _toastService.ShowErrorAsync("Failed to copy coordinates");
         }
     }
 
@@ -856,21 +1392,185 @@ public partial class GroupsViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Navigates to the member's location using internal navigation.
+    /// Navigates to the member's location using OSRM routing with straight line fallback.
+    /// Calculates route from current location and displays it on the main map.
     /// </summary>
     [RelayCommand]
-    private void NavigateToMember()
+    private async Task NavigateToMemberAsync()
     {
-        if (SelectedMember?.LastLocation == null) return;
+        if (SelectedMember?.LastLocation == null)
+        {
+            await _toastService.ShowWarningAsync("No location available");
+            return;
+        }
 
-        // TODO: Integrate with TripNavigationService when available
-        _logger.LogInformation("Navigate to {Member} at {Lat},{Lon}",
-            SelectedMember.DisplayText,
-            SelectedMember.LastLocation.Latitude,
-            SelectedMember.LastLocation.Longitude);
+        // Get current location
+        var currentLocation = _locationBridge.LastLocation;
+        if (currentLocation == null)
+        {
+            await _toastService.ShowWarningAsync("Waiting for your location...");
+            return;
+        }
+
+        // Ask user for navigation method using the styled picker
+        var page = Application.Current?.Windows.FirstOrDefault()?.Page;
+        if (page == null) return;
+
+        // Get the GroupsPage to access the navigation picker
+        var groupsPage = page as Views.GroupsPage ??
+            (Shell.Current?.CurrentPage as Views.GroupsPage);
+
+        Views.Controls.NavigationMethod? navMethod = null;
+        if (groupsPage != null)
+        {
+            navMethod = await groupsPage.ShowNavigationPickerAsync();
+        }
+        else
+        {
+            // Fallback to action sheet if page reference not available
+            var result = await page.DisplayActionSheetAsync(
+                "Navigate by", "Cancel", null,
+                "🚶 Walk", "🚗 Drive", "🚴 Bike", "📍 External Maps");
+
+            navMethod = result switch
+            {
+                "🚶 Walk" => Views.Controls.NavigationMethod.Walk,
+                "🚗 Drive" => Views.Controls.NavigationMethod.Drive,
+                "🚴 Bike" => Views.Controls.NavigationMethod.Bike,
+                "📍 External Maps" => Views.Controls.NavigationMethod.ExternalMaps,
+                _ => null
+            };
+        }
+
+        if (navMethod == null)
+            return;
+
+        // Handle external maps
+        if (navMethod == Views.Controls.NavigationMethod.ExternalMaps)
+        {
+            await OpenExternalMapsAsync(
+                SelectedMember.LastLocation.Latitude,
+                SelectedMember.LastLocation.Longitude);
+            return;
+        }
+
+        // Map selection to OSRM profile
+        var osrmProfile = navMethod switch
+        {
+            Views.Controls.NavigationMethod.Walk => "foot",
+            Views.Controls.NavigationMethod.Drive => "car",
+            Views.Controls.NavigationMethod.Bike => "bike",
+            _ => "foot"
+        };
+
+        try
+        {
+            IsBusy = true;
+
+            var destLat = SelectedMember.LastLocation.Latitude;
+            var destLon = SelectedMember.LastLocation.Longitude;
+            var destName = SelectedMember.DisplayText ?? "Member";
+
+            _logger.LogInformation("Calculating {Mode} route to {Member} at {Lat},{Lon}", osrmProfile, destName, destLat, destLon);
+
+            // Calculate route using OSRM with straight line fallback
+            var route = await _tripNavigationService.CalculateRouteToCoordinatesAsync(
+                currentLocation.Latitude,
+                currentLocation.Longitude,
+                destLat,
+                destLon,
+                destName,
+                osrmProfile);
+
+            // Close bottom sheet before navigating
+            IsMemberSheetOpen = false;
+
+            // Set source page for returning after navigation stops
+            _navigationHudViewModel.SourcePageRoute = "//groups";
+
+            // Navigate to main map with route parameter
+            // MainViewModel will receive and display the route via IQueryAttributable
+            var navParams = new Dictionary<string, object>
+            {
+                ["NavigationRoute"] = route
+            };
+            if (Shell.Current != null)
+            {
+                await Shell.Current.GoToAsync("//main", navParams);
+            }
+
+            _logger.LogInformation("Started navigation to {Member}: {Distance:F1}km",
+                destName, route.TotalDistanceMeters / 1000);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to start navigation");
+            await _toastService.ShowErrorAsync("Failed to start navigation");
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Opens external maps app for navigation.
+    /// </summary>
+    private async Task OpenExternalMapsAsync(double lat, double lon)
+    {
+        try
+        {
+            IsMemberSheetOpen = false;
+
+            var location = new Location(lat, lon);
+            var options = new MapLaunchOptions { NavigationMode = NavigationMode.Walking };
+
+            await Microsoft.Maui.ApplicationModel.Map.Default.OpenAsync(location, options);
+        }
+        catch (Exception ex)
+        {
+            // Fallback to Google Maps URL
+            try
+            {
+                var url = $"https://www.google.com/maps/dir/?api=1&destination={lat},{lon}&travelmode=walking";
+                await Launcher.OpenAsync(new Uri(url));
+            }
+            catch
+            {
+                _logger.LogError(ex, "Failed to open external maps");
+                await _toastService.ShowErrorAsync("Unable to open maps");
+            }
+        }
     }
 
     #endregion
+
+    /// <summary>
+    /// Updates the cached viewport bounds. Called from page when map viewport changes.
+    /// </summary>
+    public void UpdateCachedViewportBounds()
+    {
+        if (_map == null) return;
+
+        var bounds = _mapBuilder.GetViewportBounds(_map);
+        if (bounds.HasValue)
+        {
+            _cachedViewportBounds = bounds;
+            _logger.LogDebug("Viewport bounds cached: ({MinLon},{MinLat}) to ({MaxLon},{MaxLat}) zoom {Zoom}",
+                bounds.Value.MinLon, bounds.Value.MinLat, bounds.Value.MaxLon, bounds.Value.MaxLat, bounds.Value.ZoomLevel);
+        }
+    }
+
+    /// <summary>
+    /// Clears the live GPS location indicator from the map.
+    /// Groups page has its own map - no location indicator to clear.
+    /// This method is kept for interface compatibility but is now a no-op.
+    /// </summary>
+    public void ClearLiveLocationIndicator()
+    {
+        // Groups has its own map without a location layer - nothing to clear
+        _logger.LogDebug("[Groups] ClearLiveLocationIndicator - no-op (own map)");
+    }
 
     /// <summary>
     /// Updates the map markers with current member locations.
@@ -884,6 +1584,8 @@ public partial class GroupsViewModel : BaseViewModel
 
         _logger.LogDebug("[Groups] UpdateMapMarkers: total={Total}, withLocation={WithLocation}, visible={Visible}, filtered={Filtered}",
             total, withLocation, visible, filtered);
+
+        if (_groupMembersLayer == null) return;
 
         var memberLocations = Members
             .Where(m => m.LastLocation != null && m.IsVisibleOnMap)
@@ -899,10 +1601,82 @@ public partial class GroupsViewModel : BaseViewModel
             .ToList();
 
         _logger.LogDebug("[Groups] Passing {Count} member locations to map", memberLocations.Count);
-        _mapService.UpdateGroupMembers(memberLocations);
+        var points = _groupLayerService.UpdateGroupMemberMarkers(_groupMembersLayer, memberLocations);
+
+        // Auto-zoom to fit all members if there are multiple
+        if (points.Count > 1 && _map != null)
+        {
+            _mapBuilder.ZoomToPoints(_map, points);
+        }
+        else if (points.Count == 1 && _map != null)
+        {
+            _map.Navigator.CenterOn(points[0]);
+        }
     }
 
     #region SSE Management
+
+    /// <summary>
+    /// Abandons SSE clients without waiting for cleanup.
+    /// Just unsubscribes from events and forgets references - instant, non-blocking.
+    /// Old connections will timeout naturally or be GC'd.
+    /// </summary>
+    private void AbandonSseClients()
+    {
+        _logger.LogDebug("Abandoning SSE clients (non-blocking)");
+
+        // Unsubscribe from events immediately (prevents old events reaching handlers)
+        if (_locationSseClient != null)
+        {
+            _locationSseClient.LocationReceived -= OnLocationReceived;
+            _locationSseClient.Connected -= OnSseConnected;
+            _locationSseClient.Reconnecting -= OnSseReconnecting;
+        }
+
+        if (_membershipSseClient != null)
+        {
+            _membershipSseClient.MembershipReceived -= OnMembershipReceived;
+        }
+
+        // Trigger cancellation but don't wait for it (fire and forget)
+        var oldCts = _sseCts;
+        if (oldCts != null)
+        {
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try { oldCts.Cancel(); oldCts.Dispose(); }
+                catch { /* ignore cleanup errors */ }
+            });
+        }
+
+        // Clear references - old clients become orphaned, will be GC'd eventually
+        _sseCts = null;
+        _locationSseClient = null;
+        _membershipSseClient = null;
+
+        // Clear throttle tracking
+        _lastUpdateTimes.Clear();
+    }
+
+    /// <summary>
+    /// Ensures SSE clients exist. Only starts new clients if they're null.
+    /// SSE clients have auto-reconnect, so we don't restart based on IsConnected.
+    /// Called when navigating back to today's date.
+    /// </summary>
+    private async Task EnsureSseConnectedAsync()
+    {
+        // Check if SSE clients already exist (they have auto-reconnect built in)
+        // Don't check IsConnected - it may be temporarily false during reconnection
+        if (_locationSseClient != null && _membershipSseClient != null)
+        {
+            _logger.LogDebug("SSE clients exist, skipping start (auto-reconnect handles connection)");
+            return;
+        }
+
+        _logger.LogDebug("SSE clients are null, starting new subscriptions");
+        // Start SSE only if clients don't exist
+        await StartSseSubscriptionsAsync();
+    }
 
     /// <summary>
     /// Starts SSE subscriptions for the selected group.
@@ -912,8 +1686,8 @@ public partial class GroupsViewModel : BaseViewModel
         if (SelectedGroup == null || !IsToday)
             return;
 
-        // Stop any existing subscriptions
-        StopSseSubscriptions();
+        // Abandon any existing subscriptions (instant, non-blocking)
+        AbandonSseClients();
 
         _sseCts = new CancellationTokenSource();
         var groupId = SelectedGroup.Id.ToString();
@@ -962,41 +1736,75 @@ public partial class GroupsViewModel : BaseViewModel
                 _logger.LogError(ex, "Membership SSE subscription error");
             }
         });
-
-        await Task.CompletedTask;
     }
 
     /// <summary>
     /// Stops all SSE subscriptions.
+    /// Non-blocking: cancels immediately, cleanup runs in background.
     /// </summary>
     private void StopSseSubscriptions()
     {
         _logger.LogDebug("Stopping SSE subscriptions");
 
-        // Cancel ongoing operations
+        // Cancel ongoing operations immediately (non-blocking)
         _sseCts?.Cancel();
-        _sseCts?.Dispose();
+
+        // Capture references for background cleanup
+        var oldCts = _sseCts;
+        var oldLocationClient = _locationSseClient;
+        var oldMembershipClient = _membershipSseClient;
+
+        // Clear references immediately so new subscriptions can start
         _sseCts = null;
+        _locationSseClient = null;
+        _membershipSseClient = null;
 
-        // Stop and dispose location SSE client
-        if (_locationSseClient != null)
+        // Unsubscribe from events on main thread to prevent race conditions
+        if (oldLocationClient != null)
         {
-            _locationSseClient.LocationReceived -= OnLocationReceived;
-            _locationSseClient.Connected -= OnSseConnected;
-            _locationSseClient.Reconnecting -= OnSseReconnecting;
-            _locationSseClient.Stop();
-            _locationSseClient.Dispose();
-            _locationSseClient = null;
+            oldLocationClient.LocationReceived -= OnLocationReceived;
+            oldLocationClient.Connected -= OnSseConnected;
+            oldLocationClient.Reconnecting -= OnSseReconnecting;
         }
 
-        // Stop and dispose membership SSE client
-        if (_membershipSseClient != null)
+        if (oldMembershipClient != null)
         {
-            _membershipSseClient.MembershipReceived -= OnMembershipReceived;
-            _membershipSseClient.Stop();
-            _membershipSseClient.Dispose();
-            _membershipSseClient = null;
+            oldMembershipClient.MembershipReceived -= OnMembershipReceived;
         }
+
+        // Dispose in background to avoid blocking main thread
+        // HttpClient cleanup on Android can take 2+ seconds per connection
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                oldLocationClient?.Stop();
+                oldLocationClient?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug("SSE location client cleanup error: {Message}", ex.Message);
+            }
+
+            try
+            {
+                oldMembershipClient?.Stop();
+                oldMembershipClient?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug("SSE membership client cleanup error: {Message}", ex.Message);
+            }
+
+            try
+            {
+                oldCts?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug("SSE CTS cleanup error: {Message}", ex.Message);
+            }
+        });
 
         // Clear throttle tracking
         _lastUpdateTimes.Clear();
@@ -1007,6 +1815,10 @@ public partial class GroupsViewModel : BaseViewModel
     /// </summary>
     private async void OnLocationReceived(object? sender, SseLocationEventArgs e)
     {
+        // Guard against events firing after disposal
+        if (IsDisposed)
+            return;
+
         try
         {
             // Skip live updates when viewing historical data
@@ -1047,8 +1859,19 @@ public partial class GroupsViewModel : BaseViewModel
     /// </summary>
     private async void OnMembershipReceived(object? sender, SseMembershipEventArgs e)
     {
+        // Guard against events firing after disposal
+        if (IsDisposed)
+            return;
+
         try
         {
+            // Skip membership updates when viewing historical data
+            if (!IsToday)
+            {
+                _logger.LogDebug("SSE membership update skipped - viewing historical date");
+                return;
+            }
+
             var membership = e.Membership;
             _logger.LogDebug("SSE membership event: {Action} for {UserId}", membership.Action, membership.UserId);
 
@@ -1203,6 +2026,12 @@ public partial class GroupsViewModel : BaseViewModel
 
         OnPropertyChanged(nameof(IsConfigured));
 
+        // Initialize cached viewport bounds on first appearance
+        if (!_cachedViewportBounds.HasValue)
+        {
+            UpdateCachedViewportBounds();
+        }
+
         if (IsConfigured && Groups.Count == 0)
         {
             await LoadGroupsAsync();
@@ -1210,25 +2039,45 @@ public partial class GroupsViewModel : BaseViewModel
         else if (SelectedGroup != null && IsToday)
         {
             // Resume SSE subscriptions when returning to the page
-            await StartSseSubscriptionsAsync();
+            // Fire and forget - don't block page appearing
+            _ = StartSseSubscriptionsAsync();
         }
     }
 
     /// <summary>
     /// Called when the view disappears.
+    /// Groups owns its own map, so layer cleanup is optional (for memory).
+    /// SSE intentionally NOT stopped here - stopping SSE blocks for 10+ seconds on Android.
+    /// SSE continues running in background; events are ignored when page not visible.
+    /// SSE only stops when switching groups or app closes.
     /// </summary>
     public override Task OnDisappearingAsync()
     {
-        StopSseSubscriptions();
+        // Groups owns its own map - no shared layer conflicts with other pages
+        // Optional: clear layers to free memory when page not visible
+        ClearGroupMembers();
+        ClearHistoricalLocations();
+
+        // DON'T stop SSE here - it causes 25+ second navigation freeze
+        // SSE events are already guarded by IsDisposed check
+        // SSE will be stopped when switching groups (OnSelectedGroupChanged)
         return base.OnDisappearingAsync();
     }
 
     /// <summary>
     /// Cleans up resources to prevent memory leaks.
+    /// Called during ViewModel disposal (app closing, etc.)
     /// </summary>
     protected override void Cleanup()
     {
-        StopSseSubscriptions();
+        // Only stop SSE during actual disposal (app closing)
+        // Use ThreadPool to not block the disposal
+        ThreadPool.QueueUserWorkItem(_ => StopSseSubscriptions());
+
+        // Dispose map to release native resources
+        _map?.Dispose();
+        _map = null;
+
         base.Cleanup();
     }
 }

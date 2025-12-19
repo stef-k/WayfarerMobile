@@ -1,41 +1,26 @@
 namespace WayfarerMobile.Core.Helpers;
 
 /// <summary>
-/// Catalog of available marker icon names and color variants.
-/// Icons are sourced from Resources/Raw/wayfarer-map-icons.
+/// Catalog of marker icon utilities.
+/// Icons are dynamically loaded from Resources/Raw/wayfarer-map-icons.
+/// No hardcoded icon list - any icon name is accepted and loaded on-demand.
+/// If loading fails, TripLayerService falls back to a colored ellipse marker.
 /// </summary>
 public static class IconCatalog
 {
     /// <summary>
-    /// Available marker color variants (directory names under dist/png/marker).
+    /// Default marker color when none specified.
     /// </summary>
-    public static readonly string[] MarkerColors =
-    [
-        "bg-black",
-        "bg-blue",
-        "bg-green",
-        "bg-purple",
-        "bg-red"
-    ];
+    public const string DefaultColor = "bg-blue";
 
     /// <summary>
-    /// Available marker icon names (file basenames).
+    /// Default marker icon when none specified.
     /// </summary>
-    public static readonly string[] IconNames =
-    [
-        "anchor", "atm", "barbecue", "beach", "bike", "boat", "camera", "camping",
-        "car", "charging-point", "checkmark", "clouds", "construction", "danger",
-        "drink", "eat", "ev-station", "fitness", "flag", "flight", "gas", "help",
-        "hike", "hospital", "hotel", "info", "kayak", "latest", "luggage", "map",
-        "marker", "museum", "no-wheelchair", "no-wifi", "park", "parking", "pet",
-        "pharmacy", "phishing", "police", "run", "sail", "scuba-dive", "sea",
-        "shopping", "ski", "smoke-free", "smoke", "sos", "star", "subway", "surf",
-        "swim", "taxi", "telephone", "thunderstorm", "tool", "train", "walk",
-        "water", "wc", "wheelchair", "wifi"
-    ];
+    public const string DefaultIcon = "marker";
 
     /// <summary>
     /// Commonly used icons that should be promoted in pickers.
+    /// Use TripLayerService.GetValidatedPriorityIconsAsync to filter to existing icons.
     /// </summary>
     public static readonly string[] PriorityIconNames =
     [
@@ -44,32 +29,34 @@ public static class IconCatalog
     ];
 
     /// <summary>
-    /// Validates or coerces a color to a known variant.
+    /// Normalizes a color string, returning fallback for null/empty.
+    /// Does not validate - any color name is accepted for dynamic loading.
     /// </summary>
-    /// <param name="color">The color to validate.</param>
-    /// <param name="fallback">Fallback color if invalid.</param>
-    /// <returns>A valid color string.</returns>
-    public static string CoerceColor(string? color, string fallback = "bg-blue")
+    /// <param name="color">The color to normalize.</param>
+    /// <param name="fallback">Fallback color if null/empty.</param>
+    /// <returns>Normalized color string with "bg-" prefix.</returns>
+    public static string CoerceColor(string? color, string fallback = DefaultColor)
     {
         if (string.IsNullOrWhiteSpace(color))
             return fallback;
 
-        var normalized = color.StartsWith("bg-") ? color : $"bg-{color}";
-        return MarkerColors.Contains(normalized) ? normalized : fallback;
+        // Ensure "bg-" prefix for consistency
+        return color.StartsWith("bg-") ? color : $"bg-{color}";
     }
 
     /// <summary>
-    /// Validates or coerces an icon name to a known icon.
+    /// Normalizes an icon name, returning fallback for null/empty.
+    /// Does not validate - any icon name is accepted for dynamic loading.
     /// </summary>
-    /// <param name="iconName">The icon name to validate.</param>
-    /// <param name="fallback">Fallback icon if invalid.</param>
-    /// <returns>A valid icon name.</returns>
-    public static string CoerceIcon(string? iconName, string fallback = "marker")
+    /// <param name="iconName">The icon name to normalize.</param>
+    /// <param name="fallback">Fallback icon if null/empty.</param>
+    /// <returns>The icon name or fallback.</returns>
+    public static string CoerceIcon(string? iconName, string fallback = DefaultIcon)
     {
         if (string.IsNullOrWhiteSpace(iconName))
             return fallback;
 
-        return IconNames.Contains(iconName) ? iconName : fallback;
+        return iconName;
     }
 
     /// <summary>
@@ -86,7 +73,8 @@ public static class IconCatalog
     }
 
     /// <summary>
-    /// Converts a marker color to its hex equivalent.
+    /// Converts a marker color to its hex equivalent for fallback rendering.
+    /// Known colors return their mapped hex value; unknown colors return default blue.
     /// </summary>
     /// <param name="markerColor">The marker color (e.g., "bg-blue").</param>
     /// <returns>Hex color string.</returns>
@@ -100,7 +88,7 @@ public static class IconCatalog
             "bg-green" => "#4CAF50",
             "bg-purple" => "#9C27B0",
             "bg-red" => "#F44336",
-            _ => "#2196F3"
+            _ => "#2196F3" // Default to blue for unknown colors
         };
     }
 }

@@ -131,7 +131,14 @@ public static class MauiProgram
 
         // Map Services (depends on tile cache)
         services.AddSingleton<LocationIndicatorService>();
-        services.AddSingleton<MapService>();
+        services.AddTransient<IMapBuilder, MapBuilder>(); // Each ViewModel gets its own Map instance
+
+        // Feature-specific Layer Services
+        services.AddSingleton<IGroupLayerService, GroupLayerService>(); // Stateless rendering
+        services.AddSingleton<ILocationLayerService, LocationLayerService>(); // Stateful (animation)
+        services.AddSingleton<IDroppedPinLayerService, DroppedPinLayerService>(); // Stateless rendering
+        services.AddSingleton<ITripLayerService, TripLayerService>(); // Has icon cache
+        services.AddSingleton<ITimelineLayerService, TimelineLayerService>(); // Stateless rendering
 
         // Routing Services
         services.AddSingleton<OsrmRoutingService>();
@@ -229,12 +236,23 @@ public static class MauiProgram
         // Register IHttpClientFactory
         services.AddHttpClient();
 
-        // WayfarerApi - main API client with 30s timeout
+        // WayfarerApi - main API client with 30s timeout and isolated connection pool
+        // Uses HTTP/2 for better performance and to ensure separation from SSE (HTTP/1.1)
         services.AddHttpClient("WayfarerApi", client =>
         {
             client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestVersion = new Version(2, 0); // Force HTTP/2
+            client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
             client.DefaultRequestHeaders.Accept.Add(
                 new MediaTypeWithQualityHeaderValue("application/json"));
+        })
+        .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+        {
+            // Isolated connection pool - won't compete with SSE connections
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+            PooledConnectionIdleTimeout = TimeSpan.FromSeconds(90),
+            MaxConnectionsPerServer = 10, // Allow parallel API requests
+            ConnectTimeout = TimeSpan.FromSeconds(10)
         });
 
         // Wikipedia - geosearch API with 10s timeout
@@ -256,6 +274,24 @@ public static class MauiProgram
         {
             client.Timeout = TimeSpan.FromSeconds(30);
             client.DefaultRequestHeaders.Add("User-Agent", "WayfarerMobile/1.0");
+        });
+
+        // SSE - Server-Sent Events with isolated connection pool and long timeout
+        // Uses HTTP/1.1 to ensure completely separate TCP connections from API calls
+        // HTTP/2 multiplexing can cause SSE to block API requests on the same host
+        services.AddHttpClient("SSE", client =>
+        {
+            client.Timeout = TimeSpan.FromMinutes(30); // Long timeout for SSE streams
+            client.DefaultRequestVersion = new Version(1, 1); // Force HTTP/1.1
+            client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact;
+        })
+        .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+        {
+            // Isolated connection pool - won't compete with API connections
+            PooledConnectionLifetime = TimeSpan.FromMinutes(30),
+            PooledConnectionIdleTimeout = TimeSpan.FromMinutes(2),
+            MaxConnectionsPerServer = 4, // Allow multiple SSE connections per group
+            ConnectTimeout = TimeSpan.FromSeconds(10)
         });
     }
 }

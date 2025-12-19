@@ -80,6 +80,12 @@ public class GroupsService : IGroupsService
     /// <inheritdoc/>
     public async Task<List<GroupMember>> GetGroupMembersAsync(Guid groupId, CancellationToken cancellationToken = default)
     {
+        if (groupId == Guid.Empty)
+        {
+            _logger.LogWarning("Cannot fetch group members - invalid group ID");
+            return new List<GroupMember>();
+        }
+
         if (!_settings.IsConfigured)
         {
             _logger.LogWarning("Cannot fetch group members - API not configured");
@@ -115,6 +121,12 @@ public class GroupsService : IGroupsService
         List<string>? userIds = null,
         CancellationToken cancellationToken = default)
     {
+        if (groupId == Guid.Empty)
+        {
+            _logger.LogWarning("Cannot fetch locations - invalid group ID");
+            return new Dictionary<string, MemberLocation>();
+        }
+
         if (!_settings.IsConfigured)
         {
             _logger.LogWarning("Cannot fetch locations - API not configured");
@@ -173,6 +185,12 @@ public class GroupsService : IGroupsService
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        if (groupId == Guid.Empty)
+        {
+            _logger.LogWarning("Cannot query locations - invalid group ID");
+            return null;
+        }
+
         if (!_settings.IsConfigured)
         {
             _logger.LogWarning("Cannot query locations - API not configured");
@@ -214,6 +232,12 @@ public class GroupsService : IGroupsService
         bool disabled,
         CancellationToken cancellationToken = default)
     {
+        if (groupId == Guid.Empty)
+        {
+            _logger.LogWarning("Cannot update peer visibility - invalid group ID");
+            return false;
+        }
+
         if (!_settings.IsConfigured)
         {
             _logger.LogWarning("Cannot update peer visibility - API not configured");
@@ -246,7 +270,7 @@ public class GroupsService : IGroupsService
     /// <summary>
     /// Parses the latest locations response into a dictionary.
     /// </summary>
-    private static Dictionary<string, MemberLocation> ParseLatestLocationsResponse(string responseBody)
+    private Dictionary<string, MemberLocation> ParseLatestLocationsResponse(string responseBody)
     {
         var result = new Dictionary<string, MemberLocation>();
 
@@ -268,18 +292,22 @@ public class GroupsService : IGroupsService
 
                     var location = new MemberLocation();
 
-                    // Try direct latitude/longitude properties first (preferred format)
-                    if (element.TryGetProperty("latitude", out var latProp))
-                        location.Latitude = latProp.GetDouble();
-                    else if (element.TryGetProperty("coordinates", out var coords) &&
-                             coords.TryGetProperty("y", out var coordLat))
-                        location.Latitude = coordLat.GetDouble();
-
-                    if (element.TryGetProperty("longitude", out var lonProp))
-                        location.Longitude = lonProp.GetDouble();
-                    else if (element.TryGetProperty("coordinates", out var coordsLon) &&
-                             coordsLon.TryGetProperty("x", out var coordLon))
-                        location.Longitude = coordLon.GetDouble();
+                    // Parse coordinates - API returns { coordinates: { latitude, longitude } }
+                    if (element.TryGetProperty("coordinates", out var coords))
+                    {
+                        if (coords.TryGetProperty("latitude", out var coordLat))
+                            location.Latitude = coordLat.GetDouble();
+                        if (coords.TryGetProperty("longitude", out var coordLon))
+                            location.Longitude = coordLon.GetDouble();
+                    }
+                    // Fallback: try direct latitude/longitude properties
+                    else
+                    {
+                        if (element.TryGetProperty("latitude", out var latProp))
+                            location.Latitude = latProp.GetDouble();
+                        if (element.TryGetProperty("longitude", out var lonProp))
+                            location.Longitude = lonProp.GetDouble();
+                    }
 
                     if (element.TryGetProperty("localTimestamp", out var timestamp))
                         location.Timestamp = timestamp.GetDateTime();
@@ -299,7 +327,7 @@ public class GroupsService : IGroupsService
         catch (JsonException ex)
         {
             // Log parse error but don't propagate - return partial results
-            System.Diagnostics.Debug.WriteLine($"[GroupsService] Failed to parse locations response: {ex.Message}");
+            _logger.LogWarning(ex, "Failed to parse locations response");
         }
 
         return result;

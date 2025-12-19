@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Mapsui.Layers;
 using Microsoft.Maui.ApplicationModel;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
@@ -18,7 +19,6 @@ public partial class MainViewModel : BaseViewModel
     #region Fields
 
     private readonly ILocationBridge _locationBridge;
-    private readonly MapService _mapService;
     private readonly IPermissionsService _permissionsService;
     private readonly TripNavigationService _tripNavigationService;
     private readonly NavigationHudViewModel _navigationHudViewModel;
@@ -29,6 +29,21 @@ public partial class MainViewModel : BaseViewModel
     private readonly CacheOverlayService _cacheOverlayService;
     private readonly LocationIndicatorService _indicatorService;
 
+    // Map composition services
+    private readonly IMapBuilder _mapBuilder;
+    private readonly ILocationLayerService _locationLayerService;
+    private readonly IDroppedPinLayerService _droppedPinLayerService;
+    private readonly ITripLayerService _tripLayerService;
+
+    // Map and layers (owned by this ViewModel)
+    private Map? _map;
+    private WritableLayer? _locationLayer;
+    private WritableLayer? _navigationRouteLayer;
+    private WritableLayer? _navigationRouteCompletedLayer;
+    private WritableLayer? _droppedPinLayer;
+    private WritableLayer? _tripPlacesLayer;
+    private WritableLayer? _tripSegmentsLayer;
+
     #endregion
 
     #region Properties
@@ -36,7 +51,7 @@ public partial class MainViewModel : BaseViewModel
     /// <summary>
     /// Gets the map instance for binding.
     /// </summary>
-    public Map Map => _mapService.Map;
+    public Map Map => _map ??= CreateMap();
 
     /// <summary>
     /// Gets or sets the current tracking state.
@@ -364,7 +379,6 @@ public partial class MainViewModel : BaseViewModel
     /// Creates a new instance of MainViewModel.
     /// </summary>
     /// <param name="locationBridge">The location bridge service.</param>
-    /// <param name="mapService">The map service.</param>
     /// <param name="permissionsService">The permissions service.</param>
     /// <param name="tripNavigationService">The trip navigation service.</param>
     /// <param name="navigationHudViewModel">The navigation HUD view model.</param>
@@ -374,9 +388,12 @@ public partial class MainViewModel : BaseViewModel
     /// <param name="cacheStatusService">The cache status service.</param>
     /// <param name="cacheOverlayService">The cache overlay service.</param>
     /// <param name="indicatorService">The location indicator service for smoothed heading.</param>
+    /// <param name="mapBuilder">The map builder for creating isolated map instances.</param>
+    /// <param name="locationLayerService">The location layer service for rendering current location.</param>
+    /// <param name="droppedPinLayerService">The dropped pin layer service.</param>
+    /// <param name="tripLayerService">The trip layer service for places and segments.</param>
     public MainViewModel(
         ILocationBridge locationBridge,
-        MapService mapService,
         IPermissionsService permissionsService,
         TripNavigationService tripNavigationService,
         NavigationHudViewModel navigationHudViewModel,
@@ -385,10 +402,13 @@ public partial class MainViewModel : BaseViewModel
         UnifiedTileCacheService tileCacheService,
         CacheStatusService cacheStatusService,
         CacheOverlayService cacheOverlayService,
-        LocationIndicatorService indicatorService)
+        LocationIndicatorService indicatorService,
+        IMapBuilder mapBuilder,
+        ILocationLayerService locationLayerService,
+        IDroppedPinLayerService droppedPinLayerService,
+        ITripLayerService tripLayerService)
     {
         _locationBridge = locationBridge;
-        _mapService = mapService;
         _permissionsService = permissionsService;
         _tripNavigationService = tripNavigationService;
         _navigationHudViewModel = navigationHudViewModel;
@@ -398,6 +418,10 @@ public partial class MainViewModel : BaseViewModel
         _cacheStatusService = cacheStatusService;
         _cacheOverlayService = cacheOverlayService;
         _indicatorService = indicatorService;
+        _mapBuilder = mapBuilder;
+        _locationLayerService = locationLayerService;
+        _droppedPinLayerService = droppedPinLayerService;
+        _tripLayerService = tripLayerService;
         Title = "WayfarerMobile";
 
         // Subscribe to location events
@@ -412,10 +436,112 @@ public partial class MainViewModel : BaseViewModel
 
         // Subscribe to cache status updates (updates when location changes, NOT on startup)
         _cacheStatusService.StatusChanged += OnCacheStatusChanged;
-
-        // Set default map zoom
-        _mapService.SetDefaultZoom();
     }
+
+    #endregion
+
+    #region Map Creation
+
+    /// <summary>
+    /// Creates and configures this ViewModel's private map instance.
+    /// </summary>
+    private Map CreateMap()
+    {
+        // Create layers for Main page features
+        _locationLayer = _mapBuilder.CreateLayer(_locationLayerService.LocationLayerName);
+        _tripSegmentsLayer = _mapBuilder.CreateLayer(_tripLayerService.TripSegmentsLayerName);
+        _tripPlacesLayer = _mapBuilder.CreateLayer(_tripLayerService.TripPlacesLayerName);
+        _navigationRouteCompletedLayer = _mapBuilder.CreateLayer("NavigationRouteCompleted");
+        _navigationRouteLayer = _mapBuilder.CreateLayer("NavigationRoute");
+        _droppedPinLayer = _mapBuilder.CreateLayer(_droppedPinLayerService.DroppedPinLayerName);
+
+        // Create map with all layers (order matters: segments under places under location)
+        var map = _mapBuilder.CreateMap(
+            _tripSegmentsLayer,
+            _navigationRouteCompletedLayer,
+            _navigationRouteLayer,
+            _tripPlacesLayer,
+            _droppedPinLayer,
+            _locationLayer);
+
+        // Set default zoom
+        SetDefaultZoom(map);
+
+        return map;
+    }
+
+    /// <summary>
+    /// Sets the default zoom level for the map.
+    /// </summary>
+    private static void SetDefaultZoom(Map map)
+    {
+        // Zoom level 15 is good for street-level view
+        if (map.Navigator.Resolutions?.Count > 15)
+        {
+            map.Navigator.ZoomTo(map.Navigator.Resolutions[15]);
+        }
+    }
+
+    /// <summary>
+    /// Ensures the map is initialized.
+    /// </summary>
+    private void EnsureMapInitialized()
+    {
+        _ = Map; // Force lazy initialization
+    }
+
+    /// <summary>
+    /// Refreshes the map display.
+    /// </summary>
+    private void RefreshMap()
+    {
+        _map?.Refresh();
+    }
+
+    /// <summary>
+    /// Zooms the map to fit the current navigation route.
+    /// </summary>
+    private void ZoomToNavigationRoute()
+    {
+        var route = _tripNavigationService.ActiveRoute;
+        if (route?.Waypoints == null || route.Waypoints.Count < 2 || _map == null)
+            return;
+
+        var points = route.Waypoints
+            .Select(w => Mapsui.Projections.SphericalMercator.FromLonLat(w.Longitude, w.Latitude))
+            .Select(p => new Mapsui.MPoint(p.x, p.y))
+            .ToList();
+
+        _mapBuilder.ZoomToPoints(_map, points);
+    }
+
+    /// <summary>
+    /// Shows the navigation route on the map.
+    /// </summary>
+    private void ShowNavigationRoute(NavigationRoute route)
+    {
+        if (_navigationRouteLayer == null || _navigationRouteCompletedLayer == null || _map == null)
+            return;
+
+        _mapBuilder.UpdateNavigationRoute(_navigationRouteLayer, _navigationRouteCompletedLayer, route);
+    }
+
+    /// <summary>
+    /// Clears the navigation route from the map.
+    /// </summary>
+    private void ClearNavigationRoute()
+    {
+        _navigationRouteLayer?.Clear();
+        _navigationRouteLayer?.DataHasChanged();
+        _navigationRouteCompletedLayer?.Clear();
+        _navigationRouteCompletedLayer?.DataHasChanged();
+    }
+
+    /// <summary>
+    /// Checks if navigation route is currently displayed.
+    /// </summary>
+    private bool HasNavigationRoute =>
+        _navigationRouteLayer?.GetFeatures().Any() == true;
 
     #endregion
 
@@ -429,19 +555,39 @@ public partial class MainViewModel : BaseViewModel
         CurrentLocation = location;
         LocationCount++;
 
-        // Update map (this also updates _indicatorService.CurrentHeading via CalculateBestHeading)
-        _mapService.UpdateLocation(location, centerMap: IsFollowingLocation && !IsNavigating);
+        // Update location indicator on map
+        if (_locationLayer != null)
+        {
+            _locationLayerService.UpdateLocation(_locationLayer, location);
 
-        // Notify heading properties after MapService updates the indicator service
+            // Center map if following and not navigating
+            if (IsFollowingLocation && !IsNavigating && _map != null)
+            {
+                _mapBuilder.CenterOnLocation(_map, location.Latitude, location.Longitude);
+            }
+        }
+
+        // Notify heading properties after LocationLayerService updates the indicator service
         // This ensures HeadingText uses the smoothed heading calculated by LocationIndicatorService
         OnPropertyChanged(nameof(HeadingText));
         OnPropertyChanged(nameof(HasHeading));
 
         // Update navigation if active
-        if (IsNavigating)
+        if (IsNavigating && _navigationRouteLayer != null && _navigationRouteCompletedLayer != null)
         {
             var state = _tripNavigationService.UpdateLocation(location.Latitude, location.Longitude);
-            _mapService.UpdateNavigationRouteProgress(location.Latitude, location.Longitude);
+
+            // Update route progress visualization
+            var route = _tripNavigationService.ActiveRoute;
+            if (route != null)
+            {
+                _mapBuilder.UpdateNavigationRouteProgress(
+                    _navigationRouteLayer,
+                    _navigationRouteCompletedLayer,
+                    route,
+                    location.Latitude,
+                    location.Longitude);
+            }
 
             // Check for arrival
             if (state.Status == NavigationStatus.Arrived)
@@ -454,9 +600,22 @@ public partial class MainViewModel : BaseViewModel
     /// <summary>
     /// Handles stop navigation request from HUD.
     /// </summary>
-    private void OnStopNavigationRequested(object? sender, EventArgs e)
+    private async void OnStopNavigationRequested(object? sender, string? sourcePageRoute)
     {
         StopNavigation();
+
+        // Navigate back to source page if specified
+        if (!string.IsNullOrEmpty(sourcePageRoute))
+        {
+            try
+            {
+                await Shell.Current.GoToAsync(sourcePageRoute);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MainViewModel] Failed to navigate to {sourcePageRoute}: {ex.Message}");
+            }
+        }
     }
 
     /// <summary>
@@ -475,10 +634,10 @@ public partial class MainViewModel : BaseViewModel
     {
         TrackingState = state;
 
-        // Clear track when stopping
-        if (state == TrackingState.Ready || state == TrackingState.NotInitialized)
+        // Clear location indicator when stopping
+        if ((state == TrackingState.Ready || state == TrackingState.NotInitialized) && _locationLayer != null)
         {
-            _mapService.ClearTrack();
+            _locationLayerService.ClearLocation(_locationLayer);
         }
     }
 
@@ -604,9 +763,9 @@ public partial class MainViewModel : BaseViewModel
     {
         var location = CurrentLocation ?? _locationBridge.LastLocation;
 
-        if (location != null)
+        if (location != null && _map != null)
         {
-            _mapService.CenterOnLocation(location);
+            _mapBuilder.CenterOnLocation(_map, location.Latitude, location.Longitude);
             IsFollowingLocation = true;
         }
         else
@@ -641,12 +800,20 @@ public partial class MainViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Zooms the map to show the entire track.
+    /// Zooms the map to show all relevant features (location, route, places).
     /// </summary>
     [RelayCommand]
     private void ZoomToTrack()
     {
-        _mapService.ZoomToTrack();
+        // Zoom to navigation route if active, otherwise just center on location
+        if (IsNavigating && _tripNavigationService.ActiveRoute != null)
+        {
+            ZoomToNavigationRoute();
+        }
+        else if (CurrentLocation != null && _map != null)
+        {
+            _mapBuilder.CenterOnLocation(_map, CurrentLocation.Latitude, CurrentLocation.Longitude, 15);
+        }
         IsFollowingLocation = false;
     }
 
@@ -656,7 +823,7 @@ public partial class MainViewModel : BaseViewModel
     [RelayCommand]
     private void ResetNorth()
     {
-        _mapService.ResetMapRotation();
+        _map?.Navigator.RotateTo(0);
     }
 
     #region Context Menu Commands
@@ -677,7 +844,11 @@ public partial class MainViewModel : BaseViewModel
         DroppedPinLatitude = latitude;
         DroppedPinLongitude = longitude;
         HasDroppedPin = true;
-        _mapService.ShowDroppedPin(latitude, longitude);
+
+        if (_droppedPinLayer != null)
+        {
+            _droppedPinLayerService.ShowDroppedPin(_droppedPinLayer, latitude, longitude);
+        }
     }
 
     /// <summary>
@@ -742,35 +913,136 @@ public partial class MainViewModel : BaseViewModel
         HasDroppedPin = false;
         DroppedPinLatitude = 0;
         DroppedPinLongitude = 0;
-        _mapService.ClearDroppedPin();
+
+        if (_droppedPinLayer != null)
+        {
+            _droppedPinLayerService.ClearDroppedPin(_droppedPinLayer);
+        }
     }
 
     /// <summary>
-    /// Navigates to the context menu location using device's native navigation app.
+    /// Navigates to the context menu location with choice of internal or external navigation.
     /// </summary>
     [RelayCommand]
     private async Task NavigateToContextLocationAsync()
     {
+        // Ask user for navigation method using the styled picker
+        var page = Application.Current?.Windows.FirstOrDefault()?.Page;
+        if (page == null) return;
+
+        // Get the MainPage to access the navigation picker
+        var mainPage = page as MainPage ?? (Shell.Current?.CurrentPage as MainPage);
+
+        Views.Controls.NavigationMethod? navMethod = null;
+        if (mainPage != null)
+        {
+            navMethod = await mainPage.ShowNavigationPickerAsync();
+        }
+        else
+        {
+            // Fallback to action sheet if page reference not available
+            var result = await page.DisplayActionSheetAsync(
+                "Navigate by", "Cancel", null,
+                "🚶 Walk", "🚗 Drive", "🚴 Bike", "📍 External Maps");
+
+            navMethod = result switch
+            {
+                "🚶 Walk" => Views.Controls.NavigationMethod.Walk,
+                "🚗 Drive" => Views.Controls.NavigationMethod.Drive,
+                "🚴 Bike" => Views.Controls.NavigationMethod.Bike,
+                "📍 External Maps" => Views.Controls.NavigationMethod.ExternalMaps,
+                _ => null
+            };
+        }
+
+        if (navMethod == null)
+            return;
+
+        HideContextMenu();
+
+        // Handle external maps
+        if (navMethod == Views.Controls.NavigationMethod.ExternalMaps)
+        {
+            await OpenExternalMapsAsync(ContextMenuLatitude, ContextMenuLongitude);
+            return;
+        }
+
+        // Get current location for internal navigation
+        var currentLocation = CurrentLocation ?? _locationBridge.LastLocation;
+        if (currentLocation == null)
+        {
+            await _toastService.ShowWarningAsync("Waiting for your location...");
+            return;
+        }
+
+        // Map selection to OSRM profile
+        var osrmProfile = navMethod switch
+        {
+            Views.Controls.NavigationMethod.Walk => "foot",
+            Views.Controls.NavigationMethod.Drive => "car",
+            Views.Controls.NavigationMethod.Bike => "bike",
+            _ => "foot"
+        };
+
         try
         {
-            var location = new Location(ContextMenuLatitude, ContextMenuLongitude);
-            var options = new MapLaunchOptions { NavigationMode = NavigationMode.Walking };
+            IsBusy = true;
 
-            await Microsoft.Maui.ApplicationModel.Map.Default.OpenAsync(location, options);
-            HideContextMenu();
+            // Calculate route using OSRM with straight line fallback
+            var route = await _tripNavigationService.CalculateRouteToCoordinatesAsync(
+                currentLocation.Latitude,
+                currentLocation.Longitude,
+                ContextMenuLatitude,
+                ContextMenuLongitude,
+                "Dropped Pin",
+                osrmProfile);
+
+            // Clear dropped pin and start navigation
+            ClearDroppedPin();
+
+            // Display route and start navigation
+            IsNavigating = true;
+            ShowNavigationRoute(route);
+            ZoomToNavigationRoute();
+            await _navigationHudViewModel.StartNavigationAsync(route);
+            IsFollowingLocation = false;
+
+            System.Diagnostics.Debug.WriteLine($"[MainViewModel] Started navigation to dropped pin: {route.TotalDistanceMeters / 1000:F1}km");
         }
         catch (Exception ex)
         {
-            // Fallback to Google Maps URL if native map fails
+            System.Diagnostics.Debug.WriteLine($"[MainViewModel] Failed to start navigation: {ex.Message}");
+            await _toastService.ShowErrorAsync("Failed to start navigation");
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Opens external maps app for navigation.
+    /// </summary>
+    private async Task OpenExternalMapsAsync(double lat, double lon)
+    {
+        try
+        {
+            var location = new Location(lat, lon);
+            var options = new MapLaunchOptions { NavigationMode = NavigationMode.Walking };
+
+            await Microsoft.Maui.ApplicationModel.Map.Default.OpenAsync(location, options);
+        }
+        catch (Exception ex)
+        {
+            // Fallback to Google Maps URL
             try
             {
-                var url = $"https://www.google.com/maps/dir/?api=1&destination={ContextMenuLatitude},{ContextMenuLongitude}&travelmode=walking";
+                var url = $"https://www.google.com/maps/dir/?api=1&destination={lat},{lon}&travelmode=walking";
                 await Launcher.OpenAsync(new Uri(url));
-                HideContextMenu();
             }
             catch
             {
-                await _toastService.ShowErrorAsync($"Unable to open navigation: {ex.Message}");
+                await _toastService.ShowErrorAsync($"Unable to open maps: {ex.Message}");
             }
         }
     }
@@ -853,12 +1125,10 @@ public partial class MainViewModel : BaseViewModel
         SelectedPlace = place;
 
         // Center map on selected place
-        var location = new LocationData
+        if (_map != null)
         {
-            Latitude = place.Latitude,
-            Longitude = place.Longitude
-        };
-        _mapService.CenterOnLocation(location);
+            _mapBuilder.CenterOnLocation(_map, place.Latitude, place.Longitude);
+        }
         IsFollowingLocation = false;
     }
 
@@ -938,8 +1208,8 @@ public partial class MainViewModel : BaseViewModel
         if (route != null)
         {
             IsNavigating = true;
-            _mapService.ShowNavigationRoute(route);
-            _mapService.ZoomToNavigationRoute();
+            ShowNavigationRoute(route);
+            ZoomToNavigationRoute();
             await _navigationHudViewModel.StartNavigationAsync(route);
             IsFollowingLocation = false; // Don't auto-center during navigation
         }
@@ -961,8 +1231,8 @@ public partial class MainViewModel : BaseViewModel
         if (route != null)
         {
             IsNavigating = true;
-            _mapService.ShowNavigationRoute(route);
-            _mapService.ZoomToNavigationRoute();
+            ShowNavigationRoute(route);
+            ZoomToNavigationRoute();
             await _navigationHudViewModel.StartNavigationAsync(route);
             IsFollowingLocation = false;
         }
@@ -975,7 +1245,7 @@ public partial class MainViewModel : BaseViewModel
     private void StopNavigation()
     {
         IsNavigating = false;
-        _mapService.ClearNavigationRoute();
+        ClearNavigationRoute();
         _navigationHudViewModel.StopNavigationDisplay();
         IsFollowingLocation = true;
     }
@@ -988,7 +1258,11 @@ public partial class MainViewModel : BaseViewModel
     {
         LoadedTrip = tripDetails;
         _tripNavigationService.LoadTrip(tripDetails);
-        await _mapService.UpdateTripPlacesAsync(tripDetails.AllPlaces);
+
+        if (_tripPlacesLayer != null)
+        {
+            await _tripLayerService.UpdateTripPlacesAsync(_tripPlacesLayer, tripDetails.AllPlaces);
+        }
     }
 
     /// <summary>
@@ -1004,7 +1278,11 @@ public partial class MainViewModel : BaseViewModel
         LoadedTrip = null;
         SelectedPlace = null;
         _tripNavigationService.UnloadTrip();
-        _mapService.ClearTripPlaces();
+
+        if (_tripPlacesLayer != null)
+        {
+            _tripLayerService.ClearTripPlaces(_tripPlacesLayer);
+        }
     }
 
     #endregion
@@ -1017,7 +1295,7 @@ public partial class MainViewModel : BaseViewModel
     public override async Task OnAppearingAsync()
     {
         // Ensure map is initialized
-        _mapService.EnsureInitialized();
+        EnsureMapInitialized();
 
         // Update state from bridge
         TrackingState = _locationBridge.CurrentState;
@@ -1027,13 +1305,14 @@ public partial class MainViewModel : BaseViewModel
         await CheckPermissionsStateAsync();
 
         // Update map if we have a location
-        if (CurrentLocation != null)
+        if (CurrentLocation != null && _locationLayer != null && _map != null)
         {
-            _mapService.UpdateLocation(CurrentLocation, centerMap: true);
+            _locationLayerService.UpdateLocation(_locationLayer, CurrentLocation);
+            _mapBuilder.CenterOnLocation(_map, CurrentLocation.Latitude, CurrentLocation.Longitude);
         }
 
         // Refresh map to fix any layout issues (e.g., after bottom sheet closes)
-        _mapService.RefreshMap();
+        RefreshMap();
 
         // Cache health is updated by CacheStatusService when location changes - NOT here on startup
 
@@ -1060,6 +1339,33 @@ public partial class MainViewModel : BaseViewModel
         }
 
         await base.OnDisappearingAsync();
+    }
+
+    /// <summary>
+    /// Cleans up event subscriptions to prevent memory leaks.
+    /// </summary>
+    protected override void Cleanup()
+    {
+        // Unsubscribe from location bridge events
+        _locationBridge.LocationReceived -= OnLocationReceived;
+        _locationBridge.StateChanged -= OnStateChanged;
+
+        // Unsubscribe from child ViewModel events and dispose
+        _navigationHudViewModel.StopNavigationRequested -= OnStopNavigationRequested;
+        _navigationHudViewModel.Dispose();
+        _checkInViewModel.CheckInCompleted -= OnCheckInCompleted;
+
+        // Unsubscribe from cache status events
+        _cacheStatusService.StatusChanged -= OnCacheStatusChanged;
+
+        // Stop location animation
+        _locationLayerService.StopAnimation();
+
+        // Dispose map to release native resources
+        _map?.Dispose();
+        _map = null;
+
+        base.Cleanup();
     }
 
     /// <summary>

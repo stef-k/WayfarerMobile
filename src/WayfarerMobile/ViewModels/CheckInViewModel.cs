@@ -1,10 +1,10 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Mapsui.Layers;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
-using WayfarerMobile.Services;
 
 namespace WayfarerMobile.ViewModels;
 
@@ -15,9 +15,14 @@ public partial class CheckInViewModel : BaseViewModel
 {
     private readonly ILocationBridge _locationBridge;
     private readonly IApiClient _apiClient;
-    private readonly MapService _mapService;
+    private readonly IMapBuilder _mapBuilder;
+    private readonly ILocationLayerService _locationLayerService;
     private readonly IActivitySyncService _activitySyncService;
     private readonly IToastService _toastService;
+
+    // Map state - CheckInViewModel owns its Map instance
+    private Mapsui.Map? _map;
+    private WritableLayer? _locationLayer;
 
     #region Observable Properties
 
@@ -108,7 +113,7 @@ public partial class CheckInViewModel : BaseViewModel
     /// <summary>
     /// Gets the map instance for binding.
     /// </summary>
-    public Mapsui.Map Map => _mapService.Map;
+    public Mapsui.Map Map => _map ??= CreateMap();
 
     /// <summary>
     /// Gets the available activity types.
@@ -130,13 +135,15 @@ public partial class CheckInViewModel : BaseViewModel
     public CheckInViewModel(
         ILocationBridge locationBridge,
         IApiClient apiClient,
-        MapService mapService,
+        IMapBuilder mapBuilder,
+        ILocationLayerService locationLayerService,
         IActivitySyncService activitySyncService,
         IToastService toastService)
     {
         _locationBridge = locationBridge;
         _apiClient = apiClient;
-        _mapService = mapService;
+        _mapBuilder = mapBuilder;
+        _locationLayerService = locationLayerService;
         _activitySyncService = activitySyncService;
         _toastService = toastService;
         Title = "Check In";
@@ -157,7 +164,7 @@ public partial class CheckInViewModel : BaseViewModel
 
         if (CurrentLocation != null)
         {
-            _mapService.UpdateLocation(CurrentLocation, centerMap: true);
+            UpdateLocation(CurrentLocation, centerMap: true);
         }
     }
 
@@ -277,7 +284,7 @@ public partial class CheckInViewModel : BaseViewModel
         CurrentLocation = _locationBridge.LastLocation;
         if (CurrentLocation != null)
         {
-            _mapService.UpdateLocation(CurrentLocation, centerMap: true);
+            UpdateLocation(CurrentLocation, centerMap: true);
         }
         else
         {
@@ -316,7 +323,7 @@ public partial class CheckInViewModel : BaseViewModel
                     Timestamp = cachedLocation.Timestamp.UtcDateTime,
                     Provider = "maui-cached"
                 };
-                _mapService.UpdateLocation(CurrentLocation, centerMap: true);
+                UpdateLocation(CurrentLocation, centerMap: true);
                 return;
             }
 
@@ -335,7 +342,7 @@ public partial class CheckInViewModel : BaseViewModel
                     Timestamp = location.Timestamp.UtcDateTime,
                     Provider = "maui-gps"
                 };
-                _mapService.UpdateLocation(CurrentLocation, centerMap: true);
+                UpdateLocation(CurrentLocation, centerMap: true);
             }
         }
         catch (Exception ex)
@@ -350,7 +357,23 @@ public partial class CheckInViewModel : BaseViewModel
     public override Task OnDisappearingAsync()
     {
         _locationBridge.LocationReceived -= OnLocationReceived;
+
+        // Clear location layer to release memory
+        if (_locationLayer != null)
+        {
+            _locationLayerService.ClearLocation(_locationLayer);
+        }
+
         return base.OnDisappearingAsync();
+    }
+
+    /// <summary>
+    /// Cleans up event subscriptions to prevent memory leaks.
+    /// </summary>
+    protected override void Cleanup()
+    {
+        _locationBridge.LocationReceived -= OnLocationReceived;
+        base.Cleanup();
     }
 
     /// <summary>
@@ -360,9 +383,49 @@ public partial class CheckInViewModel : BaseViewModel
     {
         MainThread.BeginInvokeOnMainThread(() =>
         {
+            var isFirst = CurrentLocation == null;
             CurrentLocation = location;
-            _mapService.UpdateLocation(location, centerMap: CurrentLocation == null);
+            UpdateLocation(location, centerMap: isFirst);
         });
+    }
+
+    #endregion
+
+    #region Map Management
+
+    /// <summary>
+    /// Creates the Map instance with location layer.
+    /// </summary>
+    private Mapsui.Map CreateMap()
+    {
+        _locationLayer = _mapBuilder.CreateLayer(_locationLayerService.LocationLayerName);
+        var map = _mapBuilder.CreateMap(_locationLayer);
+
+        // Set default zoom
+        map.Navigator.ZoomTo(2);
+
+        return map;
+    }
+
+    /// <summary>
+    /// Updates the location on the map.
+    /// </summary>
+    /// <param name="location">The location data.</param>
+    /// <param name="centerMap">Whether to center the map on the location.</param>
+    private void UpdateLocation(LocationData location, bool centerMap = false)
+    {
+        // Ensure map is initialized
+        _ = Map;
+
+        if (_locationLayer != null)
+        {
+            _locationLayerService.UpdateLocation(_locationLayer, location);
+        }
+
+        if (centerMap && _map != null)
+        {
+            _mapBuilder.CenterOnLocation(_map, location.Latitude, location.Longitude, zoomLevel: 16);
+        }
     }
 
     #endregion

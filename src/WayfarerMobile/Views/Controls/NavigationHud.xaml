@@ -4,13 +4,15 @@
              xmlns:vm="clr-namespace:WayfarerMobile.ViewModels"
              x:Class="WayfarerMobile.Views.Controls.NavigationHud"
              x:DataType="vm:NavigationHudViewModel"
-             IsVisible="{Binding IsNavigating}">
+             IsVisible="{Binding IsNavigating}"
+             VerticalOptions="End"
+             HorizontalOptions="Fill">
 
     <Frame Padding="0"
            CornerRadius="16"
            BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}"
            HasShadow="True"
-           Margin="10">
+           VerticalOptions="End">
 
         <Grid RowDefinitions="Auto,Auto,Auto" Padding="15">
 
@@ -114,19 +116,13 @@
                        CornerRadius="10"
                        BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}"
                        HasShadow="False">
-                    <Grid ColumnDefinitions="Auto,*">
-                        <Label Grid.Column="0"
-                               Text="➤"
-                               FontSize="16"
-                               VerticalOptions="Center"
-                               Margin="0,0,10,0" />
-                        <Label Grid.Column="1"
-                               Text="{Binding InstructionText}"
-                               FontSize="14"
-                               VerticalOptions="Center"
-                               LineBreakMode="TailTruncation"
-                               MaxLines="2" />
-                    </Grid>
+                    <Label Text="{Binding InstructionText}"
+                           FontSize="14"
+                           VerticalOptions="Center"
+                           HorizontalOptions="Center"
+                           HorizontalTextAlignment="Center"
+                           LineBreakMode="TailTruncation"
+                           MaxLines="2" />
                 </Frame>
 
                 <!-- Progress bar -->

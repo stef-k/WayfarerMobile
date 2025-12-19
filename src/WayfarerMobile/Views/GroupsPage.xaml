@@ -5,6 +5,7 @@
              xmlns:models="clr-namespace:WayfarerMobile.Core.Models;assembly=WayfarerMobile.Core"
              xmlns:mapsui="clr-namespace:Mapsui.UI.Maui;assembly=Mapsui.UI.Maui"
              xmlns:controls="clr-namespace:WayfarerMobile.Shared.Controls"
+             xmlns:offlineBanner="clr-namespace:WayfarerMobile.Views.Controls"
              xmlns:bottomSheet="clr-namespace:Syncfusion.Maui.Toolkit.BottomSheet;assembly=Syncfusion.Maui.Toolkit"
              xmlns:picker="clr-namespace:Syncfusion.Maui.Toolkit.Picker;assembly=Syncfusion.Maui.Toolkit"
              xmlns:sys="clr-namespace:System;assembly=netstandard"
@@ -13,9 +14,43 @@
              Title="{Binding Title}"
              BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}">
 
-    <Grid>
+    <!-- Tappable Title View - opens group picker -->
+    <Shell.TitleView>
+        <HorizontalStackLayout Spacing="4" VerticalOptions="Center">
+            <HorizontalStackLayout.GestureRecognizers>
+                <TapGestureRecognizer Command="{Binding OpenGroupPickerCommand}" />
+            </HorizontalStackLayout.GestureRecognizers>
+            <Label Text="{Binding Title}"
+                   FontSize="18"
+                   FontAttributes="Bold"
+                   TextColor="White"
+                   VerticalOptions="Center" />
+            <Label Text="▼"
+                   FontSize="10"
+                   TextColor="White"
+                   VerticalOptions="Center"
+                   Opacity="0.7" />
+        </HorizontalStackLayout>
+    </Shell.TitleView>
+
+    <!-- Group Picker Popup -->
+    <ContentPage.Resources>
+        <ResourceDictionary>
+            <Style x:Key="GroupPickerPopupStyle" TargetType="Frame">
+                <Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}" />
+                <Setter Property="CornerRadius" Value="12" />
+                <Setter Property="Padding" Value="16" />
+                <Setter Property="HasShadow" Value="True" />
+            </Style>
+        </ResourceDictionary>
+    </ContentPage.Resources>
+
+    <Grid RowDefinitions="Auto,*">
+        <!-- Offline Banner -->
+        <offlineBanner:OfflineBanner Grid.Row="0" />
         <!-- Not Configured Message - Outside bottom sheet -->
-        <VerticalStackLayout IsVisible="{Binding IsConfigured, Converter={StaticResource InvertedBoolConverter}}"
+        <VerticalStackLayout Grid.Row="1"
+                            IsVisible="{Binding IsConfigured, Converter={StaticResource InvertedBoolConverter}}"
                             VerticalOptions="Center"
                             HorizontalOptions="Center"
                             Spacing="16"
@@ -33,6 +68,7 @@
 
         <!-- Main Content with Bottom Sheet (when configured) -->
         <bottomSheet:SfBottomSheet x:Name="BottomSheet"
+                                   Grid.Row="1"
                                    IsVisible="{Binding IsConfigured}"
                                    IsOpen="{Binding IsMemberSheetOpen, Mode=TwoWay}"
                                    State="Collapsed"
@@ -54,7 +90,7 @@
                     <picker:SfDatePicker x:Name="DatePicker"
                                          IsOpen="{Binding IsDatePickerOpen, Mode=TwoWay}"
                                          Mode="Dialog"
-                                         SelectedDate="{Binding SelectedDate}"
+                                         SelectedDate="{Binding SelectedDate, Mode=TwoWay}"
                                          MaximumDate="{x:Static sys:DateTime.Today}"
                                          Format="dd_MMM_yyyy"
                                          OkButtonClicked="OnDatePickerOkClicked"
@@ -67,12 +103,12 @@
                         </picker:SfDatePicker.FooterView>
                     </picker:SfDatePicker>
 
-                    <!-- Row 0: Compact Header Bar -->
+                    <!-- Row 0: Compact Header Bar - Date Navigation -->
                     <Border Grid.Row="0"
                             Padding="8,4"
                             BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}"
                             StrokeThickness="0">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="6">
+                        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="6">
                             <!-- Previous Day Button -->
                             <ImageButton Grid.Column="0"
                                          Source="arrow_left.png"
@@ -83,27 +119,21 @@
                                          BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
                                          Command="{Binding PreviousDayCommand}" />
 
-                            <!-- Group + Date Combined Button -->
+                            <!-- Date Button (opens date picker directly) -->
                             <Button Grid.Column="1"
+                                    Text="{Binding DateButtonText}"
                                     FontSize="12"
                                     HeightRequest="36"
-                                    Padding="8,0"
+                                    Padding="12,0"
                                     CornerRadius="8"
-                                    HorizontalOptions="Fill"
                                     BackgroundColor="{StaticResource Primary}"
                                     TextColor="White"
-                                    Command="{Binding ToggleHeaderExpandedCommand}">
-                                <Button.Text>
-                                    <MultiBinding StringFormat="{}{0} • {1}">
-                                        <Binding Path="SelectedGroupName" />
-                                        <Binding Path="DateButtonText" />
-                                    </MultiBinding>
-                                </Button.Text>
-                            </Button>
+                                    Command="{Binding OpenDatePickerCommand}" />
 
-                            <!-- Live Indicator -->
+                            <!-- Live Indicator (centered in remaining space) -->
                             <HorizontalStackLayout Grid.Column="2"
                                                    Spacing="4"
+                                                   HorizontalOptions="Center"
                                                    IsVisible="{Binding IsToday}">
                                 <Ellipse WidthRequest="8"
                                          HeightRequest="8"
@@ -153,99 +183,7 @@
                         </Grid>
                     </Border>
 
-                    <!-- Row 1: Expanded Header (Group Selector + Date Picker) - Collapsible -->
-                    <Border Grid.Row="1"
-                            Padding="8"
-                            BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
-                            StrokeThickness="0"
-                            IsVisible="{Binding IsHeaderExpanded}">
-                        <VerticalStackLayout Spacing="8">
-                            <!-- Group Selector -->
-                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                <Frame Padding="8,4"
-                                       CornerRadius="8"
-                                       BorderColor="{StaticResource Gray300}"
-                                       HasShadow="False"
-                                       BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
-                                    <Picker Title="Select Group"
-                                            ItemsSource="{Binding Groups}"
-                                            SelectedItem="{Binding SelectedGroup}"
-                                            ItemDisplayBinding="{Binding Name}"
-                                            IsEnabled="{Binding IsLoadingGroups, Converter={StaticResource InvertedBoolConverter}}" />
-                                </Frame>
-
-                                <ActivityIndicator Grid.Column="1"
-                                                  IsRunning="{Binding IsLoadingGroups}"
-                                                  IsVisible="{Binding IsLoadingGroups}"
-                                                  WidthRequest="36"
-                                                  HeightRequest="36"
-                                                  Color="{StaticResource Primary}" />
-
-                                <Button Grid.Column="1"
-                                        Text="↻"
-                                        FontSize="18"
-                                        WidthRequest="36"
-                                        HeightRequest="36"
-                                        Padding="0"
-                                        CornerRadius="8"
-                                        BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                                        TextColor="{StaticResource Primary}"
-                                        Command="{Binding LoadGroupsCommand}"
-                                        IsVisible="{Binding IsLoadingGroups, Converter={StaticResource InvertedBoolConverter}}" />
-                            </Grid>
-
-                            <!-- Date Selection Row -->
-                            <HorizontalStackLayout Spacing="8" HorizontalOptions="Center">
-                                <Button Text="Pick Date"
-                                        FontSize="12"
-                                        HeightRequest="36"
-                                        Padding="16,0"
-                                        CornerRadius="8"
-                                        BackgroundColor="{StaticResource Primary}"
-                                        TextColor="White"
-                                        Command="{Binding OpenDatePickerCommand}" />
-                            </HorizontalStackLayout>
-
-                            <!-- Member Filter Section -->
-                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                                <Label Text="{Binding VisibleMemberCount, StringFormat='Showing {0} members on map'}"
-                                       FontSize="12"
-                                       TextColor="{StaticResource Gray500}"
-                                       VerticalOptions="Center" />
-                                <Button Grid.Column="1"
-                                        Text="All"
-                                        FontSize="11"
-                                        HeightRequest="32"
-                                        Padding="12,0"
-                                        CornerRadius="8"
-                                        BackgroundColor="{StaticResource Success}"
-                                        TextColor="White"
-                                        Command="{Binding SelectAllMembersCommand}" />
-                                <Button Grid.Column="2"
-                                        Text="None"
-                                        FontSize="11"
-                                        HeightRequest="32"
-                                        Padding="12,0"
-                                        CornerRadius="8"
-                                        BackgroundColor="{StaticResource Gray500}"
-                                        TextColor="White"
-                                        Command="{Binding DeselectAllMembersCommand}" />
-                            </Grid>
-
-                            <!-- Close header button -->
-                            <Button Text="Close"
-                                    FontSize="12"
-                                    HeightRequest="32"
-                                    Padding="16,0"
-                                    CornerRadius="8"
-                                    HorizontalOptions="Center"
-                                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                                    TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource Gray100}}"
-                                    Command="{Binding ToggleHeaderExpandedCommand}" />
-                        </VerticalStackLayout>
-                    </Border>
-
-                    <!-- Row 1: List View (when not expanded and list mode) -->
+                    <!-- Row 1: List View -->
                     <Grid Grid.Row="1" IsVisible="{Binding ShowListView}">
                         <!-- Shimmer Loading Placeholder -->
                         <controls:ShimmerLoadingView IsActive="{Binding IsLoadingMembers}"
@@ -257,6 +195,88 @@
                             <CollectionView ItemsSource="{Binding Members}"
                                            SelectionMode="None"
                                            Margin="8,0">
+
+                                <!-- Header with Group Selector and All/None buttons -->
+                                <CollectionView.Header>
+                                    <VerticalStackLayout Spacing="8" Padding="0,8">
+                                        <!-- Group Selector -->
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                            <Frame Padding="8,4"
+                                                   CornerRadius="8"
+                                                   BorderColor="{StaticResource Gray300}"
+                                                   HasShadow="False"
+                                                   BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+                                                <Picker Title="Select Group"
+                                                        ItemsSource="{Binding Groups}"
+                                                        SelectedItem="{Binding SelectedGroup}"
+                                                        ItemDisplayBinding="{Binding Name}"
+                                                        IsEnabled="{Binding IsLoadingGroups, Converter={StaticResource InvertedBoolConverter}}" />
+                                            </Frame>
+
+                                            <ActivityIndicator Grid.Column="1"
+                                                              IsRunning="{Binding IsLoadingGroups}"
+                                                              IsVisible="{Binding IsLoadingGroups}"
+                                                              WidthRequest="36"
+                                                              HeightRequest="36"
+                                                              Color="{StaticResource Primary}" />
+
+                                            <Button Grid.Column="1"
+                                                    Text="↻"
+                                                    FontSize="18"
+                                                    WidthRequest="36"
+                                                    HeightRequest="36"
+                                                    Padding="0"
+                                                    CornerRadius="8"
+                                                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                                    TextColor="{StaticResource Primary}"
+                                                    Command="{Binding LoadGroupsCommand}"
+                                                    IsVisible="{Binding IsLoadingGroups, Converter={StaticResource InvertedBoolConverter}}" />
+                                        </Grid>
+
+                                        <!-- All/None Buttons -->
+                                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                                            <Label Text="{Binding VisibleMemberCount, StringFormat='Showing {0} members'}"
+                                                   FontSize="12"
+                                                   TextColor="{StaticResource Gray500}"
+                                                   VerticalOptions="Center" />
+                                            <Button Grid.Column="1"
+                                                    Text="All"
+                                                    FontSize="11"
+                                                    HeightRequest="32"
+                                                    Padding="12,0"
+                                                    CornerRadius="8"
+                                                    BackgroundColor="{StaticResource Success}"
+                                                    TextColor="White"
+                                                    Command="{Binding SelectAllMembersCommand}" />
+                                            <Button Grid.Column="2"
+                                                    Text="None"
+                                                    FontSize="11"
+                                                    HeightRequest="32"
+                                                    Padding="12,0"
+                                                    CornerRadius="8"
+                                                    BackgroundColor="{StaticResource Gray500}"
+                                                    TextColor="White"
+                                                    Command="{Binding DeselectAllMembersCommand}" />
+                                        </Grid>
+
+                                        <!-- Show Today's History Toggle (only visible when viewing today) -->
+                                        <Grid ColumnDefinitions="*,Auto"
+                                              IsVisible="{Binding ShowHistoricalToggle}"
+                                              Padding="0,4">
+                                            <VerticalStackLayout VerticalOptions="Center">
+                                                <Label Text="Show Today's History"
+                                                       FontSize="14"
+                                                       TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource White}}" />
+                                                <Label Text="Display all location points for today"
+                                                       FontSize="11"
+                                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                            </VerticalStackLayout>
+                                            <Switch Grid.Column="1"
+                                                    IsToggled="{Binding ShowHistoricalLocations}"
+                                                    OnColor="{StaticResource Primary}" />
+                                        </Grid>
+                                    </VerticalStackLayout>
+                                </CollectionView.Header>
 
                                 <CollectionView.EmptyView>
                                     <VerticalStackLayout VerticalOptions="Center"
@@ -281,6 +301,7 @@
                                                 <!-- Visibility Checkbox -->
                                                 <CheckBox Grid.Column="0"
                                                           IsChecked="{Binding IsVisibleOnMap}"
+                                                          CheckedChanged="OnMemberVisibilityChanged"
                                                           VerticalOptions="Center"
                                                           Color="{StaticResource Primary}" />
 
@@ -500,14 +521,65 @@
                                      HeightRequest="44"
                                      CornerRadius="22"
                                      Padding="10"
-                                     BackgroundColor="{StaticResource Primary}" />
+                                     BackgroundColor="{StaticResource Gray900}" />
                     </HorizontalStackLayout>
                 </Grid>
             </bottomSheet:SfBottomSheet.BottomSheetContent>
         </bottomSheet:SfBottomSheet>
 
-        <!-- Loading Overlay -->
-        <controls:LoadingOverlay IsVisible="{Binding IsBusy}"
+        <!-- Loading Overlay - spans all rows to overlay entire page -->
+        <controls:LoadingOverlay Grid.RowSpan="2"
+                                 IsVisible="{Binding IsBusy}"
                                  Message="Loading..." />
+
+        <!-- Group Picker Popup Overlay -->
+        <Grid Grid.RowSpan="2"
+              IsVisible="{Binding IsGroupPickerOpen}"
+              BackgroundColor="#80000000">
+            <Grid.GestureRecognizers>
+                <TapGestureRecognizer Command="{Binding CloseGroupPickerCommand}" />
+            </Grid.GestureRecognizers>
+            <Frame Margin="24"
+                   Padding="16"
+                   CornerRadius="12"
+                   VerticalOptions="Start"
+                   HorizontalOptions="Fill"
+                   BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+                <Frame.GestureRecognizers>
+                    <TapGestureRecognizer />
+                </Frame.GestureRecognizers>
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="Select Group"
+                           FontSize="18"
+                           FontAttributes="Bold" />
+                    <Frame Padding="8,4"
+                           CornerRadius="8"
+                           BorderColor="{StaticResource Gray300}"
+                           HasShadow="False"
+                           BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}">
+                        <Picker Title="Select Group"
+                                ItemsSource="{Binding Groups}"
+                                SelectedItem="{Binding SelectedGroup}"
+                                ItemDisplayBinding="{Binding Name}"
+                                SelectedIndexChanged="OnGroupPickerSelectedIndexChanged" />
+                    </Frame>
+                    <Button Text="Close"
+                            FontSize="14"
+                            HeightRequest="40"
+                            CornerRadius="8"
+                            HorizontalOptions="End"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                            TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource Gray100}}"
+                            Command="{Binding CloseGroupPickerCommand}" />
+                </VerticalStackLayout>
+            </Frame>
+        </Grid>
+
+        <!-- Navigation Method Picker (overlay, doesn't affect layout) -->
+        <offlineBanner:NavigationMethodPicker x:Name="NavigationMethodPicker"
+                                              Grid.Row="0"
+                                              Grid.RowSpan="2"
+                                              IsVisible="False"
+                                              InputTransparent="True" />
     </Grid>
 </ContentPage>

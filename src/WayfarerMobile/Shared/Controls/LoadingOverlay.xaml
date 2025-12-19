@@ -2,34 +2,21 @@
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="WayfarerMobile.Shared.Controls.LoadingOverlay"
-             x:Name="thisControl">
+             x:Name="thisControl"
+             HorizontalOptions="Fill"
+             VerticalOptions="Fill">
 
-    <Border BackgroundColor="#80000000"
-            InputTransparent="False"
-            ZIndex="100">
+    <Grid BackgroundColor="#80000000"
+          InputTransparent="False"
+          HorizontalOptions="Fill"
+          VerticalOptions="Fill"
+          ZIndex="100">
 
-        <Border VerticalOptions="Center"
-                HorizontalOptions="Center"
-                Padding="24"
-                StrokeThickness="0"
-                BackgroundColor="{StaticResource Surface}">
-            <Border.StrokeShape>
-                <RoundRectangle CornerRadius="16" />
-            </Border.StrokeShape>
-
-            <VerticalStackLayout Spacing="16"
-                                 HorizontalOptions="Center">
-                <ActivityIndicator IsRunning="True"
-                                   Color="{StaticResource Primary}"
-                                   WidthRequest="48"
-                                   HeightRequest="48" />
-
-                <Label Text="{Binding Message, Source={x:Reference thisControl}}"
-                       Style="{StaticResource Body}"
-                       HorizontalOptions="Center"
-                       HorizontalTextAlignment="Center"
-                       IsVisible="{Binding Message, Source={x:Reference thisControl}, Converter={StaticResource IsNotNullConverter}}" />
-            </VerticalStackLayout>
-        </Border>
-    </Border>
+        <ActivityIndicator IsRunning="True"
+                           Color="White"
+                           WidthRequest="48"
+                           HeightRequest="48"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center" />
+    </Grid>
 </ContentView>

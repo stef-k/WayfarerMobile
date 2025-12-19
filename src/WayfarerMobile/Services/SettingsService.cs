@@ -79,42 +79,88 @@ public class SettingsService : ISettingsService
         set => Preferences.Set(KeyBackgroundTrackingEnabled, value);
     }
 
+    // Cached values to avoid blocking SecureStorage calls on main thread
+    private string? _cachedServerUrl;
+    private string? _cachedApiToken;
+    private bool _serverUrlLoaded;
+    private bool _apiTokenLoaded;
+
+    /// <summary>
+    /// Pre-loads secure settings from SecureStorage into memory cache.
+    /// Call this at app startup to avoid blocking on first access.
+    /// </summary>
+    public async Task PreloadSecureSettingsAsync()
+    {
+        if (!_serverUrlLoaded)
+        {
+            _cachedServerUrl = await SecureStorage.Default.GetAsync(KeyServerUrl);
+            _serverUrlLoaded = true;
+        }
+        if (!_apiTokenLoaded)
+        {
+            _cachedApiToken = await SecureStorage.Default.GetAsync(KeyApiToken);
+            _apiTokenLoaded = true;
+        }
+    }
+
     /// <summary>
     /// Gets or sets the server URL for API calls.
-    /// Stored in SecureStorage for enhanced security.
+    /// Cached in memory to avoid SecureStorage deadlocks on Android.
     /// </summary>
     public string? ServerUrl
     {
-        get => SecureStorage.Default.GetAsync(KeyServerUrl).GetAwaiter().GetResult();
+        get
+        {
+            if (!_serverUrlLoaded)
+            {
+                // First access - load from SecureStorage on background thread
+                _cachedServerUrl = Task.Run(async () => await SecureStorage.Default.GetAsync(KeyServerUrl)).Result;
+                _serverUrlLoaded = true;
+            }
+            return _cachedServerUrl;
+        }
         set
         {
+            _cachedServerUrl = value;
+            _serverUrlLoaded = true;
             if (string.IsNullOrEmpty(value))
             {
                 SecureStorage.Default.Remove(KeyServerUrl);
             }
             else
             {
-                SecureStorage.Default.SetAsync(KeyServerUrl, value).GetAwaiter().GetResult();
+                Task.Run(async () => await SecureStorage.Default.SetAsync(KeyServerUrl, value));
             }
         }
     }
 
     /// <summary>
     /// Gets or sets the API authentication token.
-    /// Stored in SecureStorage for enhanced security.
+    /// Cached in memory to avoid SecureStorage deadlocks on Android.
     /// </summary>
     public string? ApiToken
     {
-        get => SecureStorage.Default.GetAsync(KeyApiToken).GetAwaiter().GetResult();
+        get
+        {
+            if (!_apiTokenLoaded)
+            {
+                // First access - load from SecureStorage on background thread
+                _cachedApiToken = Task.Run(async () => await SecureStorage.Default.GetAsync(KeyApiToken)).Result;
+                _apiTokenLoaded = true;
+            }
+            return _cachedApiToken;
+        }
         set
         {
+            _cachedApiToken = value;
+            _apiTokenLoaded = true;
             if (string.IsNullOrEmpty(value))
             {
                 SecureStorage.Default.Remove(KeyApiToken);
             }
             else
             {
-                SecureStorage.Default.SetAsync(KeyApiToken, value).GetAwaiter().GetResult();
+                Task.Run(async () => await SecureStorage.Default.SetAsync(KeyApiToken, value));
             }
         }
     }
