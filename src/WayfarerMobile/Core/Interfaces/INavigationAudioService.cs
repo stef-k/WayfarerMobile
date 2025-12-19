@@ -48,6 +48,13 @@ public interface INavigationAudioService
     Task AnnounceRouteCompleteAsync(string destinationName);
 
     /// <summary>
+    /// Announces a turn-by-turn step instruction.
+    /// </summary>
+    /// <param name="instruction">The step instruction text.</param>
+    /// <param name="distanceMeters">Distance to the maneuver in meters.</param>
+    Task AnnounceStepInstructionAsync(string instruction, double distanceMeters);
+
+    /// <summary>
     /// Stops any current announcement.
     /// </summary>
     Task StopAsync();

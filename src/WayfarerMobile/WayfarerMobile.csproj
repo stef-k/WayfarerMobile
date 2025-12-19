@@ -46,8 +46,8 @@
 
 	<ItemGroup>
 		<!-- MAUI -->
-		<PackageReference Include="Microsoft.Maui.Controls" Version="10.0.11" />
-		<PackageReference Include="Microsoft.Maui.Essentials" Version="10.0.11" />
+		<PackageReference Include="Microsoft.Maui.Controls" Version="10.0.20" />
+		<PackageReference Include="Microsoft.Maui.Essentials" Version="10.0.20" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.1" />
 
 		<!-- MVVM -->
@@ -64,7 +64,7 @@
 		<PackageReference Include="SQLitePCLRaw.bundle_green" Version="2.1.11" />
 
 		<!-- QR Code -->
-		<PackageReference Include="ZXing.Net.Maui.Controls" Version="0.7.0" />
+		<PackageReference Include="ZXing.Net.Maui.Controls" Version="0.7.2" />
 
 		<!-- HTTP -->
 		<PackageReference Include="Microsoft.Extensions.Http" Version="10.0.1" />

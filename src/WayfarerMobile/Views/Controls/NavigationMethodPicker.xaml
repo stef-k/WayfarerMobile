@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:picker="clr-namespace:Syncfusion.Maui.Toolkit.Picker;assembly=Syncfusion.Maui.Toolkit"
+             x:Class="WayfarerMobile.Views.Controls.NavigationMethodPicker"
+             x:Name="ThisPicker">
+
+    <picker:SfPicker x:Name="NavPicker"
+                     Mode="Dialog"
+                     WidthRequest="320"
+                     HeightRequest="450"
+                     OkButtonClicked="OnOkClicked"
+                     CancelButtonClicked="OnCancelClicked">
+        <picker:SfPicker.HeaderView>
+            <picker:PickerHeaderView x:Name="HeaderView"
+                                     Text="Navigate by"
+                                     Height="50" />
+        </picker:SfPicker.HeaderView>
+        <picker:SfPicker.FooterView>
+            <picker:PickerFooterView x:Name="FooterView"
+                                     Height="50" />
+        </picker:SfPicker.FooterView>
+    </picker:SfPicker>
+
+</ContentView>

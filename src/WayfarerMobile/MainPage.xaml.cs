@@ -3,6 +3,7 @@ using Mapsui.Layers;
 using Mapsui.Projections;
 using Mapsui.UI.Maui;
 using WayfarerMobile.ViewModels;
+using WayfarerMobile.Views.Controls;
 
 namespace WayfarerMobile;
 
@@ -272,5 +273,14 @@ public partial class MainPage : ContentPage
             // This ensures the sheet always opens fully, not at the last dragged position
             CheckInBottomSheet.State = Syncfusion.Maui.Toolkit.BottomSheet.BottomSheetState.FullExpanded;
         }
+    }
+
+    /// <summary>
+    /// Shows the navigation method picker and returns the selected method.
+    /// </summary>
+    /// <returns>The selected navigation method, or null if cancelled.</returns>
+    public Task<NavigationMethod?> ShowNavigationPickerAsync()
+    {
+        return NavigationMethodPicker.ShowAsync();
     }
 }

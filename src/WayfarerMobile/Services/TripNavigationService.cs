@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Algorithms;
 using WayfarerMobile.Core.Enums;
+using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Core.Navigation;
 using WayfarerMobile.Core.Helpers;
@@ -23,6 +24,7 @@ public class TripNavigationService
     private readonly ILogger<TripNavigationService> _logger;
     private readonly OsrmRoutingService _osrmService;
     private readonly RouteCacheService _routeCacheService;
+    private readonly INavigationAudioService _audioService;
 
     private TripNavigationGraph? _currentGraph;
     private TripDetails? _currentTrip;
@@ -66,18 +68,22 @@ public class TripNavigationService
     /// <param name="logger">The logger.</param>
     /// <param name="osrmService">The OSRM routing service.</param>
     /// <param name="routeCacheService">The route cache service.</param>
+    /// <param name="audioService">The navigation audio service.</param>
     public TripNavigationService(
         ILogger<TripNavigationService> logger,
         OsrmRoutingService osrmService,
-        RouteCacheService routeCacheService)
+        RouteCacheService routeCacheService,
+        INavigationAudioService audioService)
     {
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(osrmService);
         ArgumentNullException.ThrowIfNull(routeCacheService);
+        ArgumentNullException.ThrowIfNull(audioService);
 
         _logger = logger;
         _osrmService = osrmService;
         _routeCacheService = routeCacheService;
+        _audioService = audioService;
     }
 
     /// <summary>
@@ -366,6 +372,206 @@ public class TripNavigationService
     }
 
     /// <summary>
+    /// Calculates a route to arbitrary coordinates (not requiring a loaded trip).
+    /// Uses OSRM for routing when online, falls back to straight line when offline.
+    /// </summary>
+    /// <param name="currentLat">Current latitude.</param>
+    /// <param name="currentLon">Current longitude.</param>
+    /// <param name="destLat">Destination latitude.</param>
+    /// <param name="destLon">Destination longitude.</param>
+    /// <param name="destName">Destination name for display.</param>
+    /// <param name="profile">Routing profile (foot, car, bike). Default is foot.</param>
+    /// <returns>The calculated route (OSRM or direct).</returns>
+    public async Task<NavigationRoute> CalculateRouteToCoordinatesAsync(
+        double currentLat, double currentLon,
+        double destLat, double destLon,
+        string destName,
+        string profile = "foot")
+    {
+        _logger.LogInformation("Calculating route to {Name} at {Lat},{Lon}", destName, destLat, destLon);
+
+        // Try OSRM first
+        try
+        {
+            var osrmRoute = await _osrmService.GetRouteAsync(
+                currentLat, currentLon,
+                destLat, destLon,
+                profile);
+
+            if (osrmRoute != null)
+            {
+                var route = BuildRouteFromOsrmCoordinates(osrmRoute, currentLat, currentLon, destLat, destLon, destName);
+                _logger.LogInformation("Using OSRM route to {Name}: {Distance:F1}km", destName, osrmRoute.DistanceMeters / 1000);
+                _activeRoute = route;
+                return route;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "OSRM routing failed, falling back to direct route");
+        }
+
+        // Fallback to direct route (straight line)
+        _logger.LogInformation("Using direct route to {Name}", destName);
+        var directRoute = BuildDirectRouteToCoordinates(currentLat, currentLon, destLat, destLon, destName);
+        _activeRoute = directRoute;
+        return directRoute;
+    }
+
+    /// <summary>
+    /// Builds a navigation route from OSRM response to coordinates.
+    /// </summary>
+    private NavigationRoute BuildRouteFromOsrmCoordinates(
+        OsrmRouteResult osrmRoute,
+        double startLat, double startLon,
+        double destLat, double destLon,
+        string destName)
+    {
+        var waypoints = new List<NavigationWaypoint>();
+
+        // Decode the polyline to get all route points
+        var routePoints = Core.Helpers.PolylineDecoder.Decode(osrmRoute.Geometry);
+
+        // Add start
+        waypoints.Add(new NavigationWaypoint
+        {
+            Latitude = startLat,
+            Longitude = startLon,
+            Name = "Current Location",
+            Type = WaypointType.Start
+        });
+
+        // Add intermediate route points (skip first and last as they're start/destination)
+        foreach (var point in routePoints.Skip(1).Take(routePoints.Count - 2))
+        {
+            waypoints.Add(new NavigationWaypoint
+            {
+                Latitude = point.Latitude,
+                Longitude = point.Longitude,
+                Type = WaypointType.RoutePoint
+            });
+        }
+
+        // Add destination
+        waypoints.Add(new NavigationWaypoint
+        {
+            Latitude = destLat,
+            Longitude = destLon,
+            Name = destName,
+            Type = WaypointType.Destination
+        });
+
+        // Convert OSRM steps to NavigationSteps
+        var steps = osrmRoute.Steps.Select(s => new NavigationStep
+        {
+            Instruction = s.Instruction,
+            DistanceMeters = s.DistanceMeters,
+            DurationSeconds = s.DurationSeconds,
+            ManeuverType = s.ManeuverType,
+            Latitude = s.Latitude,
+            Longitude = s.Longitude,
+            StreetName = s.StreetName
+        }).ToList();
+
+        return new NavigationRoute
+        {
+            Waypoints = waypoints,
+            Steps = steps,
+            DestinationName = destName,
+            TotalDistanceMeters = osrmRoute.DistanceMeters,
+            EstimatedDuration = TimeSpan.FromSeconds(osrmRoute.DurationSeconds),
+            IsDirectRoute = false
+        };
+    }
+
+    /// <summary>
+    /// Builds a direct route (straight line) to coordinates.
+    /// </summary>
+    private NavigationRoute BuildDirectRouteToCoordinates(
+        double startLat, double startLon,
+        double destLat, double destLon,
+        string destName)
+    {
+        var distance = GeoMath.CalculateDistance(startLat, startLon, destLat, destLon);
+        var bearing = GeoMath.CalculateBearing(startLat, startLon, destLat, destLon);
+        var direction = GetCardinalDirection(bearing);
+        var distanceText = FormatDistance(distance);
+
+        // Create instruction for straight-line navigation
+        var instruction = string.IsNullOrEmpty(destName) || destName == "Dropped Pin"
+            ? $"Head {direction}, {distanceText}"
+            : $"Head {direction}, {distanceText} to {destName}";
+
+        var steps = new List<NavigationStep>
+        {
+            new()
+            {
+                Instruction = instruction,
+                DistanceMeters = distance,
+                DurationSeconds = distance / 1.4,
+                ManeuverType = "depart",
+                Latitude = startLat,
+                Longitude = startLon
+            },
+            new()
+            {
+                Instruction = "You have arrived",
+                DistanceMeters = 0,
+                DurationSeconds = 0,
+                ManeuverType = "arrive",
+                Latitude = destLat,
+                Longitude = destLon
+            }
+        };
+
+        return new NavigationRoute
+        {
+            Waypoints = new List<NavigationWaypoint>
+            {
+                new() { Latitude = startLat, Longitude = startLon, Name = "Current Location", Type = WaypointType.Start },
+                new() { Latitude = destLat, Longitude = destLon, Name = destName, Type = WaypointType.Destination }
+            },
+            Steps = steps,
+            DestinationName = destName,
+            TotalDistanceMeters = distance,
+            EstimatedDuration = TimeSpan.FromSeconds(distance / 1.4), // Walking speed ~5km/h
+            IsDirectRoute = true,
+            InitialBearing = bearing
+        };
+    }
+
+    /// <summary>
+    /// Gets the cardinal direction name from a bearing.
+    /// </summary>
+    private static string GetCardinalDirection(double bearing)
+    {
+        // Normalize bearing to 0-360
+        bearing = ((bearing % 360) + 360) % 360;
+
+        return bearing switch
+        {
+            >= 337.5 or < 22.5 => "north",
+            >= 22.5 and < 67.5 => "northeast",
+            >= 67.5 and < 112.5 => "east",
+            >= 112.5 and < 157.5 => "southeast",
+            >= 157.5 and < 202.5 => "south",
+            >= 202.5 and < 247.5 => "southwest",
+            >= 247.5 and < 292.5 => "west",
+            _ => "northwest"
+        };
+    }
+
+    /// <summary>
+    /// Formats a distance in meters to a human-readable string.
+    /// </summary>
+    private static string FormatDistance(double meters)
+    {
+        if (meters >= 1000)
+            return $"{meters / 1000:F1} km";
+        return $"{meters:F0} m";
+    }
+
+    /// <summary>
     /// Calculates a route to the next place in sequence.
     /// </summary>
     /// <param name="currentLat">Current latitude.</param>
@@ -474,6 +680,14 @@ public class TripNavigationService
         if (timeSinceLastAnnouncement.TotalSeconds < MinAnnouncementIntervalSeconds)
             return;
 
+        // For routes with OSRM steps, use step-based announcements
+        if (_activeRoute.Steps.Count > 0 && !_activeRoute.IsDirectRoute)
+        {
+            CheckForStepAnnouncement(lat, lon);
+            return;
+        }
+
+        // For direct routes or routes without steps, use waypoint-based announcements
         // Find next waypoint with a name (places, not route points)
         var nextWaypoint = _activeRoute.Waypoints
             .Where(w => !string.IsNullOrEmpty(w.Name) && w.Type != WaypointType.RoutePoint)
@@ -489,8 +703,39 @@ public class TripNavigationService
             var transportMode = GetTransportModeToWaypoint(nextWaypoint);
             var announcement = BuildTurnAnnouncement(nextWaypoint, state.DistanceToNextWaypointMeters, transportMode);
 
-            AnnounceInstruction(announcement);
+            AnnounceInstruction(announcement, state.DistanceToNextWaypointMeters);
             _lastAnnouncedWaypoint = nextWaypoint.Name;
+        }
+    }
+
+    /// <summary>
+    /// Checks for step-based turn announcements (OSRM routes).
+    /// </summary>
+    private void CheckForStepAnnouncement(double lat, double lon)
+    {
+        if (_activeRoute?.Steps == null || _activeRoute.Steps.Count == 0)
+            return;
+
+        // Find the next step that we're approaching
+        foreach (var step in _activeRoute.Steps)
+        {
+            // Skip "arrive" steps - those are announced differently
+            if (step.ManeuverType == "arrive")
+                continue;
+
+            var distance = GeoMath.CalculateDistance(lat, lon, step.Latitude, step.Longitude);
+
+            // Announce when within announcement range but not too close
+            if (distance > 20 && distance <= TurnAnnouncementDistanceMeters)
+            {
+                var stepKey = $"{step.ManeuverType}:{step.Latitude:F5},{step.Longitude:F5}";
+                if (stepKey != _lastAnnouncedWaypoint)
+                {
+                    AnnounceInstruction(step.Instruction, distance);
+                    _lastAnnouncedWaypoint = stepKey;
+                    return;
+                }
+            }
         }
     }
 
@@ -545,24 +790,24 @@ public class TripNavigationService
     }
 
     /// <summary>
-    /// Announces a navigation instruction using text-to-speech.
+    /// Announces a navigation instruction using the audio service.
     /// </summary>
-    private void AnnounceInstruction(string instruction)
+    private void AnnounceInstruction(string instruction, double distanceMeters = 0)
     {
         _lastAnnouncementTime = DateTime.UtcNow;
-        _logger.LogDebug("Turn announcement: {Instruction}", instruction);
+        _logger.LogDebug("Turn announcement: {Instruction} at {Distance:F0}m", instruction, distanceMeters);
         InstructionAnnounced?.Invoke(this, instruction);
 
-        // Use text-to-speech
+        // Use audio service for proper settings integration
         MainThread.BeginInvokeOnMainThread(async () =>
         {
             try
             {
-                await TextToSpeech.Default.SpeakAsync(instruction);
+                await _audioService.AnnounceStepInstructionAsync(instruction, distanceMeters);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to speak turn announcement");
+                _logger.LogWarning(ex, "Failed to announce step instruction");
             }
         });
     }
@@ -797,10 +1042,24 @@ public class TripNavigationService
     }
 
     /// <summary>
-    /// Gets the current navigation instruction.
+    /// Gets the current navigation instruction based on route steps.
     /// </summary>
     private string GetCurrentInstruction(double lat, double lon)
     {
+        if (_activeRoute == null)
+            return "Continue to destination";
+
+        // If we have steps, find the current/next step
+        if (_activeRoute.Steps.Count > 0)
+        {
+            var currentStep = FindCurrentStep(lat, lon);
+            if (currentStep != null)
+            {
+                return currentStep.Instruction;
+            }
+        }
+
+        // Fallback to basic instruction
         var nextName = GetNextWaypointName(lat, lon);
         var distance = CalculateDistanceToNextWaypoint(lat, lon);
 
@@ -810,6 +1069,73 @@ public class TripNavigationService
         return distance >= 1000
             ? $"Head towards {nextName} ({distance / 1000:F1} km)"
             : $"Head towards {nextName} ({distance:F0} m)";
+    }
+
+    /// <summary>
+    /// Finds the current step based on user position.
+    /// Returns the step the user is currently on or approaching.
+    /// </summary>
+    private NavigationStep? FindCurrentStep(double lat, double lon)
+    {
+        if (_activeRoute == null || _activeRoute.Steps.Count == 0)
+            return null;
+
+        // For direct routes, just return the first step until arrival
+        if (_activeRoute.IsDirectRoute)
+        {
+            var destDistance = GeoMath.CalculateDistance(lat, lon,
+                _activeRoute.Waypoints.Last().Latitude,
+                _activeRoute.Waypoints.Last().Longitude);
+
+            // If very close to destination, show arrival
+            if (destDistance < 30)
+                return _activeRoute.Steps.LastOrDefault();
+
+            return _activeRoute.Steps.FirstOrDefault();
+        }
+
+        // For OSRM routes, find the nearest step we haven't passed yet
+        NavigationStep? currentStep = null;
+        double minDistance = double.MaxValue;
+
+        for (int i = 0; i < _activeRoute.Steps.Count; i++)
+        {
+            var step = _activeRoute.Steps[i];
+            var distance = GeoMath.CalculateDistance(lat, lon, step.Latitude, step.Longitude);
+
+            // Check if this step is ahead of us (not behind)
+            // A step is "current" if we're within ~100m of it
+            if (distance < 100 && distance < minDistance)
+            {
+                minDistance = distance;
+                currentStep = step;
+            }
+        }
+
+        // If we found a nearby step, return it
+        if (currentStep != null)
+            return currentStep;
+
+        // Otherwise, find the next step ahead of us
+        // by finding the step with smallest distance that's still ahead
+        for (int i = 0; i < _activeRoute.Steps.Count - 1; i++)
+        {
+            var step = _activeRoute.Steps[i];
+            var nextStep = _activeRoute.Steps[i + 1];
+
+            var distToStep = GeoMath.CalculateDistance(lat, lon, step.Latitude, step.Longitude);
+            var distToNext = GeoMath.CalculateDistance(lat, lon, nextStep.Latitude, nextStep.Longitude);
+
+            // If we're closer to the current step than the next, this is our current step
+            if (distToStep < distToNext)
+            {
+                // Return the next step's instruction (what's coming up)
+                return nextStep;
+            }
+        }
+
+        // Default to first step
+        return _activeRoute.Steps.FirstOrDefault();
     }
 
     /// <summary>

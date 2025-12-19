@@ -2,6 +2,8 @@ using System.Collections.ObjectModel;
 using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Mapsui;
+using Mapsui.Layers;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
@@ -19,7 +21,8 @@ public partial class TripsViewModel : BaseViewModel
 {
     private readonly IApiClient _apiClient;
     private readonly ISettingsService _settingsService;
-    private readonly MapService _mapService;
+    private readonly IMapBuilder _mapBuilder;
+    private readonly ITripLayerService _tripLayerService;
     private readonly TripDownloadService _downloadService;
     private readonly NavigationService _navigationService;
     private readonly TripNavigationService _tripNavigationService;
@@ -29,6 +32,13 @@ public partial class TripsViewModel : BaseViewModel
     private readonly IDownloadNotificationService _downloadNotificationService;
     private readonly CacheStatusService _cacheStatusService;
     private IReadOnlyList<SegmentDisplayItem>? _cachedSegmentDisplayItems;
+
+    // Map state - TripsViewModel owns its Map instance
+    private Mapsui.Map? _map;
+    private WritableLayer? _tripPlacesLayer;
+    private WritableLayer? _tripSegmentsLayer;
+    private WritableLayer? _navigationRouteLayer;
+    private WritableLayer? _navigationRouteCompletedLayer;
 
     #region Observable Properties
 
@@ -237,7 +247,7 @@ public partial class TripsViewModel : BaseViewModel
     /// <summary>
     /// Gets the map instance for binding.
     /// </summary>
-    public Mapsui.Map Map => _mapService.Map;
+    public Mapsui.Map Map => _map ??= CreateMap();
 
     /// <summary>
     /// Gets whether a place is selected.
@@ -254,7 +264,8 @@ public partial class TripsViewModel : BaseViewModel
     public TripsViewModel(
         IApiClient apiClient,
         ISettingsService settingsService,
-        MapService mapService,
+        IMapBuilder mapBuilder,
+        ITripLayerService tripLayerService,
         TripDownloadService downloadService,
         NavigationService navigationService,
         TripNavigationService tripNavigationService,
@@ -266,7 +277,8 @@ public partial class TripsViewModel : BaseViewModel
     {
         _apiClient = apiClient;
         _settingsService = settingsService;
-        _mapService = mapService;
+        _mapBuilder = mapBuilder;
+        _tripLayerService = tripLayerService;
         _downloadService = downloadService;
         _navigationService = navigationService;
         _downloadNotificationService = downloadNotificationService;
@@ -425,8 +437,7 @@ public partial class TripsViewModel : BaseViewModel
         SelectedTripDetails = null;
         SelectedPlace = null;
         IsSidebarOpen = false;
-        _mapService.ClearTripPlaces();
-        _mapService.ClearTripSegments();
+        ClearTripLayers();
     }
 
     /// <summary>
@@ -521,16 +532,10 @@ public partial class TripsViewModel : BaseViewModel
     [RelayCommand]
     private void CenterOnPlace(TripPlace? place)
     {
-        if (place == null)
+        if (place == null || _map == null)
             return;
 
-        var location = new LocationData
-        {
-            Latitude = place.Latitude,
-            Longitude = place.Longitude
-        };
-
-        _mapService.CenterOnLocation(location);
+        _mapBuilder.CenterOnLocation(_map, place.Latitude, place.Longitude);
     }
 
     /// <summary>
@@ -549,7 +554,7 @@ public partial class TripsViewModel : BaseViewModel
             {
                 await _navigationService.StopNavigationAsync();
             }
-            _mapService.ClearNavigationRoute();
+            ClearNavigationRoute();
 
             // Load trip for routing if we have trip details
             if (SelectedTripDetails != null && !_tripNavigationService.IsTripLoaded)
@@ -572,8 +577,8 @@ public partial class TripsViewModel : BaseViewModel
                 if (route != null)
                 {
                     // Show route on map
-                    _mapService.ShowNavigationRoute(route);
-                    _mapService.ZoomToNavigationRoute();
+                    ShowNavigationRoute(route);
+                    ZoomToNavigationRoute();
 
                     // Subscribe to location updates for route progress
                     _locationBridge.LocationReceived += OnLocationReceivedForNavigation;
@@ -606,7 +611,7 @@ public partial class TripsViewModel : BaseViewModel
         MainThread.BeginInvokeOnMainThread(() =>
         {
             // Update route progress display on map
-            _mapService.UpdateNavigationRouteProgress(location.Latitude, location.Longitude);
+            UpdateNavigationRouteProgress(location.Latitude, location.Longitude);
 
             // Update trip navigation state
             if (_tripNavigationService.IsTripLoaded)
@@ -631,7 +636,7 @@ public partial class TripsViewModel : BaseViewModel
         }
 
         // Clear route from map
-        _mapService.ClearNavigationRoute();
+        ClearNavigationRoute();
 
         // Unload trip navigation
         _tripNavigationService.UnloadTrip();
@@ -788,34 +793,29 @@ public partial class TripsViewModel : BaseViewModel
     /// </summary>
     private async Task DisplayTripOnMapAsync(TripDetails trip)
     {
+        EnsureMapInitialized();
+
         // Display segments first (so they appear below place markers)
-        if (trip.Segments.Any())
+        if (trip.Segments.Any() && _tripSegmentsLayer != null)
         {
-            _mapService.UpdateTripSegments(trip.Segments);
+            _tripLayerService.UpdateTripSegments(_tripSegmentsLayer, trip.Segments);
         }
 
         // Use the dedicated trip places layer with custom icons
-        await _mapService.UpdateTripPlacesAsync(trip.AllPlaces);
+        if (_tripPlacesLayer != null)
+        {
+            await _tripLayerService.UpdateTripPlacesAsync(_tripPlacesLayer, trip.AllPlaces);
+        }
 
         // Center on trip bounding box or first place
         if (trip.CenterLat.HasValue && trip.CenterLon.HasValue)
         {
-            var centerLocation = new LocationData
-            {
-                Latitude = trip.CenterLat.Value,
-                Longitude = trip.CenterLon.Value
-            };
-            _mapService.CenterOnLocation(centerLocation);
+            _mapBuilder.CenterOnLocation(_map!, trip.CenterLat.Value, trip.CenterLon.Value);
         }
         else if (trip.AllPlaces.Any())
         {
             var firstPlace = trip.AllPlaces.First();
-            var location = new LocationData
-            {
-                Latitude = firstPlace.Latitude,
-                Longitude = firstPlace.Longitude
-            };
-            _mapService.CenterOnLocation(location);
+            _mapBuilder.CenterOnLocation(_map!, firstPlace.Latitude, firstPlace.Longitude);
         }
     }
 
@@ -845,7 +845,7 @@ public partial class TripsViewModel : BaseViewModel
             if (state.HasArrived)
             {
                 _locationBridge.LocationReceived -= OnLocationReceivedForNavigation;
-                _mapService.ClearNavigationRoute();
+                ClearNavigationRoute();
                 IsNavigating = false;
                 NavigationDestination = null;
             }
@@ -863,7 +863,7 @@ public partial class TripsViewModel : BaseViewModel
             if (state.Status == NavigationStatus.Arrived)
             {
                 _locationBridge.LocationReceived -= OnLocationReceivedForNavigation;
-                _mapService.ClearNavigationRoute();
+                ClearNavigationRoute();
             }
             // Handle rerouting - redraw the route
             else if (state.Status == NavigationStatus.OnRoute)
@@ -871,7 +871,7 @@ public partial class TripsViewModel : BaseViewModel
                 var route = _tripNavigationService.ActiveRoute;
                 if (route != null)
                 {
-                    _mapService.ShowNavigationRoute(route);
+                    ShowNavigationRoute(route);
                 }
             }
         });
@@ -913,8 +913,7 @@ public partial class TripsViewModel : BaseViewModel
         // Clear map markers and segments when leaving
         if (!ShowingDetails)
         {
-            _mapService.ClearTripPlaces();
-            _mapService.ClearTripSegments();
+            ClearTripLayers();
         }
         await base.OnDisappearingAsync();
     }
@@ -941,7 +940,115 @@ public partial class TripsViewModel : BaseViewModel
         // Unsubscribe from location updates if still subscribed
         _locationBridge.LocationReceived -= OnLocationReceivedForNavigation;
 
+        // Dispose map to release native resources
+        _map?.Dispose();
+        _map = null;
+
         base.Cleanup();
+    }
+
+    #endregion
+
+    #region Map Management
+
+    /// <summary>
+    /// Creates the Map instance with trip layers.
+    /// Layer order (bottom to top): TileLayer, TripSegments, NavigationRouteCompleted, NavigationRoute, TripPlaces.
+    /// </summary>
+    private Mapsui.Map CreateMap()
+    {
+        // Create layers
+        _tripSegmentsLayer = _mapBuilder.CreateLayer(_tripLayerService.TripSegmentsLayerName);
+        _navigationRouteCompletedLayer = _mapBuilder.CreateLayer("NavigationRouteCompleted");
+        _navigationRouteLayer = _mapBuilder.CreateLayer("NavigationRoute");
+        _tripPlacesLayer = _mapBuilder.CreateLayer(_tripLayerService.TripPlacesLayerName);
+
+        // Create map with layers in correct z-order
+        var map = _mapBuilder.CreateMap(
+            _tripSegmentsLayer,
+            _navigationRouteCompletedLayer,
+            _navigationRouteLayer,
+            _tripPlacesLayer);
+
+        // Set default zoom
+        SetDefaultZoom(map);
+
+        return map;
+    }
+
+    /// <summary>
+    /// Sets a sensible default zoom level.
+    /// </summary>
+    private static void SetDefaultZoom(Mapsui.Map map)
+    {
+        map.Navigator.ZoomTo(2);
+    }
+
+    /// <summary>
+    /// Ensures the map is initialized before use.
+    /// </summary>
+    private void EnsureMapInitialized()
+    {
+        _ = Map; // Access property to trigger lazy initialization
+    }
+
+    /// <summary>
+    /// Clears all trip layers (places and segments).
+    /// </summary>
+    private void ClearTripLayers()
+    {
+        if (_tripPlacesLayer != null)
+            _tripLayerService.ClearTripPlaces(_tripPlacesLayer);
+        if (_tripSegmentsLayer != null)
+            _tripLayerService.ClearTripSegments(_tripSegmentsLayer);
+    }
+
+    /// <summary>
+    /// Clears all navigation route layers.
+    /// </summary>
+    private void ClearNavigationRoute()
+    {
+        _navigationRouteLayer?.Clear();
+        _navigationRouteLayer?.DataHasChanged();
+        _navigationRouteCompletedLayer?.Clear();
+        _navigationRouteCompletedLayer?.DataHasChanged();
+    }
+
+    /// <summary>
+    /// Shows a navigation route on the map.
+    /// </summary>
+    private void ShowNavigationRoute(NavigationRoute route)
+    {
+        if (_navigationRouteLayer == null || _navigationRouteCompletedLayer == null) return;
+        _mapBuilder.UpdateNavigationRoute(_navigationRouteLayer, _navigationRouteCompletedLayer, route);
+    }
+
+    /// <summary>
+    /// Zooms the map to show the entire navigation route.
+    /// </summary>
+    private void ZoomToNavigationRoute()
+    {
+        if (_navigationRouteLayer == null || _map == null) return;
+
+        var features = _navigationRouteLayer.GetFeatures().ToList();
+        if (!features.Any()) return;
+
+        var extent = features.Select(f => f.Extent).Where(e => e != null).Aggregate((a, b) => a!.Join(b!));
+        if (extent != null)
+        {
+            _map.Navigator.ZoomToBox(extent.Grow(extent.Width * 0.2, extent.Height * 0.2));
+        }
+    }
+
+    /// <summary>
+    /// Updates the navigation route progress display.
+    /// </summary>
+    private void UpdateNavigationRouteProgress(double latitude, double longitude)
+    {
+        if (_navigationRouteLayer == null || _navigationRouteCompletedLayer == null) return;
+        var route = _tripNavigationService.ActiveRoute;
+        if (route == null) return;
+        _mapBuilder.UpdateNavigationRouteProgress(_navigationRouteLayer, _navigationRouteCompletedLayer, route, latitude, longitude);
     }
 
     #endregion

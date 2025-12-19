@@ -160,6 +160,40 @@ public class NavigationAudioService : INavigationAudioService
     }
 
     /// <summary>
+    /// Announces a turn-by-turn step instruction.
+    /// </summary>
+    public async Task AnnounceStepInstructionAsync(string instruction, double distanceMeters)
+    {
+        if (!IsEnabled) return;
+
+        // Check deduplication - use instruction as identifier
+        var instructionKey = $"step:{instruction}";
+        if (!ShouldAnnounce(instructionKey))
+        {
+            _logger.LogDebug("Skipping duplicate step announcement: {Instruction}", instruction);
+            return;
+        }
+
+        // Build announcement with distance context if significant
+        string announcement;
+        if (distanceMeters >= 50)
+        {
+            var distanceText = FormatDistance(distanceMeters);
+            announcement = $"In {distanceText}, {instruction}";
+        }
+        else
+        {
+            // Immediate instruction (within 50m)
+            announcement = instruction;
+        }
+
+        _logger.LogDebug("Step announcement: {Announcement}", announcement);
+        await _ttsService.SpeakAsync(announcement);
+
+        RecordAnnouncement(instructionKey);
+    }
+
+    /// <summary>
     /// Stops any current announcement.
     /// </summary>
     public async Task StopAsync()

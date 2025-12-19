@@ -149,8 +149,8 @@
                     <controls:NavigationHud BindingContext="{Binding NavigationHud}"
                                             VerticalOptions="End"
                                             HorizontalOptions="Fill"
-                                            Margin="10,0,10,100"
-                                            ZIndex="5" />
+                                            Margin="10,0,10,10"
+                                            ZIndex="15" />
                 </Grid>
             </bottomSheet:SfBottomSheet.Content>
 
@@ -347,6 +347,11 @@
                                    VerticalOptions="Center"
                                    HorizontalOptions="Center"
                                    ZIndex="20" />
+
+        <!-- Navigation Method Picker (overlay, doesn't affect layout) -->
+        <controls:NavigationMethodPicker x:Name="NavigationMethodPicker"
+                                         IsVisible="False"
+                                         InputTransparent="True" />
     </Grid>
 
 </ContentPage>

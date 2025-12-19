@@ -23,6 +23,13 @@ public class SseClient : ISseClient
     private bool _disposed;
     private volatile bool _isConnected;
 
+    /// <summary>
+    /// Active response stream for force-close on cancellation.
+    /// CancellationToken.Cancel() does NOT interrupt active stream reads in .NET.
+    /// We must close the stream directly to unblock ReadLineAsync immediately.
+    /// </summary>
+    private Stream? _activeResponseStream;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -146,13 +153,45 @@ public class SseClient : ISseClient
     /// <inheritdoc />
     public void Stop()
     {
+        Stream? streamToClose;
+        CancellationTokenSource? ctsToCancel;
+
         lock (_connectionLock)
         {
-            _cancellationTokenSource?.Cancel();
+            streamToClose = _activeResponseStream;
+            ctsToCancel = _cancellationTokenSource;
+            _activeResponseStream = null;
             _isConnected = false;
         }
 
-        _logger.LogInformation("SSE subscription stopped");
+        // Force-close stream FIRST - this is what unblocks ReadLineAsync immediately
+        // CancellationToken.Cancel() does NOT interrupt active stream reads in .NET
+        if (streamToClose != null)
+        {
+            try
+            {
+                streamToClose.Close();
+                _logger.LogDebug("SSE stream force-closed");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug("SSE stream close error (expected): {Message}", ex.Message);
+            }
+        }
+
+        // Then cancel token (triggers registered callbacks in background tasks)
+        if (ctsToCancel != null && !ctsToCancel.IsCancellationRequested)
+        {
+            try
+            {
+                ctsToCancel.Cancel();
+                _logger.LogInformation("SSE subscription stopped");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug("SSE cancellation error: {Message}", ex.Message);
+            }
+        }
     }
 
     #endregion
@@ -240,9 +279,9 @@ public class SseClient : ISseClient
         // Check cancellation before starting
         cancellationToken.ThrowIfCancellationRequested();
 
-        // Create HttpClient with extended timeout for long-lived SSE connections
-        var httpClient = _httpClientFactory.CreateClient();
-        httpClient.Timeout = TimeSpan.FromMinutes(30);
+        // Use dedicated SSE client with isolated connection pool
+        // This prevents SSE connections from blocking API calls when cancelling
+        var httpClient = _httpClientFactory.CreateClient("SSE");
 
         // Create request with Bearer auth and Accept header
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -285,9 +324,44 @@ public class SseClient : ISseClient
 
             // Stream and parse SSE frames
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            using var reader = new StreamReader(stream, Encoding.UTF8);
 
-            await ParseSseStreamAsync(reader, cancellationToken).ConfigureAwait(false);
+            // Track stream for force-close on Stop()
+            lock (_connectionLock)
+            {
+                _activeResponseStream = stream;
+            }
+
+            // Also register callback to force-close when cancelled
+            // This ensures immediate disconnect even if Stop() isn't called directly
+            await using var registration = cancellationToken.Register(() =>
+            {
+                try
+                {
+                    stream.Close();
+                    _logger.LogDebug("SSE stream force-closed via cancellation callback");
+                }
+                catch
+                {
+                    // Ignore - stream may already be closed
+                }
+            });
+
+            try
+            {
+                using var reader = new StreamReader(stream, Encoding.UTF8);
+                await ParseSseStreamAsync(reader, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                // Clear stream reference
+                lock (_connectionLock)
+                {
+                    if (_activeResponseStream == stream)
+                    {
+                        _activeResponseStream = null;
+                    }
+                }
+            }
         }
     }
 
@@ -393,10 +467,24 @@ public class SseClient : ISseClient
 
     /// <summary>
     /// Check if an exception is related to cancellation/disconnection (not a real error).
+    /// Includes stream force-close exceptions which are expected during Stop().
     /// </summary>
     private static bool IsCancellationException(Exception ex)
     {
+        // Standard cancellation exceptions
         if (ex is OperationCanceledException or TaskCanceledException)
+        {
+            return true;
+        }
+
+        // ObjectDisposedException occurs when stream is force-closed during read
+        if (ex is ObjectDisposedException)
+        {
+            return true;
+        }
+
+        // IOException with "closed" typically means stream was force-closed
+        if (ex is IOException)
         {
             return true;
         }
@@ -408,7 +496,8 @@ public class SseClient : ISseClient
                message.Contains("connection closed") ||
                message.Contains("request was canceled") ||
                message.Contains("the request was aborted") ||
-               (ex is IOException && message.Contains("closed"));
+               message.Contains("closed") ||
+               message.Contains("disposed");
     }
 
     #endregion
@@ -425,12 +514,15 @@ public class SseClient : ISseClient
             return;
         }
 
+        // Stop() handles stream close and cancellation
         Stop();
 
         lock (_connectionLock)
         {
+            // Dispose CTS after Stop() has used it
             _cancellationTokenSource?.Dispose();
             _cancellationTokenSource = null;
+            _activeResponseStream = null;
         }
 
         _disposed = true;

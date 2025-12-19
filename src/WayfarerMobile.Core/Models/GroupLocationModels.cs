@@ -83,6 +83,18 @@ public class GroupLocationsQueryResponse
 }
 
 /// <summary>
+/// Nested coordinates object as returned by API.
+/// </summary>
+public class CoordinatesDto
+{
+    /// <summary>Latitude in degrees.</summary>
+    public double Latitude { get; set; }
+
+    /// <summary>Longitude in degrees.</summary>
+    public double Longitude { get; set; }
+}
+
+/// <summary>
 /// Individual location result from query.
 /// </summary>
 public class GroupLocationResult
@@ -93,11 +105,14 @@ public class GroupLocationResult
     /// <summary>User ID who logged this location.</summary>
     public string? UserId { get; set; }
 
-    /// <summary>Latitude in degrees.</summary>
-    public double Latitude { get; set; }
+    /// <summary>Coordinates object from API.</summary>
+    public CoordinatesDto? Coordinates { get; set; }
 
-    /// <summary>Longitude in degrees.</summary>
-    public double Longitude { get; set; }
+    /// <summary>Latitude in degrees (from Coordinates).</summary>
+    public double Latitude => Coordinates?.Latitude ?? 0;
+
+    /// <summary>Longitude in degrees (from Coordinates).</summary>
+    public double Longitude => Coordinates?.Longitude ?? 0;
 
     /// <summary>UTC timestamp.</summary>
     public DateTime Timestamp { get; set; }

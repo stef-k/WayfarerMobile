@@ -5,7 +5,8 @@
              xmlns:models="clr-namespace:WayfarerMobile.Core.Models;assembly=WayfarerMobile.Core"
              xmlns:mapsui="clr-namespace:Mapsui.UI.Maui;assembly=Mapsui.UI.Maui"
              xmlns:controls="clr-namespace:WayfarerMobile.Shared.Controls"
-             xmlns:segmented="clr-namespace:Syncfusion.Maui.Toolkit.SegmentedControl;assembly=Syncfusion.Maui.Toolkit"
+             xmlns:offlineBanner="clr-namespace:WayfarerMobile.Views.Controls"
+             xmlns:bottomSheet="clr-namespace:Syncfusion.Maui.Toolkit.BottomSheet;assembly=Syncfusion.Maui.Toolkit"
              xmlns:picker="clr-namespace:Syncfusion.Maui.Toolkit.Picker;assembly=Syncfusion.Maui.Toolkit"
              xmlns:sys="clr-namespace:System;assembly=netstandard"
              x:Class="WayfarerMobile.Views.GroupsPage"
@@ -13,10 +14,42 @@
              Title="{Binding Title}"
              BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}">
 
-    <Grid RowDefinitions="Auto,*">
+    <!-- Tappable Title View - opens group picker -->
+    <Shell.TitleView>
+        <HorizontalStackLayout Spacing="4" VerticalOptions="Center">
+            <HorizontalStackLayout.GestureRecognizers>
+                <TapGestureRecognizer Command="{Binding OpenGroupPickerCommand}" />
+            </HorizontalStackLayout.GestureRecognizers>
+            <Label Text="{Binding Title}"
+                   FontSize="18"
+                   FontAttributes="Bold"
+                   TextColor="White"
+                   VerticalOptions="Center" />
+            <Label Text="▼"
+                   FontSize="10"
+                   TextColor="White"
+                   VerticalOptions="Center"
+                   Opacity="0.7" />
+        </HorizontalStackLayout>
+    </Shell.TitleView>
 
-        <!-- Not Configured Message -->
-        <VerticalStackLayout Grid.Row="0" Grid.RowSpan="2"
+    <!-- Group Picker Popup -->
+    <ContentPage.Resources>
+        <ResourceDictionary>
+            <Style x:Key="GroupPickerPopupStyle" TargetType="Frame">
+                <Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}" />
+                <Setter Property="CornerRadius" Value="12" />
+                <Setter Property="Padding" Value="16" />
+                <Setter Property="HasShadow" Value="True" />
+            </Style>
+        </ResourceDictionary>
+    </ContentPage.Resources>
+
+    <Grid RowDefinitions="Auto,*">
+        <!-- Offline Banner -->
+        <offlineBanner:OfflineBanner Grid.Row="0" />
+        <!-- Not Configured Message - Outside bottom sheet -->
+        <VerticalStackLayout Grid.Row="1"
                             IsVisible="{Binding IsConfigured, Converter={StaticResource InvertedBoolConverter}}"
                             VerticalOptions="Center"
                             HorizontalOptions="Center"
@@ -33,318 +66,520 @@
                    TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
         </VerticalStackLayout>
 
-        <!-- Main Content (when configured) -->
-        <Grid Grid.Row="0" Grid.RowSpan="2"
-              IsVisible="{Binding IsConfigured}"
-              RowDefinitions="Auto,Auto,Auto,*">
+        <!-- Main Content with Bottom Sheet (when configured) -->
+        <bottomSheet:SfBottomSheet x:Name="BottomSheet"
+                                   Grid.Row="1"
+                                   IsVisible="{Binding IsConfigured}"
+                                   IsOpen="{Binding IsMemberSheetOpen, Mode=TwoWay}"
+                                   State="Collapsed"
+                                   AllowedState="All"
+                                   HalfExpandedRatio="0.5"
+                                   FullExpandedRatio="0.95"
+                                   CollapsedHeight="0"
+                                   EnableSwiping="True"
+                                   IsModal="True"
+                                   ShowGrabber="True"
+                                   GrabberWidth="40"
+                                   GrabberHeight="4"
+                                   CornerRadius="16"
+                                   BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
 
-            <!-- Group Selector -->
-            <Frame Grid.Row="0"
-                   Padding="12"
-                   Margin="8"
-                   CornerRadius="8"
-                   BorderColor="{StaticResource Gray200}">
-                <Grid ColumnDefinitions="*,Auto">
-                    <Picker Title="Select Group"
-                            ItemsSource="{Binding Groups}"
-                            SelectedItem="{Binding SelectedGroup}"
-                            ItemDisplayBinding="{Binding Name}"
-                            IsEnabled="{Binding IsLoadingGroups, Converter={StaticResource InvertedBoolConverter}}" />
+            <bottomSheet:SfBottomSheet.Content>
+                <Grid RowDefinitions="Auto,*">
+                    <!-- SfDatePicker inside SfBottomSheet.Content, NO Grid.Row to work as modal -->
+                    <picker:SfDatePicker x:Name="DatePicker"
+                                         IsOpen="{Binding IsDatePickerOpen, Mode=TwoWay}"
+                                         Mode="Dialog"
+                                         SelectedDate="{Binding SelectedDate, Mode=TwoWay}"
+                                         MaximumDate="{x:Static sys:DateTime.Today}"
+                                         Format="dd_MMM_yyyy"
+                                         OkButtonClicked="OnDatePickerOkClicked"
+                                         CancelButtonClicked="OnDatePickerCancelClicked">
+                        <picker:SfDatePicker.HeaderView>
+                            <picker:PickerHeaderView Height="40" Text="Select Date" />
+                        </picker:SfDatePicker.HeaderView>
+                        <picker:SfDatePicker.FooterView>
+                            <picker:PickerFooterView Height="40" />
+                        </picker:SfDatePicker.FooterView>
+                    </picker:SfDatePicker>
 
-                    <ActivityIndicator Grid.Column="1"
-                                      IsRunning="{Binding IsLoadingGroups}"
-                                      IsVisible="{Binding IsLoadingGroups}"
-                                      WidthRequest="24"
-                                      HeightRequest="24"
-                                      Color="{StaticResource Primary}" />
+                    <!-- Row 0: Compact Header Bar - Date Navigation -->
+                    <Border Grid.Row="0"
+                            Padding="8,4"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}"
+                            StrokeThickness="0">
+                        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="6">
+                            <!-- Previous Day Button -->
+                            <ImageButton Grid.Column="0"
+                                         Source="arrow_left.png"
+                                         WidthRequest="36"
+                                         HeightRequest="36"
+                                         Padding="6"
+                                         CornerRadius="8"
+                                         BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                         Command="{Binding PreviousDayCommand}" />
 
-                    <Button Grid.Column="1"
-                            Text="↻"
-                            FontSize="18"
-                            WidthRequest="44"
-                            HeightRequest="44"
-                            Padding="0"
-                            Command="{Binding LoadGroupsCommand}"
-                            IsVisible="{Binding IsLoadingGroups, Converter={StaticResource InvertedBoolConverter}}"
-                            BackgroundColor="Transparent"
-                            TextColor="{StaticResource Primary}" />
+                            <!-- Date Button (opens date picker directly) -->
+                            <Button Grid.Column="1"
+                                    Text="{Binding DateButtonText}"
+                                    FontSize="12"
+                                    HeightRequest="36"
+                                    Padding="12,0"
+                                    CornerRadius="8"
+                                    BackgroundColor="{StaticResource Primary}"
+                                    TextColor="White"
+                                    Command="{Binding OpenDatePickerCommand}" />
+
+                            <!-- Live Indicator (centered in remaining space) -->
+                            <HorizontalStackLayout Grid.Column="2"
+                                                   Spacing="4"
+                                                   HorizontalOptions="Center"
+                                                   IsVisible="{Binding IsToday}">
+                                <Ellipse WidthRequest="8"
+                                         HeightRequest="8"
+                                         Fill="{StaticResource Success}"
+                                         VerticalOptions="Center" />
+                                <Label Text="Live"
+                                       FontSize="10"
+                                       FontAttributes="Bold"
+                                       TextColor="{StaticResource Success}"
+                                       VerticalOptions="Center" />
+                            </HorizontalStackLayout>
+
+                            <!-- Today Button -->
+                            <Button Grid.Column="3"
+                                    Text="Today"
+                                    FontSize="10"
+                                    HeightRequest="36"
+                                    Padding="8,0"
+                                    CornerRadius="8"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                    TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource Gray100}}"
+                                    Command="{Binding TodayCommand}"
+                                    IsVisible="{Binding IsToday, Converter={StaticResource InvertedBoolConverter}}" />
+
+                            <!-- Next Day Button -->
+                            <ImageButton Grid.Column="4"
+                                         Source="arrow_right.png"
+                                         WidthRequest="36"
+                                         HeightRequest="36"
+                                         Padding="6"
+                                         CornerRadius="8"
+                                         BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                         Command="{Binding NextDayCommand}"
+                                         IsEnabled="{Binding IsToday, Converter={StaticResource InvertedBoolConverter}}" />
+
+                            <!-- Toggle List/Map Button -->
+                            <Button Grid.Column="5"
+                                    Text="{Binding IsMapView, Converter={StaticResource BoolToTextConverter}, ConverterParameter='List|Map'}"
+                                    FontSize="10"
+                                    HeightRequest="36"
+                                    WidthRequest="50"
+                                    Padding="4,0"
+                                    CornerRadius="8"
+                                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                    TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource Gray100}}"
+                                    Command="{Binding ToggleViewCommand}" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Row 1: List View -->
+                    <Grid Grid.Row="1" IsVisible="{Binding ShowListView}">
+                        <!-- Shimmer Loading Placeholder -->
+                        <controls:ShimmerLoadingView IsActive="{Binding IsLoadingMembers}"
+                                                     IsVisible="{Binding IsLoadingMembers}" />
+
+                        <RefreshView Command="{Binding LoadMembersCommand}"
+                                    IsRefreshing="{Binding IsLoadingMembers}"
+                                    IsVisible="{Binding IsLoadingMembers, Converter={StaticResource InvertedBoolConverter}}">
+                            <CollectionView ItemsSource="{Binding Members}"
+                                           SelectionMode="None"
+                                           Margin="8,0">
+
+                                <!-- Header with Group Selector and All/None buttons -->
+                                <CollectionView.Header>
+                                    <VerticalStackLayout Spacing="8" Padding="0,8">
+                                        <!-- Group Selector -->
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                            <Frame Padding="8,4"
+                                                   CornerRadius="8"
+                                                   BorderColor="{StaticResource Gray300}"
+                                                   HasShadow="False"
+                                                   BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+                                                <Picker Title="Select Group"
+                                                        ItemsSource="{Binding Groups}"
+                                                        SelectedItem="{Binding SelectedGroup}"
+                                                        ItemDisplayBinding="{Binding Name}"
+                                                        IsEnabled="{Binding IsLoadingGroups, Converter={StaticResource InvertedBoolConverter}}" />
+                                            </Frame>
+
+                                            <ActivityIndicator Grid.Column="1"
+                                                              IsRunning="{Binding IsLoadingGroups}"
+                                                              IsVisible="{Binding IsLoadingGroups}"
+                                                              WidthRequest="36"
+                                                              HeightRequest="36"
+                                                              Color="{StaticResource Primary}" />
+
+                                            <Button Grid.Column="1"
+                                                    Text="↻"
+                                                    FontSize="18"
+                                                    WidthRequest="36"
+                                                    HeightRequest="36"
+                                                    Padding="0"
+                                                    CornerRadius="8"
+                                                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                                    TextColor="{StaticResource Primary}"
+                                                    Command="{Binding LoadGroupsCommand}"
+                                                    IsVisible="{Binding IsLoadingGroups, Converter={StaticResource InvertedBoolConverter}}" />
+                                        </Grid>
+
+                                        <!-- All/None Buttons -->
+                                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                                            <Label Text="{Binding VisibleMemberCount, StringFormat='Showing {0} members'}"
+                                                   FontSize="12"
+                                                   TextColor="{StaticResource Gray500}"
+                                                   VerticalOptions="Center" />
+                                            <Button Grid.Column="1"
+                                                    Text="All"
+                                                    FontSize="11"
+                                                    HeightRequest="32"
+                                                    Padding="12,0"
+                                                    CornerRadius="8"
+                                                    BackgroundColor="{StaticResource Success}"
+                                                    TextColor="White"
+                                                    Command="{Binding SelectAllMembersCommand}" />
+                                            <Button Grid.Column="2"
+                                                    Text="None"
+                                                    FontSize="11"
+                                                    HeightRequest="32"
+                                                    Padding="12,0"
+                                                    CornerRadius="8"
+                                                    BackgroundColor="{StaticResource Gray500}"
+                                                    TextColor="White"
+                                                    Command="{Binding DeselectAllMembersCommand}" />
+                                        </Grid>
+
+                                        <!-- Show Today's History Toggle (only visible when viewing today) -->
+                                        <Grid ColumnDefinitions="*,Auto"
+                                              IsVisible="{Binding ShowHistoricalToggle}"
+                                              Padding="0,4">
+                                            <VerticalStackLayout VerticalOptions="Center">
+                                                <Label Text="Show Today's History"
+                                                       FontSize="14"
+                                                       TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource White}}" />
+                                                <Label Text="Display all location points for today"
+                                                       FontSize="11"
+                                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                            </VerticalStackLayout>
+                                            <Switch Grid.Column="1"
+                                                    IsToggled="{Binding ShowHistoricalLocations}"
+                                                    OnColor="{StaticResource Primary}" />
+                                        </Grid>
+                                    </VerticalStackLayout>
+                                </CollectionView.Header>
+
+                                <CollectionView.EmptyView>
+                                    <VerticalStackLayout VerticalOptions="Center"
+                                                        HorizontalOptions="Center"
+                                                        Spacing="8"
+                                                        Padding="24">
+                                        <Label Text="{Binding HasSelectedGroup, Converter={StaticResource BoolToTextConverter}, ConverterParameter='No members found|Select a group to see members'}"
+                                               FontSize="16"
+                                               TextColor="{StaticResource Gray500}"
+                                               HorizontalTextAlignment="Center" />
+                                    </VerticalStackLayout>
+                                </CollectionView.EmptyView>
+
+                                <CollectionView.ItemTemplate>
+                                    <DataTemplate x:DataType="models:GroupMember">
+                                        <Frame Margin="0,4"
+                                               Padding="8"
+                                               CornerRadius="8"
+                                               BorderColor="{StaticResource Gray200}"
+                                               BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+                                            <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+                                                <!-- Visibility Checkbox -->
+                                                <CheckBox Grid.Column="0"
+                                                          IsChecked="{Binding IsVisibleOnMap}"
+                                                          CheckedChanged="OnMemberVisibilityChanged"
+                                                          VerticalOptions="Center"
+                                                          Color="{StaticResource Primary}" />
+
+                                                <!-- Color indicator -->
+                                                <BoxView Grid.Column="1"
+                                                        WidthRequest="6"
+                                                        HeightRequest="36"
+                                                        CornerRadius="3"
+                                                        Color="{Binding ColorHex}"
+                                                        VerticalOptions="Center" />
+
+                                                <!-- Name and Location Info -->
+                                                <VerticalStackLayout Grid.Column="2" Margin="8,0,0,0" Spacing="2">
+                                                    <VerticalStackLayout.GestureRecognizers>
+                                                        <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:GroupsViewModel}}, Path=ShowMemberDetailsCommand}"
+                                                                              CommandParameter="{Binding}" />
+                                                    </VerticalStackLayout.GestureRecognizers>
+                                                    <HorizontalStackLayout Spacing="6">
+                                                        <Label Text="{Binding DisplayText}"
+                                                               FontSize="14"
+                                                               FontAttributes="Bold"
+                                                               LineBreakMode="TailTruncation" />
+                                                        <Label Text="(You)"
+                                                               FontSize="12"
+                                                               TextColor="{StaticResource Primary}"
+                                                               IsVisible="{Binding IsSelf}" />
+                                                    </HorizontalStackLayout>
+                                                    <Label Text="{Binding LastLocation.Address}"
+                                                           FontSize="11"
+                                                           TextColor="{StaticResource Gray500}"
+                                                           LineBreakMode="TailTruncation"
+                                                           MaxLines="1"
+                                                           IsVisible="{Binding LastLocation, Converter={StaticResource IsNotNullConverter}}" />
+                                                </VerticalStackLayout>
+
+                                                <!-- Live/Offline indicator -->
+                                                <Frame Grid.Column="3"
+                                                      VerticalOptions="Center"
+                                                      Padding="6,3"
+                                                      CornerRadius="10"
+                                                      IsVisible="{Binding LastLocation.IsLive}"
+                                                      BackgroundColor="{StaticResource Success}"
+                                                      BorderColor="Transparent"
+                                                      HasShadow="False">
+                                                    <Label Text="LIVE"
+                                                           FontSize="9"
+                                                           FontAttributes="Bold"
+                                                           TextColor="White" />
+                                                </Frame>
+                                            </Grid>
+                                        </Frame>
+                                    </DataTemplate>
+                                </CollectionView.ItemTemplate>
+                            </CollectionView>
+                        </RefreshView>
+                    </Grid>
+
+                    <!-- Row 1: Map View (when not expanded and map mode) -->
+                    <mapsui:MapControl Grid.Row="1"
+                                       x:Name="MapControl"
+                                       Map="{Binding Map}"
+                                       IsVisible="{Binding ShowMapView}"
+                                       VerticalOptions="Fill"
+                                       HorizontalOptions="Fill" />
+
+                    <!-- Error Message Overlay -->
+                    <Frame Grid.Row="1"
+                          VerticalOptions="End"
+                          Margin="8"
+                          Padding="12"
+                          CornerRadius="8"
+                          BackgroundColor="#FFEBEE"
+                          BorderColor="Transparent"
+                          HasShadow="False"
+                          IsVisible="{Binding ErrorMessage, Converter={StaticResource IsNotNullConverter}}">
+                        <Label Text="{Binding ErrorMessage}"
+                               TextColor="#C62828"
+                               FontSize="14" />
+                    </Frame>
                 </Grid>
-            </Frame>
+            </bottomSheet:SfBottomSheet.Content>
 
-            <!-- Date Navigation Header -->
-            <Border Grid.Row="1"
-                    BackgroundColor="{StaticResource Surface}"
-                    Padding="8,12"
-                    Margin="8,0"
-                    StrokeThickness="0"
-                    StrokeShape="RoundRectangle 8">
-                <Grid ColumnDefinitions="Auto,*,Auto">
-                    <!-- Previous Day Button -->
-                    <Button Grid.Column="0"
-                            Text="◀"
-                            Command="{Binding PreviousDayCommand}"
-                            BackgroundColor="Transparent"
-                            TextColor="{StaticResource Primary}"
-                            FontSize="18"
-                            WidthRequest="40"
-                            HeightRequest="40" />
+            <!-- Member Details Bottom Sheet Content -->
+            <bottomSheet:SfBottomSheet.BottomSheetContent>
+                <Grid RowDefinitions="Auto,*,Auto" BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+                    <!-- Header with member info and close button -->
+                    <Grid Grid.Row="0" Padding="16,12" ColumnDefinitions="Auto,*,Auto">
+                        <!-- Color indicator -->
+                        <Ellipse Grid.Column="0"
+                                 WidthRequest="16"
+                                 HeightRequest="16"
+                                 Fill="{Binding SelectedMember.ColorHex}"
+                                 VerticalOptions="Center" />
 
-                    <!-- Current Date (tappable to open date picker) -->
-                    <VerticalStackLayout Grid.Column="1"
-                                         HorizontalOptions="Center"
-                                         VerticalOptions="Center"
-                                         Spacing="2">
-                        <VerticalStackLayout.GestureRecognizers>
-                            <TapGestureRecognizer Command="{Binding OpenDatePickerCommand}" />
-                        </VerticalStackLayout.GestureRecognizers>
-                        <HorizontalStackLayout HorizontalOptions="Center" Spacing="6">
-                            <Label Text="{Binding SelectedDateText}"
-                                   FontSize="16"
-                                   FontAttributes="Bold"
-                                   VerticalOptions="Center" />
-                            <Label Text="📅"
-                                   FontSize="14"
-                                   VerticalOptions="Center"
-                                   TextColor="{StaticResource Primary}" />
-                        </HorizontalStackLayout>
-                        <!-- Live indicator when viewing today -->
-                        <HorizontalStackLayout HorizontalOptions="Center"
-                                               Spacing="4"
-                                               IsVisible="{Binding IsToday}">
-                            <Ellipse WidthRequest="8"
-                                     HeightRequest="8"
-                                     Fill="{StaticResource Success}"
-                                     VerticalOptions="Center" />
-                            <Label Text="Live"
-                                   FontSize="11"
-                                   TextColor="{StaticResource Success}"
-                                   VerticalOptions="Center" />
-                        </HorizontalStackLayout>
-                    </VerticalStackLayout>
+                        <!-- Member name and status -->
+                        <VerticalStackLayout Grid.Column="1" Margin="12,0,0,0" Spacing="2">
+                            <Label Text="{Binding SelectedMember.DisplayText}"
+                                   Style="{StaticResource Headline}"
+                                   FontAttributes="Bold" />
+                            <HorizontalStackLayout Spacing="8">
+                                <Label Text="{Binding SelectedMember.GroupRole}"
+                                       Style="{StaticResource Caption}"
+                                       TextColor="{StaticResource TextSecondary}" />
+                                <Frame Padding="6,2"
+                                       CornerRadius="8"
+                                       IsVisible="{Binding SelectedMember.LastLocation.IsLive}"
+                                       BackgroundColor="{StaticResource Success}"
+                                       BorderColor="Transparent"
+                                       HasShadow="False">
+                                    <Label Text="LIVE" FontSize="9" FontAttributes="Bold" TextColor="White" />
+                                </Frame>
+                            </HorizontalStackLayout>
+                        </VerticalStackLayout>
 
-                    <!-- Next Day / Today Button -->
-                    <HorizontalStackLayout Grid.Column="2" Spacing="2">
-                        <Button Text="Today"
-                                Command="{Binding TodayCommand}"
-                                BackgroundColor="{StaticResource Primary}"
-                                TextColor="White"
-                                FontSize="11"
-                                Padding="10,6"
-                                CornerRadius="14"
-                                HeightRequest="28"
-                                IsVisible="{Binding IsToday, Converter={StaticResource InvertedBoolConverter}}" />
-                        <Button Text="▶"
-                                Command="{Binding NextDayCommand}"
+                        <!-- Close button -->
+                        <Button Grid.Column="2"
+                                Text="✕"
+                                FontSize="16"
+                                WidthRequest="36"
+                                HeightRequest="36"
+                                Padding="0"
+                                CornerRadius="18"
                                 BackgroundColor="Transparent"
-                                TextColor="{StaticResource Primary}"
-                                FontSize="18"
-                                WidthRequest="40"
-                                HeightRequest="40" />
+                                TextColor="{StaticResource TextSecondary}"
+                                Command="{Binding CloseMemberSheetCommand}" />
+                    </Grid>
+
+                    <!-- Content -->
+                    <ScrollView Grid.Row="1" Padding="16,0">
+                        <VerticalStackLayout Spacing="12">
+                            <!-- Location Time -->
+                            <Frame Padding="12"
+                                   BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                                   BorderColor="Transparent"
+                                   CornerRadius="8"
+                                   HasShadow="False"
+                                   IsVisible="{Binding SelectedMember.LastLocation, Converter={StaticResource IsNotNullConverter}}">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="Last Updated" Style="{StaticResource Caption}" FontAttributes="Bold" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedMemberLocationTime}" Style="{StaticResource Body}" />
+                                </VerticalStackLayout>
+                            </Frame>
+
+                            <!-- Coordinates -->
+                            <Frame Padding="12"
+                                   BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                                   BorderColor="Transparent"
+                                   CornerRadius="8"
+                                   HasShadow="False"
+                                   IsVisible="{Binding SelectedMember.LastLocation, Converter={StaticResource IsNotNullConverter}}">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="Coordinates" Style="{StaticResource Caption}" FontAttributes="Bold" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedMemberCoordinates}" Style="{StaticResource Body}" />
+                                </VerticalStackLayout>
+                            </Frame>
+
+                            <!-- Address -->
+                            <Frame Padding="12"
+                                   BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                                   BorderColor="Transparent"
+                                   CornerRadius="8"
+                                   HasShadow="False"
+                                   IsVisible="{Binding SelectedMember.LastLocation.Address, Converter={StaticResource IsNotNullConverter}}">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="Address" Style="{StaticResource Caption}" FontAttributes="Bold" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedMember.LastLocation.Address}" Style="{StaticResource Body}" />
+                                </VerticalStackLayout>
+                            </Frame>
+
+                            <!-- No Location Message -->
+                            <Label Text="No location data available"
+                                   Style="{StaticResource Body}"
+                                   TextColor="{StaticResource TextSecondary}"
+                                   HorizontalTextAlignment="Center"
+                                   Margin="0,20"
+                                   IsVisible="{Binding SelectedMember.LastLocation, Converter={StaticResource IsNullConverter}}" />
+                        </VerticalStackLayout>
+                    </ScrollView>
+
+                    <!-- Action Buttons -->
+                    <HorizontalStackLayout Grid.Row="2"
+                                           Padding="16,12"
+                                           Spacing="12"
+                                           HorizontalOptions="Center"
+                                           IsVisible="{Binding SelectedMember.LastLocation, Converter={StaticResource IsNotNullConverter}}">
+                        <ImageButton Source="maps.png"
+                                     Command="{Binding OpenInMapsCommand}"
+                                     WidthRequest="44"
+                                     HeightRequest="44"
+                                     CornerRadius="22"
+                                     Padding="10"
+                                     BackgroundColor="{StaticResource Gray900}" />
+                        <ImageButton Source="wikipedia.png"
+                                     Command="{Binding SearchWikipediaCommand}"
+                                     WidthRequest="44"
+                                     HeightRequest="44"
+                                     CornerRadius="22"
+                                     Padding="10"
+                                     BackgroundColor="{StaticResource Gray900}" />
+                        <ImageButton Source="copy.png"
+                                     Command="{Binding CopyCoordinatesCommand}"
+                                     WidthRequest="44"
+                                     HeightRequest="44"
+                                     CornerRadius="22"
+                                     Padding="10"
+                                     BackgroundColor="{StaticResource Gray900}" />
+                        <ImageButton Source="share.png"
+                                     Command="{Binding ShareLocationCommand}"
+                                     WidthRequest="44"
+                                     HeightRequest="44"
+                                     CornerRadius="22"
+                                     Padding="10"
+                                     BackgroundColor="{StaticResource Gray900}" />
+                        <ImageButton Source="navigate.png"
+                                     Command="{Binding NavigateToMemberCommand}"
+                                     WidthRequest="44"
+                                     HeightRequest="44"
+                                     CornerRadius="22"
+                                     Padding="10"
+                                     BackgroundColor="{StaticResource Gray900}" />
                     </HorizontalStackLayout>
                 </Grid>
-            </Border>
+            </bottomSheet:SfBottomSheet.BottomSheetContent>
+        </bottomSheet:SfBottomSheet>
 
-            <!-- View Toggle - Segmented Control -->
-            <segmented:SfSegmentedControl Grid.Row="2"
-                                          HorizontalOptions="Center"
-                                          Margin="8,8"
-                                          SelectedIndex="{Binding ViewModeIndex, Mode=TwoWay}"
-                                          CornerRadius="16"
-                                          SegmentCornerRadius="14"
-                                          SegmentHeight="36"
-                                          SegmentWidth="100">
-                <segmented:SfSegmentedControl.SelectionIndicatorSettings>
-                    <segmented:SelectionIndicatorSettings Background="{StaticResource Primary}"
-                                                          SelectionIndicatorPlacement="Fill" />
-                </segmented:SfSegmentedControl.SelectionIndicatorSettings>
-                <segmented:SfSegmentedControl.ItemsSource>
-                    <x:Array Type="{x:Type segmented:SfSegmentItem}">
-                        <segmented:SfSegmentItem Text="List" />
-                        <segmented:SfSegmentItem Text="Map" />
-                    </x:Array>
-                </segmented:SfSegmentedControl.ItemsSource>
-            </segmented:SfSegmentedControl>
-
-            <!-- List View -->
-            <Grid Grid.Row="3" IsVisible="{Binding IsListView}">
-                <!-- Shimmer Loading Placeholder -->
-                <controls:ShimmerLoadingView IsActive="{Binding IsLoadingMembers}"
-                                             IsVisible="{Binding IsLoadingMembers}" />
-
-                <RefreshView Command="{Binding LoadMembersCommand}"
-                            IsRefreshing="{Binding IsLoadingMembers}"
-                            IsVisible="{Binding IsLoadingMembers, Converter={StaticResource InvertedBoolConverter}}">
-                <CollectionView ItemsSource="{Binding Members}"
-                               SelectionMode="None"
-                               Margin="8,0">
-
-                    <CollectionView.EmptyView>
-                        <VerticalStackLayout VerticalOptions="Center"
-                                            HorizontalOptions="Center"
-                                            Spacing="8"
-                                            Padding="24">
-                            <Label Text="{Binding HasSelectedGroup, Converter={StaticResource BoolToTextConverter}, ConverterParameter='No members found|Select a group to see members'}"
-                                   FontSize="16"
-                                   TextColor="{StaticResource Gray500}"
-                                   HorizontalTextAlignment="Center" />
-                        </VerticalStackLayout>
-                    </CollectionView.EmptyView>
-
-                    <CollectionView.ItemTemplate>
-                        <DataTemplate x:DataType="models:GroupMember">
-                            <Frame Margin="0,4"
-                                   Padding="12"
-                                   CornerRadius="8"
-                                   BorderColor="{StaticResource Gray200}">
-                                <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
-
-                                    <!-- Color indicator -->
-                                    <BoxView Grid.RowSpan="2"
-                                            WidthRequest="8"
-                                            HeightRequest="44"
-                                            CornerRadius="4"
-                                            Color="{Binding ColorHex}"
-                                            VerticalOptions="Center" />
-
-                                    <!-- Name and Role -->
-                                    <VerticalStackLayout Grid.Column="1" Margin="12,0,0,0">
-                                        <HorizontalStackLayout Spacing="8">
-                                            <Label Text="{Binding DisplayText}"
-                                                   FontSize="16"
-                                                   FontAttributes="Bold" />
-                                            <Label Text="(You)"
-                                                   FontSize="14"
-                                                   TextColor="{StaticResource Primary}"
-                                                   IsVisible="{Binding IsSelf}" />
-                                        </HorizontalStackLayout>
-                                        <Label Text="{Binding GroupRole}"
-                                               FontSize="12"
-                                               TextColor="{StaticResource Gray500}" />
-                                    </VerticalStackLayout>
-
-                                    <!-- Location Info -->
-                                    <VerticalStackLayout Grid.Column="1"
-                                                        Grid.Row="1"
-                                                        Margin="12,4,0,0"
-                                                        IsVisible="{Binding LastLocation, Converter={StaticResource IsNotNullConverter}}">
-                                        <Label Text="{Binding LastLocation.Address, StringFormat='📍 {0}'}"
-                                               FontSize="12"
-                                               TextColor="{StaticResource Gray600}"
-                                               LineBreakMode="TailTruncation"
-                                               MaxLines="1" />
-                                        <Label FontSize="11"
-                                               TextColor="{StaticResource Gray500}">
-                                            <Label.Text>
-                                                <Binding Path="LastLocation.Timestamp"
-                                                        StringFormat="{}{0:MMM dd, HH:mm}" />
-                                            </Label.Text>
-                                        </Label>
-                                    </VerticalStackLayout>
-
-                                    <!-- Live indicator -->
-                                    <Frame Grid.Column="2"
-                                          Grid.RowSpan="2"
-                                          VerticalOptions="Center"
-                                          Padding="8,4"
-                                          CornerRadius="12"
-                                          IsVisible="{Binding LastLocation.IsLive}"
-                                          BackgroundColor="{StaticResource Success}">
-                                        <Label Text="LIVE"
-                                               FontSize="10"
-                                               FontAttributes="Bold"
-                                               TextColor="White" />
-                                    </Frame>
-
-                                    <!-- Offline indicator -->
-                                    <Label Grid.Column="2"
-                                          Grid.RowSpan="2"
-                                          Text="Offline"
-                                          FontSize="12"
-                                          TextColor="{StaticResource Gray400}"
-                                          VerticalOptions="Center"
-                                          IsVisible="{Binding LastLocation, Converter={StaticResource IsNullConverter}}" />
-
-                                </Grid>
-                            </Frame>
-                        </DataTemplate>
-                    </CollectionView.ItemTemplate>
-                </CollectionView>
-                </RefreshView>
-            </Grid>
-
-            <!-- Map View -->
-            <Grid Grid.Row="3"
-                  IsVisible="{Binding IsMapView}">
-                <mapsui:MapControl Map="{Binding Map}" />
-
-                <!-- Member Legend Overlay -->
-                <Frame Margin="8"
-                       Padding="8"
-                       CornerRadius="8"
-                       VerticalOptions="End"
-                       HorizontalOptions="Start"
-                       BackgroundColor="#E0FFFFFF"
-                       BorderColor="{StaticResource Gray300}"
-                       MaximumWidthRequest="200">
-                    <CollectionView ItemsSource="{Binding Members}"
-                                   SelectionMode="None"
-                                   MaximumHeightRequest="200">
-                        <CollectionView.ItemTemplate>
-                            <DataTemplate x:DataType="models:GroupMember">
-                                <HorizontalStackLayout Spacing="8" Padding="4,2">
-                                    <Ellipse WidthRequest="12"
-                                             HeightRequest="12"
-                                             Fill="{Binding ColorHex}"
-                                             VerticalOptions="Center" />
-                                    <Label Text="{Binding DisplayText}"
-                                           FontSize="12"
-                                           VerticalOptions="Center"
-                                           LineBreakMode="TailTruncation" />
-                                    <Label Text="●"
-                                           FontSize="8"
-                                           TextColor="{StaticResource Success}"
-                                           VerticalOptions="Center"
-                                           IsVisible="{Binding LastLocation.IsLive}" />
-                                </HorizontalStackLayout>
-                            </DataTemplate>
-                        </CollectionView.ItemTemplate>
-                    </CollectionView>
-                </Frame>
-            </Grid>
-
-            <!-- Error Message -->
-            <Frame Grid.Row="3"
-                  VerticalOptions="End"
-                  Margin="8"
-                  Padding="12"
-                  CornerRadius="8"
-                  BackgroundColor="#FFEBEE"
-                  IsVisible="{Binding ErrorMessage, Converter={StaticResource IsNotNullConverter}}">
-                <Label Text="{Binding ErrorMessage}"
-                       TextColor="#C62828"
-                       FontSize="14" />
-            </Frame>
-        </Grid>
-
-        <!-- Loading Overlay -->
-        <controls:LoadingOverlay Grid.Row="0" Grid.RowSpan="2"
+        <!-- Loading Overlay - spans all rows to overlay entire page -->
+        <controls:LoadingOverlay Grid.RowSpan="2"
                                  IsVisible="{Binding IsBusy}"
                                  Message="Loading..." />
 
-        <!-- Date Picker Popup -->
-        <picker:SfDatePicker x:Name="DatePicker"
-                             Grid.RowSpan="2"
-                             IsOpen="{Binding IsDatePickerOpen, Mode=TwoWay}"
-                             Mode="Dialog"
-                             SelectedDate="{Binding SelectedDate}"
-                             MaximumDate="{x:Static sys:DateTime.Today}"
-                             Format="dd_MMM_yyyy">
-            <picker:SfDatePicker.HeaderView>
-                <picker:PickerHeaderView Height="40" Text="Select Date" />
-            </picker:SfDatePicker.HeaderView>
-            <picker:SfDatePicker.FooterView>
-                <picker:PickerFooterView Height="40" />
-            </picker:SfDatePicker.FooterView>
-        </picker:SfDatePicker>
+        <!-- Group Picker Popup Overlay -->
+        <Grid Grid.RowSpan="2"
+              IsVisible="{Binding IsGroupPickerOpen}"
+              BackgroundColor="#80000000">
+            <Grid.GestureRecognizers>
+                <TapGestureRecognizer Command="{Binding CloseGroupPickerCommand}" />
+            </Grid.GestureRecognizers>
+            <Frame Margin="24"
+                   Padding="16"
+                   CornerRadius="12"
+                   VerticalOptions="Start"
+                   HorizontalOptions="Fill"
+                   BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+                <Frame.GestureRecognizers>
+                    <TapGestureRecognizer />
+                </Frame.GestureRecognizers>
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="Select Group"
+                           FontSize="18"
+                           FontAttributes="Bold" />
+                    <Frame Padding="8,4"
+                           CornerRadius="8"
+                           BorderColor="{StaticResource Gray300}"
+                           HasShadow="False"
+                           BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}">
+                        <Picker Title="Select Group"
+                                ItemsSource="{Binding Groups}"
+                                SelectedItem="{Binding SelectedGroup}"
+                                ItemDisplayBinding="{Binding Name}"
+                                SelectedIndexChanged="OnGroupPickerSelectedIndexChanged" />
+                    </Frame>
+                    <Button Text="Close"
+                            FontSize="14"
+                            HeightRequest="40"
+                            CornerRadius="8"
+                            HorizontalOptions="End"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                            TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource Gray100}}"
+                            Command="{Binding CloseGroupPickerCommand}" />
+                </VerticalStackLayout>
+            </Frame>
+        </Grid>
+
+        <!-- Navigation Method Picker (overlay, doesn't affect layout) -->
+        <offlineBanner:NavigationMethodPicker x:Name="NavigationMethodPicker"
+                                              Grid.Row="0"
+                                              Grid.RowSpan="2"
+                                              IsVisible="False"
+                                              InputTransparent="True" />
     </Grid>
 </ContentPage>

@@ -64,7 +64,7 @@
             Route="TimelinePage" />
     </FlyoutItem>
 
-    <FlyoutItem x:Name="TripsFlyoutItem" Title="Trips" Route="trips" FlyoutIcon="map.png" FlyoutDisplayOptions="AsSingleItem">
+    <FlyoutItem x:Name="TripsFlyoutItem" Title="Trips" Route="trips" FlyoutIcon="trip.png" FlyoutDisplayOptions="AsSingleItem">
         <ShellContent
             x:Name="TripsContent"
             Title="Trips"

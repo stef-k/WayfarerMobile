@@ -104,6 +104,15 @@ public partial class App : Application
     {
         try
         {
+            // Pre-load secure settings to avoid blocking SecureStorage calls later
+            // This must happen early to prevent deadlocks on Android when API calls access ServerUrl/ApiToken
+            var settings = _serviceProvider.GetService<ISettingsService>() as SettingsService;
+            if (settings != null)
+            {
+                _ = settings.PreloadSecureSettingsAsync();
+                System.Diagnostics.Debug.WriteLine("[App] Secure settings preload started");
+            }
+
             // Start location sync service (server sync)
             var syncService = _serviceProvider.GetService<LocationSyncService>();
             syncService?.Start();
