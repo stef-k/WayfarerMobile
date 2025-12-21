@@ -855,7 +855,7 @@ public class TripModelsTests
         {
             Id = Guid.NewGuid(),
             Name = "Test Trip",
-            PlaceCount = 5
+            PlacesCount = 5
         };
 
         // Act
@@ -873,7 +873,7 @@ public class TripModelsTests
         {
             Id = Guid.NewGuid(),
             Name = "Test Trip",
-            PlaceCount = 1
+            PlacesCount = 1
         };
 
         // Act
@@ -891,7 +891,7 @@ public class TripModelsTests
         {
             Id = Guid.NewGuid(),
             Name = "Test Trip",
-            PlaceCount = 0
+            PlacesCount = 0
         };
 
         // Act

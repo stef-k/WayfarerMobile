@@ -1024,8 +1024,8 @@ public class TripsViewModelTests
 
         return tripDetails.Segments.Select(segment =>
         {
-            var originName = places.TryGetValue(segment.OriginId, out var origin) ? origin.Name : "Unknown";
-            var destName = places.TryGetValue(segment.DestinationId, out var dest) ? dest.Name : "Unknown";
+            var originName = segment.OriginId.HasValue && places.TryGetValue(segment.OriginId.Value, out var origin) ? origin.Name : "Unknown";
+            var destName = segment.DestinationId.HasValue && places.TryGetValue(segment.DestinationId.Value, out var dest) ? dest.Name : "Unknown";
 
             return new SegmentDisplayItem
             {
@@ -1034,7 +1034,7 @@ public class TripsViewModelTests
                 DestinationName = destName,
                 TransportMode = segment.TransportMode ?? "walk",
                 DistanceKm = segment.DistanceKm,
-                DurationMinutes = segment.DurationMinutes
+                DurationMinutes = (int?)segment.DurationMinutes
             };
         }).ToList();
     }
