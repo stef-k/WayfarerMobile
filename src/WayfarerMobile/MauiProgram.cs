@@ -13,6 +13,7 @@ using WayfarerMobile.Views;
 using WayfarerMobile.Views.Onboarding;
 using SkiaSharp.Views.Maui.Controls.Hosting;
 using ZXing.Net.Maui.Controls;
+using WayfarerMobile.Handlers;
 
 namespace WayfarerMobile;
 
@@ -33,6 +34,11 @@ public static class MauiProgram
             .UseSkiaSharp()
             .ConfigureSyncfusionToolkit()
             .UseBarcodeReader()
+            .ConfigureMauiHandlers(handlers =>
+            {
+                // Register custom WebView handler to enable external content loading
+                handlers.AddHandler<WebView, CustomWebViewHandler>();
+            })
             .ConfigureFonts(fonts =>
             {
                 fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
