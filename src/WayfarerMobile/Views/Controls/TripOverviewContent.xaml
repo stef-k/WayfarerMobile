@@ -111,7 +111,7 @@
                                 <sfExpander:SfExpander IsExpanded="True"
                                                        IsVisible="{Binding IsVisibleInUi}">
                                     <sfExpander:SfExpander.Header>
-                                        <Grid MinHeightRequest="40" Padding="8,6"
+                                        <Grid MinimumHeightRequest="40" Padding="8,6"
                                               BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}">
                                             <Label Text="{Binding Name}"
                                                    FontSize="14"

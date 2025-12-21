@@ -30,11 +30,12 @@ public static class ImageProxyHelper
             return html;
         }
 
-        // Remove /api/ suffix if present and ensure no trailing slash
-        var baseUrl = backendBaseUrl
-            .Replace("/api/", "")
-            .Replace("/api", "")
-            .TrimEnd('/');
+        // Remove /api suffix if present and ensure no trailing slash
+        var baseUrl = backendBaseUrl.TrimEnd('/');
+        if (baseUrl.EndsWith("/api", StringComparison.OrdinalIgnoreCase))
+        {
+            baseUrl = baseUrl[..^4]; // Remove trailing "/api"
+        }
 
         var result = html;
 
@@ -147,11 +148,12 @@ public static class ImageProxyHelper
             return unescapedHtml;
         }
 
-        // Remove /api/ suffix if present and ensure no trailing slash
-        var baseUrl = backendBaseUrl
-            .Replace("/api/", "")
-            .Replace("/api", "")
-            .TrimEnd('/');
+        // Remove /api suffix if present and ensure no trailing slash
+        var baseUrl = backendBaseUrl.TrimEnd('/');
+        if (baseUrl.EndsWith("/api", StringComparison.OrdinalIgnoreCase))
+        {
+            baseUrl = baseUrl[..^4]; // Remove trailing "/api"
+        }
 
         // Escape special regex characters in the URL
         var escapedBackendUrl = Regex.Escape(baseUrl);

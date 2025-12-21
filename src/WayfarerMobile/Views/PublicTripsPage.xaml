@@ -109,14 +109,14 @@
                                     <HorizontalStackLayout Spacing="4">
                                         <Label Text="&#x1F4CD;"
                                                FontSize="12" />
-                                        <Label Text="{Binding PlaceCount, StringFormat='{0} places'}"
+                                        <Label Text="{Binding PlacesCount, StringFormat='{0} places'}"
                                                FontSize="12"
                                                TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                                     </HorizontalStackLayout>
                                     <HorizontalStackLayout Spacing="4">
                                         <Label Text="&#x1F5FA;"
                                                FontSize="12" />
-                                        <Label Text="{Binding RegionCount, StringFormat='{0} regions'}"
+                                        <Label Text="{Binding RegionsCount, StringFormat='{0} regions'}"
                                                FontSize="12"
                                                TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                                     </HorizontalStackLayout>
