@@ -279,7 +279,7 @@ public partial class TimelineEntrySheet : ContentView
     {
         Entry = entry;
         IsEditing = false;
-        SheetState = BottomSheetState.HalfExpanded;
+        SheetState = BottomSheetState.FullExpanded;
         IsOpen = true;
     }
 
@@ -316,7 +316,7 @@ public partial class TimelineEntrySheet : ContentView
     public void ExitEditMode()
     {
         IsEditing = false;
-        SheetState = BottomSheetState.HalfExpanded;
+        SheetState = BottomSheetState.FullExpanded;
     }
 
     #endregion

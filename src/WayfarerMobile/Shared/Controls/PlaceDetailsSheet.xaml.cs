@@ -275,7 +275,7 @@ public partial class PlaceDetailsSheet : ContentView
     {
         Place = place;
         IsEditing = false;
-        SheetState = BottomSheetState.HalfExpanded;
+        SheetState = BottomSheetState.FullExpanded;
         IsOpen = true;
     }
 
@@ -310,7 +310,7 @@ public partial class PlaceDetailsSheet : ContentView
     public void ExitEditMode()
     {
         IsEditing = false;
-        SheetState = BottomSheetState.HalfExpanded;
+        SheetState = BottomSheetState.FullExpanded;
     }
 
     #endregion

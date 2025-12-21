@@ -2,6 +2,7 @@ using Mapsui;
 using Mapsui.Layers;
 using Mapsui.Projections;
 using Mapsui.UI.Maui;
+using WayfarerMobile.Core.Models;
 using WayfarerMobile.ViewModels;
 using WayfarerMobile.Views.Controls;
 
@@ -10,9 +11,10 @@ namespace WayfarerMobile;
 /// <summary>
 /// Main page showing current location and tracking controls.
 /// </summary>
-public partial class MainPage : ContentPage
+public partial class MainPage : ContentPage, IQueryAttributable
 {
     private readonly MainViewModel _viewModel;
+    private TripDetails? _pendingTrip;
 
     /// <summary>
     /// Creates a new instance of MainPage.
@@ -40,7 +42,7 @@ public partial class MainPage : ContentPage
 
         // Wire up bottom sheet StateChanged event (done in code-behind for XamlC compatibility)
         // SfBottomSheet uses StateChanged, not Closed - we detect closure via Hidden state
-        CheckInBottomSheet.StateChanged += OnCheckInSheetStateChanged;
+        MainBottomSheet.StateChanged += OnMainSheetStateChanged;
     }
 
     #region Context Menu Event Handlers
@@ -97,7 +99,7 @@ public partial class MainPage : ContentPage
     #endregion
 
     /// <summary>
-    /// Handles map info events for drop pin mode and other interactions.
+    /// Handles map info events for drop pin mode, trip feature taps, and other interactions.
     /// </summary>
     private void OnMapInfo(object? sender, MapInfoEventArgs e)
     {
@@ -114,6 +116,12 @@ public partial class MainPage : ContentPage
 
         try
         {
+            // Check if user tapped on a trip place or area feature
+            if (HandleTripFeatureTap(mapInfo))
+            {
+                return;
+            }
+
             // Convert world position (Web Mercator) to lat/lon
             var worldPos = mapInfo.WorldPosition;
             var lonLat = SphericalMercator.ToLonLat(worldPos.X, worldPos.Y);
@@ -146,12 +154,86 @@ public partial class MainPage : ContentPage
     }
 
     /// <summary>
+    /// Handles taps on trip place or area features.
+    /// </summary>
+    /// <param name="mapInfo">The map info with feature data.</param>
+    /// <returns>True if a trip feature was tapped and handled.</returns>
+    private bool HandleTripFeatureTap(Mapsui.MapInfo mapInfo)
+    {
+        // Check if a trip is loaded
+        if (!_viewModel.HasLoadedTrip || _viewModel.LoadedTrip == null)
+            return false;
+
+        // Get the feature that was tapped
+        var feature = mapInfo.Feature;
+        if (feature == null)
+            return false;
+
+        // Check for place tap
+        if (feature["PlaceId"] is Guid placeId)
+        {
+            var place = _viewModel.LoadedTrip.AllPlaces.FirstOrDefault(p => p.Id == placeId);
+            if (place != null)
+            {
+                _viewModel.SelectTripPlaceCommand.Execute(place);
+                _viewModel.IsTripSheetOpen = true;
+                return true;
+            }
+        }
+
+        // Check for area tap
+        if (feature["AreaId"] is Guid areaId)
+        {
+            var area = _viewModel.LoadedTrip.AllAreas.FirstOrDefault(a => a.Id == areaId);
+            if (area != null)
+            {
+                _viewModel.SelectTripAreaCommand.Execute(area);
+                _viewModel.IsTripSheetOpen = true;
+                return true;
+            }
+        }
+
+        // Check for segment tap
+        if (feature["SegmentId"] is Guid segmentId)
+        {
+            var segment = _viewModel.LoadedTrip.Segments.FirstOrDefault(s => s.Id == segmentId);
+            if (segment != null)
+            {
+                _viewModel.SelectTripSegmentCommand.Execute(segment);
+                _viewModel.IsTripSheetOpen = true;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Called when the page appears.
     /// </summary>
     protected override async void OnAppearing()
     {
         base.OnAppearing();
         await _viewModel.OnAppearingAsync();
+
+        // Load pending trip if navigated with LoadTrip parameter
+        if (_pendingTrip != null)
+        {
+            await _viewModel.LoadTripForNavigationAsync(_pendingTrip);
+            _pendingTrip = null;
+        }
+    }
+
+    /// <summary>
+    /// Handles navigation query attributes.
+    /// </summary>
+    /// <param name="query">The query parameters from navigation.</param>
+    public void ApplyQueryAttributes(IDictionary<string, object> query)
+    {
+        if (query.TryGetValue("LoadTrip", out var tripObj) && tripObj is TripDetails trip)
+        {
+            _pendingTrip = trip;
+        }
     }
 
     /// <summary>
@@ -180,16 +262,27 @@ public partial class MainPage : ContentPage
     }
 
     /// <summary>
-    /// Handles the check-in sheet state changes.
-    /// Detects when sheet is closed (Hidden state) to run cleanup logic.
+    /// Handles the main bottom sheet state changes.
+    /// Detects when sheet is closed (Hidden state) to run cleanup logic for whichever content was showing.
     /// </summary>
-    private async void OnCheckInSheetStateChanged(object? sender, Syncfusion.Maui.Toolkit.BottomSheet.StateChangedEventArgs e)
+    private async void OnMainSheetStateChanged(object? sender, Syncfusion.Maui.Toolkit.BottomSheet.StateChangedEventArgs e)
     {
         // Only handle when sheet becomes hidden (closed)
         if (e.NewState == Syncfusion.Maui.Toolkit.BottomSheet.BottomSheetState.Hidden)
         {
-            _viewModel.IsCheckInSheetOpen = false;
-            await _viewModel.OnCheckInSheetClosedAsync();
+            // Handle check-in sheet cleanup if it was open
+            if (_viewModel.IsCheckInSheetOpen)
+            {
+                _viewModel.IsCheckInSheetOpen = false;
+                await _viewModel.OnCheckInSheetClosedAsync();
+            }
+
+            // Handle trip sheet cleanup if it was open
+            if (_viewModel.IsTripSheetOpen)
+            {
+                _viewModel.IsTripSheetOpen = false;
+                _viewModel.TripSheetBackCommand.Execute(null);
+            }
         }
     }
 
@@ -267,11 +360,15 @@ public partial class MainPage : ContentPage
     /// </summary>
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
+        // Reset sheet to fully expanded state when either sheet opens
+        // This ensures the sheet always opens fully, not at the last dragged position
         if (e.PropertyName == nameof(MainViewModel.IsCheckInSheetOpen) && _viewModel.IsCheckInSheetOpen)
         {
-            // Reset sheet to fully expanded state when opening
-            // This ensures the sheet always opens fully, not at the last dragged position
-            CheckInBottomSheet.State = Syncfusion.Maui.Toolkit.BottomSheet.BottomSheetState.FullExpanded;
+            MainBottomSheet.State = Syncfusion.Maui.Toolkit.BottomSheet.BottomSheetState.FullExpanded;
+        }
+        else if (e.PropertyName == nameof(MainViewModel.IsTripSheetOpen) && _viewModel.IsTripSheetOpen)
+        {
+            MainBottomSheet.State = Syncfusion.Maui.Toolkit.BottomSheet.BottomSheetState.FullExpanded;
         }
     }
 

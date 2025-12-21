@@ -8,16 +8,16 @@
              xmlns:bottomSheet="clr-namespace:Syncfusion.Maui.Toolkit.BottomSheet;assembly=Syncfusion.Maui.Toolkit"
              x:Class="WayfarerMobile.MainPage"
              x:DataType="vm:MainViewModel"
-             Title="Map">
+             Title="{Binding PageTitle}">
 
     <Grid>
-        <!-- SfBottomSheet wraps the main content -->
-        <bottomSheet:SfBottomSheet x:Name="CheckInBottomSheet"
-                                   IsOpen="{Binding IsCheckInSheetOpen, Mode=TwoWay}"
+        <!-- Main SfBottomSheet - wraps the map and shows either Check-In or Trip content -->
+        <bottomSheet:SfBottomSheet x:Name="MainBottomSheet"
+                                   IsOpen="{Binding IsAnySheetOpen, Mode=TwoWay}"
                                    State="FullExpanded"
                                    AllowedState="All"
-                                   HalfExpandedRatio="0.7"
-                                   FullExpandedRatio="0.95"
+                                   HalfExpandedRatio="0.6"
+                                   FullExpandedRatio="0.98"
                                    EnableSwiping="True"
                                    IsModal="True"
                                    ShowGrabber="True"
@@ -119,6 +119,15 @@
                                          Margin="0,0,15,30"
                                          Spacing="12"
                                          ZIndex="5">
+                        <!-- 0. Trip Overview (visible when trip loaded) -->
+                        <ImageButton Source="trip.png"
+                                     Command="{Binding ToggleTripSheetCommand}"
+                                     IsVisible="{Binding HasLoadedTrip}"
+                                     WidthRequest="48"
+                                     HeightRequest="48"
+                                     CornerRadius="24"
+                                     Padding="10"
+                                     BackgroundColor="{StaticResource Primary}" />
                         <!-- 1. Drop Pin / Context Menu -->
                         <ImageButton Source="add_location_alt.png"
                                      Clicked="OnDropPinClicked"
@@ -154,12 +163,15 @@
                 </Grid>
             </bottomSheet:SfBottomSheet.Content>
 
-            <!-- Bottom Sheet Content: Check-In Form -->
+            <!-- Bottom Sheet Content: Either Check-In or Trip Overview -->
             <bottomSheet:SfBottomSheet.BottomSheetContent>
-                <Grid RowDefinitions="Auto,*,Auto"
-                      BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+                <Grid BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+                    <!-- Check-In Content (visible when check-in sheet is open) -->
+                    <Grid RowDefinitions="Auto,*,Auto"
+                          IsVisible="{Binding IsCheckInSheetOpen}"
+                          BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
 
-                    <!-- Header Section -->
+                        <!-- Header Section -->
                     <Grid Grid.Row="0" Padding="16,8,16,12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -335,6 +347,11 @@
                                    FontSize="16" />
                         </VerticalStackLayout>
                     </Border>
+                    </Grid>
+
+                    <!-- Trip Overview Content (visible when trip sheet is open) -->
+                    <controls:TripOverviewContent x:Name="TripOverviewContent"
+                                                  IsVisible="{Binding IsTripSheetOpen}" />
                 </Grid>
             </bottomSheet:SfBottomSheet.BottomSheetContent>
         </bottomSheet:SfBottomSheet>

@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:viewmodels="clr-namespace:WayfarerMobile.ViewModels"
+             xmlns:models="clr-namespace:WayfarerMobile.Core.Models;assembly=WayfarerMobile.Core"
+             xmlns:controls="clr-namespace:WayfarerMobile.Shared.Controls"
+             x:Class="WayfarerMobile.Views.Controls.MyTripsView"
+             x:DataType="viewmodels:TripsViewModel">
+
+    <Grid RowDefinitions="*">
+        <!-- RefreshView always visible - never hide it or pull-to-refresh breaks -->
+        <RefreshView Command="{Binding LoadTripsCommand}"
+                     IsRefreshing="{Binding IsLoadingTrips, Mode=TwoWay}">
+            <CollectionView ItemsSource="{Binding MyTrips}"
+                            SelectionMode="None"
+                            IsGrouped="True">
+
+                <!-- Empty State -->
+                <CollectionView.EmptyView>
+                    <VerticalStackLayout VerticalOptions="Center"
+                                         HorizontalOptions="Center"
+                                         Spacing="16"
+                                         Padding="32">
+                        <Label Text="🗺️"
+                               FontSize="64"
+                               HorizontalOptions="Center" />
+                        <Label Text="No trips yet"
+                               Style="{StaticResource Headline}"
+                               HorizontalOptions="Center" />
+                        <Label Text="Create trips on the web app or browse public trips to clone."
+                               Style="{StaticResource Body}"
+                               HorizontalOptions="Center"
+                               HorizontalTextAlignment="Center"
+                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
+                    </VerticalStackLayout>
+                </CollectionView.EmptyView>
+
+                <!-- Group Header Template -->
+                <CollectionView.GroupHeaderTemplate>
+                    <DataTemplate x:DataType="viewmodels:TripGrouping">
+                        <Label Text="{Binding Name}"
+                               FontSize="13"
+                               FontAttributes="Bold"
+                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
+                               Padding="16,16,16,8"
+                               BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}" />
+                    </DataTemplate>
+                </CollectionView.GroupHeaderTemplate>
+
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="viewmodels:TripListItem">
+                        <Border Margin="12,4"
+                                Padding="16"
+                                StrokeThickness="0"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="12" />
+                            </Border.StrokeShape>
+
+                            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="4">
+                                <!-- Trip Name -->
+                                <Label Grid.Row="0" Grid.Column="0"
+                                       Text="{Binding Name}"
+                                       FontSize="15"
+                                       FontAttributes="Bold"
+                                       LineBreakMode="WordWrap"
+                                       MaxLines="2"
+                                       TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}" />
+
+                                <!-- Status Badge -->
+                                <Border Grid.Row="0" Grid.Column="1"
+                                        Padding="8,4"
+                                        StrokeThickness="0"
+                                        BackgroundColor="{Binding StatusColor}"
+                                        VerticalOptions="Center">
+                                    <Border.StrokeShape>
+                                        <RoundRectangle CornerRadius="10" />
+                                    </Border.StrokeShape>
+                                    <Label Text="{Binding StatusText}"
+                                           FontSize="11"
+                                           TextColor="White" />
+                                </Border>
+
+                                <!-- Location Info -->
+                                <Label Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                       Text="{Binding LocationsText}"
+                                       FontSize="13"
+                                       TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
+                                       LineBreakMode="TailTruncation" />
+
+                                <!-- Stats -->
+                                <HorizontalStackLayout Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                                                       Spacing="12">
+                                    <Label Text="{Binding StatsText}"
+                                           FontSize="12"
+                                           TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                </HorizontalStackLayout>
+
+                                <!-- Actions Row -->
+                                <VerticalStackLayout Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+                                                     Spacing="4"
+                                                     Margin="0,8,0,0">
+                                    <HorizontalStackLayout Spacing="8">
+                                        <!-- Load to Map Button -->
+                                        <Button Text="Load to Map"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=LoadTripToMapCommand}"
+                                                CommandParameter="{Binding .}"
+                                                IsVisible="{Binding CanLoadToMap}"
+                                                BackgroundColor="{StaticResource Primary}"
+                                                TextColor="White"
+                                                FontSize="12"
+                                                HeightRequest="32"
+                                                Padding="12,0"
+                                                CornerRadius="16" />
+
+                                        <!-- Download (Metadata only) -->
+                                        <Button Text="Download"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=QuickDownloadCommand}"
+                                                CommandParameter="{Binding .}"
+                                                IsVisible="{Binding CanQuickDownload}"
+                                                BackgroundColor="{StaticResource Primary}"
+                                                TextColor="White"
+                                                FontSize="12"
+                                                HeightRequest="32"
+                                                Padding="12,0"
+                                                CornerRadius="16" />
+
+                                        <!-- Download + Maps (With Tiles) -->
+                                        <Button Text="+ Offline Maps"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=FullDownloadCommand}"
+                                                CommandParameter="{Binding .}"
+                                                IsVisible="{Binding CanFullDownload}"
+                                                BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                                TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
+                                                FontSize="12"
+                                                HeightRequest="32"
+                                                Padding="12,0"
+                                                CornerRadius="16" />
+
+                                        <!-- Delete Downloaded/Partial -->
+                                        <Button Text="Delete"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=DeleteDownloadCommand}"
+                                                CommandParameter="{Binding .}"
+                                                IsVisible="{Binding CanDelete}"
+                                                BackgroundColor="{StaticResource Error}"
+                                                TextColor="White"
+                                                FontSize="12"
+                                                HeightRequest="32"
+                                                Padding="12,0"
+                                                CornerRadius="16" />
+                                    </HorizontalStackLayout>
+
+                                    <!-- Hint for server-only trips -->
+                                    <Label Text="Download to load on map. Add offline maps for use without internet."
+                                           FontSize="11"
+                                           TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
+                                           IsVisible="{Binding CanQuickDownload}"
+                                           LineBreakMode="TailTruncation" />
+                                </VerticalStackLayout>
+
+                                <!-- Download Progress (when downloading) -->
+                                <Grid Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+                                      IsVisible="{Binding IsDownloading}"
+                                      Margin="0,8,0,0">
+                                    <ProgressBar Progress="{Binding DownloadProgress}"
+                                                 ProgressColor="{StaticResource Primary}"
+                                                 HeightRequest="4" />
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </RefreshView>
+
+        <!-- Shimmer overlay - only shown on initial load, not on pull-to-refresh -->
+        <controls:ShimmerLoadingView IsActive="{Binding IsInitialLoad}"
+                                     IsVisible="{Binding IsInitialLoad}"
+                                     BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}" />
+    </Grid>
+</ContentView>

@@ -5,6 +5,7 @@ using Serilog.Events;
 using Syncfusion.Maui.Toolkit.Hosting;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Data.Services;
+using WayfarerMobile.Handlers;
 using WayfarerMobile.Services;
 using WayfarerMobile.Services.Security;
 using WayfarerMobile.Services.TileCache;
@@ -13,7 +14,6 @@ using WayfarerMobile.Views;
 using WayfarerMobile.Views.Onboarding;
 using SkiaSharp.Views.Maui.Controls.Hosting;
 using ZXing.Net.Maui.Controls;
-using WayfarerMobile.Handlers;
 
 namespace WayfarerMobile;
 

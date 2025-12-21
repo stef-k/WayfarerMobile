@@ -77,6 +77,7 @@ public class DatabaseService : IAsyncDisposable
             await _database.CreateTableAsync<OfflinePlaceEntity>();
             await _database.CreateTableAsync<OfflineSegmentEntity>();
             await _database.CreateTableAsync<OfflineAreaEntity>();
+            await _database.CreateTableAsync<OfflinePolygonEntity>();
             await _database.CreateTableAsync<LiveTileEntity>();
             await _database.CreateTableAsync<ActivityType>();
 
@@ -632,6 +633,37 @@ public class DatabaseService : IAsyncDisposable
         {
             area.TripId = tripId;
             await _database.InsertAsync(area);
+        }
+    }
+
+    /// <summary>
+    /// Gets offline polygons (TripArea zones) for a trip.
+    /// </summary>
+    public async Task<List<OfflinePolygonEntity>> GetOfflinePolygonsAsync(int tripId)
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<OfflinePolygonEntity>()
+            .Where(p => p.TripId == tripId)
+            .OrderBy(p => p.SortOrder)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Saves offline polygons (TripArea zones) for a trip.
+    /// </summary>
+    public async Task SaveOfflinePolygonsAsync(int tripId, IEnumerable<OfflinePolygonEntity> polygons)
+    {
+        await EnsureInitializedAsync();
+
+        // Clear existing polygons for this trip
+        await _database!.ExecuteAsync(
+            "DELETE FROM OfflinePolygons WHERE TripId = ?", tripId);
+
+        // Insert new polygons
+        foreach (var polygon in polygons)
+        {
+            polygon.TripId = tripId;
+            await _database.InsertAsync(polygon);
         }
     }
 

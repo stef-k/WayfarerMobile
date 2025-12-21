@@ -28,6 +28,8 @@
             <converters:BoolToOpacityConverter x:Key="BoolToOpacityConverter" />
             <converters:BoolToCheckConverter x:Key="BoolToCheckConverter" />
             <converters:IndexToColorConverter x:Key="IndexToColorConverter" />
+            <converters:HtmlToTextConverter x:Key="HtmlToTextConverter" />
+            <converters:MauiAssetImageConverter x:Key="MauiAssetImageConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

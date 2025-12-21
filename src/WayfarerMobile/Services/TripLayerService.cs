@@ -53,6 +53,9 @@ public class TripLayerService : ITripLayerService
     public string TripPlacesLayerName => "TripPlaces";
 
     /// <inheritdoc />
+    public string TripAreasLayerName => "TripAreas";
+
+    /// <inheritdoc />
     public string TripSegmentsLayerName => "TripSegments";
 
     /// <inheritdoc />
@@ -102,25 +105,145 @@ public class TripLayerService : ITripLayerService
     }
 
     /// <inheritdoc />
+    public void UpdateTripAreas(WritableLayer layer, IEnumerable<TripArea> areas)
+    {
+        layer.Clear();
+
+        var areaList = areas.ToList();
+        _logger.LogInformation("UpdateTripAreas called with {Count} areas", areaList.Count);
+
+        var areaCount = 0;
+        foreach (var area in areaList)
+        {
+            _logger.LogInformation("Processing area '{Name}': GeometryGeoJson={HasGeo}, Boundary={BoundaryCount} pts, Fill={Fill}",
+                area.Name,
+                !string.IsNullOrEmpty(area.GeometryGeoJson) ? $"yes({area.GeometryGeoJson.Length} chars)" : "null",
+                area.Boundary?.Count ?? 0,
+                area.FillColor ?? "null");
+
+            if (area.Boundary == null || area.Boundary.Count < 3)
+            {
+                _logger.LogWarning("Skipping area '{Name}': insufficient boundary points ({Count})",
+                    area.Name, area.Boundary?.Count ?? 0);
+                continue;
+            }
+
+            try
+            {
+                // Log first few boundary coordinates
+                if (area.Boundary.Count > 0)
+                {
+                    var first = area.Boundary[0];
+                    _logger.LogDebug("Area '{Name}' first coord: Lat={Lat}, Lon={Lon}",
+                        area.Name, first.Latitude, first.Longitude);
+                }
+
+                // Convert boundary coordinates to map coordinates
+                var coordinates = area.Boundary
+                    .Select(p =>
+                    {
+                        var (x, y) = SphericalMercator.FromLonLat(p.Longitude, p.Latitude);
+                        return new Coordinate(x, y);
+                    })
+                    .ToList();
+
+                _logger.LogDebug("Area '{Name}' converted to {Count} map coordinates", area.Name, coordinates.Count);
+
+                // Close the polygon if not already closed
+                if (!coordinates[0].Equals(coordinates[^1]))
+                {
+                    coordinates.Add(coordinates[0]);
+                }
+
+                // Create polygon
+                var linearRing = new LinearRing(coordinates.ToArray());
+                var polygon = new Polygon(linearRing);
+
+                _logger.LogDebug("Area '{Name}' polygon valid: {IsValid}, area: {Area}",
+                    area.Name, polygon.IsValid, polygon.Area);
+
+                // Create style with fill and stroke colors
+                var style = CreateAreaStyle(area.FillColor, area.StrokeColor);
+
+                var feature = new GeometryFeature(polygon)
+                {
+                    Styles = new[] { style }
+                };
+
+                // Add properties for tap identification
+                feature["AreaId"] = area.Id;
+                feature["Name"] = area.Name ?? "";
+
+                layer.Add(feature);
+                areaCount++;
+                _logger.LogInformation("Successfully added area '{Name}' to layer", area.Name);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to create polygon for area {AreaId}", area.Id);
+            }
+        }
+
+        layer.DataHasChanged();
+        _logger.LogDebug("Added {AreaCount} trip area polygons", areaCount);
+    }
+
+    /// <inheritdoc />
+    public void ClearTripAreas(WritableLayer layer)
+    {
+        layer.Clear();
+        layer.DataHasChanged();
+    }
+
+    /// <inheritdoc />
     public void UpdateTripSegments(WritableLayer layer, IEnumerable<TripSegment> segments)
     {
         layer.Clear();
 
+        var segmentList = segments.ToList();
+        _logger.LogInformation("UpdateTripSegments called with {Count} segments", segmentList.Count);
+
         var segmentCount = 0;
-        foreach (var segment in segments)
+        foreach (var segment in segmentList)
         {
+            _logger.LogDebug("Processing segment {Id}: Mode={Mode}, Geometry length={Length}",
+                segment.Id, segment.TransportMode ?? "null",
+                segment.Geometry?.Length ?? 0);
+
             if (string.IsNullOrEmpty(segment.Geometry))
+            {
+                _logger.LogWarning("Skipping segment {Id}: no geometry", segment.Id);
                 continue;
+            }
 
             try
             {
-                // Decode polyline to coordinates
-                var points = PolylineDecoder.Decode(segment.Geometry);
-                if (points.Count < 2)
+                // Parse geometry - could be GeoJSON LineString or encoded polyline
+                List<(double Latitude, double Longitude)> coordinates;
+
+                if (segment.Geometry.TrimStart().StartsWith("{"))
+                {
+                    // GeoJSON format: {"type":"LineString","coordinates":[[lon,lat],...]}
+                    coordinates = ParseGeoJsonLineString(segment.Geometry);
+                    _logger.LogDebug("Parsed GeoJSON segment {Id}: {PointCount} points", segment.Id, coordinates.Count);
+                }
+                else
+                {
+                    // Encoded polyline format
+                    var points = PolylineDecoder.Decode(segment.Geometry);
+                    coordinates = points.Select(p => (p.Latitude, p.Longitude)).ToList();
+                    _logger.LogDebug("Decoded polyline segment {Id}: {PointCount} points", segment.Id, coordinates.Count);
+                }
+
+                if (coordinates.Count < 2)
+                {
+                    _logger.LogWarning("Skipping segment {Id}: only {Count} points after parsing",
+                        segment.Id, coordinates.Count);
                     continue;
+                }
 
                 // Convert to map coordinates
-                var coordinates = points
+                var mapCoordinates = coordinates
                     .Select(p =>
                     {
                         var (x, y) = SphericalMercator.FromLonLat(p.Longitude, p.Latitude);
@@ -129,7 +252,7 @@ public class TripLayerService : ITripLayerService
                     .ToArray();
 
                 // Create line feature with transport mode style
-                var lineString = new LineString(coordinates);
+                var lineString = new LineString(mapCoordinates);
                 var style = CreateSegmentStyle(segment.TransportMode);
 
                 var feature = new GeometryFeature(lineString)
@@ -288,6 +411,39 @@ public class TripLayerService : ITripLayerService
 
     #endregion
 
+    #region Area Styles
+
+    /// <summary>
+    /// Creates a style for an area polygon with fill and stroke colors.
+    /// </summary>
+    private static IStyle CreateAreaStyle(string? fillColor, string? strokeColor)
+    {
+        // Parse fill color with transparency for semi-transparent polygons
+        var fillHex = fillColor ?? "#4285F4"; // Default blue
+        var strokeHex = strokeColor ?? fillHex;
+
+        var fill = MapsuiColorHelper.ParseHexColor(fillHex);
+        var stroke = MapsuiColorHelper.ParseHexColor(strokeHex);
+
+        // Make fill semi-transparent if not already
+        if (fill.A > 100)
+        {
+            fill = Color.FromArgb(80, fill.R, fill.G, fill.B);
+        }
+
+        return new VectorStyle
+        {
+            Fill = new Brush(fill),
+            Outline = new Pen(stroke, 2)
+            {
+                PenStrokeCap = PenStrokeCap.Round,
+                StrokeJoin = StrokeJoin.Round
+            }
+        };
+    }
+
+    #endregion
+
     #region Segment Styles
 
     /// <summary>
@@ -343,6 +499,46 @@ public class TripLayerService : ITripLayerService
             // Default - gray solid line
             _ => (Color.FromArgb(200, 158, 158, 158), 3, null)
         };
+    }
+
+    #endregion
+
+    #region GeoJSON Parsing
+
+    /// <summary>
+    /// Parses a GeoJSON LineString into coordinate pairs.
+    /// </summary>
+    /// <param name="geoJson">GeoJSON string with type "LineString".</param>
+    /// <returns>List of (Latitude, Longitude) tuples.</returns>
+    private static List<(double Latitude, double Longitude)> ParseGeoJsonLineString(string geoJson)
+    {
+        var result = new List<(double Latitude, double Longitude)>();
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(geoJson);
+            var root = doc.RootElement;
+
+            // GeoJSON LineString format: { "type": "LineString", "coordinates": [[lon,lat], [lon,lat], ...] }
+            if (root.TryGetProperty("coordinates", out var coordinates))
+            {
+                foreach (var point in coordinates.EnumerateArray())
+                {
+                    if (point.GetArrayLength() >= 2)
+                    {
+                        var lon = point[0].GetDouble();
+                        var lat = point[1].GetDouble();
+                        result.Add((lat, lon));
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Invalid GeoJSON, return empty list
+        }
+
+        return result;
     }
 
     #endregion

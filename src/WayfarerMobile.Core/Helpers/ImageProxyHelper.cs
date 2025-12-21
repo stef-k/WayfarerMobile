@@ -11,8 +11,9 @@ namespace WayfarerMobile.Core.Helpers;
 public static class ImageProxyHelper
 {
     /// <summary>
-    /// Convert Google MyMaps image URLs to backend proxy URLs for WebView display.
-    /// Also converts relative proxy URLs to absolute URLs.
+    /// Convert all external image URLs to backend proxy URLs for WebView display.
+    /// Handles Google MyMaps URLs, relative proxy URLs, and any other external HTTP/HTTPS images.
+    /// This ensures images load properly regardless of CORS or authentication restrictions.
     /// </summary>
     /// <param name="html">The HTML content containing image tags.</param>
     /// <param name="backendBaseUrl">The backend server base URL (without /api suffix).</param>
@@ -75,6 +76,38 @@ public static class ImageProxyHelper
 
             var absoluteUrl = $"{baseUrl}/Public/ProxyImage?url={encodedUrl}";
             return prefix + absoluteUrl + suffix;
+        });
+
+        // Step 3: Convert any remaining external HTTP/HTTPS image URLs to proxy URLs
+        // This handles images from any external source that may have CORS or auth restrictions
+        // Skip data: URIs and already-proxied images
+        var externalImageRegex = new Regex(
+            @"(<img[^>]*src\s*=\s*[""'])(https?://[^""']*)([""'][^>]*>)",
+            RegexOptions.IgnoreCase);
+
+        result = externalImageRegex.Replace(result, match =>
+        {
+            var prefix = match.Groups[1].Value;  // <img src="
+            var imageUrl = match.Groups[2].Value;  // http:// or https:// URL
+            var suffix = match.Groups[3].Value;  // ">
+
+            // Skip if already proxied or is the backend itself
+            if (imageUrl.Contains("/Public/ProxyImage") || imageUrl.StartsWith(baseUrl))
+            {
+                return match.Value;
+            }
+
+            try
+            {
+                // URL encode and create proxy URL
+                var encodedUrl = HttpUtility.UrlEncode(imageUrl);
+                var proxyUrl = $"{baseUrl}/Public/ProxyImage?url={encodedUrl}";
+                return prefix + proxyUrl + suffix;
+            }
+            catch
+            {
+                return match.Value;
+            }
         });
 
         return result;

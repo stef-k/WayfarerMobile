@@ -120,6 +120,15 @@ public class TripDownloadService
                 return null;
             }
 
+            // Debug: Log parsed data to verify deserialization
+            _logger.LogInformation("Trip '{TripName}' fetched: {RegionCount} regions, {PlaceCount} places",
+                tripDetails.Name, tripDetails.Regions.Count, tripDetails.AllPlaces.Count);
+            foreach (var place in tripDetails.AllPlaces.Take(3))
+            {
+                _logger.LogDebug("  Place '{Name}': Lat={Lat}, Lon={Lon}",
+                    place.Name, place.Latitude, place.Longitude);
+            }
+
             RaiseProgress(tripEntity.Id, 25, "Saving regions...");
 
             // Convert and save areas/regions
@@ -154,7 +163,8 @@ public class TripDownloadService
                         Notes = place.Notes,
                         IconName = place.Icon,
                         MarkerColor = place.MarkerColor,
-                        SortOrder = place.SortOrder > 0 ? place.SortOrder : placeIndex++
+                        Address = place.Address,
+                        SortOrder = place.SortOrder is > 0 ? place.SortOrder.Value : placeIndex++
                     });
                 }
             }
@@ -164,15 +174,32 @@ public class TripDownloadService
 
             RaiseProgress(tripEntity.Id, 40, "Saving segments...");
 
-            // Convert and save segments
+            // Build place name lookup for segment origin/destination (includes region name: "Place, Region")
+            var placeNameLookup = new Dictionary<Guid, string>();
+            foreach (var region in tripDetails.Regions)
+            {
+                foreach (var place in region.Places)
+                {
+                    // Format: "PlaceName, RegionName" (or just "PlaceName" if region has same name)
+                    var displayName = string.Equals(place.Name, region.Name, StringComparison.OrdinalIgnoreCase)
+                        ? place.Name
+                        : $"{place.Name}, {region.Name}";
+                    placeNameLookup[place.Id] = displayName;
+                }
+            }
+
+            // Convert and save segments with place names
             var segments = tripDetails.Segments.Select((s, index) => new OfflineSegmentEntity
             {
                 ServerId = s.Id,
-                OriginId = s.OriginId,
-                DestinationId = s.DestinationId,
+                OriginId = s.OriginId ?? Guid.Empty,
+                OriginName = s.OriginId.HasValue && placeNameLookup.TryGetValue(s.OriginId.Value, out var fromName) ? fromName : null,
+                DestinationId = s.DestinationId ?? Guid.Empty,
+                DestinationName = s.DestinationId.HasValue && placeNameLookup.TryGetValue(s.DestinationId.Value, out var toName) ? toName : null,
                 TransportMode = s.TransportMode,
                 DistanceKm = s.DistanceKm,
-                DurationMinutes = s.DurationMinutes,
+                DurationMinutes = (int?)s.DurationMinutes,
+                Notes = s.Notes,
                 Geometry = s.Geometry,
                 SortOrder = index
             }).ToList();
@@ -180,10 +207,31 @@ public class TripDownloadService
             await _databaseService.SaveOfflineSegmentsAsync(tripEntity.Id, segments);
             tripEntity.SegmentCount = segments.Count;
 
+            // Save polygon zones (TripArea) from each region
+            var polygons = new List<OfflinePolygonEntity>();
+            foreach (var region in tripDetails.Regions)
+            {
+                foreach (var area in region.Areas)
+                {
+                    polygons.Add(new OfflinePolygonEntity
+                    {
+                        ServerId = area.Id,
+                        RegionId = region.Id,
+                        Name = area.Name,
+                        Notes = area.Notes,
+                        FillColor = area.FillColor,
+                        StrokeColor = area.StrokeColor,
+                        GeometryGeoJson = area.GeometryGeoJson,
+                        SortOrder = area.SortOrder ?? 0
+                    });
+                }
+            }
+            await _databaseService.SaveOfflinePolygonsAsync(tripEntity.Id, polygons);
+
             tripEntity.ProgressPercent = 50;
             await _databaseService.SaveDownloadedTripAsync(tripEntity);
 
-            RaiseProgress(tripEntity.Id, 50, $"Saved {places.Count} places, {segments.Count} segments");
+            RaiseProgress(tripEntity.Id, 50, $"Saved {places.Count} places, {segments.Count} segments, {polygons.Count} polygons");
 
             // Get bounding box for tile download
             var boundingBox = tripSummary.BoundingBox ?? tripDetails.BoundingBox;
@@ -215,9 +263,11 @@ public class TripDownloadService
                 _logger.LogWarning("No bounding box for trip {TripName}, skipping tiles", tripSummary.Name);
             }
 
-            // Store version for sync tracking
+            // Store version and trip details for sync tracking
             tripEntity.Version = tripDetails.Version;
-            tripEntity.ServerUpdatedAt = DateTime.UtcNow;
+            tripEntity.ServerUpdatedAt = tripDetails.UpdatedAt;
+            tripEntity.Notes = tripDetails.Notes;
+            tripEntity.CoverImageUrl = tripDetails.CoverImageUrl;
             tripEntity.ProgressPercent = 100;
             await _databaseService.SaveDownloadedTripAsync(tripEntity);
 
@@ -310,20 +360,42 @@ public class TripDownloadService
         var placesTask = _databaseService.GetOfflinePlacesAsync(trip.Id);
         var segmentsTask = _databaseService.GetOfflineSegmentsAsync(trip.Id);
         var areasTask = _databaseService.GetOfflineAreasAsync(trip.Id);
+        var polygonsTask = _databaseService.GetOfflinePolygonsAsync(trip.Id);
 
-        await Task.WhenAll(placesTask, segmentsTask, areasTask);
+        await Task.WhenAll(placesTask, segmentsTask, areasTask, polygonsTask);
 
         var placeEntities = await placesTask;
         var segmentEntities = await segmentsTask;
         var areaEntities = await areasTask;
+        var polygonEntities = await polygonsTask;
 
-        // Build regions with places
+        // Group polygons by region
+        var polygonsByRegion = polygonEntities.GroupBy(p => p.RegionId).ToDictionary(g => g.Key, g => g.ToList());
+
+        // Build regions with places and areas (polygon zones)
         var regions = new List<TripRegion>();
         var placesByRegion = placeEntities.GroupBy(p => p.RegionId ?? Guid.Empty);
 
         foreach (var regionGroup in placesByRegion)
         {
             var area = areaEntities.FirstOrDefault(a => a.ServerId == regionGroup.Key);
+
+            // Build TripArea list for this region
+            var tripAreas = new List<TripArea>();
+            if (polygonsByRegion.TryGetValue(regionGroup.Key, out var regionPolygons))
+            {
+                tripAreas = regionPolygons.Select(p => new TripArea
+                {
+                    Id = p.ServerId,
+                    Name = p.Name,
+                    Notes = p.Notes,
+                    FillColor = p.FillColor,
+                    StrokeColor = p.StrokeColor,
+                    GeometryGeoJson = p.GeometryGeoJson,
+                    SortOrder = p.SortOrder
+                }).OrderBy(a => a.SortOrder).ToList();
+            }
+
             var region = new TripRegion
             {
                 Id = regionGroup.Key,
@@ -338,8 +410,10 @@ public class TripDownloadService
                     Notes = p.Notes,
                     Icon = p.IconName,
                     MarkerColor = p.MarkerColor,
+                    Address = p.Address,
                     SortOrder = p.SortOrder
-                }).OrderBy(p => p.SortOrder).ToList()
+                }).OrderBy(p => p.SortOrder).ToList(),
+                Areas = tripAreas
             };
             regions.Add(region);
         }
@@ -349,10 +423,13 @@ public class TripDownloadService
         {
             Id = s.ServerId,
             OriginId = s.OriginId,
+            OriginName = s.OriginName,
             DestinationId = s.DestinationId,
+            DestinationName = s.DestinationName,
             TransportMode = s.TransportMode,
             DistanceKm = s.DistanceKm,
             DurationMinutes = s.DurationMinutes,
+            Notes = s.Notes,
             Geometry = s.Geometry
         }).ToList();
 
@@ -361,6 +438,9 @@ public class TripDownloadService
         {
             Id = trip.ServerId,
             Name = trip.Name,
+            Notes = trip.Notes,
+            CoverImageUrl = trip.CoverImageUrl,
+            UpdatedAt = trip.ServerUpdatedAt ?? trip.UpdatedAt,
             BoundingBox = new BoundingBox
             {
                 North = trip.BoundingBoxNorth,
@@ -372,8 +452,14 @@ public class TripDownloadService
             Segments = segments
         };
 
+        // Debug: Log loaded data to verify SQLite storage
         _logger.LogInformation("Loaded offline trip: {TripName} ({PlaceCount} places, {SegmentCount} segments)",
             trip.Name, placeEntities.Count, segmentEntities.Count);
+        foreach (var place in tripDetails.AllPlaces.Take(3))
+        {
+            _logger.LogDebug("  Loaded place '{Name}': Lat={Lat}, Lon={Lon}",
+                place.Name, place.Latitude, place.Longitude);
+        }
 
         return tripDetails;
     }
@@ -394,10 +480,13 @@ public class TripDownloadService
         {
             Id = s.ServerId,
             OriginId = s.OriginId,
+            OriginName = s.OriginName,
             DestinationId = s.DestinationId,
+            DestinationName = s.DestinationName,
             TransportMode = s.TransportMode,
             DistanceKm = s.DistanceKm,
             DurationMinutes = s.DurationMinutes,
+            Notes = s.Notes,
             Geometry = s.Geometry
         }).ToList();
     }
@@ -533,7 +622,7 @@ public class TripDownloadService
                         Notes = place.Notes,
                         IconName = place.Icon,
                         MarkerColor = place.MarkerColor,
-                        SortOrder = place.SortOrder > 0 ? place.SortOrder : placeIndex++
+                        SortOrder = place.SortOrder is > 0 ? place.SortOrder.Value : placeIndex++
                     });
                 }
             }
@@ -543,21 +632,61 @@ public class TripDownloadService
 
             RaiseProgress(localTrip.Id, 55, "Updating segments...");
 
-            // Update segments
+            // Build place name lookup for segment origin/destination (includes region name: "Place, Region")
+            var syncPlaceNameLookup = new Dictionary<Guid, string>();
+            foreach (var region in serverTrip.Regions)
+            {
+                foreach (var place in region.Places)
+                {
+                    // Format: "PlaceName, RegionName" (or just "PlaceName" if region has same name)
+                    var displayName = string.Equals(place.Name, region.Name, StringComparison.OrdinalIgnoreCase)
+                        ? place.Name
+                        : $"{place.Name}, {region.Name}";
+                    syncPlaceNameLookup[place.Id] = displayName;
+                }
+            }
+
+            // Update segments with place names
             var segments = serverTrip.Segments.Select((s, index) => new OfflineSegmentEntity
             {
                 ServerId = s.Id,
-                OriginId = s.OriginId,
-                DestinationId = s.DestinationId,
+                OriginId = s.OriginId ?? Guid.Empty,
+                OriginName = s.OriginId.HasValue && syncPlaceNameLookup.TryGetValue(s.OriginId.Value, out var fromName) ? fromName : null,
+                DestinationId = s.DestinationId ?? Guid.Empty,
+                DestinationName = s.DestinationId.HasValue && syncPlaceNameLookup.TryGetValue(s.DestinationId.Value, out var toName) ? toName : null,
                 TransportMode = s.TransportMode,
                 DistanceKm = s.DistanceKm,
-                DurationMinutes = s.DurationMinutes,
+                DurationMinutes = (int?)s.DurationMinutes,
+                Notes = s.Notes,
                 Geometry = s.Geometry,
                 SortOrder = index
             }).ToList();
 
             await _databaseService.SaveOfflineSegmentsAsync(localTrip.Id, segments);
             localTrip.SegmentCount = segments.Count;
+
+            RaiseProgress(localTrip.Id, 65, "Updating polygon zones...");
+
+            // Update polygon zones (TripArea) from each region
+            var polygons = new List<OfflinePolygonEntity>();
+            foreach (var region in serverTrip.Regions)
+            {
+                foreach (var tripArea in region.Areas)
+                {
+                    polygons.Add(new OfflinePolygonEntity
+                    {
+                        ServerId = tripArea.Id,
+                        RegionId = region.Id,
+                        Name = tripArea.Name,
+                        Notes = tripArea.Notes,
+                        FillColor = tripArea.FillColor,
+                        StrokeColor = tripArea.StrokeColor,
+                        GeometryGeoJson = tripArea.GeometryGeoJson,
+                        SortOrder = tripArea.SortOrder ?? 0
+                    });
+                }
+            }
+            await _databaseService.SaveOfflinePolygonsAsync(localTrip.Id, polygons);
 
             RaiseProgress(localTrip.Id, 75, "Checking map coverage...");
 

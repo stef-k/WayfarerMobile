@@ -32,10 +32,12 @@ public static class PolylineDecoder
 
             do
             {
+                if (index >= encoded.Length)
+                    break;
                 b = encoded[index++] - 63;
                 result |= (b & 0x1f) << shift;
                 shift += 5;
-            } while (b >= 0x20 && index < encoded.Length);
+            } while (b >= 0x20);
 
             lat += (result & 1) != 0 ? ~(result >> 1) : result >> 1;
 
@@ -45,10 +47,12 @@ public static class PolylineDecoder
 
             do
             {
+                if (index >= encoded.Length)
+                    break;
                 b = encoded[index++] - 63;
                 result |= (b & 0x1f) << shift;
                 shift += 5;
-            } while (b >= 0x20 && index < encoded.Length);
+            } while (b >= 0x20);
 
             lng += (result & 1) != 0 ? ~(result >> 1) : result >> 1;
 
