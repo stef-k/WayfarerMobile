@@ -34,7 +34,7 @@
 
     <!-- Flyout Item Template -->
     <Shell.ItemTemplate>
-        <DataTemplate>
+        <DataTemplate x:DataType="BaseShellItem">
             <Grid ColumnDefinitions="Auto,*" Padding="15,12" ColumnSpacing="15">
                 <Image Grid.Column="0"
                        Source="{Binding FlyoutIcon}"

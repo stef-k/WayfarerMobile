@@ -203,7 +203,7 @@ public partial class CheckInViewModel : BaseViewModel
     [RelayCommand]
     private async Task CancelAsync()
     {
-        await Shell.Current.GoBackAsync();
+        await Shell.Current.GoToAsync("..");
     }
 
     /// <summary>
