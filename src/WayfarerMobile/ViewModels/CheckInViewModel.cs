@@ -198,6 +198,15 @@ public partial class CheckInViewModel : BaseViewModel
     }
 
     /// <summary>
+    /// Cancels the check-in and navigates back.
+    /// </summary>
+    [RelayCommand]
+    private async Task CancelAsync()
+    {
+        await Shell.Current.GoToAsync("..");
+    }
+
+    /// <summary>
     /// Submits the check-in to the server.
     /// </summary>
     [RelayCommand]

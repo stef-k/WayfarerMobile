@@ -5,6 +5,7 @@ using Serilog.Events;
 using Syncfusion.Maui.Toolkit.Hosting;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Data.Services;
+using WayfarerMobile.Handlers;
 using WayfarerMobile.Services;
 using WayfarerMobile.Services.Security;
 using WayfarerMobile.Services.TileCache;
@@ -33,6 +34,11 @@ public static class MauiProgram
             .UseSkiaSharp()
             .ConfigureSyncfusionToolkit()
             .UseBarcodeReader()
+            .ConfigureMauiHandlers(handlers =>
+            {
+                // Register custom WebView handler to enable external content loading
+                handlers.AddHandler<WebView, CustomWebViewHandler>();
+            })
             .ConfigureFonts(fonts =>
             {
                 fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");

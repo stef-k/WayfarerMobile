@@ -1,4 +1,5 @@
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Helpers;
 using WayfarerMobile.Services;
 using WayfarerMobile.ViewModels;
 
@@ -28,6 +29,9 @@ public partial class App : Application
 
         // Apply saved theme and language settings on startup
         ApplySavedSettings();
+
+        // Pre-load notes viewer template for WebView display
+        _ = NotesViewerHelper.PreloadTemplateAsync();
 
         // Initialize global exception handler first
         InitializeExceptionHandler();
@@ -185,22 +189,21 @@ public partial class App : Application
                 return;
             }
 
-            // CRITICAL: Queue the service start to run after current main thread work completes.
-            // This ensures startForegroundService() is called when the main thread is free,
-            // allowing Android to immediately process OnCreate and call StartForeground()
-            // within the required 5-second window.
-            MainThread.BeginInvokeOnMainThread(async () =>
+            // CRITICAL: Delay service start to let app fully initialize.
+            // The main thread is heavily loaded during startup (map creation, UI setup, etc.)
+            // and starting the foreground service while blocked can cause Android's 5-second
+            // timeout to expire before OnCreate/StartForeground can execute.
+            await Task.Delay(2000); // Wait for app to stabilize
+
+            try
             {
-                try
-                {
-                    await locationBridge.StartAsync();
-                    System.Diagnostics.Debug.WriteLine("[App] Location tracking service started (24/7 mode)");
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[App] Failed to start location tracking service: {ex.Message}");
-                }
-            });
+                await locationBridge.StartAsync();
+                System.Diagnostics.Debug.WriteLine("[App] Location tracking service started (24/7 mode)");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] Failed to start location tracking service: {ex.Message}");
+            }
         }
         catch (Exception ex)
         {

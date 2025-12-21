@@ -105,6 +105,16 @@ public class DownloadedTripEntity
     /// Gets or sets the server's last update timestamp.
     /// </summary>
     public DateTime? ServerUpdatedAt { get; set; }
+
+    /// <summary>
+    /// Gets or sets the trip notes (HTML).
+    /// </summary>
+    public string? Notes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the trip cover image URL.
+    /// </summary>
+    public string? CoverImageUrl { get; set; }
 }
 
 /// <summary>

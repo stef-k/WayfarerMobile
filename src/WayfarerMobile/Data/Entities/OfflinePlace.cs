@@ -69,4 +69,9 @@ public class OfflinePlaceEntity
     /// Gets or sets the sort order.
     /// </summary>
     public int SortOrder { get; set; }
+
+    /// <summary>
+    /// Gets or sets the place address.
+    /// </summary>
+    public string? Address { get; set; }
 }

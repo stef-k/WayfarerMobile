@@ -260,6 +260,25 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
 
         System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] OnStartCommand: {action}");
 
+        // CRITICAL: If started via startForegroundService(), we MUST call startForeground()
+        // even if already in foreground. This handles:
+        // 1. App calling StartAsync() when service is already running
+        // 2. Android restarting a sticky service after it was killed
+        // 3. BootReceiver starting the service
+        if (action == ActionStart && OperatingSystem.IsAndroidVersionAtLeast(26))
+        {
+            try
+            {
+                var notification = CreateNotification(GetCurrentNotificationText());
+                StartForeground(NotificationId, notification);
+                System.Diagnostics.Debug.WriteLine("[LocationTrackingService] StartForeground called in OnStartCommand");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] Error in OnStartCommand StartForeground: {ex.Message}");
+            }
+        }
+
         switch (action)
         {
             case ActionStart:
@@ -834,6 +853,20 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         builder.SetPriority(NotificationCompat.PriorityLow);
 
         return builder.Build()!;
+    }
+
+    /// <summary>
+    /// Gets the current notification text based on state.
+    /// </summary>
+    private string GetCurrentNotificationText()
+    {
+        return _currentState switch
+        {
+            TrackingState.Active => _timelineTrackingEnabled ? "Timeline: ON" : "Timeline: OFF",
+            TrackingState.Paused => "Tracking paused",
+            TrackingState.Ready => "Initializing...",
+            _ => "Location tracking"
+        };
     }
 
     /// <summary>

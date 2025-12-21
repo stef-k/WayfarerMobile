@@ -855,7 +855,7 @@ public class TripModelsTests
         {
             Id = Guid.NewGuid(),
             Name = "Test Trip",
-            PlaceCount = 5
+            PlacesCount = 5
         };
 
         // Act
@@ -873,7 +873,7 @@ public class TripModelsTests
         {
             Id = Guid.NewGuid(),
             Name = "Test Trip",
-            PlaceCount = 1
+            PlacesCount = 1
         };
 
         // Act
@@ -891,7 +891,7 @@ public class TripModelsTests
         {
             Id = Guid.NewGuid(),
             Name = "Test Trip",
-            PlaceCount = 0
+            PlacesCount = 0
         };
 
         // Act
@@ -1049,6 +1049,443 @@ public class TripModelsTests
 
         // Assert
         result.Should().BeFalse();
+    }
+
+    #endregion
+
+    #region TripSummary StatsText Tests
+
+    [Fact]
+    public void TripSummary_StatsText_MultiplePlaces_ReturnsPluralForm()
+    {
+        var summary = new TripSummary
+        {
+            Id = Guid.NewGuid(),
+            Name = "Test Trip",
+            PlacesCount = 5,
+            RegionsCount = 2
+        };
+
+        var result = summary.StatsText;
+
+        result.Should().Contain("5 places");
+        result.Should().Contain("2 regions");
+    }
+
+    [Fact]
+    public void TripSummary_StatsText_SinglePlace_ReturnsSingularForm()
+    {
+        var summary = new TripSummary
+        {
+            Id = Guid.NewGuid(),
+            Name = "Test Trip",
+            PlacesCount = 1,
+            RegionsCount = 1
+        };
+
+        var result = summary.StatsText;
+
+        result.Should().Contain("1 place");
+        result.Should().Contain("1 region");
+    }
+
+    [Fact]
+    public void TripSummary_StatsText_ZeroPlaces_ReturnsEmptyTrip()
+    {
+        var summary = new TripSummary
+        {
+            Id = Guid.NewGuid(),
+            Name = "Test Trip",
+            PlacesCount = 0,
+            RegionsCount = 0
+        };
+
+        var result = summary.StatsText;
+
+        result.Should().Be("Empty trip");
+    }
+
+    #endregion
+
+    #region TripDetails Tests
+
+    [Fact]
+    public void TripDetails_HasNotes_Null_ReturnsFalse()
+    {
+        var details = new TripDetails { Notes = null };
+        details.HasNotes.Should().BeFalse();
+    }
+
+    [Fact]
+    public void TripDetails_HasNotes_Empty_ReturnsFalse()
+    {
+        var details = new TripDetails { Notes = "" };
+        details.HasNotes.Should().BeFalse();
+    }
+
+    [Fact]
+    public void TripDetails_HasNotes_Whitespace_ReturnsFalse()
+    {
+        var details = new TripDetails { Notes = "   " };
+        details.HasNotes.Should().BeFalse();
+    }
+
+    [Fact]
+    public void TripDetails_HasNotes_EmptyParagraph_ReturnsFalse()
+    {
+        var details = new TripDetails { Notes = "<p></p>" };
+        details.HasNotes.Should().BeFalse();
+    }
+
+    [Fact]
+    public void TripDetails_HasNotes_QuillEmptyDefault_ReturnsFalse()
+    {
+        var details = new TripDetails { Notes = "<p><br></p>" };
+        details.HasNotes.Should().BeFalse();
+    }
+
+    [Fact]
+    public void TripDetails_HasNotes_ValidContent_ReturnsTrue()
+    {
+        var details = new TripDetails { Notes = "<p>Some notes here</p>" };
+        details.HasNotes.Should().BeTrue();
+    }
+
+    [Fact]
+    public void TripDetails_HasTags_EmptyList_ReturnsFalse()
+    {
+        var details = new TripDetails { Tags = new List<TripTag>() };
+        details.HasTags.Should().BeFalse();
+    }
+
+    [Fact]
+    public void TripDetails_HasTags_WithTags_ReturnsTrue()
+    {
+        var details = new TripDetails
+        {
+            Tags = new List<TripTag>
+            {
+                new TripTag { Id = Guid.NewGuid(), Slug = "adventure", Name = "Adventure" },
+                new TripTag { Id = Guid.NewGuid(), Slug = "beach", Name = "Beach" }
+            }
+        };
+        details.HasTags.Should().BeTrue();
+    }
+
+    [Fact]
+    public void TripDetails_TagsDisplay_EmptyList_ReturnsEmptyString()
+    {
+        var details = new TripDetails { Tags = new List<TripTag>() };
+        details.TagsDisplay.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void TripDetails_TagsDisplay_SingleTag_ReturnsTagName()
+    {
+        var details = new TripDetails
+        {
+            Tags = new List<TripTag>
+            {
+                new TripTag { Id = Guid.NewGuid(), Slug = "adventure", Name = "Adventure" }
+            }
+        };
+        details.TagsDisplay.Should().Be("Adventure");
+    }
+
+    [Fact]
+    public void TripDetails_TagsDisplay_MultipleTags_ReturnsCommaSeparated()
+    {
+        var details = new TripDetails
+        {
+            Tags = new List<TripTag>
+            {
+                new TripTag { Id = Guid.NewGuid(), Slug = "adventure", Name = "Adventure" },
+                new TripTag { Id = Guid.NewGuid(), Slug = "beach", Name = "Beach" },
+                new TripTag { Id = Guid.NewGuid(), Slug = "hiking", Name = "Hiking" }
+            }
+        };
+        details.TagsDisplay.Should().Be("Adventure, Beach, Hiking");
+    }
+
+    [Fact]
+    public void TripDetails_HasCoverImage_Null_ReturnsFalse()
+    {
+        var details = new TripDetails { CoverImageUrl = null };
+        details.HasCoverImage.Should().BeFalse();
+    }
+
+    [Fact]
+    public void TripDetails_HasCoverImage_Empty_ReturnsFalse()
+    {
+        var details = new TripDetails { CoverImageUrl = "" };
+        details.HasCoverImage.Should().BeFalse();
+    }
+
+    [Fact]
+    public void TripDetails_HasCoverImage_ValidUrl_ReturnsTrue()
+    {
+        var details = new TripDetails { CoverImageUrl = "https://example.com/image.jpg" };
+        details.HasCoverImage.Should().BeTrue();
+    }
+
+    [Fact]
+    public void TripDetails_AllAreas_EmptyRegions_ReturnsEmptyList()
+    {
+        var details = new TripDetails { Regions = new List<TripRegion>() };
+        details.AllAreas.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void TripDetails_AllAreas_MultipleRegions_AggregatesAllAreas()
+    {
+        var details = new TripDetails
+        {
+            Regions = new List<TripRegion>
+            {
+                new TripRegion
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "Region1",
+                    Areas = new List<TripArea>
+                    {
+                        new TripArea { Id = Guid.NewGuid(), Name = "Area1" },
+                        new TripArea { Id = Guid.NewGuid(), Name = "Area2" }
+                    }
+                },
+                new TripRegion
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "Region2",
+                    Areas = new List<TripArea>
+                    {
+                        new TripArea { Id = Guid.NewGuid(), Name = "Area3" }
+                    }
+                }
+            }
+        };
+
+        var areas = details.AllAreas.ToList();
+        areas.Should().HaveCount(3);
+        areas.Select(a => a.Name).Should().Contain(new[] { "Area1", "Area2", "Area3" });
+    }
+
+    #endregion
+
+    #region TripRegion Tests
+
+    [Fact]
+    public void TripRegion_IsUnassignedRegion_ExactMatch_ReturnsTrue()
+    {
+        var region = new TripRegion { Name = "Unassigned Places" };
+        region.IsUnassignedRegion.Should().BeTrue();
+    }
+
+    [Fact]
+    public void TripRegion_IsUnassignedRegion_DifferentName_ReturnsFalse()
+    {
+        var region = new TripRegion { Name = "My Region" };
+        region.IsUnassignedRegion.Should().BeFalse();
+    }
+
+    [Fact]
+    public void TripRegion_HasContent_NoPlacesNoAreas_ReturnsFalse()
+    {
+        var region = new TripRegion
+        {
+            Name = "Empty Region",
+            Places = new List<TripPlace>(),
+            Areas = new List<TripArea>()
+        };
+        region.HasContent.Should().BeFalse();
+    }
+
+    [Fact]
+    public void TripRegion_HasContent_WithPlaces_ReturnsTrue()
+    {
+        var region = new TripRegion
+        {
+            Name = "Region",
+            Places = new List<TripPlace> { new TripPlace { Name = "Place1" } },
+            Areas = new List<TripArea>()
+        };
+        region.HasContent.Should().BeTrue();
+    }
+
+    [Fact]
+    public void TripRegion_HasContent_WithAreas_ReturnsTrue()
+    {
+        var region = new TripRegion
+        {
+            Name = "Region",
+            Places = new List<TripPlace>(),
+            Areas = new List<TripArea> { new TripArea { Name = "Area1" } }
+        };
+        region.HasContent.Should().BeTrue();
+    }
+
+    [Fact]
+    public void TripRegion_IsVisibleInUi_UnassignedEmpty_ReturnsFalse()
+    {
+        var region = new TripRegion
+        {
+            Name = "Unassigned Places",
+            Places = new List<TripPlace>(),
+            Areas = new List<TripArea>()
+        };
+        region.IsVisibleInUi.Should().BeFalse();
+    }
+
+    [Fact]
+    public void TripRegion_IsVisibleInUi_UnassignedWithContent_ReturnsTrue()
+    {
+        var region = new TripRegion
+        {
+            Name = "Unassigned Places",
+            Places = new List<TripPlace> { new TripPlace { Name = "Place1" } },
+            Areas = new List<TripArea>()
+        };
+        region.IsVisibleInUi.Should().BeTrue();
+    }
+
+    [Fact]
+    public void TripRegion_IsVisibleInUi_RegularRegion_AlwaysTrue()
+    {
+        var region = new TripRegion
+        {
+            Name = "My Region",
+            Places = new List<TripPlace>(),
+            Areas = new List<TripArea>()
+        };
+        region.IsVisibleInUi.Should().BeTrue();
+    }
+
+    [Fact]
+    public void TripRegion_CanDelete_UnassignedRegion_ReturnsFalse()
+    {
+        var region = new TripRegion { Name = "Unassigned Places" };
+        region.CanDelete.Should().BeFalse();
+    }
+
+    [Fact]
+    public void TripRegion_CanDelete_RegularRegion_ReturnsTrue()
+    {
+        var region = new TripRegion { Name = "My Region" };
+        region.CanDelete.Should().BeTrue();
+    }
+
+    [Fact]
+    public void TripRegion_CanRename_UnassignedRegion_ReturnsFalse()
+    {
+        var region = new TripRegion { Name = "Unassigned Places" };
+        region.CanRename.Should().BeFalse();
+    }
+
+    [Fact]
+    public void TripRegion_CanRename_RegularRegion_ReturnsTrue()
+    {
+        var region = new TripRegion { Name = "My Region" };
+        region.CanRename.Should().BeTrue();
+    }
+
+    [Fact]
+    public void TripRegion_HasNotes_EmptyHtml_ReturnsFalse()
+    {
+        var region = new TripRegion { Notes = "<p></p>" };
+        region.HasNotes.Should().BeFalse();
+    }
+
+    [Fact]
+    public void TripRegion_HasNotes_ValidContent_ReturnsTrue()
+    {
+        var region = new TripRegion { Notes = "<p>Region notes</p>" };
+        region.HasNotes.Should().BeTrue();
+    }
+
+    #endregion
+
+    #region TripPlace Tests
+
+    [Fact]
+    public void TripPlace_Location_ValidArray_SetsLatLon()
+    {
+        var place = new TripPlace();
+        place.Location = new[] { 10.5, 20.5 }; // [lon, lat]
+
+        place.Longitude.Should().Be(10.5);
+        place.Latitude.Should().Be(20.5);
+    }
+
+    [Fact]
+    public void TripPlace_Location_ShortArray_DoesNotSet()
+    {
+        var place = new TripPlace { Latitude = 1.0, Longitude = 2.0 };
+        place.Location = new[] { 5.0 }; // Only one element
+
+        // Should keep original values
+        place.Latitude.Should().Be(1.0);
+        place.Longitude.Should().Be(2.0);
+    }
+
+    [Fact]
+    public void TripPlace_Location_NullArray_DoesNotSet()
+    {
+        var place = new TripPlace { Latitude = 1.0, Longitude = 2.0 };
+        place.Location = null;
+
+        // Should keep original values
+        place.Latitude.Should().Be(1.0);
+        place.Longitude.Should().Be(2.0);
+    }
+
+    [Fact]
+    public void TripPlace_Location_GetterWithValues_ReturnsArray()
+    {
+        var place = new TripPlace { Latitude = 20.5, Longitude = 10.5 };
+        var result = place.Location;
+
+        result.Should().NotBeNull();
+        result.Should().HaveCount(2);
+        result![0].Should().Be(10.5); // Longitude first (GeoJSON format)
+        result![1].Should().Be(20.5); // Latitude second
+    }
+
+    [Fact]
+    public void TripPlace_Location_GetterWithZeroValues_ReturnsNull()
+    {
+        var place = new TripPlace { Latitude = 0, Longitude = 0 };
+        place.Location.Should().BeNull();
+    }
+
+    #endregion
+
+    #region TripSegment Tests
+
+    [Fact]
+    public void TripSegment_HasNotes_Null_ReturnsFalse()
+    {
+        var segment = new TripSegment { Notes = null };
+        segment.HasNotes.Should().BeFalse();
+    }
+
+    [Fact]
+    public void TripSegment_HasNotes_Empty_ReturnsFalse()
+    {
+        var segment = new TripSegment { Notes = "" };
+        segment.HasNotes.Should().BeFalse();
+    }
+
+    [Fact]
+    public void TripSegment_HasNotes_EmptyHtml_ReturnsFalse()
+    {
+        var segment = new TripSegment { Notes = "<p></p>" };
+        segment.HasNotes.Should().BeFalse();
+    }
+
+    [Fact]
+    public void TripSegment_HasNotes_ValidContent_ReturnsTrue()
+    {
+        var segment = new TripSegment { Notes = "<p>Segment notes here</p>" };
+        segment.HasNotes.Should().BeTrue();
     }
 
     #endregion

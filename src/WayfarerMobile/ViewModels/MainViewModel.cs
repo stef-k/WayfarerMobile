@@ -1,10 +1,12 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Mapsui.Layers;
+using Microsoft.Extensions.Logging;
 using Microsoft.Maui.ApplicationModel;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Helpers;
 using WayfarerMobile.Services;
 using WayfarerMobile.Services.TileCache;
 using Map = Mapsui.Map;
@@ -34,6 +36,9 @@ public partial class MainViewModel : BaseViewModel
     private readonly ILocationLayerService _locationLayerService;
     private readonly IDroppedPinLayerService _droppedPinLayerService;
     private readonly ITripLayerService _tripLayerService;
+    private readonly IWikipediaService _wikipediaService;
+    private readonly ISettingsService _settingsService;
+    private readonly ILogger<MainViewModel> _logger;
 
     // Map and layers (owned by this ViewModel)
     private Map? _map;
@@ -42,6 +47,7 @@ public partial class MainViewModel : BaseViewModel
     private WritableLayer? _navigationRouteCompletedLayer;
     private WritableLayer? _droppedPinLayer;
     private WritableLayer? _tripPlacesLayer;
+    private WritableLayer? _tripAreasLayer;
     private WritableLayer? _tripSegmentsLayer;
 
     #endregion
@@ -119,6 +125,7 @@ public partial class MainViewModel : BaseViewModel
     /// Gets or sets whether the check-in sheet is open.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAnySheetOpen))]
     private bool _isCheckInSheetOpen;
 
     /// <summary>
@@ -153,11 +160,12 @@ public partial class MainViewModel : BaseViewModel
     private double _droppedPinLongitude;
 
     /// <summary>
-    /// Gets or sets whether the trip sidebar is visible.
+    /// Gets or sets whether the trip sheet is open.
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasLoadedTrip))]
-    private bool _isTripSidebarVisible;
+    [NotifyPropertyChangedFor(nameof(IsAnySheetOpen))]
+    private bool _isTripSheetOpen;
 
     /// <summary>
     /// Gets or sets the currently loaded trip details.
@@ -165,13 +173,93 @@ public partial class MainViewModel : BaseViewModel
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasLoadedTrip))]
     [NotifyPropertyChangedFor(nameof(TripPlaceCount))]
+    [NotifyPropertyChangedFor(nameof(HasTripSegments))]
+    [NotifyPropertyChangedFor(nameof(TripNotesPreview))]
+    [NotifyPropertyChangedFor(nameof(TripNotesHtml))]
+    [NotifyPropertyChangedFor(nameof(PageTitle))]
+    [NotifyPropertyChangedFor(nameof(TripSheetTitle))]
+    [NotifyPropertyChangedFor(nameof(TripSheetSubtitle))]
     private TripDetails? _loadedTrip;
 
     /// <summary>
-    /// Gets or sets the selected place in the sidebar.
+    /// Gets or sets the selected place in the trip.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingPlace))]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingOverview))]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingDetails))]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingScrollableContent))]
+    [NotifyPropertyChangedFor(nameof(TripSheetTitle))]
+    [NotifyPropertyChangedFor(nameof(TripSheetSubtitle))]
+    [NotifyPropertyChangedFor(nameof(SelectedTripPlaceCoordinates))]
+    [NotifyPropertyChangedFor(nameof(SelectedTripPlaceNotesHtml))]
+    private TripPlace? _selectedTripPlace;
+
+    /// <summary>
+    /// Gets or sets the selected area in the trip.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingArea))]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingOverview))]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingDetails))]
+    [NotifyPropertyChangedFor(nameof(TripSheetTitle))]
+    [NotifyPropertyChangedFor(nameof(TripSheetSubtitle))]
+    [NotifyPropertyChangedFor(nameof(SelectedTripAreaNotesHtml))]
+    private TripArea? _selectedTripArea;
+
+    /// <summary>
+    /// Gets or sets the selected segment in the trip.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingSegment))]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingOverview))]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingDetails))]
+    [NotifyPropertyChangedFor(nameof(TripSheetTitle))]
+    [NotifyPropertyChangedFor(nameof(TripSheetSubtitle))]
+    [NotifyPropertyChangedFor(nameof(SelectedTripSegmentNotesHtml))]
+    private TripSegment? _selectedTripSegment;
+
+    /// <summary>
+    /// Gets or sets whether trip notes detail view is showing.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingTripNotes))]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingOverview))]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingDetails))]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingScrollableContent))]
+    [NotifyPropertyChangedFor(nameof(TripSheetTitle))]
+    [NotifyPropertyChangedFor(nameof(TripSheetSubtitle))]
+    private bool _isShowingTripNotes;
+
+    /// <summary>
+    /// Gets or sets whether area notes detail view is showing.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingAreaNotes))]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingScrollableContent))]
+    [NotifyPropertyChangedFor(nameof(TripSheetTitle))]
+    private bool _isShowingAreaNotes;
+
+    /// <summary>
+    /// Gets or sets whether segment notes detail view is showing.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingSegmentNotes))]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingScrollableContent))]
+    [NotifyPropertyChangedFor(nameof(TripSheetTitle))]
+    private bool _isShowingSegmentNotes;
+
+    // Legacy property for compatibility
     private TripPlace? _selectedPlace;
+
+    /// <summary>
+    /// Gets or sets the selected place (legacy compatibility).
+    /// </summary>
+    public TripPlace? SelectedPlace
+    {
+        get => _selectedPlace;
+        set => SetProperty(ref _selectedPlace, value);
+    }
 
     /// <summary>
     /// Gets the navigation HUD view model for binding.
@@ -367,9 +455,210 @@ public partial class MainViewModel : BaseViewModel
     public bool HasLoadedTrip => LoadedTrip != null;
 
     /// <summary>
+    /// Gets or sets whether any bottom sheet is open (check-in or trip).
+    /// Used for the main SfBottomSheet.IsOpen binding.
+    /// </summary>
+    public bool IsAnySheetOpen
+    {
+        get => IsCheckInSheetOpen || IsTripSheetOpen;
+        set
+        {
+            // When the sheet is closed by user swipe (value = false),
+            // close whichever sheet is currently open
+            if (!value)
+            {
+                if (IsCheckInSheetOpen)
+                    IsCheckInSheetOpen = false;
+                if (IsTripSheetOpen)
+                    IsTripSheetOpen = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the page title (trip name when loaded, "Map" otherwise).
+    /// </summary>
+    public string PageTitle => LoadedTrip?.Name ?? "Map";
+
+    /// <summary>
     /// Gets the number of places in the loaded trip.
     /// </summary>
     public int TripPlaceCount => LoadedTrip?.AllPlaces.Count ?? 0;
+
+    /// <summary>
+    /// Gets whether the loaded trip has segments.
+    /// </summary>
+    public bool HasTripSegments => LoadedTrip?.Segments.Count > 0;
+
+    /// <summary>
+    /// Gets a preview of trip notes (first 200 chars).
+    /// </summary>
+    public string? TripNotesPreview => LoadedTrip?.Notes?.Length > 200
+        ? LoadedTrip.Notes[..200] + "..."
+        : LoadedTrip?.Notes;
+
+    /// <summary>
+    /// Gets the trip notes as HtmlWebViewSource for WebView rendering.
+    /// Uses notes-viewer.html template for proper CSP and image handling.
+    /// </summary>
+    public HtmlWebViewSource? TripNotesHtml
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(LoadedTrip?.Notes))
+                return null;
+
+            var isDark = Application.Current?.RequestedTheme == AppTheme.Dark;
+            return NotesViewerHelper.PrepareNotesHtml(LoadedTrip.Notes, _settingsService.ServerUrl, isDark);
+        }
+    }
+
+    /// <summary>
+    /// Gets whether trip sheet is showing overview (no item selected).
+    /// </summary>
+    public bool IsTripSheetShowingOverview =>
+        SelectedTripPlace == null && SelectedTripArea == null && SelectedTripSegment == null && !IsShowingTripNotes;
+
+    /// <summary>
+    /// Gets whether trip sheet is showing trip notes detail view.
+    /// </summary>
+    public bool IsTripSheetShowingTripNotes => IsShowingTripNotes;
+
+    /// <summary>
+    /// Gets whether trip sheet is showing area notes detail view.
+    /// </summary>
+    public bool IsTripSheetShowingAreaNotes => IsShowingAreaNotes;
+
+    /// <summary>
+    /// Gets whether trip sheet is showing segment notes detail view.
+    /// </summary>
+    public bool IsTripSheetShowingSegmentNotes => IsShowingSegmentNotes;
+
+    /// <summary>
+    /// Gets whether the scrollable content area should be visible (Overview, Area, or Segment - not Place, TripNotes, AreaNotes, or SegmentNotes).
+    /// </summary>
+    public bool IsTripSheetShowingScrollableContent =>
+        !IsTripSheetShowingPlace && !IsTripSheetShowingTripNotes && !IsTripSheetShowingAreaNotes && !IsTripSheetShowingSegmentNotes;
+
+    /// <summary>
+    /// Gets whether trip sheet is showing place details.
+    /// </summary>
+    public bool IsTripSheetShowingPlace => SelectedTripPlace != null;
+
+    /// <summary>
+    /// Gets whether trip sheet is showing area details.
+    /// </summary>
+    public bool IsTripSheetShowingArea => SelectedTripArea != null;
+
+    /// <summary>
+    /// Gets whether trip sheet is showing segment details.
+    /// </summary>
+    public bool IsTripSheetShowingSegment => SelectedTripSegment != null;
+
+    /// <summary>
+    /// Gets whether trip sheet is showing any details (not overview).
+    /// </summary>
+    public bool IsTripSheetShowingDetails => !IsTripSheetShowingOverview;
+
+    /// <summary>
+    /// Gets the trip sheet title.
+    /// </summary>
+    public string TripSheetTitle
+    {
+        get
+        {
+            if (SelectedTripPlace != null)
+                return SelectedTripPlace.Name;
+            if (IsShowingAreaNotes && SelectedTripArea != null)
+                return $"{SelectedTripArea.Name} - Notes";
+            if (SelectedTripArea != null)
+                return SelectedTripArea.Name;
+            if (IsShowingSegmentNotes && SelectedTripSegment != null)
+                return "Segment Notes";
+            if (SelectedTripSegment != null)
+                return $"Segment: {SelectedTripSegment.TransportMode ?? "Route"}";
+            if (IsShowingTripNotes)
+                return "Trip Notes";
+            return LoadedTrip?.Name ?? "Trip";
+        }
+    }
+
+    /// <summary>
+    /// Gets the trip sheet subtitle.
+    /// </summary>
+    public string? TripSheetSubtitle
+    {
+        get
+        {
+            if (IsTripSheetShowingOverview && LoadedTrip != null)
+            {
+                var parts = new List<string>();
+                var placeCount = LoadedTrip.AllPlaces.Count;
+                var areaCount = LoadedTrip.AllAreas.Count;
+                var segmentCount = LoadedTrip.Segments.Count;
+                if (placeCount > 0) parts.Add($"{placeCount} places");
+                if (areaCount > 0) parts.Add($"{areaCount} areas");
+                if (segmentCount > 0) parts.Add($"{segmentCount} segments");
+                return string.Join(" • ", parts);
+            }
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the selected trip place coordinates as text.
+    /// </summary>
+    public string? SelectedTripPlaceCoordinates => SelectedTripPlace != null
+        ? $"{SelectedTripPlace.Latitude:F5}, {SelectedTripPlace.Longitude:F5}"
+        : null;
+
+    /// <summary>
+    /// Gets the HTML content for the selected trip place notes, wrapped for WebView display.
+    /// Uses notes-viewer.html template for proper CSP and image handling.
+    /// </summary>
+    public HtmlWebViewSource? SelectedTripPlaceNotesHtml
+    {
+        get
+        {
+            if (SelectedTripPlace?.Notes == null)
+                return null;
+
+            var isDark = Application.Current?.RequestedTheme == AppTheme.Dark;
+            return NotesViewerHelper.PrepareNotesHtml(SelectedTripPlace.Notes, _settingsService.ServerUrl, isDark);
+        }
+    }
+
+    /// <summary>
+    /// Gets the HTML content for the selected trip area notes, wrapped for WebView display.
+    /// Uses notes-viewer.html template for proper CSP and image handling.
+    /// </summary>
+    public HtmlWebViewSource? SelectedTripAreaNotesHtml
+    {
+        get
+        {
+            if (SelectedTripArea?.Notes == null)
+                return null;
+
+            var isDark = Application.Current?.RequestedTheme == AppTheme.Dark;
+            return NotesViewerHelper.PrepareNotesHtml(SelectedTripArea.Notes, _settingsService.ServerUrl, isDark);
+        }
+    }
+
+    /// <summary>
+    /// Gets the HTML content for the selected trip segment notes, wrapped for WebView display.
+    /// Uses notes-viewer.html template for proper CSP and image handling.
+    /// </summary>
+    public HtmlWebViewSource? SelectedTripSegmentNotesHtml
+    {
+        get
+        {
+            if (SelectedTripSegment?.Notes == null)
+                return null;
+
+            var isDark = Application.Current?.RequestedTheme == AppTheme.Dark;
+            return NotesViewerHelper.PrepareNotesHtml(SelectedTripSegment.Notes, _settingsService.ServerUrl, isDark);
+        }
+    }
 
     #endregion
 
@@ -392,6 +681,9 @@ public partial class MainViewModel : BaseViewModel
     /// <param name="locationLayerService">The location layer service for rendering current location.</param>
     /// <param name="droppedPinLayerService">The dropped pin layer service.</param>
     /// <param name="tripLayerService">The trip layer service for places and segments.</param>
+    /// <param name="wikipediaService">The Wikipedia geosearch service.</param>
+    /// <param name="settingsService">The settings service.</param>
+    /// <param name="logger">The logger instance.</param>
     public MainViewModel(
         ILocationBridge locationBridge,
         IPermissionsService permissionsService,
@@ -406,7 +698,10 @@ public partial class MainViewModel : BaseViewModel
         IMapBuilder mapBuilder,
         ILocationLayerService locationLayerService,
         IDroppedPinLayerService droppedPinLayerService,
-        ITripLayerService tripLayerService)
+        ITripLayerService tripLayerService,
+        IWikipediaService wikipediaService,
+        ISettingsService settingsService,
+        ILogger<MainViewModel> logger)
     {
         _locationBridge = locationBridge;
         _permissionsService = permissionsService;
@@ -422,6 +717,9 @@ public partial class MainViewModel : BaseViewModel
         _locationLayerService = locationLayerService;
         _droppedPinLayerService = droppedPinLayerService;
         _tripLayerService = tripLayerService;
+        _wikipediaService = wikipediaService;
+        _settingsService = settingsService;
+        _logger = logger;
         Title = "WayfarerMobile";
 
         // Subscribe to location events
@@ -449,14 +747,16 @@ public partial class MainViewModel : BaseViewModel
     {
         // Create layers for Main page features
         _locationLayer = _mapBuilder.CreateLayer(_locationLayerService.LocationLayerName);
+        _tripAreasLayer = _mapBuilder.CreateLayer(_tripLayerService.TripAreasLayerName);
         _tripSegmentsLayer = _mapBuilder.CreateLayer(_tripLayerService.TripSegmentsLayerName);
         _tripPlacesLayer = _mapBuilder.CreateLayer(_tripLayerService.TripPlacesLayerName);
         _navigationRouteCompletedLayer = _mapBuilder.CreateLayer("NavigationRouteCompleted");
         _navigationRouteLayer = _mapBuilder.CreateLayer("NavigationRoute");
         _droppedPinLayer = _mapBuilder.CreateLayer(_droppedPinLayerService.DroppedPinLayerName);
 
-        // Create map with all layers (order matters: segments under places under location)
+        // Create map with all layers (order: areas under segments under places under location)
         var map = _mapBuilder.CreateMap(
+            _tripAreasLayer,
             _tripSegmentsLayer,
             _navigationRouteCompletedLayer,
             _navigationRouteLayer,
@@ -560,8 +860,9 @@ public partial class MainViewModel : BaseViewModel
         {
             _locationLayerService.UpdateLocation(_locationLayer, location);
 
-            // Center map if following and not navigating
-            if (IsFollowingLocation && !IsNavigating && _map != null)
+            // Center map if following and not navigating or browsing a trip
+            // Don't auto-center when a trip is loaded - user needs to browse places
+            if (IsFollowingLocation && !IsNavigating && !HasLoadedTrip && _map != null)
             {
                 _mapBuilder.CenterOnLocation(_map, location.Latitude, location.Longitude);
             }
@@ -1090,15 +1391,15 @@ public partial class MainViewModel : BaseViewModel
     #endregion
 
     /// <summary>
-    /// Toggles the trip sidebar visibility.
+    /// Toggles the trip sheet visibility.
     /// </summary>
     [RelayCommand]
-    private async Task ToggleTripSidebarAsync()
+    private async Task ToggleTripSheetAsync()
     {
-        // If sidebar is visible, hide it
-        if (IsTripSidebarVisible)
+        // If sheet is open, close it
+        if (IsTripSheetOpen)
         {
-            IsTripSidebarVisible = false;
+            IsTripSheetOpen = false;
             return;
         }
 
@@ -1109,20 +1410,97 @@ public partial class MainViewModel : BaseViewModel
             return;
         }
 
-        // Show the sidebar with the loaded trip
-        IsTripSidebarVisible = true;
+        // Show the sheet with the loaded trip
+        ClearTripSheetSelection();
+        IsTripSheetOpen = true;
     }
 
     /// <summary>
-    /// Selects a place from the sidebar and centers the map on it.
+    /// Closes the trip sheet.
     /// </summary>
     [RelayCommand]
-    private void SelectPlace(TripPlace? place)
+    private void CloseTripSheet()
+    {
+        IsTripSheetOpen = false;
+    }
+
+    /// <summary>
+    /// Goes back from details to overview in trip sheet.
+    /// Handles nested navigation (notes views go back to their parent item).
+    /// </summary>
+    [RelayCommand]
+    private void TripSheetBack()
+    {
+        // If showing area notes, go back to area details
+        if (IsShowingAreaNotes)
+        {
+            IsShowingAreaNotes = false;
+            return;
+        }
+
+        // If showing segment notes, go back to segment details
+        if (IsShowingSegmentNotes)
+        {
+            IsShowingSegmentNotes = false;
+            return;
+        }
+
+        // Otherwise, go back to overview
+        ClearTripSheetSelection();
+    }
+
+    /// <summary>
+    /// Clears trip sheet item selection (returns to overview).
+    /// </summary>
+    private void ClearTripSheetSelection()
+    {
+        SelectedTripPlace = null;
+        SelectedTripArea = null;
+        SelectedTripSegment = null;
+        IsShowingTripNotes = false;
+        IsShowingAreaNotes = false;
+        IsShowingSegmentNotes = false;
+    }
+
+    /// <summary>
+    /// Shows the trip notes detail view.
+    /// </summary>
+    [RelayCommand]
+    private void ShowTripNotes()
+    {
+        IsShowingTripNotes = true;
+    }
+
+    /// <summary>
+    /// Shows the area notes detail view.
+    /// </summary>
+    [RelayCommand]
+    private void ShowAreaNotes()
+    {
+        IsShowingAreaNotes = true;
+    }
+
+    /// <summary>
+    /// Shows the segment notes detail view.
+    /// </summary>
+    [RelayCommand]
+    private void ShowSegmentNotes()
+    {
+        IsShowingSegmentNotes = true;
+    }
+
+    /// <summary>
+    /// Selects a place from the trip and shows details.
+    /// </summary>
+    [RelayCommand]
+    private void SelectTripPlace(TripPlace? place)
     {
         if (place == null)
             return;
 
-        SelectedPlace = place;
+        ClearTripSheetSelection();
+        SelectedTripPlace = place;
+        SelectedPlace = place; // Legacy compatibility
 
         // Center map on selected place
         if (_map != null)
@@ -1133,16 +1511,190 @@ public partial class MainViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Navigates to the selected place.
+    /// Selects an area from the trip and shows details.
     /// </summary>
     [RelayCommand]
-    private async Task NavigateToSelectedPlaceAsync()
+    private void SelectTripArea(TripArea? area)
     {
-        if (SelectedPlace == null)
+        if (area == null)
             return;
 
-        await StartNavigationToPlaceAsync(SelectedPlace.Id.ToString());
-        IsTripSidebarVisible = false;
+        ClearTripSheetSelection();
+        SelectedTripArea = area;
+
+        // Center map on area center
+        var center = area.Center;
+        if (_map != null && center != null)
+        {
+            _mapBuilder.CenterOnLocation(_map, center.Latitude, center.Longitude);
+        }
+        IsFollowingLocation = false;
+    }
+
+    /// <summary>
+    /// Selects a segment from the trip and shows details.
+    /// </summary>
+    [RelayCommand]
+    private void SelectTripSegment(TripSegment? segment)
+    {
+        if (segment == null)
+            return;
+
+        ClearTripSheetSelection();
+        SelectedTripSegment = segment;
+    }
+
+    /// <summary>
+    /// Navigates to the selected trip place.
+    /// </summary>
+    [RelayCommand]
+    private async Task NavigateToTripPlaceAsync()
+    {
+        if (SelectedTripPlace == null)
+            return;
+
+        await StartNavigationToPlaceAsync(SelectedTripPlace.Id.ToString());
+        IsTripSheetOpen = false;
+    }
+
+    /// <summary>
+    /// Opens selected trip place in external maps app.
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenTripPlaceInMapsAsync()
+    {
+        if (SelectedTripPlace == null)
+            return;
+
+        try
+        {
+            var location = new Location(SelectedTripPlace.Latitude, SelectedTripPlace.Longitude);
+            await Microsoft.Maui.ApplicationModel.Map.OpenAsync(location, new MapLaunchOptions
+            {
+                Name = SelectedTripPlace.Name,
+                NavigationMode = NavigationMode.None
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to open maps");
+            await _toastService.ShowErrorAsync("Failed to open maps");
+        }
+    }
+
+    /// <summary>
+    /// Copies selected trip place coordinates to clipboard.
+    /// </summary>
+    [RelayCommand]
+    private async Task CopyTripPlaceCoordsAsync()
+    {
+        if (SelectedTripPlace == null)
+            return;
+
+        var coords = $"{SelectedTripPlace.Latitude:F6}, {SelectedTripPlace.Longitude:F6}";
+        await Clipboard.SetTextAsync(coords);
+        await _toastService.ShowSuccessAsync("Coordinates copied");
+    }
+
+    /// <summary>
+    /// Shares selected trip place location.
+    /// </summary>
+    [RelayCommand]
+    private async Task ShareTripPlaceAsync()
+    {
+        if (SelectedTripPlace == null)
+            return;
+
+        try
+        {
+            var mapsUrl = $"https://www.google.com/maps/search/?api=1&query={SelectedTripPlace.Latitude},{SelectedTripPlace.Longitude}";
+            await Share.RequestAsync(new ShareTextRequest
+            {
+                Title = SelectedTripPlace.Name,
+                Text = $"{SelectedTripPlace.Name}\n{mapsUrl}"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to share place");
+            await _toastService.ShowErrorAsync("Failed to share");
+        }
+    }
+
+    /// <summary>
+    /// Opens Wikipedia geosearch for selected trip place.
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenTripPlaceWikipediaAsync()
+    {
+        if (SelectedTripPlace == null)
+            return;
+
+        var found = await _wikipediaService.OpenNearbyArticleAsync(
+            SelectedTripPlace.Latitude,
+            SelectedTripPlace.Longitude);
+
+        if (!found)
+        {
+            await _toastService.ShowWarningAsync("No Wikipedia article found nearby");
+        }
+    }
+
+    /// <summary>
+    /// Opens the edit page for the selected trip place.
+    /// </summary>
+    [RelayCommand]
+    private async Task EditTripPlaceAsync()
+    {
+        if (SelectedTripPlace == null || LoadedTrip == null)
+            return;
+
+        // TODO: Navigate to place edit page when implemented
+        await _toastService.ShowAsync("Edit feature coming soon");
+    }
+
+    /// <summary>
+    /// Opens selected trip area in external maps app.
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenTripAreaInMapsAsync()
+    {
+        var center = SelectedTripArea?.Center;
+        if (center == null)
+            return;
+
+        try
+        {
+            var location = new Location(center.Latitude, center.Longitude);
+            await Microsoft.Maui.ApplicationModel.Map.OpenAsync(location, new MapLaunchOptions
+            {
+                Name = SelectedTripArea?.Name ?? "Area",
+                NavigationMode = NavigationMode.None
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to open maps");
+            await _toastService.ShowErrorAsync("Failed to open maps");
+        }
+    }
+
+    /// <summary>
+    /// Opens Wikipedia geosearch for selected trip area.
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenTripAreaWikipediaAsync()
+    {
+        var center = SelectedTripArea?.Center;
+        if (center == null)
+            return;
+
+        var found = await _wikipediaService.OpenNearbyArticleAsync(center.Latitude, center.Longitude);
+
+        if (!found)
+        {
+            await _toastService.ShowWarningAsync("No Wikipedia article found nearby");
+        }
     }
 
     /// <summary>
@@ -1154,7 +1706,8 @@ public partial class MainViewModel : BaseViewModel
         UnloadTrip();
         LoadedTrip = null;
         SelectedPlace = null;
-        IsTripSidebarVisible = false;
+        ClearTripSheetSelection();
+        IsTripSheetOpen = false;
     }
 
     /// <summary>
@@ -1239,7 +1792,8 @@ public partial class MainViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Stops current navigation.
+    /// Stops current navigation and returns to the prior state.
+    /// If navigating to a trip place, zooms back to that place and shows the sheet.
     /// </summary>
     [RelayCommand]
     private void StopNavigation()
@@ -1247,7 +1801,23 @@ public partial class MainViewModel : BaseViewModel
         IsNavigating = false;
         ClearNavigationRoute();
         _navigationHudViewModel.StopNavigationDisplay();
-        IsFollowingLocation = true;
+
+        // Return to the selected trip place if one exists
+        if (SelectedTripPlace != null && _map != null)
+        {
+            // Zoom to the selected place
+            var sphericalPoint = Mapsui.Projections.SphericalMercator.FromLonLat(
+                SelectedTripPlace.Longitude,
+                SelectedTripPlace.Latitude);
+            _map.Navigator.CenterOnAndZoomTo(new Mapsui.MPoint(sphericalPoint.x, sphericalPoint.y), 2000);
+
+            // Re-open the trip sheet to show place details
+            IsTripSheetOpen = true;
+        }
+        else
+        {
+            IsFollowingLocation = true;
+        }
     }
 
     /// <summary>
@@ -1256,13 +1826,71 @@ public partial class MainViewModel : BaseViewModel
     /// <param name="tripDetails">The trip details to load.</param>
     public async Task LoadTripForNavigationAsync(TripDetails tripDetails)
     {
+        _logger.LogInformation("Loading trip: {TripName} ({PlaceCount} places, {SegmentCount} segments, {AreaCount} areas)",
+            tripDetails.Name, tripDetails.AllPlaces.Count, tripDetails.Segments.Count, tripDetails.AllAreas.Count);
+
+        // Debug: Log regions and their areas
+        _logger.LogDebug("Trip has {RegionCount} regions", tripDetails.Regions.Count);
+        foreach (var region in tripDetails.Regions)
+        {
+            _logger.LogDebug("Region '{Name}': {PlaceCount} places, {AreaCount} areas",
+                region.Name, region.Places.Count, region.Areas.Count);
+        }
+
+        // Debug: Log place coordinates to verify data
+        foreach (var place in tripDetails.AllPlaces.Take(5))
+        {
+            _logger.LogDebug("Place '{Name}': Lat={Lat}, Lon={Lon}, Icon={Icon}",
+                place.Name, place.Latitude, place.Longitude, place.Icon ?? "null");
+        }
+
+        // Reset any previous selection state
+        ClearTripSheetSelection();
+
         LoadedTrip = tripDetails;
         _tripNavigationService.LoadTrip(tripDetails);
 
+        var placePoints = new List<Mapsui.MPoint>();
+
+        // Update places layer
         if (_tripPlacesLayer != null)
         {
-            await _tripLayerService.UpdateTripPlacesAsync(_tripPlacesLayer, tripDetails.AllPlaces);
+            placePoints = await _tripLayerService.UpdateTripPlacesAsync(_tripPlacesLayer, tripDetails.AllPlaces);
+            _logger.LogDebug("Updated {Count} places on map layer (from {Total} total)", placePoints.Count, tripDetails.AllPlaces.Count);
         }
+
+        // Update areas layer
+        if (_tripAreasLayer != null)
+        {
+            _tripLayerService.UpdateTripAreas(_tripAreasLayer, tripDetails.AllAreas);
+        }
+
+        // Update segments layer
+        if (_tripSegmentsLayer != null)
+        {
+            _tripLayerService.UpdateTripSegments(_tripSegmentsLayer, tripDetails.Segments);
+        }
+
+        // Zoom map to fit all trip places
+        if (_map != null && placePoints.Count > 0)
+        {
+            _mapBuilder.ZoomToPoints(_map, placePoints);
+            IsFollowingLocation = false; // Don't auto-center on user location
+            _logger.LogInformation("Zoomed map to fit {Count} trip places", placePoints.Count);
+        }
+        else if (_map != null && tripDetails.BoundingBox != null)
+        {
+            // Fallback: use trip bounding box center
+            var bb = tripDetails.BoundingBox;
+            var centerLat = (bb.North + bb.South) / 2;
+            var centerLon = (bb.East + bb.West) / 2;
+            _mapBuilder.CenterOnLocation(_map, centerLat, centerLon, zoomLevel: 12);
+            IsFollowingLocation = false;
+            _logger.LogInformation("Centered map on trip bounding box center");
+        }
+
+        // Force map refresh to ensure layers are rendered
+        RefreshMap();
     }
 
     /// <summary>
@@ -1279,9 +1907,30 @@ public partial class MainViewModel : BaseViewModel
         SelectedPlace = null;
         _tripNavigationService.UnloadTrip();
 
+        // Clear all trip layers
         if (_tripPlacesLayer != null)
         {
             _tripLayerService.ClearTripPlaces(_tripPlacesLayer);
+        }
+
+        if (_tripAreasLayer != null)
+        {
+            _tripLayerService.ClearTripAreas(_tripAreasLayer);
+        }
+
+        if (_tripSegmentsLayer != null)
+        {
+            _tripLayerService.ClearTripSegments(_tripSegmentsLayer);
+        }
+
+        // Resume following user location when trip is unloaded
+        IsFollowingLocation = true;
+
+        // Recenter map on user location
+        var location = CurrentLocation ?? _locationBridge.LastLocation;
+        if (location != null && _map != null)
+        {
+            _mapBuilder.CenterOnLocation(_map, location.Latitude, location.Longitude);
         }
     }
 
@@ -1308,7 +1957,11 @@ public partial class MainViewModel : BaseViewModel
         if (CurrentLocation != null && _locationLayer != null && _map != null)
         {
             _locationLayerService.UpdateLocation(_locationLayer, CurrentLocation);
-            _mapBuilder.CenterOnLocation(_map, CurrentLocation.Latitude, CurrentLocation.Longitude);
+            // Only center on user if no trip is loaded
+            if (!HasLoadedTrip)
+            {
+                _mapBuilder.CenterOnLocation(_map, CurrentLocation.Latitude, CurrentLocation.Longitude);
+            }
         }
 
         // Refresh map to fix any layout issues (e.g., after bottom sheet closes)

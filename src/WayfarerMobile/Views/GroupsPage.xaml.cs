@@ -168,7 +168,7 @@ public partial class GroupsPage : ContentPage
         {
             if (_viewModel.IsMemberSheetOpen && _viewModel.SelectedMember != null)
             {
-                BottomSheet.State = BottomSheetState.HalfExpanded;
+                BottomSheet.State = BottomSheetState.FullExpanded;
             }
             else if (!_viewModel.IsMemberSheetOpen)
             {

@@ -140,12 +140,12 @@
 
                         <!-- Result Message -->
                         <Border Padding="12"
-                                IsVisible="{Binding ResultMessage, Converter={StaticResource IsNotNullConverter}}"
+                                IsVisible="{Binding IsSuccess}"
                                 BackgroundColor="{Binding IsSuccess, Converter={StaticResource BoolToColorConverter}, ConverterParameter='#E8F5E9|#FFEBEE'}">
                             <Border.StrokeShape>
                                 <RoundRectangle CornerRadius="8" />
                             </Border.StrokeShape>
-                            <Label Text="{Binding ResultMessage}"
+                            <Label Text="{Binding OverlayMessage}"
                                    TextColor="{Binding IsSuccess, Converter={StaticResource BoolToColorConverter}, ConverterParameter='#2E7D32|#C62828'}"
                                    HorizontalTextAlignment="Center" />
                         </Border>

@@ -32,10 +32,20 @@ public class OfflineSegmentEntity
     public Guid OriginId { get; set; }
 
     /// <summary>
+    /// Gets or sets the origin place name (for display).
+    /// </summary>
+    public string? OriginName { get; set; }
+
+    /// <summary>
     /// Gets or sets the destination place ID.
     /// </summary>
     [Indexed]
     public Guid DestinationId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the destination place name (for display).
+    /// </summary>
+    public string? DestinationName { get; set; }
 
     /// <summary>
     /// Gets or sets the transportation mode (walk, drive, transit, etc.).
@@ -53,7 +63,12 @@ public class OfflineSegmentEntity
     public int? DurationMinutes { get; set; }
 
     /// <summary>
-    /// Gets or sets the route geometry (encoded polyline) from user-defined segment.
+    /// Gets or sets the segment notes (HTML).
+    /// </summary>
+    public string? Notes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the route geometry (encoded polyline or GeoJSON) from user-defined segment.
     /// </summary>
     public string? Geometry { get; set; }
 

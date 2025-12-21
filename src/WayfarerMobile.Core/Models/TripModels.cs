@@ -53,6 +53,18 @@ public class TripSummary
     public BoundingBox? BoundingBox { get; set; }
 
     /// <summary>
+    /// Gets or sets the number of places (server sends as placesCount).
+    /// </summary>
+    [JsonPropertyName("placesCount")]
+    public int PlacesCount { get; set; }
+
+    /// <summary>
+    /// Gets or sets the number of regions (server sends as regionsCount).
+    /// </summary>
+    [JsonPropertyName("regionsCount")]
+    public int RegionsCount { get; set; }
+
+    /// <summary>
     /// Gets a display string for locations.
     /// </summary>
     [JsonIgnore]
@@ -66,6 +78,35 @@ public class TripSummary
             return parts.Any() ? string.Join(" • ", parts) : "No location info";
         }
     }
+
+    /// <summary>
+    /// Gets a stats text for display.
+    /// </summary>
+    [JsonIgnore]
+    public string StatsText => PlacesCount > 0
+        ? $"{PlacesCount} place{(PlacesCount == 1 ? "" : "s")} • {RegionsCount} region{(RegionsCount == 1 ? "" : "s")}"
+        : "Empty trip";
+}
+
+/// <summary>
+/// Tag associated with a trip.
+/// </summary>
+public class TripTag
+{
+    /// <summary>
+    /// Gets or sets the tag ID.
+    /// </summary>
+    public Guid Id { get; set; }
+
+    /// <summary>
+    /// Gets or sets the URL-safe slug (e.g., "road-trip").
+    /// </summary>
+    public string Slug { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the display name (e.g., "Road Trip").
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -76,17 +117,39 @@ public class TripDetails
     /// <summary>
     /// Gets or sets the trip ID.
     /// </summary>
+    [JsonPropertyName("id")]
     public Guid Id { get; set; }
 
     /// <summary>
     /// Gets or sets the trip name.
     /// </summary>
+    [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the trip notes (HTML).
+    /// Gets or sets the trip description.
     /// </summary>
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
+    /// <summary>
+    /// Gets or sets the trip notes (HTML).
+    /// Server sends as "notes".
+    /// </summary>
+    [JsonPropertyName("notes")]
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the cover image URL.
+    /// Server sends as "coverImageUrl".
+    /// </summary>
+    [JsonPropertyName("coverImageUrl")]
+    public string? CoverImageUrl { get; set; }
+
+    /// <summary>
+    /// Gets or sets the tags associated with this trip.
+    /// </summary>
+    public List<TripTag> Tags { get; set; } = new();
 
     /// <summary>
     /// Gets or sets the center latitude.
@@ -125,8 +188,66 @@ public class TripDetails
 
     /// <summary>
     /// Gets or sets the last update timestamp.
+    /// Server sends as "updatedAt".
     /// </summary>
+    [JsonPropertyName("updatedAt")]
     public DateTime UpdatedAt { get; set; }
+
+    /// <summary>
+    /// Gets whether this trip has tags.
+    /// </summary>
+    [JsonIgnore]
+    public bool HasTags => Tags.Count > 0;
+
+    /// <summary>
+    /// Gets the tags as a comma-separated string for display.
+    /// </summary>
+    [JsonIgnore]
+    public string TagsDisplay => Tags.Count > 0
+        ? string.Join(", ", Tags.Select(t => t.Name))
+        : string.Empty;
+
+    /// <summary>
+    /// Gets whether this trip has a cover image.
+    /// </summary>
+    [JsonIgnore]
+    public bool HasCoverImage => !string.IsNullOrEmpty(CoverImageUrl);
+
+    /// <summary>
+    /// Gets whether this trip has meaningful notes content.
+    /// Filters out empty HTML like Quill.js default &lt;p&gt;&lt;/p&gt; or &lt;p&gt;&lt;br&gt;&lt;/p&gt;.
+    /// </summary>
+    [JsonIgnore]
+    public bool HasNotes
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(Notes))
+                return false;
+
+            // Strip HTML tags and check if there's actual content
+            var stripped = System.Text.RegularExpressions.Regex.Replace(Notes, "<[^>]*>", "").Trim();
+            return !string.IsNullOrWhiteSpace(stripped);
+        }
+    }
+
+    /// <summary>
+    /// Gets regions sorted by display order for UI binding.
+    /// Places and areas within each region are also sorted.
+    /// </summary>
+    [JsonIgnore]
+    public List<TripRegion> SortedRegions =>
+        Regions
+            .OrderBy(r => r.SortOrder)
+            .Select(r => new TripRegion
+            {
+                Id = r.Id,
+                Name = r.Name,
+                SortOrder = r.SortOrder,
+                Places = r.Places.OrderBy(p => p.SortOrder).ToList(),
+                Areas = r.Areas.OrderBy(a => a.SortOrder).ToList()
+            })
+            .ToList();
 
     /// <summary>
     /// Gets all places from all regions.
@@ -134,6 +255,13 @@ public class TripDetails
     [JsonIgnore]
     public List<TripPlace> AllPlaces =>
         Regions.SelectMany(r => r.Places).ToList();
+
+    /// <summary>
+    /// Gets all areas from all regions.
+    /// </summary>
+    [JsonIgnore]
+    public List<TripArea> AllAreas =>
+        Regions.SelectMany(r => r.Areas).ToList();
 }
 
 /// <summary>
@@ -163,10 +291,15 @@ public class BoundingBox
 }
 
 /// <summary>
-/// Trip region containing places.
+/// Trip region containing places and areas.
 /// </summary>
 public class TripRegion
 {
+    /// <summary>
+    /// The reserved name for the built-in unassigned places region.
+    /// </summary>
+    public const string UnassignedPlacesName = "Unassigned Places";
+
     /// <summary>
     /// Gets or sets the region ID.
     /// </summary>
@@ -178,14 +311,292 @@ public class TripRegion
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the region notes (HTML).
+    /// </summary>
+    public string? Notes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the cover image URL.
+    /// </summary>
+    public string? CoverImageUrl { get; set; }
+
+    /// <summary>
+    /// Gets or sets the center latitude.
+    /// Populated from Center property during deserialization.
+    /// </summary>
+    [JsonIgnore]
+    public double? CenterLatitude { get; set; }
+
+    /// <summary>
+    /// Gets or sets the center longitude.
+    /// Populated from Center property during deserialization.
+    /// </summary>
+    [JsonIgnore]
+    public double? CenterLongitude { get; set; }
+
+    /// <summary>
+    /// Center as [lon, lat] array for API deserialization.
+    /// Server sends coordinates in GeoJSON format: [longitude, latitude].
+    /// </summary>
+    [JsonPropertyName("center")]
+    public double[]? Center
+    {
+        get => CenterLatitude.HasValue && CenterLongitude.HasValue
+            ? new[] { CenterLongitude.Value, CenterLatitude.Value }
+            : null;
+        set
+        {
+            if (value is { Length: >= 2 })
+            {
+                CenterLongitude = value[0];
+                CenterLatitude = value[1];
+            }
+        }
+    }
+
+    /// <summary>
     /// Gets or sets the places in this region.
     /// </summary>
     public List<TripPlace> Places { get; set; } = new();
 
     /// <summary>
-    /// Gets or sets the sort order.
+    /// Gets or sets the areas (polygons) in this region.
     /// </summary>
+    public List<TripArea> Areas { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets the sort order.
+    /// Server sends as "displayOrder".
+    /// </summary>
+    [JsonPropertyName("displayOrder")]
     public int SortOrder { get; set; }
+
+    /// <summary>
+    /// Gets whether this is the built-in "Unassigned Places" region.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsUnassignedRegion => string.Equals(Name, UnassignedPlacesName, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Gets whether this region has any content (places or areas).
+    /// </summary>
+    [JsonIgnore]
+    public bool HasContent => Places.Count > 0 || Areas.Count > 0;
+
+    /// <summary>
+    /// Gets whether this region should be shown in the UI.
+    /// "Unassigned Places" is hidden when empty; other regions always shown.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsVisibleInUi => !IsUnassignedRegion || HasContent;
+
+    /// <summary>
+    /// Gets whether this region can be deleted.
+    /// "Unassigned Places" cannot be deleted.
+    /// </summary>
+    [JsonIgnore]
+    public bool CanDelete => !IsUnassignedRegion;
+
+    /// <summary>
+    /// Gets whether this region can be renamed.
+    /// "Unassigned Places" cannot be renamed.
+    /// </summary>
+    [JsonIgnore]
+    public bool CanRename => !IsUnassignedRegion;
+
+    /// <summary>
+    /// Gets whether this region has a cover image.
+    /// </summary>
+    [JsonIgnore]
+    public bool HasCoverImage => !string.IsNullOrEmpty(CoverImageUrl);
+
+    /// <summary>
+    /// Gets whether this region has meaningful notes content.
+    /// Filters out empty HTML like Quill.js default.
+    /// </summary>
+    [JsonIgnore]
+    public bool HasNotes
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(Notes))
+                return false;
+            var stripped = System.Text.RegularExpressions.Regex.Replace(Notes, "<[^>]*>", "").Trim();
+            return !string.IsNullOrWhiteSpace(stripped);
+        }
+    }
+}
+
+/// <summary>
+/// Area (polygon zone) within a trip region.
+/// Represents geographic boundaries like neighborhoods, parks, or zones.
+/// </summary>
+public class TripArea
+{
+    /// <summary>
+    /// Gets or sets the area ID.
+    /// </summary>
+    public Guid Id { get; set; }
+
+    /// <summary>
+    /// Gets or sets the area name.
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the area notes (HTML).
+    /// </summary>
+    public string? Notes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the fill color for the polygon.
+    /// Server sends as "fillHex".
+    /// </summary>
+    [JsonPropertyName("fillHex")]
+    public string? FillColor { get; set; }
+
+    /// <summary>
+    /// Gets or sets the stroke/border color for the polygon.
+    /// </summary>
+    public string? StrokeColor { get; set; }
+
+    /// <summary>
+    /// Backing field for GeometryGeoJson.
+    /// </summary>
+    private string? _geometryGeoJson;
+
+    /// <summary>
+    /// Backing field for parsed boundary.
+    /// </summary>
+    private List<GeoCoordinate>? _boundary;
+
+    /// <summary>
+    /// Gets or sets the polygon boundary coordinates.
+    /// Populated from GeometryGeoJson during deserialization or set directly for offline.
+    /// </summary>
+    [JsonIgnore]
+    public List<GeoCoordinate> Boundary
+    {
+        get
+        {
+            // Lazy parse on first access if not already parsed
+            if (_boundary == null && !string.IsNullOrEmpty(_geometryGeoJson))
+            {
+                _boundary = ParseGeoJsonPolygon(_geometryGeoJson);
+            }
+            return _boundary ?? new List<GeoCoordinate>();
+        }
+        set => _boundary = value;
+    }
+
+    /// <summary>
+    /// GeoJSON string for the polygon geometry.
+    /// Server sends as "geometryGeoJson". Parsed into Boundary on access.
+    /// </summary>
+    [JsonPropertyName("geometryGeoJson")]
+    public string? GeometryGeoJson
+    {
+        get => _geometryGeoJson;
+        set
+        {
+            _geometryGeoJson = value;
+            _boundary = null; // Clear cached boundary to force re-parse
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the sort order.
+    /// Server sends as "displayOrder" (nullable).
+    /// </summary>
+    [JsonPropertyName("displayOrder")]
+    public int? SortOrder { get; set; }
+
+    /// <summary>
+    /// Parses a GeoJSON polygon string into a list of coordinates.
+    /// </summary>
+    private static List<GeoCoordinate> ParseGeoJsonPolygon(string geoJson)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(geoJson);
+            var root = doc.RootElement;
+
+            // GeoJSON Polygon format: { "type": "Polygon", "coordinates": [[[lon,lat], [lon,lat], ...]] }
+            if (root.TryGetProperty("coordinates", out var coordinates) &&
+                coordinates.GetArrayLength() > 0)
+            {
+                var ring = coordinates[0]; // First ring (outer boundary)
+                var result = new List<GeoCoordinate>();
+
+                foreach (var point in ring.EnumerateArray())
+                {
+                    if (point.GetArrayLength() >= 2)
+                    {
+                        var lon = point[0].GetDouble();
+                        var lat = point[1].GetDouble();
+                        result.Add(new GeoCoordinate { Latitude = lat, Longitude = lon });
+                    }
+                }
+
+                return result;
+            }
+        }
+        catch
+        {
+            // Silently fail - invalid GeoJSON returns empty list
+        }
+
+        return new List<GeoCoordinate>();
+    }
+
+    /// <summary>
+    /// Gets the center point of the area (centroid of polygon).
+    /// </summary>
+    [JsonIgnore]
+    public GeoCoordinate? Center
+    {
+        get
+        {
+            if (Boundary.Count == 0)
+                return null;
+
+            var avgLat = Boundary.Average(c => c.Latitude);
+            var avgLon = Boundary.Average(c => c.Longitude);
+            return new GeoCoordinate { Latitude = avgLat, Longitude = avgLon };
+        }
+    }
+
+    /// <summary>
+    /// Gets whether this area has meaningful notes content.
+    /// Filters out empty HTML like Quill.js default.
+    /// </summary>
+    [JsonIgnore]
+    public bool HasNotes
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(Notes))
+                return false;
+            var stripped = System.Text.RegularExpressions.Regex.Replace(Notes, "<[^>]*>", "").Trim();
+            return !string.IsNullOrWhiteSpace(stripped);
+        }
+    }
+}
+
+/// <summary>
+/// Geographic coordinate (latitude/longitude pair).
+/// </summary>
+public class GeoCoordinate
+{
+    /// <summary>
+    /// Gets or sets the latitude.
+    /// </summary>
+    public double Latitude { get; set; }
+
+    /// <summary>
+    /// Gets or sets the longitude.
+    /// </summary>
+    public double Longitude { get; set; }
 }
 
 /// <summary>
@@ -205,13 +616,35 @@ public class TripPlace
 
     /// <summary>
     /// Gets or sets the latitude.
+    /// Can be set directly (offline code) or via Location property (API deserialization).
     /// </summary>
+    [JsonIgnore]
     public double Latitude { get; set; }
 
     /// <summary>
     /// Gets or sets the longitude.
+    /// Can be set directly (offline code) or via Location property (API deserialization).
     /// </summary>
+    [JsonIgnore]
     public double Longitude { get; set; }
+
+    /// <summary>
+    /// Location as [lon, lat] array for API deserialization.
+    /// Server sends coordinates in GeoJSON format: [longitude, latitude].
+    /// </summary>
+    [JsonPropertyName("location")]
+    public double[]? Location
+    {
+        get => Latitude != 0 || Longitude != 0 ? new[] { Longitude, Latitude } : null;
+        set
+        {
+            if (value is { Length: >= 2 })
+            {
+                Longitude = value[0];
+                Latitude = value[1];
+            }
+        }
+    }
 
     /// <summary>
     /// Gets or sets the place notes (HTML).
@@ -220,7 +653,9 @@ public class TripPlace
 
     /// <summary>
     /// Gets or sets the icon name.
+    /// Server sends as "iconName".
     /// </summary>
+    [JsonPropertyName("iconName")]
     public string? Icon { get; set; }
 
     /// <summary>
@@ -229,9 +664,25 @@ public class TripPlace
     public string? MarkerColor { get; set; }
 
     /// <summary>
-    /// Gets or sets the sort order.
+    /// Gets or sets the address of the place.
+    /// Server sends as "address".
     /// </summary>
-    public int SortOrder { get; set; }
+    [JsonPropertyName("address")]
+    public string? Address { get; set; }
+
+    /// <summary>
+    /// Gets or sets the sort order.
+    /// Server sends as "displayOrder" (nullable).
+    /// </summary>
+    [JsonPropertyName("displayOrder")]
+    public int? SortOrder { get; set; }
+
+    /// <summary>
+    /// Gets the icon resource path for UI binding.
+    /// Uses IconCatalog to resolve the icon and color to a resource path.
+    /// </summary>
+    [JsonIgnore]
+    public string IconPath => Helpers.IconCatalog.GetIconResourcePath(Icon, MarkerColor);
 }
 
 /// <summary>
@@ -246,33 +697,85 @@ public class TripSegment
 
     /// <summary>
     /// Gets or sets the origin place ID.
+    /// Server sends as "fromPlaceId".
     /// </summary>
-    public Guid OriginId { get; set; }
+    [JsonPropertyName("fromPlaceId")]
+    public Guid? OriginId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the origin place name (populated during loading for display).
+    /// </summary>
+    [JsonIgnore]
+    public string? OriginName { get; set; }
 
     /// <summary>
     /// Gets or sets the destination place ID.
+    /// Server sends as "toPlaceId".
     /// </summary>
-    public Guid DestinationId { get; set; }
+    [JsonPropertyName("toPlaceId")]
+    public Guid? DestinationId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the destination place name (populated during loading for display).
+    /// </summary>
+    [JsonIgnore]
+    public string? DestinationName { get; set; }
 
     /// <summary>
     /// Gets or sets the transportation mode.
+    /// Server sends as "mode".
     /// </summary>
+    [JsonPropertyName("mode")]
     public string? TransportMode { get; set; }
 
     /// <summary>
     /// Gets or sets the distance in kilometers.
+    /// Server sends as "estimatedDistanceKm".
     /// </summary>
+    [JsonPropertyName("estimatedDistanceKm")]
     public double? DistanceKm { get; set; }
 
     /// <summary>
     /// Gets or sets the duration in minutes.
+    /// Server sends as "estimatedDurationMinutes".
     /// </summary>
-    public int? DurationMinutes { get; set; }
+    [JsonPropertyName("estimatedDurationMinutes")]
+    public double? DurationMinutes { get; set; }
 
     /// <summary>
-    /// Gets or sets the route geometry (encoded polyline).
+    /// Gets or sets the segment notes (HTML).
     /// </summary>
+    public string? Notes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the sort order.
+    /// Server sends as "displayOrder".
+    /// </summary>
+    [JsonPropertyName("displayOrder")]
+    public int SortOrder { get; set; }
+
+    /// <summary>
+    /// Gets or sets the route geometry (encoded polyline or JSON).
+    /// Server sends as "routeJson".
+    /// </summary>
+    [JsonPropertyName("routeJson")]
     public string? Geometry { get; set; }
+
+    /// <summary>
+    /// Gets whether this segment has meaningful notes content.
+    /// Filters out empty HTML like Quill.js default.
+    /// </summary>
+    [JsonIgnore]
+    public bool HasNotes
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(Notes))
+                return false;
+            var stripped = System.Text.RegularExpressions.Regex.Replace(Notes, "<[^>]*>", "").Trim();
+            return !string.IsNullOrWhiteSpace(stripped);
+        }
+    }
 }
 
 /// <summary>
@@ -807,6 +1310,13 @@ public class PlaceCreateRequest
     /// Gets or sets the display order.
     /// </summary>
     public int? DisplayOrder { get; set; }
+
+    /// <summary>
+    /// Gets the icon resource path for UI binding.
+    /// Uses IconCatalog to resolve the icon and color to a resource path.
+    /// </summary>
+    [JsonIgnore]
+    public string IconPath => Helpers.IconCatalog.GetIconResourcePath(Icon, MarkerColor);
 }
 
 /// <summary>
@@ -1078,26 +1588,28 @@ public class PublicTripSummary
     public List<string> Cities { get; set; } = new();
 
     /// <summary>
-    /// Gets or sets the number of places.
+    /// Gets or sets the number of places (server sends as placesCount).
     /// </summary>
-    public int PlaceCount { get; set; }
+    [JsonPropertyName("placesCount")]
+    public int PlacesCount { get; set; }
 
     /// <summary>
-    /// Gets or sets the owner's display name.
+    /// Gets or sets the number of regions (server sends as regionsCount).
     /// </summary>
-    public string? OwnerName { get; set; }
+    [JsonPropertyName("regionsCount")]
+    public int RegionsCount { get; set; }
 
     /// <summary>
-    /// Gets the author name (alias for OwnerName for UI binding).
+    /// Gets or sets the owner's display name (server sends as ownerDisplayName).
+    /// </summary>
+    [JsonPropertyName("ownerDisplayName")]
+    public string? OwnerDisplayName { get; set; }
+
+    /// <summary>
+    /// Gets the author name (alias for OwnerDisplayName for UI binding).
     /// </summary>
     [JsonIgnore]
-    public string? AuthorName => OwnerName;
-
-    /// <summary>
-    /// Gets the number of regions (countries) in the trip.
-    /// </summary>
-    [JsonIgnore]
-    public int RegionCount => Countries.Count;
+    public string? AuthorName => OwnerDisplayName;
 
     /// <summary>
     /// Gets or sets whether the current user owns this trip.
@@ -1134,7 +1646,7 @@ public class PublicTripSummary
     /// </summary>
     [JsonIgnore]
     public string SummaryText =>
-        PlaceCount > 0 ? $"{PlaceCount} place{(PlaceCount == 1 ? "" : "s")}" : "Empty trip";
+        PlacesCount > 0 ? $"{PlacesCount} place{(PlacesCount == 1 ? "" : "s")}" : "Empty trip";
 }
 
 /// <summary>

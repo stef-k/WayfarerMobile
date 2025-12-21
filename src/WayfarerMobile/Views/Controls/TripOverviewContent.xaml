@@ -1,0 +1,507 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:viewmodels="clr-namespace:WayfarerMobile.ViewModels"
+             xmlns:models="clr-namespace:WayfarerMobile.Core.Models;assembly=WayfarerMobile.Core"
+             xmlns:sfExpander="clr-namespace:Syncfusion.Maui.Toolkit.Expander;assembly=Syncfusion.Maui.Toolkit"
+             x:Class="WayfarerMobile.Views.Controls.TripOverviewContent"
+             x:DataType="viewmodels:MainViewModel"
+             BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+
+    <!-- Main content grid - no SfBottomSheet, this is placed inside MainPage's BottomSheet -->
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- Header -->
+        <Grid Grid.Row="0" Padding="8,8,8,8" ColumnDefinitions="Auto,*,Auto">
+            <!-- Back Button (visible when showing details) -->
+            <Button Grid.Column="0"
+                    Text="←"
+                    FontSize="18"
+                    WidthRequest="36"
+                    HeightRequest="36"
+                    Padding="0"
+                    CornerRadius="18"
+                    BackgroundColor="Transparent"
+                    TextColor="{StaticResource Primary}"
+                    Command="{Binding TripSheetBackCommand}"
+                    IsVisible="{Binding IsTripSheetShowingDetails}" />
+
+            <!-- Title -->
+            <VerticalStackLayout Grid.Column="1" VerticalOptions="Center">
+                <Label Text="{Binding TripSheetTitle}"
+                       FontSize="16"
+                       FontAttributes="Bold"
+                       LineBreakMode="WordWrap"
+                       MaxLines="2" />
+                <Label Text="{Binding TripSheetSubtitle}"
+                       FontSize="12"
+                       TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
+                       IsVisible="{Binding TripSheetSubtitle, Converter={StaticResource IsNotNullConverter}}" />
+            </VerticalStackLayout>
+
+            <!-- Close Button -->
+            <Button Grid.Column="2"
+                    Text="✕"
+                    FontSize="16"
+                    WidthRequest="36"
+                    HeightRequest="36"
+                    Padding="0"
+                    CornerRadius="18"
+                    BackgroundColor="Transparent"
+                    TextColor="{StaticResource TextSecondary}"
+                    Command="{Binding CloseTripSheetCommand}" />
+        </Grid>
+
+        <!-- Content Area - ScrollView for Overview/Area/Segment modes (hidden for Place and TripNotes detail views) -->
+        <ScrollView Grid.Row="1"
+                    IsVisible="{Binding IsTripSheetShowingScrollableContent}">
+            <Grid>
+                <!-- Overview Mode -->
+                <VerticalStackLayout IsVisible="{Binding IsTripSheetShowingOverview}"
+                                     Spacing="0">
+
+                    <!-- Trip Info Section -->
+                    <VerticalStackLayout Padding="8,0,8,8" Spacing="8">
+                        <!-- Cover Image (if exists) -->
+                        <Border StrokeThickness="0"
+                                HeightRequest="150"
+                                IsVisible="{Binding LoadedTrip.HasCoverImage}">
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="8" />
+                            </Border.StrokeShape>
+                            <Image Source="{Binding LoadedTrip.CoverImageUrl}"
+                                   Aspect="AspectFill" />
+                        </Border>
+
+                        <!-- Updated At -->
+                        <Label Text="{Binding LoadedTrip.UpdatedAt, StringFormat='Last updated: {0:MMM d, yyyy}'}"
+                               FontSize="12"
+                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
+
+                        <!-- Trip Notes (tappable to open detail view) -->
+                        <Border StrokeThickness="0"
+                                BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}"
+                                Padding="8,10"
+                                IsVisible="{Binding LoadedTrip.HasNotes}">
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="6" />
+                            </Border.StrokeShape>
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding ShowTripNotesCommand}" />
+                            </Border.GestureRecognizers>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Label Grid.Column="0"
+                                       Text="Trip Notes"
+                                       FontSize="13"
+                                       FontAttributes="Bold"
+                                       VerticalOptions="Center" />
+                                <Label Grid.Column="1"
+                                       Text="→"
+                                       FontSize="16"
+                                       TextColor="{StaticResource Primary}"
+                                       VerticalOptions="Center" />
+                            </Grid>
+                        </Border>
+                    </VerticalStackLayout>
+
+                    <!-- Regions with Places and Areas -->
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding LoadedTrip.SortedRegions}">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="models:TripRegion">
+                                <sfExpander:SfExpander IsExpanded="True"
+                                                       IsVisible="{Binding IsVisibleInUi}">
+                                    <sfExpander:SfExpander.Header>
+                                        <Grid MinimumHeightRequest="40" Padding="8,6"
+                                              BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}">
+                                            <Label Text="{Binding Name}"
+                                                   FontSize="14"
+                                                   FontAttributes="Bold"
+                                                   VerticalOptions="Center"
+                                                   LineBreakMode="WordWrap" />
+                                        </Grid>
+                                    </sfExpander:SfExpander.Header>
+                                    <sfExpander:SfExpander.Content>
+                                        <VerticalStackLayout Spacing="0">
+                                            <!-- Region Cover Image (collapsible) -->
+                                            <sfExpander:SfExpander IsExpanded="True" IsVisible="{Binding HasCoverImage}">
+                                                <sfExpander:SfExpander.Header>
+                                                    <Grid HeightRequest="32" Padding="8,0"
+                                                          BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+                                                        <Label Text="Cover Image" FontSize="12" VerticalOptions="Center"
+                                                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
+                                                    </Grid>
+                                                </sfExpander:SfExpander.Header>
+                                                <sfExpander:SfExpander.Content>
+                                                    <Border StrokeThickness="0" HeightRequest="100" Margin="8,2,8,6">
+                                                        <Border.StrokeShape><RoundRectangle CornerRadius="6" /></Border.StrokeShape>
+                                                        <Image Source="{Binding CoverImageUrl}" Aspect="AspectFill" />
+                                                    </Border>
+                                                </sfExpander:SfExpander.Content>
+                                            </sfExpander:SfExpander>
+                                            <!-- Region Notes (collapsible) -->
+                                            <sfExpander:SfExpander IsExpanded="True" IsVisible="{Binding HasNotes}">
+                                                <sfExpander:SfExpander.Header>
+                                                    <Grid HeightRequest="32" Padding="8,0"
+                                                          BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+                                                        <Label Text="Notes" FontSize="12" VerticalOptions="Center"
+                                                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
+                                                    </Grid>
+                                                </sfExpander:SfExpander.Header>
+                                                <sfExpander:SfExpander.Content>
+                                                    <Border Padding="8,2,8,6" StrokeThickness="0"
+                                                            BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+                                                        <Label Text="{Binding Notes}" TextType="Html" FontSize="13" />
+                                                    </Border>
+                                                </sfExpander:SfExpander.Content>
+                                            </sfExpander:SfExpander>
+                                            <!-- Places -->
+                                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Places}">
+                                                <BindableLayout.ItemTemplate>
+                                                    <DataTemplate x:DataType="models:TripPlace">
+                                                        <Border Padding="8,8" Margin="0,0,0,1" StrokeThickness="0"
+                                                                BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+                                                            <Border.GestureRecognizers>
+                                                                <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=SelectTripPlaceCommand}"
+                                                                                      CommandParameter="{Binding .}" />
+                                                            </Border.GestureRecognizers>
+                                                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                                                <Image Grid.Column="0" Source="{Binding IconPath, Converter={StaticResource MauiAssetImageConverter}}"
+                                                                       WidthRequest="32" HeightRequest="32" VerticalOptions="Center" />
+                                                                <Label Grid.Column="1" Text="{Binding Name}" FontSize="14" VerticalOptions="Center"
+                                                                       LineBreakMode="WordWrap" />
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </BindableLayout.ItemTemplate>
+                                            </VerticalStackLayout>
+                                            <!-- Areas -->
+                                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Areas}">
+                                                <BindableLayout.ItemTemplate>
+                                                    <DataTemplate x:DataType="models:TripArea">
+                                                        <Border Padding="8,8" Margin="0,0,0,1" StrokeThickness="0"
+                                                                BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+                                                            <Border.GestureRecognizers>
+                                                                <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=SelectTripAreaCommand}"
+                                                                                      CommandParameter="{Binding .}" />
+                                                            </Border.GestureRecognizers>
+                                                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                                                <Border Grid.Column="0" WidthRequest="28" HeightRequest="28" StrokeThickness="2"
+                                                                        Stroke="{Binding StrokeColor, TargetNullValue='#4CAF50'}"
+                                                                        BackgroundColor="{Binding FillColor, TargetNullValue='#4CAF5040'}"
+                                                                        VerticalOptions="Center">
+                                                                    <Border.StrokeShape><RoundRectangle CornerRadius="4" /></Border.StrokeShape>
+                                                                </Border>
+                                                                <Label Grid.Column="1" Text="{Binding Name}" FontSize="14" VerticalOptions="Center"
+                                                                       LineBreakMode="WordWrap" />
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </BindableLayout.ItemTemplate>
+                                            </VerticalStackLayout>
+                                        </VerticalStackLayout>
+                                    </sfExpander:SfExpander.Content>
+                                </sfExpander:SfExpander>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+
+                    <!-- Segments -->
+                    <Label Text="Segments" FontSize="14" FontAttributes="Bold" Padding="8,10,8,6"
+                           BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}"
+                           IsVisible="{Binding HasTripSegments}" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding LoadedTrip.Segments}"
+                                         IsVisible="{Binding HasTripSegments}">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="models:TripSegment">
+                                <Border Padding="8,8" Margin="0,0,0,1" StrokeThickness="0"
+                                        BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+                                    <Border.GestureRecognizers>
+                                        <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=SelectTripSegmentCommand}"
+                                                              CommandParameter="{Binding .}" />
+                                    </Border.GestureRecognizers>
+                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                        <Label Grid.Column="0" Text="━━" FontSize="14" VerticalOptions="Center" TextColor="{StaticResource Primary}" />
+                                        <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="2">
+                                            <Label Text="{Binding TransportMode, StringFormat='Segment: {0}'}" FontSize="14"
+                                                   LineBreakMode="WordWrap" />
+                                            <HorizontalStackLayout Spacing="6">
+                                                <Label Text="{Binding DistanceKm, StringFormat='{0:F1} km'}" FontSize="11"
+                                                       TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
+                                                       IsVisible="{Binding DistanceKm, Converter={StaticResource IsNotNullConverter}}" />
+                                                <Label Text="{Binding DurationMinutes, StringFormat='{0} min'}" FontSize="11"
+                                                       TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
+                                                       IsVisible="{Binding DurationMinutes, Converter={StaticResource IsNotNullConverter}}" />
+                                            </HorizontalStackLayout>
+                                            <!-- From → To -->
+                                            <Label FontSize="11" LineBreakMode="TailTruncation"
+                                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
+                                                   IsVisible="{Binding OriginName, Converter={StaticResource IsNotNullConverter}}">
+                                                <Label.FormattedText>
+                                                    <FormattedString>
+                                                        <Span Text="{Binding OriginName}" />
+                                                        <Span Text=" → " />
+                                                        <Span Text="{Binding DestinationName}" />
+                                                    </FormattedString>
+                                                </Label.FormattedText>
+                                            </Label>
+                                        </VerticalStackLayout>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+
+                </VerticalStackLayout>
+
+                <!-- Area Details Mode (hidden when showing area notes) -->
+                <VerticalStackLayout IsVisible="{Binding IsTripSheetShowingArea}" Spacing="8" Padding="8,0,8,8">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                        <Border Grid.Column="0" WidthRequest="32" HeightRequest="32" StrokeThickness="2"
+                                Stroke="{Binding SelectedTripArea.StrokeColor, TargetNullValue='#4CAF50'}"
+                                BackgroundColor="{Binding SelectedTripArea.FillColor, TargetNullValue='#4CAF5040'}"
+                                VerticalOptions="Start">
+                            <Border.StrokeShape><RoundRectangle CornerRadius="4" /></Border.StrokeShape>
+                        </Border>
+                        <Label Grid.Column="1" Text="{Binding SelectedTripArea.Name}" FontSize="18" FontAttributes="Bold"
+                               VerticalOptions="Center" LineBreakMode="WordWrap" />
+                    </Grid>
+                    <!-- Area Notes (tappable to open detail view) -->
+                    <Border StrokeThickness="0"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}"
+                            Padding="8,10"
+                            IsVisible="{Binding SelectedTripArea.HasNotes}">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="6" />
+                        </Border.StrokeShape>
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer Command="{Binding ShowAreaNotesCommand}" />
+                        </Border.GestureRecognizers>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Grid.Column="0"
+                                   Text="Notes"
+                                   FontSize="13"
+                                   FontAttributes="Bold"
+                                   VerticalOptions="Center" />
+                            <Label Grid.Column="1"
+                                   Text="→"
+                                   FontSize="16"
+                                   TextColor="{StaticResource Primary}"
+                                   VerticalOptions="Center" />
+                        </Grid>
+                    </Border>
+                </VerticalStackLayout>
+
+                <!-- Segment Details Mode (hidden when showing segment notes) -->
+                <VerticalStackLayout IsVisible="{Binding IsTripSheetShowingSegment}" Spacing="10" Padding="8,0,8,8">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                        <Label Grid.Column="0" Text="━━" FontSize="20" VerticalOptions="Start" TextColor="{StaticResource Primary}" />
+                        <Label Grid.Column="1" Text="{Binding SelectedTripSegment.TransportMode}" FontSize="20" FontAttributes="Bold"
+                               LineBreakMode="WordWrap" />
+                    </Grid>
+                    <HorizontalStackLayout Spacing="16">
+                        <Label Text="{Binding SelectedTripSegment.DistanceKm, StringFormat='{0:F1} km'}" FontSize="15"
+                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
+                               IsVisible="{Binding SelectedTripSegment.DistanceKm, Converter={StaticResource IsNotNullConverter}}" />
+                        <Label Text="{Binding SelectedTripSegment.DurationMinutes, StringFormat='{0} minutes'}" FontSize="15"
+                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
+                               IsVisible="{Binding SelectedTripSegment.DurationMinutes, Converter={StaticResource IsNotNullConverter}}" />
+                    </HorizontalStackLayout>
+                    <!-- From -->
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8"
+                          IsVisible="{Binding SelectedTripSegment.OriginName, Converter={StaticResource IsNotNullConverter}}">
+                        <Label Grid.Column="0" Text="From:" FontSize="15" FontAttributes="Bold"
+                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
+                        <Label Grid.Column="1" Text="{Binding SelectedTripSegment.OriginName}" FontSize="15" LineBreakMode="WordWrap" />
+                    </Grid>
+                    <!-- To -->
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8"
+                          IsVisible="{Binding SelectedTripSegment.DestinationName, Converter={StaticResource IsNotNullConverter}}">
+                        <Label Grid.Column="0" Text="To:" FontSize="15" FontAttributes="Bold"
+                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
+                        <Label Grid.Column="1" Text="{Binding SelectedTripSegment.DestinationName}" FontSize="15" LineBreakMode="WordWrap" />
+                    </Grid>
+                    <!-- Segment Notes (tappable to open detail view) -->
+                    <Border StrokeThickness="0"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}"
+                            Padding="10,12"
+                            IsVisible="{Binding SelectedTripSegment.HasNotes}">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="6" />
+                        </Border.StrokeShape>
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer Command="{Binding ShowSegmentNotesCommand}" />
+                        </Border.GestureRecognizers>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Grid.Column="0"
+                                   Text="Notes"
+                                   FontSize="15"
+                                   FontAttributes="Bold"
+                                   VerticalOptions="Center" />
+                            <Label Grid.Column="1"
+                                   Text="→"
+                                   FontSize="18"
+                                   TextColor="{StaticResource Primary}"
+                                   VerticalOptions="Center" />
+                        </Grid>
+                    </Border>
+                </VerticalStackLayout>
+            </Grid>
+        </ScrollView>
+
+        <!-- Place Details Mode - OUTSIDE ScrollView for proper WebView scrolling -->
+        <Grid Grid.Row="1"
+              RowDefinitions="Auto,Auto,Auto,*"
+              Padding="8,0,8,8"
+              RowSpacing="8"
+              IsVisible="{Binding IsTripSheetShowingPlace}">
+
+            <!-- Row 0: Place Header -->
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                <Image Grid.Column="0" Source="{Binding SelectedTripPlace.IconPath, Converter={StaticResource MauiAssetImageConverter}}"
+                       WidthRequest="36" HeightRequest="36" VerticalOptions="Start" />
+                <Label Grid.Column="1" Text="{Binding SelectedTripPlace.Name}" FontSize="18" FontAttributes="Bold"
+                       VerticalOptions="Center" LineBreakMode="WordWrap" />
+            </Grid>
+
+            <!-- Row 1: Coordinates -->
+            <HorizontalStackLayout Grid.Row="1" Spacing="12">
+                <HorizontalStackLayout Spacing="4">
+                    <Label Text="Lat:" FontSize="14" FontAttributes="Bold" TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
+                    <Label Text="{Binding SelectedTripPlace.Latitude, StringFormat='{0:F6}'}" FontSize="14" />
+                </HorizontalStackLayout>
+                <HorizontalStackLayout Spacing="4">
+                    <Label Text="Lon:" FontSize="14" FontAttributes="Bold" TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
+                    <Label Text="{Binding SelectedTripPlace.Longitude, StringFormat='{0:F6}'}" FontSize="14" />
+                </HorizontalStackLayout>
+            </HorizontalStackLayout>
+
+            <!-- Row 2: Address (if present) -->
+            <Grid Grid.Row="2" ColumnDefinitions="Auto,*" ColumnSpacing="4"
+                  IsVisible="{Binding SelectedTripPlace.Address, Converter={StaticResource IsNotNullConverter}}">
+                <Label Grid.Column="0" Text="Address:" FontSize="14" FontAttributes="Bold"
+                       TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
+                <Label Grid.Column="1" Text="{Binding SelectedTripPlace.Address}" FontSize="14" LineBreakMode="WordWrap" />
+            </Grid>
+
+            <!-- Row 3: Notes WebView - fills remaining space, scrolls independently -->
+            <Border Grid.Row="3" Padding="0" StrokeThickness="0"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}"
+                    IsVisible="{Binding SelectedTripPlace.Notes, Converter={StaticResource IsNotNullConverter}}">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="6" />
+                </Border.StrokeShape>
+                <WebView x:Name="NotesWebView"
+                         Source="{Binding SelectedTripPlaceNotesHtml}"
+                         VerticalOptions="Fill"
+                         HorizontalOptions="Fill"
+                         Navigating="OnNotesWebViewNavigating" />
+            </Border>
+        </Grid>
+
+        <!-- Trip Notes Mode - OUTSIDE ScrollView for proper WebView scrolling -->
+        <Grid Grid.Row="1"
+              RowDefinitions="*"
+              Padding="8,0,8,8"
+              IsVisible="{Binding IsTripSheetShowingTripNotes}">
+            <Border Padding="0" StrokeThickness="0"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="6" />
+                </Border.StrokeShape>
+                <WebView Source="{Binding TripNotesHtml}"
+                         VerticalOptions="Fill"
+                         HorizontalOptions="Fill"
+                         Navigating="OnNotesWebViewNavigating" />
+            </Border>
+        </Grid>
+
+        <!-- Area Notes Mode - OUTSIDE ScrollView for proper WebView scrolling -->
+        <Grid Grid.Row="1"
+              RowDefinitions="*"
+              Padding="8,0,8,8"
+              IsVisible="{Binding IsTripSheetShowingAreaNotes}">
+            <Border Padding="0" StrokeThickness="0"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="6" />
+                </Border.StrokeShape>
+                <WebView Source="{Binding SelectedTripAreaNotesHtml}"
+                         VerticalOptions="Fill"
+                         HorizontalOptions="Fill"
+                         Navigating="OnNotesWebViewNavigating" />
+            </Border>
+        </Grid>
+
+        <!-- Segment Notes Mode - OUTSIDE ScrollView for proper WebView scrolling -->
+        <Grid Grid.Row="1"
+              RowDefinitions="*"
+              Padding="8,0,8,8"
+              IsVisible="{Binding IsTripSheetShowingSegmentNotes}">
+            <Border Padding="0" StrokeThickness="0"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="6" />
+                </Border.StrokeShape>
+                <WebView Source="{Binding SelectedTripSegmentNotesHtml}"
+                         VerticalOptions="Fill"
+                         HorizontalOptions="Fill"
+                         Navigating="OnNotesWebViewNavigating" />
+            </Border>
+        </Grid>
+
+        <!-- Sticky Bottom Section -->
+        <Grid Grid.Row="2"
+              BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+
+            <!-- Unload Trip Button (Overview Mode) -->
+            <Button Text="Unload Trip"
+                    Command="{Binding ClearLoadedTripCommand}"
+                    Margin="8,6,8,12"
+                    BackgroundColor="{StaticResource Error}"
+                    TextColor="White"
+                    CornerRadius="8"
+                    HeightRequest="44"
+                    IsVisible="{Binding IsTripSheetShowingOverview}" />
+
+            <!-- Place Action Buttons (1 row of 6) -->
+            <Grid ColumnDefinitions="*,*,*,*,*,*"
+                  ColumnSpacing="4"
+                  Padding="8,6,8,12"
+                  IsVisible="{Binding IsTripSheetShowingPlace}">
+                <ImageButton Grid.Column="0" Source="copy.png" Command="{Binding CopyTripPlaceCoordsCommand}"
+                             BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                             CornerRadius="6" Padding="6" HeightRequest="40" HorizontalOptions="Fill" />
+                <ImageButton Grid.Column="1" Source="share_icon.png" Command="{Binding ShareTripPlaceCommand}"
+                             BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                             CornerRadius="6" Padding="6" HeightRequest="40" HorizontalOptions="Fill" />
+                <ImageButton Grid.Column="2" Source="edit.png" Command="{Binding EditTripPlaceCommand}"
+                             BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                             CornerRadius="6" Padding="6" HeightRequest="40" HorizontalOptions="Fill" />
+                <ImageButton Grid.Column="3" Source="wikipedia.png" Command="{Binding OpenTripPlaceWikipediaCommand}"
+                             BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                             CornerRadius="6" Padding="6" HeightRequest="40" HorizontalOptions="Fill" />
+                <ImageButton Grid.Column="4" Source="maps_google.png" Command="{Binding OpenTripPlaceInMapsCommand}"
+                             BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                             CornerRadius="6" Padding="6" HeightRequest="40" HorizontalOptions="Fill" />
+                <ImageButton Grid.Column="5" Source="navigate.png" Command="{Binding NavigateToTripPlaceCommand}"
+                             BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                             CornerRadius="6" Padding="6" HeightRequest="40" HorizontalOptions="Fill" />
+            </Grid>
+
+            <!-- Area Action Buttons -->
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="6" Padding="8,6,8,12"
+                  IsVisible="{Binding IsTripSheetShowingArea}">
+                <Button Grid.Column="0" ImageSource="maps_google.png" Text=" Maps" ContentLayout="Left,4"
+                        Command="{Binding OpenTripAreaInMapsCommand}"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                        TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
+                        CornerRadius="6" HeightRequest="40" />
+                <Button Grid.Column="1" ImageSource="wikipedia.png" Text=" Wiki" ContentLayout="Left,4"
+                        Command="{Binding OpenTripAreaWikipediaCommand}"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                        TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
+                        CornerRadius="6" HeightRequest="40" />
+            </Grid>
+        </Grid>
+    </Grid>
+</ContentView>

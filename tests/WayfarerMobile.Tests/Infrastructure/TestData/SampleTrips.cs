@@ -153,11 +153,11 @@ public static class SampleTrips
         {
             graph.AddEdge(new NavigationEdge
             {
-                FromNodeId = segment.OriginId.ToString(),
-                ToNodeId = segment.DestinationId.ToString(),
+                FromNodeId = (segment.OriginId ?? Guid.Empty).ToString(),
+                ToNodeId = (segment.DestinationId ?? Guid.Empty).ToString(),
                 TransportMode = segment.TransportMode ?? "walking",
                 DistanceKm = segment.DistanceKm ?? 0,
-                DurationMinutes = segment.DurationMinutes ?? 0,
+                DurationMinutes = (int)(segment.DurationMinutes ?? 0),
                 EdgeType = NavigationEdgeType.UserSegment
             });
         }
