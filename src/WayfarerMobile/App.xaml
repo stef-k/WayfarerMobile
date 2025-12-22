@@ -30,6 +30,7 @@
             <converters:IndexToColorConverter x:Key="IndexToColorConverter" />
             <converters:HtmlToTextConverter x:Key="HtmlToTextConverter" />
             <converters:MauiAssetImageConverter x:Key="MauiAssetImageConverter" />
+            <converters:HasLocationInfoConverter x:Key="HasLocationInfoConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

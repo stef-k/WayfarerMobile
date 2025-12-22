@@ -81,9 +81,10 @@
                                            TextColor="White" />
                                 </Border>
 
-                                <!-- Location Info -->
+                                <!-- Location Info (hidden when no location data) -->
                                 <Label Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
                                        Text="{Binding LocationsText}"
+                                       IsVisible="{Binding LocationsText, Converter={StaticResource HasLocationInfoConverter}}"
                                        FontSize="13"
                                        TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
                                        LineBreakMode="TailTruncation" />

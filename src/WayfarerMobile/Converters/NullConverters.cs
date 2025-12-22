@@ -128,3 +128,31 @@ public class PercentToDecimalConverter : IValueConverter
         throw new NotImplementedException();
     }
 }
+
+/// <summary>
+/// Converts a string to false if it matches "No location info", otherwise true.
+/// Used to hide fallback text that provides no useful information.
+/// </summary>
+public class HasLocationInfoConverter : IValueConverter
+{
+    /// <summary>
+    /// Converts a string to false if it matches "No location info".
+    /// </summary>
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is string text)
+        {
+            return !string.Equals(text, "No location info", StringComparison.Ordinal);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Not implemented.
+    /// </summary>
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        throw new NotImplementedException();
+    }
+}
