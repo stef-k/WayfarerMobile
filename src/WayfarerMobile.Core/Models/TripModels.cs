@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Text.Json.Serialization;
 
 namespace WayfarerMobile.Core.Models;
@@ -292,9 +293,17 @@ public class BoundingBox
 
 /// <summary>
 /// Trip region containing places and areas.
+/// Implements INotifyPropertyChanged for UI binding support.
 /// </summary>
-public class TripRegion
+public class TripRegion : INotifyPropertyChanged
 {
+    private string _name = string.Empty;
+
+    /// <summary>
+    /// Occurs when a property value changes.
+    /// </summary>
+    public event PropertyChangedEventHandler? PropertyChanged;
+
     /// <summary>
     /// The reserved name for the built-in unassigned places region.
     /// </summary>
@@ -308,7 +317,18 @@ public class TripRegion
     /// <summary>
     /// Gets or sets the region name.
     /// </summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name
+    {
+        get => _name;
+        set
+        {
+            if (_name != value)
+            {
+                _name = value;
+                OnPropertyChanged(nameof(Name));
+            }
+        }
+    }
 
     /// <summary>
     /// Gets or sets the region notes (HTML).
@@ -424,6 +444,15 @@ public class TripRegion
             var stripped = System.Text.RegularExpressions.Regex.Replace(Notes, "<[^>]*>", "").Trim();
             return !string.IsNullOrWhiteSpace(stripped);
         }
+    }
+
+    /// <summary>
+    /// Raises the PropertyChanged event.
+    /// </summary>
+    /// <param name="propertyName">The name of the property that changed.</param>
+    protected virtual void OnPropertyChanged(string propertyName)
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 }
 
