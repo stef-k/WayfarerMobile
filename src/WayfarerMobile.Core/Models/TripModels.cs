@@ -242,6 +242,10 @@ public class TripDetails
             {
                 Id = r.Id,
                 Name = r.Name,
+                Notes = r.Notes,
+                CoverImageUrl = r.CoverImageUrl,
+                CenterLatitude = r.CenterLatitude,
+                CenterLongitude = r.CenterLongitude,
                 SortOrder = r.SortOrder,
                 Places = r.Places.OrderBy(p => p.SortOrder).ToList(),
                 Areas = r.Areas.OrderBy(a => a.SortOrder).ToList()
