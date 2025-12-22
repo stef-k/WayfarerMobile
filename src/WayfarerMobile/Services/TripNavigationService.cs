@@ -51,6 +51,11 @@ public class TripNavigationService
     /// </summary>
     public bool IsTripLoaded => _currentGraph != null;
 
+    /// <summary>
+    /// Gets the ID of the currently loaded trip, or null if no trip is loaded.
+    /// </summary>
+    public Guid? CurrentTripId => _currentTrip?.Id;
+
     // Turn announcement tracking
     private string? _lastAnnouncedWaypoint;
     private DateTime _lastAnnouncementTime = DateTime.MinValue;

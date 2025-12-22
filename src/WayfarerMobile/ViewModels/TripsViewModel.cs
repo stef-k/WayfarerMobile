@@ -18,6 +18,7 @@ public partial class TripsViewModel : BaseViewModel
     private readonly ISettingsService _settingsService;
     private readonly TripDownloadService _downloadService;
     private readonly IToastService _toastService;
+    private readonly TripNavigationService _tripNavigationService;
     private readonly ILogger<TripsViewModel> _logger;
 
     private CancellationTokenSource? _searchCts;
@@ -167,12 +168,14 @@ public partial class TripsViewModel : BaseViewModel
         ISettingsService settingsService,
         TripDownloadService downloadService,
         IToastService toastService,
+        TripNavigationService tripNavigationService,
         ILogger<TripsViewModel> logger)
     {
         _apiClient = apiClient;
         _settingsService = settingsService;
         _downloadService = downloadService;
         _toastService = toastService;
+        _tripNavigationService = tripNavigationService;
         _logger = logger;
         Title = "Trips";
 
@@ -350,7 +353,23 @@ public partial class TripsViewModel : BaseViewModel
 
         try
         {
+            // Check if this trip is currently loaded on the map
+            var isCurrentlyLoaded = _tripNavigationService.CurrentTripId == item.ServerId;
+
             await _downloadService.DeleteTripAsync(item.ServerId);
+
+            // If the trip was loaded on the map, unload it and navigate to main page
+            if (isCurrentlyLoaded)
+            {
+                _tripNavigationService.UnloadTrip();
+                _logger.LogInformation("Unloaded deleted trip from map: {TripName}", item.Name);
+
+                // Navigate to main page with UnloadTrip signal
+                await Shell.Current.GoToAsync("//main", new Dictionary<string, object>
+                {
+                    ["UnloadTrip"] = true
+                });
+            }
 
             // Update item directly instead of full reload (avoids shimmer)
             item.DownloadState = TripDownloadState.ServerOnly;

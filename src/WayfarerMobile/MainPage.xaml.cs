@@ -234,6 +234,12 @@ public partial class MainPage : ContentPage, IQueryAttributable
         {
             _pendingTrip = trip;
         }
+
+        // Handle UnloadTrip signal (when trip is deleted from TripsPage)
+        if (query.TryGetValue("UnloadTrip", out var unloadObj) && unloadObj is bool unload && unload)
+        {
+            _viewModel.UnloadTrip();
+        }
     }
 
     /// <summary>
