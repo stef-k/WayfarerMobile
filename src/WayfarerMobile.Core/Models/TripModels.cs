@@ -65,27 +65,26 @@ public class TripSummary
     public int RegionsCount { get; set; }
 
     /// <summary>
-    /// Gets a display string for locations.
+    /// Gets a stats text showing region and place counts.
+    /// Format: "X Regions / Y Places" or "Empty trip".
     /// </summary>
     [JsonIgnore]
-    public string LocationsText
+    public string StatsText
     {
         get
         {
+            if (RegionsCount == 0 && PlacesCount == 0)
+                return "Empty trip";
+
             var parts = new List<string>();
-            if (Cities.Any()) parts.Add(string.Join(", ", Cities.Take(3)));
-            if (Countries.Any()) parts.Add(string.Join(", ", Countries.Take(2)));
-            return parts.Any() ? string.Join(" • ", parts) : "No location info";
+            if (RegionsCount > 0)
+                parts.Add($"{RegionsCount} Region{(RegionsCount == 1 ? "" : "s")}");
+            if (PlacesCount > 0)
+                parts.Add($"{PlacesCount} Place{(PlacesCount == 1 ? "" : "s")}");
+
+            return string.Join(" / ", parts);
         }
     }
-
-    /// <summary>
-    /// Gets a stats text for display.
-    /// </summary>
-    [JsonIgnore]
-    public string StatsText => PlacesCount > 0
-        ? $"{PlacesCount} place{(PlacesCount == 1 ? "" : "s")} • {RegionsCount} region{(RegionsCount == 1 ? "" : "s")}"
-        : "Empty trip";
 }
 
 /// <summary>
@@ -1627,26 +1626,26 @@ public class PublicTripSummary
     public DateTime CreatedAt { get; set; }
 
     /// <summary>
-    /// Gets a display string for locations.
+    /// Gets a stats text showing region and place counts.
+    /// Format: "X Regions / Y Places" or "Empty trip".
     /// </summary>
     [JsonIgnore]
-    public string LocationsText
+    public string StatsText
     {
         get
         {
+            if (RegionsCount == 0 && PlacesCount == 0)
+                return "Empty trip";
+
             var parts = new List<string>();
-            if (Cities.Any()) parts.Add(string.Join(", ", Cities.Take(3)));
-            if (Countries.Any()) parts.Add(string.Join(", ", Countries.Take(2)));
-            return parts.Any() ? string.Join(" • ", parts) : "No location info";
+            if (RegionsCount > 0)
+                parts.Add($"{RegionsCount} Region{(RegionsCount == 1 ? "" : "s")}");
+            if (PlacesCount > 0)
+                parts.Add($"{PlacesCount} Place{(PlacesCount == 1 ? "" : "s")}");
+
+            return string.Join(" / ", parts);
         }
     }
-
-    /// <summary>
-    /// Gets a short summary text.
-    /// </summary>
-    [JsonIgnore]
-    public string SummaryText =>
-        PlacesCount > 0 ? $"{PlacesCount} place{(PlacesCount == 1 ? "" : "s")}" : "Empty trip";
 }
 
 /// <summary>

@@ -5,6 +5,7 @@
              xmlns:models="clr-namespace:WayfarerMobile.Core.Models;assembly=WayfarerMobile.Core"
              xmlns:controls="clr-namespace:WayfarerMobile.Shared.Controls"
              x:Class="WayfarerMobile.Views.Controls.MyTripsView"
+             x:Name="ThisView"
              x:DataType="viewmodels:TripsViewModel">
 
     <Grid RowDefinitions="*">
@@ -57,7 +58,7 @@
                                 <RoundRectangle CornerRadius="12" />
                             </Border.StrokeShape>
 
-                            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="4">
+                            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="4">
                                 <!-- Trip Name -->
                                 <Label Grid.Row="0" Grid.Column="0"
                                        Text="{Binding Name}"
@@ -81,15 +82,8 @@
                                            TextColor="White" />
                                 </Border>
 
-                                <!-- Location Info -->
-                                <Label Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
-                                       Text="{Binding LocationsText}"
-                                       FontSize="13"
-                                       TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
-                                       LineBreakMode="TailTruncation" />
-
-                                <!-- Stats -->
-                                <HorizontalStackLayout Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                                <!-- Stats (Regions / Places) -->
+                                <HorizontalStackLayout Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
                                                        Spacing="12">
                                     <Label Text="{Binding StatsText}"
                                            FontSize="12"
@@ -97,13 +91,13 @@
                                 </HorizontalStackLayout>
 
                                 <!-- Actions Row -->
-                                <VerticalStackLayout Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+                                <VerticalStackLayout Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
                                                      Spacing="4"
                                                      Margin="0,8,0,0">
                                     <HorizontalStackLayout Spacing="8">
                                         <!-- Load to Map Button -->
                                         <Button Text="Load to Map"
-                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=LoadTripToMapCommand}"
+                                                Command="{Binding Source={x:Reference ThisView}, Path=BindingContext.LoadTripToMapCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanLoadToMap}"
                                                 BackgroundColor="{StaticResource Primary}"
@@ -115,7 +109,7 @@
 
                                         <!-- Download (Metadata only) -->
                                         <Button Text="Download"
-                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=QuickDownloadCommand}"
+                                                Command="{Binding Source={x:Reference ThisView}, Path=BindingContext.QuickDownloadCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanQuickDownload}"
                                                 BackgroundColor="{StaticResource Primary}"
@@ -127,7 +121,7 @@
 
                                         <!-- Download + Maps (With Tiles) -->
                                         <Button Text="+ Offline Maps"
-                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=FullDownloadCommand}"
+                                                Command="{Binding Source={x:Reference ThisView}, Path=BindingContext.FullDownloadCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanFullDownload}"
                                                 BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
@@ -139,7 +133,7 @@
 
                                         <!-- Delete Downloaded/Partial -->
                                         <Button Text="Delete"
-                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=DeleteDownloadCommand}"
+                                                Command="{Binding Source={x:Reference ThisView}, Path=BindingContext.DeleteDownloadCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanDelete}"
                                                 BackgroundColor="{StaticResource Error}"
@@ -159,7 +153,7 @@
                                 </VerticalStackLayout>
 
                                 <!-- Download Progress (when downloading) -->
-                                <Grid Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+                                <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
                                       IsVisible="{Binding IsDownloading}"
                                       Margin="0,8,0,0">
                                     <ProgressBar Progress="{Binding DownloadProgress}"

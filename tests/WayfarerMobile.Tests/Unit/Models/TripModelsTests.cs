@@ -8,155 +8,136 @@ public class TripModelsTests
     #region TripSummary Tests
 
     [Fact]
-    public void TripSummary_LocationsText_EmptyLists_ReturnsNoLocationInfo()
+    public void TripSummary_StatsText_NoRegionsOrPlaces_ReturnsEmptyTrip()
     {
         // Arrange
         var summary = new TripSummary
         {
             Id = Guid.NewGuid(),
             Name = "Test Trip",
-            Cities = new List<string>(),
-            Countries = new List<string>()
+            RegionsCount = 0,
+            PlacesCount = 0
         };
 
         // Act
-        var result = summary.LocationsText;
+        var result = summary.StatsText;
 
         // Assert
-        result.Should().Be("No location info");
+        result.Should().Be("Empty trip");
     }
 
     [Fact]
-    public void TripSummary_LocationsText_OnlyCities_ReturnsCities()
+    public void TripSummary_StatsText_OnlyRegions_ReturnsRegionsOnly()
     {
         // Arrange
         var summary = new TripSummary
         {
             Id = Guid.NewGuid(),
             Name = "Test Trip",
-            Cities = new List<string> { "Paris", "Lyon" },
-            Countries = new List<string>()
+            RegionsCount = 3,
+            PlacesCount = 0
         };
 
         // Act
-        var result = summary.LocationsText;
+        var result = summary.StatsText;
 
         // Assert
-        result.Should().Be("Paris, Lyon");
+        result.Should().Be("3 Regions");
     }
 
     [Fact]
-    public void TripSummary_LocationsText_OnlyCountries_ReturnsCountries()
+    public void TripSummary_StatsText_OnlyPlaces_ReturnsPlacesOnly()
     {
         // Arrange
         var summary = new TripSummary
         {
             Id = Guid.NewGuid(),
             Name = "Test Trip",
-            Cities = new List<string>(),
-            Countries = new List<string> { "France", "Germany" }
+            RegionsCount = 0,
+            PlacesCount = 5
         };
 
         // Act
-        var result = summary.LocationsText;
+        var result = summary.StatsText;
 
         // Assert
-        result.Should().Be("France, Germany");
+        result.Should().Be("5 Places");
     }
 
     [Fact]
-    public void TripSummary_LocationsText_BothCitiesAndCountries_ReturnsSeparatedByBullet()
+    public void TripSummary_StatsText_RegionsAndPlaces_ReturnsBothWithSlash()
     {
         // Arrange
         var summary = new TripSummary
         {
             Id = Guid.NewGuid(),
             Name = "Test Trip",
-            Cities = new List<string> { "Paris", "Berlin" },
-            Countries = new List<string> { "France", "Germany" }
+            RegionsCount = 3,
+            PlacesCount = 15
         };
 
         // Act
-        var result = summary.LocationsText;
+        var result = summary.StatsText;
 
         // Assert
-        result.Should().Be("Paris, Berlin \u2022 France, Germany");
+        result.Should().Be("3 Regions / 15 Places");
     }
 
     [Fact]
-    public void TripSummary_LocationsText_TakesOnlyFirstThreeCities()
+    public void TripSummary_StatsText_SingleRegion_ReturnsSingularForm()
     {
         // Arrange
         var summary = new TripSummary
         {
             Id = Guid.NewGuid(),
             Name = "Test Trip",
-            Cities = new List<string> { "Paris", "Berlin", "Rome", "Madrid", "London" },
-            Countries = new List<string>()
+            RegionsCount = 1,
+            PlacesCount = 0
         };
 
         // Act
-        var result = summary.LocationsText;
+        var result = summary.StatsText;
 
         // Assert
-        result.Should().Be("Paris, Berlin, Rome");
+        result.Should().Be("1 Region");
     }
 
     [Fact]
-    public void TripSummary_LocationsText_TakesOnlyFirstTwoCountries()
+    public void TripSummary_StatsText_SinglePlace_ReturnsSingularForm()
     {
         // Arrange
         var summary = new TripSummary
         {
             Id = Guid.NewGuid(),
             Name = "Test Trip",
-            Cities = new List<string>(),
-            Countries = new List<string> { "France", "Germany", "Italy", "Spain" }
+            RegionsCount = 0,
+            PlacesCount = 1
         };
 
         // Act
-        var result = summary.LocationsText;
+        var result = summary.StatsText;
 
         // Assert
-        result.Should().Be("France, Germany");
+        result.Should().Be("1 Place");
     }
 
     [Fact]
-    public void TripSummary_LocationsText_SingleCity_ReturnsCity()
+    public void TripSummary_StatsText_SingleRegionAndPlace_ReturnsSingularForms()
     {
         // Arrange
         var summary = new TripSummary
         {
             Id = Guid.NewGuid(),
             Name = "Test Trip",
-            Cities = new List<string> { "Tokyo" },
-            Countries = new List<string>()
+            RegionsCount = 1,
+            PlacesCount = 1
         };
 
         // Act
-        var result = summary.LocationsText;
+        var result = summary.StatsText;
 
         // Assert
-        result.Should().Be("Tokyo");
-    }
-
-    [Fact]
-    public void TripSummary_LocationsText_SingleCountry_ReturnsCountry()
-    {
-        // Arrange
-        var summary = new TripSummary
-        {
-            Id = Guid.NewGuid(),
-            Name = "Test Trip",
-            Cities = new List<string>(),
-            Countries = new List<string> { "Japan" }
-        };
-
-        // Act
-        var result = summary.LocationsText;
-
-        // Assert
-        result.Should().Be("Japan");
+        result.Should().Be("1 Region / 1 Place");
     }
 
     #endregion
@@ -772,133 +753,117 @@ public class TripModelsTests
     #region PublicTripSummary Tests
 
     [Fact]
-    public void PublicTripSummary_LocationsText_EmptyLists_ReturnsNoLocationInfo()
+    public void PublicTripSummary_StatsText_NoRegionsOrPlaces_ReturnsEmptyTrip()
     {
         // Arrange
         var summary = new PublicTripSummary
         {
             Id = Guid.NewGuid(),
             Name = "Test Trip",
-            Cities = new List<string>(),
-            Countries = new List<string>()
-        };
-
-        // Act
-        var result = summary.LocationsText;
-
-        // Assert
-        result.Should().Be("No location info");
-    }
-
-    [Fact]
-    public void PublicTripSummary_LocationsText_BothCitiesAndCountries_ReturnsSeparatedByBullet()
-    {
-        // Arrange
-        var summary = new PublicTripSummary
-        {
-            Id = Guid.NewGuid(),
-            Name = "Test Trip",
-            Cities = new List<string> { "Paris", "Berlin" },
-            Countries = new List<string> { "France", "Germany" }
-        };
-
-        // Act
-        var result = summary.LocationsText;
-
-        // Assert
-        result.Should().Be("Paris, Berlin \u2022 France, Germany");
-    }
-
-    [Fact]
-    public void PublicTripSummary_LocationsText_TakesOnlyFirstThreeCities()
-    {
-        // Arrange
-        var summary = new PublicTripSummary
-        {
-            Id = Guid.NewGuid(),
-            Name = "Test Trip",
-            Cities = new List<string> { "Paris", "Berlin", "Rome", "Madrid" },
-            Countries = new List<string>()
-        };
-
-        // Act
-        var result = summary.LocationsText;
-
-        // Assert
-        result.Should().Be("Paris, Berlin, Rome");
-    }
-
-    [Fact]
-    public void PublicTripSummary_LocationsText_TakesOnlyFirstTwoCountries()
-    {
-        // Arrange
-        var summary = new PublicTripSummary
-        {
-            Id = Guid.NewGuid(),
-            Name = "Test Trip",
-            Cities = new List<string>(),
-            Countries = new List<string> { "France", "Germany", "Italy" }
-        };
-
-        // Act
-        var result = summary.LocationsText;
-
-        // Assert
-        result.Should().Be("France, Germany");
-    }
-
-    [Fact]
-    public void PublicTripSummary_SummaryText_MultiplePlaces_ReturnsPluralForm()
-    {
-        // Arrange
-        var summary = new PublicTripSummary
-        {
-            Id = Guid.NewGuid(),
-            Name = "Test Trip",
-            PlacesCount = 5
-        };
-
-        // Act
-        var result = summary.SummaryText;
-
-        // Assert
-        result.Should().Be("5 places");
-    }
-
-    [Fact]
-    public void PublicTripSummary_SummaryText_SinglePlace_ReturnsSingularForm()
-    {
-        // Arrange
-        var summary = new PublicTripSummary
-        {
-            Id = Guid.NewGuid(),
-            Name = "Test Trip",
-            PlacesCount = 1
-        };
-
-        // Act
-        var result = summary.SummaryText;
-
-        // Assert
-        result.Should().Be("1 place");
-    }
-
-    [Fact]
-    public void PublicTripSummary_SummaryText_ZeroPlaces_ReturnsEmptyTrip()
-    {
-        // Arrange
-        var summary = new PublicTripSummary
-        {
-            Id = Guid.NewGuid(),
-            Name = "Test Trip",
+            RegionsCount = 0,
             PlacesCount = 0
         };
 
         // Act
-        var result = summary.SummaryText;
+        var result = summary.StatsText;
 
         // Assert
         result.Should().Be("Empty trip");
+    }
+
+    [Fact]
+    public void PublicTripSummary_StatsText_RegionsAndPlaces_ReturnsBothWithSlash()
+    {
+        // Arrange
+        var summary = new PublicTripSummary
+        {
+            Id = Guid.NewGuid(),
+            Name = "Test Trip",
+            RegionsCount = 3,
+            PlacesCount = 15
+        };
+
+        // Act
+        var result = summary.StatsText;
+
+        // Assert
+        result.Should().Be("3 Regions / 15 Places");
+    }
+
+    [Fact]
+    public void PublicTripSummary_StatsText_OnlyRegions_ReturnsRegionsOnly()
+    {
+        // Arrange
+        var summary = new PublicTripSummary
+        {
+            Id = Guid.NewGuid(),
+            Name = "Test Trip",
+            RegionsCount = 2,
+            PlacesCount = 0
+        };
+
+        // Act
+        var result = summary.StatsText;
+
+        // Assert
+        result.Should().Be("2 Regions");
+    }
+
+    [Fact]
+    public void PublicTripSummary_StatsText_OnlyPlaces_ReturnsPlacesOnly()
+    {
+        // Arrange
+        var summary = new PublicTripSummary
+        {
+            Id = Guid.NewGuid(),
+            Name = "Test Trip",
+            RegionsCount = 0,
+            PlacesCount = 5
+        };
+
+        // Act
+        var result = summary.StatsText;
+
+        // Assert
+        result.Should().Be("5 Places");
+    }
+
+    [Fact]
+    public void PublicTripSummary_StatsText_SingleRegion_ReturnsSingularForm()
+    {
+        // Arrange
+        var summary = new PublicTripSummary
+        {
+            Id = Guid.NewGuid(),
+            Name = "Test Trip",
+            RegionsCount = 1,
+            PlacesCount = 0
+        };
+
+        // Act
+        var result = summary.StatsText;
+
+        // Assert
+        result.Should().Be("1 Region");
+    }
+
+    [Fact]
+    public void PublicTripSummary_StatsText_SinglePlace_ReturnsSingularForm()
+    {
+        // Arrange
+        var summary = new PublicTripSummary
+        {
+            Id = Guid.NewGuid(),
+            Name = "Test Trip",
+            RegionsCount = 0,
+            PlacesCount = 1
+        };
+
+        // Act
+        var result = summary.StatsText;
+
+        // Assert
+        result.Should().Be("1 Place");
     }
 
     #endregion
@@ -1049,60 +1014,6 @@ public class TripModelsTests
 
         // Assert
         result.Should().BeFalse();
-    }
-
-    #endregion
-
-    #region TripSummary StatsText Tests
-
-    [Fact]
-    public void TripSummary_StatsText_MultiplePlaces_ReturnsPluralForm()
-    {
-        var summary = new TripSummary
-        {
-            Id = Guid.NewGuid(),
-            Name = "Test Trip",
-            PlacesCount = 5,
-            RegionsCount = 2
-        };
-
-        var result = summary.StatsText;
-
-        result.Should().Contain("5 places");
-        result.Should().Contain("2 regions");
-    }
-
-    [Fact]
-    public void TripSummary_StatsText_SinglePlace_ReturnsSingularForm()
-    {
-        var summary = new TripSummary
-        {
-            Id = Guid.NewGuid(),
-            Name = "Test Trip",
-            PlacesCount = 1,
-            RegionsCount = 1
-        };
-
-        var result = summary.StatsText;
-
-        result.Should().Contain("1 place");
-        result.Should().Contain("1 region");
-    }
-
-    [Fact]
-    public void TripSummary_StatsText_ZeroPlaces_ReturnsEmptyTrip()
-    {
-        var summary = new TripSummary
-        {
-            Id = Guid.NewGuid(),
-            Name = "Test Trip",
-            PlacesCount = 0,
-            RegionsCount = 0
-        };
-
-        var result = summary.StatsText;
-
-        result.Should().Be("Empty trip");
     }
 
     #endregion

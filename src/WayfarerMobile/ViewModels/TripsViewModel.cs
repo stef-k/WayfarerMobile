@@ -695,23 +695,19 @@ public partial class TripListItem : ObservableObject
     public string Name { get; }
 
     /// <summary>
-    /// Gets the locations text.
-    /// </summary>
-    public string LocationsText { get; }
-
-    /// <summary>
     /// Gets the stats text (dynamically calculated based on download state).
+    /// Format: "X Regions / Y Places" with download status suffix.
     /// </summary>
     public string StatsText => DownloadState switch
     {
         TripDownloadState.Complete => DownloadedEntity != null
-            ? $"{DownloadedEntity.PlaceCount} places • {DownloadedEntity.TileCount} tiles"
-            : "Downloaded",
+            ? $"{_serverStatsText} • {DownloadedEntity.TileCount} tiles"
+            : _serverStatsText ?? "Downloaded",
         TripDownloadState.MetadataOnly => DownloadedEntity != null
-            ? $"{DownloadedEntity.PlaceCount} places • No tiles"
-            : "Metadata only",
+            ? $"{_serverStatsText} • No tiles"
+            : _serverStatsText ?? "Metadata only",
         TripDownloadState.Downloading => "Downloading...",
-        _ => _serverStatsText ?? "Available online"
+        _ => _serverStatsText ?? "Empty trip"
     };
 
     /// <summary>
@@ -835,11 +831,10 @@ public partial class TripListItem : ObservableObject
     {
         ServerId = trip.Id;
         Name = trip.Name;
-        LocationsText = trip.LocationsText;
         BoundingBox = trip.BoundingBox;
 
-        // Cache server stats for fallback
-        _serverStatsText = trip.PlacesCount > 0 ? trip.StatsText : null;
+        // Cache server stats (Regions / Places format)
+        _serverStatsText = trip.StatsText;
         DownloadedEntity = downloaded;
 
         // Determine download state
