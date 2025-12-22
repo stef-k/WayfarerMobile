@@ -4,6 +4,7 @@
              xmlns:viewmodels="clr-namespace:WayfarerMobile.ViewModels"
              xmlns:models="clr-namespace:WayfarerMobile.Core.Models;assembly=WayfarerMobile.Core"
              xmlns:controls="clr-namespace:WayfarerMobile.Shared.Controls"
+             xmlns:local="clr-namespace:WayfarerMobile.Views.Controls"
              x:Class="WayfarerMobile.Views.Controls.MyTripsView"
              x:Name="ThisView"
              x:DataType="viewmodels:TripsViewModel">
@@ -97,7 +98,7 @@
                                     <HorizontalStackLayout Spacing="8">
                                         <!-- Load to Map Button -->
                                         <Button Text="Load to Map"
-                                                Command="{Binding Source={x:Reference ThisView}, Path=BindingContext.LoadTripToMapCommand}"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=LoadTripToMapCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanLoadToMap}"
                                                 BackgroundColor="{StaticResource Primary}"
@@ -109,7 +110,7 @@
 
                                         <!-- Download (Metadata only) -->
                                         <Button Text="Download"
-                                                Command="{Binding Source={x:Reference ThisView}, Path=BindingContext.QuickDownloadCommand}"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=QuickDownloadCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanQuickDownload}"
                                                 BackgroundColor="{StaticResource Primary}"
@@ -121,7 +122,7 @@
 
                                         <!-- Download + Maps (With Tiles) -->
                                         <Button Text="+ Offline Maps"
-                                                Command="{Binding Source={x:Reference ThisView}, Path=BindingContext.FullDownloadCommand}"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=FullDownloadCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanFullDownload}"
                                                 BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
@@ -133,7 +134,7 @@
 
                                         <!-- Delete Downloaded/Partial -->
                                         <Button Text="Delete"
-                                                Command="{Binding Source={x:Reference ThisView}, Path=BindingContext.DeleteDownloadCommand}"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=DeleteDownloadCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanDelete}"
                                                 BackgroundColor="{StaticResource Error}"
