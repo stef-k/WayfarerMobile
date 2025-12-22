@@ -4,7 +4,6 @@
              xmlns:viewmodels="clr-namespace:WayfarerMobile.ViewModels"
              xmlns:models="clr-namespace:WayfarerMobile.Core.Models;assembly=WayfarerMobile.Core"
              xmlns:controls="clr-namespace:WayfarerMobile.Shared.Controls"
-             xmlns:local="clr-namespace:WayfarerMobile.Views.Controls"
              x:Class="WayfarerMobile.Views.Controls.MyTripsView"
              x:Name="ThisView"
              x:DataType="viewmodels:TripsViewModel">
