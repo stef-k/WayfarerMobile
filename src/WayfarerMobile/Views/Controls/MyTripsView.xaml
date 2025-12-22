@@ -58,7 +58,7 @@
                                 <RoundRectangle CornerRadius="12" />
                             </Border.StrokeShape>
 
-                            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="4">
+                            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="4">
                                 <!-- Trip Name -->
                                 <Label Grid.Row="0" Grid.Column="0"
                                        Text="{Binding Name}"
@@ -82,15 +82,8 @@
                                            TextColor="White" />
                                 </Border>
 
-                                <!-- Location Info -->
-                                <Label Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
-                                       Text="{Binding LocationsText}"
-                                       FontSize="13"
-                                       TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
-                                       LineBreakMode="TailTruncation" />
-
-                                <!-- Stats -->
-                                <HorizontalStackLayout Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                                <!-- Stats (Regions / Places) -->
+                                <HorizontalStackLayout Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
                                                        Spacing="12">
                                     <Label Text="{Binding StatsText}"
                                            FontSize="12"
@@ -98,7 +91,7 @@
                                 </HorizontalStackLayout>
 
                                 <!-- Actions Row -->
-                                <VerticalStackLayout Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+                                <VerticalStackLayout Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
                                                      Spacing="4"
                                                      Margin="0,8,0,0">
                                     <HorizontalStackLayout Spacing="8">
@@ -160,7 +153,7 @@
                                 </VerticalStackLayout>
 
                                 <!-- Download Progress (when downloading) -->
-                                <Grid Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+                                <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
                                       IsVisible="{Binding IsDownloading}"
                                       Margin="0,8,0,0">
                                     <ProgressBar Progress="{Binding DownloadProgress}"
