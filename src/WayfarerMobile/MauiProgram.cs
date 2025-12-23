@@ -191,7 +191,7 @@ public static class MauiProgram
         services.AddSingleton<ISseClientFactory, SseClientFactory>();
 
         // ViewModels
-        services.AddTransient<MainViewModel>();
+        services.AddSingleton<MainViewModel>();
         services.AddTransient<SettingsViewModel>();
         services.AddTransient<GroupsViewModel>();
         services.AddTransient<OnboardingViewModel>();

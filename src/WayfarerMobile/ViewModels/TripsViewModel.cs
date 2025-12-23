@@ -895,8 +895,34 @@ public partial class TripsViewModel : BaseViewModel
         {
             await LoadTripsAsync();
         }
+        else
+        {
+            // Update loaded state for all trips (in case user loaded/unloaded a trip)
+            RefreshLoadedTripState();
+        }
 
         await base.OnAppearingAsync();
+    }
+
+    /// <summary>
+    /// Updates the IsCurrentlyLoaded state for all trip items.
+    /// Called when returning to this page to reflect current MainViewModel state.
+    /// </summary>
+    private void RefreshLoadedTripState()
+    {
+        var loadedTripId = MainViewModel.CurrentLoadedTripId;
+
+        foreach (var group in MyTrips)
+        {
+            foreach (var item in group)
+            {
+                var isLoaded = loadedTripId.HasValue && item.ServerId == loadedTripId.Value;
+                if (item.IsCurrentlyLoaded != isLoaded)
+                {
+                    item.IsCurrentlyLoaded = isLoaded;
+                }
+            }
+        }
     }
 
     /// <inheritdoc/>

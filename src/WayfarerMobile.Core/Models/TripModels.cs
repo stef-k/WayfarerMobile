@@ -315,6 +315,7 @@ public class BoundingBox
 public class TripRegion : INotifyPropertyChanged
 {
     private string _name = string.Empty;
+    private string? _notes;
 
     /// <summary>
     /// Occurs when a property value changes.
@@ -350,7 +351,19 @@ public class TripRegion : INotifyPropertyChanged
     /// <summary>
     /// Gets or sets the region notes (HTML).
     /// </summary>
-    public string? Notes { get; set; }
+    public string? Notes
+    {
+        get => _notes;
+        set
+        {
+            if (_notes != value)
+            {
+                _notes = value;
+                OnPropertyChanged(nameof(Notes));
+                OnPropertyChanged(nameof(HasNotes));
+            }
+        }
+    }
 
     /// <summary>
     /// Gets or sets the cover image URL.
@@ -648,8 +661,18 @@ public class GeoCoordinate
 /// <summary>
 /// Place within a trip.
 /// </summary>
-public class TripPlace
+public class TripPlace : INotifyPropertyChanged
 {
+    private string _name = string.Empty;
+    private string? _notes;
+    private string? _icon;
+    private string? _markerColor;
+
+    /// <summary>
+    /// Occurs when a property value changes.
+    /// </summary>
+    public event PropertyChangedEventHandler? PropertyChanged;
+
     /// <summary>
     /// Gets or sets the place ID.
     /// </summary>
@@ -658,7 +681,18 @@ public class TripPlace
     /// <summary>
     /// Gets or sets the place name.
     /// </summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name
+    {
+        get => _name;
+        set
+        {
+            if (_name != value)
+            {
+                _name = value;
+                OnPropertyChanged(nameof(Name));
+            }
+        }
+    }
 
     /// <summary>
     /// Gets or sets the latitude.
@@ -695,19 +729,54 @@ public class TripPlace
     /// <summary>
     /// Gets or sets the place notes (HTML).
     /// </summary>
-    public string? Notes { get; set; }
+    public string? Notes
+    {
+        get => _notes;
+        set
+        {
+            if (_notes != value)
+            {
+                _notes = value;
+                OnPropertyChanged(nameof(Notes));
+            }
+        }
+    }
 
     /// <summary>
     /// Gets or sets the icon name.
     /// Server sends as "iconName".
     /// </summary>
     [JsonPropertyName("iconName")]
-    public string? Icon { get; set; }
+    public string? Icon
+    {
+        get => _icon;
+        set
+        {
+            if (_icon != value)
+            {
+                _icon = value;
+                OnPropertyChanged(nameof(Icon));
+                OnPropertyChanged(nameof(IconPath));
+            }
+        }
+    }
 
     /// <summary>
     /// Gets or sets the marker color.
     /// </summary>
-    public string? MarkerColor { get; set; }
+    public string? MarkerColor
+    {
+        get => _markerColor;
+        set
+        {
+            if (_markerColor != value)
+            {
+                _markerColor = value;
+                OnPropertyChanged(nameof(MarkerColor));
+                OnPropertyChanged(nameof(IconPath));
+            }
+        }
+    }
 
     /// <summary>
     /// Gets or sets the address of the place.
@@ -729,6 +798,14 @@ public class TripPlace
     /// </summary>
     [JsonIgnore]
     public string IconPath => Helpers.IconCatalog.GetIconResourcePath(Icon, MarkerColor);
+
+    /// <summary>
+    /// Raises the PropertyChanged event.
+    /// </summary>
+    protected virtual void OnPropertyChanged(string propertyName)
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
 }
 
 /// <summary>
