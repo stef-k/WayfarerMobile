@@ -1465,6 +1465,90 @@ public class RegionUpdateRequest
 }
 
 /// <summary>
+/// Request to update a trip.
+/// </summary>
+public class TripUpdateRequest
+{
+    /// <summary>
+    /// Gets or sets the trip name.
+    /// </summary>
+    public string? Name { get; set; }
+
+    /// <summary>
+    /// Gets or sets the notes (HTML).
+    /// </summary>
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Response from trip update.
+/// </summary>
+public class TripUpdateResponse
+{
+    /// <summary>
+    /// Gets or sets the trip ID.
+    /// </summary>
+    public Guid Id { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the operation was successful.
+    /// </summary>
+    public bool Success { get; set; }
+
+    /// <summary>
+    /// Gets or sets the updated trip name.
+    /// </summary>
+    public string? Name { get; set; }
+
+    /// <summary>
+    /// Gets or sets the updated trip notes.
+    /// </summary>
+    public string? Notes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the error message if failed.
+    /// </summary>
+    public string? Error { get; set; }
+}
+
+/// <summary>
+/// Request to update segment notes.
+/// </summary>
+public class SegmentNotesUpdateRequest
+{
+    /// <summary>
+    /// Gets or sets the notes (HTML).
+    /// </summary>
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Response from segment notes update.
+/// </summary>
+public class SegmentUpdateResponse
+{
+    /// <summary>
+    /// Gets or sets the segment ID.
+    /// </summary>
+    public Guid Id { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the operation was successful.
+    /// </summary>
+    public bool Success { get; set; }
+
+    /// <summary>
+    /// Gets or sets the updated notes.
+    /// </summary>
+    public string? Notes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the error message if failed.
+    /// </summary>
+    public string? Error { get; set; }
+}
+
+/// <summary>
 /// Response from place creation/update.
 /// </summary>
 public class PlaceResponse

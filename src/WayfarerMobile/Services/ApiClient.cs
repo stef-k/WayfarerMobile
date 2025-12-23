@@ -645,6 +645,102 @@ public class ApiClient : IApiClient
         }
     }
 
+    /// <inheritdoc/>
+    public async Task<TripUpdateResponse?> UpdateTripAsync(
+        Guid tripId,
+        TripUpdateRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsConfigured)
+        {
+            return new TripUpdateResponse { Success = false, Error = "API not configured" };
+        }
+
+        try
+        {
+            var httpRequest = CreateRequest(HttpMethod.Put, $"/api/trips/{tripId}");
+            httpRequest.Content = JsonContent.Create(request, options: JsonOptions);
+
+            var response = await HttpClientInstance.SendAsync(httpRequest, cancellationToken);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<TripUpdateResponse>(JsonOptions, cancellationToken);
+                if (result != null)
+                {
+                    result.Success = true;
+                    _logger.LogInformation("Updated trip {TripId}", tripId);
+                }
+                return result;
+            }
+
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning("Failed to update trip {TripId}: {StatusCode} - {Error}",
+                tripId, response.StatusCode, errorBody);
+
+            return new TripUpdateResponse
+            {
+                Success = false,
+                Error = $"HTTP {(int)response.StatusCode}: {errorBody}"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating trip {TripId}", tripId);
+            return new TripUpdateResponse { Success = false, Error = ex.Message };
+        }
+    }
+
+    #endregion
+
+    #region Segment Operations
+
+    /// <inheritdoc/>
+    public async Task<SegmentUpdateResponse?> UpdateSegmentNotesAsync(
+        Guid segmentId,
+        SegmentNotesUpdateRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsConfigured)
+        {
+            return new SegmentUpdateResponse { Success = false, Error = "API not configured" };
+        }
+
+        try
+        {
+            var httpRequest = CreateRequest(HttpMethod.Put, $"/api/trips/segments/{segmentId}");
+            httpRequest.Content = JsonContent.Create(request, options: JsonOptions);
+
+            var response = await HttpClientInstance.SendAsync(httpRequest, cancellationToken);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<SegmentUpdateResponse>(JsonOptions, cancellationToken);
+                if (result != null)
+                {
+                    result.Success = true;
+                    _logger.LogInformation("Updated segment notes for {SegmentId}", segmentId);
+                }
+                return result;
+            }
+
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning("Failed to update segment {SegmentId}: {StatusCode} - {Error}",
+                segmentId, response.StatusCode, errorBody);
+
+            return new SegmentUpdateResponse
+            {
+                Success = false,
+                Error = $"HTTP {(int)response.StatusCode}: {errorBody}"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating segment {SegmentId}", segmentId);
+            return new SegmentUpdateResponse { Success = false, Error = ex.Message };
+        }
+    }
+
     #endregion
 
     /// <summary>

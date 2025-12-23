@@ -510,6 +510,169 @@ public class TripSyncService : ITripSyncService
 
     #endregion
 
+    #region Trip Operations
+
+    /// <summary>
+    /// Updates a trip's metadata with optimistic UI pattern.
+    /// </summary>
+    public async Task UpdateTripAsync(
+        Guid tripId,
+        string? name = null,
+        string? notes = null,
+        bool includeNotes = false)
+    {
+        await EnsureInitializedAsync();
+
+        var request = new TripUpdateRequest
+        {
+            Name = name,
+            Notes = includeNotes ? notes : null
+        };
+
+        if (!IsConnected)
+        {
+            await EnqueueTripMutationAsync(tripId, name, notes, includeNotes);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tripId, Message = "Updated offline - will sync when online" });
+            return;
+        }
+
+        try
+        {
+            var response = await _apiClient.UpdateTripAsync(tripId, request);
+
+            if (response?.Success == true)
+            {
+                SyncCompleted?.Invoke(this, new SyncSuccessEventArgs { EntityId = tripId });
+                return;
+            }
+
+            await EnqueueTripMutationAsync(tripId, name, notes, includeNotes);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tripId, Message = "Sync failed - will retry" });
+        }
+        catch (HttpRequestException ex) when (IsClientError(ex))
+        {
+            SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = tripId, ErrorMessage = $"Server rejected: {ex.Message}", IsClientError = true });
+        }
+        catch (Exception ex)
+        {
+            await EnqueueTripMutationAsync(tripId, name, notes, includeNotes);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tripId, Message = $"Sync failed: {ex.Message} - will retry" });
+        }
+    }
+
+    private async Task EnqueueTripMutationAsync(
+        Guid tripId,
+        string? name,
+        string? notes,
+        bool includeNotes)
+    {
+        var existing = await _database!.Table<PendingTripMutation>()
+            .Where(m => m.EntityId == tripId && m.EntityType == "Trip" && !m.IsServerRejected)
+            .FirstOrDefaultAsync();
+
+        if (existing != null)
+        {
+            if (name != null) existing.Name = name;
+            if (includeNotes) { existing.Notes = notes; existing.IncludeNotes = true; }
+            existing.CreatedAt = DateTime.UtcNow;
+            await _database.UpdateAsync(existing);
+            return;
+        }
+
+        var mutation = new PendingTripMutation
+        {
+            EntityType = "Trip",
+            OperationType = "Update",
+            EntityId = tripId,
+            TripId = tripId,
+            Name = name,
+            Notes = notes,
+            IncludeNotes = includeNotes,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _database!.InsertAsync(mutation);
+    }
+
+    #endregion
+
+    #region Segment Operations
+
+    /// <summary>
+    /// Updates a segment's notes with optimistic UI pattern.
+    /// </summary>
+    public async Task UpdateSegmentNotesAsync(
+        Guid segmentId,
+        Guid tripId,
+        string? notes)
+    {
+        await EnsureInitializedAsync();
+
+        var request = new SegmentNotesUpdateRequest { Notes = notes };
+
+        if (!IsConnected)
+        {
+            await EnqueueSegmentMutationAsync(segmentId, tripId, notes);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = segmentId, Message = "Updated offline - will sync when online" });
+            return;
+        }
+
+        try
+        {
+            var response = await _apiClient.UpdateSegmentNotesAsync(segmentId, request);
+
+            if (response?.Success == true)
+            {
+                SyncCompleted?.Invoke(this, new SyncSuccessEventArgs { EntityId = segmentId });
+                return;
+            }
+
+            await EnqueueSegmentMutationAsync(segmentId, tripId, notes);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = segmentId, Message = "Sync failed - will retry" });
+        }
+        catch (HttpRequestException ex) when (IsClientError(ex))
+        {
+            SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = segmentId, ErrorMessage = $"Server rejected: {ex.Message}", IsClientError = true });
+        }
+        catch (Exception ex)
+        {
+            await EnqueueSegmentMutationAsync(segmentId, tripId, notes);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = segmentId, Message = $"Sync failed: {ex.Message} - will retry" });
+        }
+    }
+
+    private async Task EnqueueSegmentMutationAsync(
+        Guid segmentId,
+        Guid tripId,
+        string? notes)
+    {
+        var existing = await _database!.Table<PendingTripMutation>()
+            .Where(m => m.EntityId == segmentId && m.EntityType == "Segment" && !m.IsServerRejected)
+            .FirstOrDefaultAsync();
+
+        if (existing != null)
+        {
+            existing.Notes = notes;
+            existing.IncludeNotes = true;
+            existing.CreatedAt = DateTime.UtcNow;
+            await _database.UpdateAsync(existing);
+            return;
+        }
+
+        var mutation = new PendingTripMutation
+        {
+            EntityType = "Segment",
+            OperationType = "Update",
+            EntityId = segmentId,
+            TripId = tripId,
+            Notes = notes,
+            IncludeNotes = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _database!.InsertAsync(mutation);
+    }
+
+    #endregion
+
     #region Delete Helper
 
     private async Task EnqueueDeleteMutationAsync(string entityType, Guid entityId, Guid tripId)
@@ -593,6 +756,8 @@ public class TripSyncService : ITripSyncService
             ("Region", "Create") => await ProcessRegionCreateAsync(mutation),
             ("Region", "Update") => await ProcessRegionUpdateAsync(mutation),
             ("Region", "Delete") => await _apiClient.DeleteRegionAsync(mutation.EntityId),
+            ("Trip", "Update") => await ProcessTripUpdateAsync(mutation),
+            ("Segment", "Update") => await ProcessSegmentUpdateAsync(mutation),
             _ => false
         };
     }
@@ -685,6 +850,29 @@ public class TripSyncService : ITripSyncService
 
         var response = await _apiClient.UpdateRegionAsync(mutation.EntityId, request);
         return response != null;
+    }
+
+    private async Task<bool> ProcessTripUpdateAsync(PendingTripMutation mutation)
+    {
+        var request = new TripUpdateRequest
+        {
+            Name = mutation.Name,
+            Notes = mutation.IncludeNotes ? mutation.Notes : null
+        };
+
+        var response = await _apiClient.UpdateTripAsync(mutation.EntityId, request);
+        return response?.Success == true;
+    }
+
+    private async Task<bool> ProcessSegmentUpdateAsync(PendingTripMutation mutation)
+    {
+        var request = new SegmentNotesUpdateRequest
+        {
+            Notes = mutation.Notes
+        };
+
+        var response = await _apiClient.UpdateSegmentNotesAsync(mutation.EntityId, request);
+        return response?.Success == true;
     }
 
     #endregion
@@ -818,6 +1006,31 @@ public interface ITripSyncService
     /// Delete a region with optimistic UI pattern.
     /// </summary>
     Task DeleteRegionAsync(Guid regionId, Guid tripId);
+
+    #endregion
+
+    #region Trip Operations
+
+    /// <summary>
+    /// Update a trip's metadata (name, notes) with optimistic UI pattern.
+    /// </summary>
+    Task UpdateTripAsync(
+        Guid tripId,
+        string? name = null,
+        string? notes = null,
+        bool includeNotes = false);
+
+    #endregion
+
+    #region Segment Operations
+
+    /// <summary>
+    /// Update a segment's notes with optimistic UI pattern.
+    /// </summary>
+    Task UpdateSegmentNotesAsync(
+        Guid segmentId,
+        Guid tripId,
+        string? notes);
 
     #endregion
 
