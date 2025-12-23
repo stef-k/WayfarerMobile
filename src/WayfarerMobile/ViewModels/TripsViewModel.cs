@@ -287,8 +287,7 @@ public partial class TripsViewModel : BaseViewModel
             var downloadedTrips = await _downloadService.GetDownloadedTripsAsync();
 
             // Check which trip is currently loaded on the map
-            var loadedTripIdString = Preferences.Get(MainViewModel.LoadedTripIdKey, string.Empty);
-            Guid.TryParse(loadedTripIdString, out var loadedTripId);
+            var loadedTripId = MainViewModel.CurrentLoadedTripId;
 
             // Build grouped list
             var items = new List<TripListItem>();
@@ -300,7 +299,7 @@ public partial class TripsViewModel : BaseViewModel
                 var item = new TripListItem(trip, downloaded);
 
                 // Mark as currently loaded if it matches
-                if (loadedTripId != Guid.Empty && trip.Id == loadedTripId)
+                if (loadedTripId.HasValue && trip.Id == loadedTripId.Value)
                 {
                     item.IsCurrentlyLoaded = true;
                 }

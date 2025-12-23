@@ -18,13 +18,13 @@ namespace WayfarerMobile.ViewModels;
 /// </summary>
 public partial class MainViewModel : BaseViewModel
 {
-    #region Constants
+    #region Static State
 
     /// <summary>
-    /// Preferences key for storing the currently loaded trip ID.
-    /// Used to allow "Back to Trip" navigation from My Trips.
+    /// The currently loaded trip ID (in-memory, not persisted).
+    /// Used by TripsViewModel to show "Back" button for loaded trip.
     /// </summary>
-    public const string LoadedTripIdKey = "loaded_trip_id";
+    public static Guid? CurrentLoadedTripId { get; private set; }
 
     #endregion
 
@@ -805,9 +805,6 @@ public partial class MainViewModel : BaseViewModel
 
         // Subscribe to cache status updates (updates when location changes, NOT on startup)
         _cacheStatusService.StatusChanged += OnCacheStatusChanged;
-
-        // Clear stale loaded trip preference on cold start (no trip is loaded initially)
-        Preferences.Remove(LoadedTripIdKey);
     }
 
     #endregion
@@ -2983,16 +2980,8 @@ public partial class MainViewModel : BaseViewModel
     /// </summary>
     partial void OnLoadedTripChanged(TripDetails? value)
     {
-        if (value != null)
-        {
-            // Save the loaded trip ID so My Trips can show "Back to Trip"
-            Preferences.Set(LoadedTripIdKey, value.Id.ToString());
-        }
-        else
-        {
-            // Clear the loaded trip ID
-            Preferences.Remove(LoadedTripIdKey);
-        }
+        // Update static property for cross-ViewModel access
+        CurrentLoadedTripId = value?.Id;
     }
 
     #endregion
