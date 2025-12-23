@@ -15,6 +15,7 @@ public class TripDownloadService
     private readonly IApiClient _apiClient;
     private readonly DatabaseService _databaseService;
     private readonly ISettingsService _settingsService;
+    private readonly ITripSyncService _tripSyncService;
     private readonly ILogger<TripDownloadService> _logger;
 
     // Tile download configuration - use centralized constants for consistency
@@ -43,11 +44,13 @@ public class TripDownloadService
         IApiClient apiClient,
         DatabaseService databaseService,
         ISettingsService settingsService,
+        ITripSyncService tripSyncService,
         ILogger<TripDownloadService> logger)
     {
         _apiClient = apiClient;
         _databaseService = databaseService;
         _settingsService = settingsService;
+        _tripSyncService = tripSyncService;
         _logger = logger;
     }
 
@@ -141,7 +144,7 @@ public class TripDownloadService
             }).ToList();
 
             await _databaseService.SaveOfflineAreasAsync(tripEntity.Id, areas);
-            tripEntity.AreaCount = areas.Count;
+            tripEntity.RegionCount = areas.Count;
 
             RaiseProgress(tripEntity.Id, 30, "Saving places...");
 
@@ -227,6 +230,7 @@ public class TripDownloadService
                 }
             }
             await _databaseService.SaveOfflinePolygonsAsync(tripEntity.Id, polygons);
+            tripEntity.AreaCount = polygons.Count;
 
             tripEntity.ProgressPercent = 50;
             await _databaseService.SaveDownloadedTripAsync(tripEntity);
@@ -492,15 +496,18 @@ public class TripDownloadService
     }
 
     /// <summary>
-    /// Deletes a downloaded trip.
+    /// Deletes a downloaded trip and clears any pending mutations.
     /// </summary>
     public async Task DeleteTripAsync(Guid tripServerId)
     {
         var trip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
         if (trip != null)
         {
+            // Clear pending mutations for this trip first
+            await _tripSyncService.ClearPendingMutationsForTripAsync(tripServerId);
+
             await _databaseService.DeleteDownloadedTripAsync(trip.Id);
-            _logger.LogInformation("Deleted trip: {TripId}", tripServerId);
+            _logger.LogInformation("Deleted trip and cleared pending mutations: {TripId}", tripServerId);
         }
     }
 
@@ -642,7 +649,7 @@ public class TripDownloadService
             }).ToList();
 
             await _databaseService.SaveOfflineAreasAsync(localTrip.Id, areas);
-            localTrip.AreaCount = areas.Count;
+            localTrip.RegionCount = areas.Count;
 
             RaiseProgress(localTrip.Id, 35, "Updating places...");
 
@@ -729,6 +736,7 @@ public class TripDownloadService
                 }
             }
             await _databaseService.SaveOfflinePolygonsAsync(localTrip.Id, polygons);
+            localTrip.AreaCount = polygons.Count;
 
             RaiseProgress(localTrip.Id, 75, "Checking map coverage...");
 

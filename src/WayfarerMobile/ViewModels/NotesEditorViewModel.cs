@@ -22,7 +22,9 @@ public enum NotesEntityType
     /// <summary>Place notes.</summary>
     Place,
     /// <summary>Segment notes.</summary>
-    Segment
+    Segment,
+    /// <summary>Area (geographic polygon) notes.</summary>
+    Area
 }
 
 /// <summary>
@@ -239,6 +241,10 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
                 case NotesEntityType.Segment:
                     await SaveSegmentNotesAsync(notesToSave);
                     break;
+
+                case NotesEntityType.Area:
+                    await SaveAreaNotesAsync(notesToSave);
+                    break;
             }
 
             _originalNotesHtml = NotesHtml;
@@ -270,6 +276,7 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
             NotesEntityType.Region => EntityId != Guid.Empty && TripId != Guid.Empty,
             NotesEntityType.Place => EntityId != Guid.Empty && TripId != Guid.Empty,
             NotesEntityType.Segment => EntityId != Guid.Empty && TripId != Guid.Empty,
+            NotesEntityType.Area => EntityId != Guid.Empty && TripId != Guid.Empty,
             _ => false
         };
     }
@@ -318,8 +325,8 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
         // Update local database optimistically
         await _downloadService.UpdateTripNotesAsync(EntityId, notes);
 
-        // Queue server sync
-        await _tripSyncService.UpdateTripAsync(EntityId, name: null, notes: notes);
+        // Queue server sync (includeNotes: true ensures notes are sent to server)
+        await _tripSyncService.UpdateTripAsync(EntityId, name: null, notes: notes, includeNotes: true);
     }
 
     /// <summary>
@@ -354,7 +361,17 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     private async Task SaveSegmentNotesAsync(string? notes)
     {
         // Queue server sync (segments don't have local storage)
-        await _tripSyncService.UpdateSegmentNotesAsync(TripId, EntityId, notes);
+        // Parameters: segmentId, tripId, notes
+        await _tripSyncService.UpdateSegmentNotesAsync(EntityId, TripId, notes);
+    }
+
+    /// <summary>
+    /// Saves area notes.
+    /// </summary>
+    private async Task SaveAreaNotesAsync(string? notes)
+    {
+        // Queue server sync (areas don't have local storage)
+        await _tripSyncService.UpdateAreaNotesAsync(TripId, EntityId, notes);
     }
 
     /// <summary>

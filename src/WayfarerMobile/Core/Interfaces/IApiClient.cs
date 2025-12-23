@@ -203,6 +203,18 @@ public interface IApiClient
         SegmentNotesUpdateRequest request,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Updates an area's (polygon) notes.
+    /// </summary>
+    /// <param name="areaId">The area ID.</param>
+    /// <param name="request">The area notes update request.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Area update response or null on failure.</returns>
+    Task<AreaUpdateResponse?> UpdateAreaNotesAsync(
+        Guid areaId,
+        AreaNotesUpdateRequest request,
+        CancellationToken cancellationToken = default);
+
     #endregion
 
     #region Timeline Operations

@@ -99,10 +99,10 @@ public partial class MarkerEditorViewModel : BaseViewModel, IQueryAttributable
     private string _selectedIcon = IconCatalog.DefaultIcon;
 
     /// <summary>
-    /// Gets or sets the icon filter text.
+    /// Gets or sets the selected icon option (for ComboBox binding).
     /// </summary>
     [ObservableProperty]
-    private string _iconFilter = string.Empty;
+    private MarkerIconOption? _selectedIconOption;
 
     /// <summary>
     /// Gets or sets whether saving is in progress.
@@ -238,15 +238,10 @@ public partial class MarkerEditorViewModel : BaseViewModel, IQueryAttributable
             .Distinct()
             .ToList();
 
+        MarkerIconOption? selectedOption = null;
+
         foreach (var iconName in allIcons)
         {
-            // Apply filter if set
-            if (!string.IsNullOrEmpty(IconFilter) &&
-                !iconName.Contains(IconFilter, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
             var displayName = char.ToUpper(iconName[0]) + iconName[1..];
             var option = new MarkerIconOption
             {
@@ -256,15 +251,33 @@ public partial class MarkerEditorViewModel : BaseViewModel, IQueryAttributable
                 IsSelected = string.Equals(iconName, SelectedIcon, StringComparison.OrdinalIgnoreCase)
             };
             Icons.Add(option);
+
+            // Track the selected option for ComboBox
+            if (option.IsSelected)
+            {
+                selectedOption = option;
+            }
         }
+
+        // Set the selected icon option for the ComboBox
+        SelectedIconOption = selectedOption;
     }
 
     /// <summary>
-    /// Called when IconFilter changes.
+    /// Called when SelectedIconOption changes (from ComboBox).
     /// </summary>
-    partial void OnIconFilterChanged(string value)
+    partial void OnSelectedIconOptionChanged(MarkerIconOption? value)
     {
-        LoadIcons();
+        if (value != null)
+        {
+            // Update selection state
+            foreach (var icon in Icons)
+            {
+                icon.IsSelected = icon == value;
+            }
+
+            SelectedIcon = value.IconName;
+        }
     }
 
     /// <summary>

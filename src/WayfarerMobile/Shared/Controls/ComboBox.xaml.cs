@@ -48,6 +48,17 @@ public partial class ComboBox : ContentView
         propertyChanged: OnDisplayMemberPathChanged);
 
     /// <summary>
+    /// Property path for the icon image source (e.g., PNG path).
+    /// When set, items will show an icon alongside the text.
+    /// </summary>
+    public static readonly BindableProperty IconMemberPathProperty = BindableProperty.Create(
+        nameof(IconMemberPath),
+        typeof(string),
+        typeof(ComboBox),
+        default(string),
+        propertyChanged: OnIconMemberPathChanged);
+
+    /// <summary>
     /// Property path for the value (optional, for SelectedValue binding).
     /// </summary>
     public static readonly BindableProperty ValueMemberPathProperty = BindableProperty.Create(
@@ -140,6 +151,24 @@ public partial class ComboBox : ContentView
         typeof(ComboBox),
         200.0);
 
+    /// <summary>
+    /// The icon source for the selected item (computed from IconMemberPath).
+    /// </summary>
+    public static readonly BindableProperty SelectedIconSourceProperty = BindableProperty.Create(
+        nameof(SelectedIconSource),
+        typeof(string),
+        typeof(ComboBox),
+        default(string));
+
+    /// <summary>
+    /// Whether the selected item has an icon to display.
+    /// </summary>
+    public static readonly BindableProperty HasSelectedIconProperty = BindableProperty.Create(
+        nameof(HasSelectedIcon),
+        typeof(bool),
+        typeof(ComboBox),
+        false);
+
     #endregion
 
     #region Properties
@@ -169,6 +198,15 @@ public partial class ComboBox : ContentView
     {
         get => (string?)GetValue(DisplayMemberPathProperty);
         set => SetValue(DisplayMemberPathProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the icon member path for displaying images alongside text.
+    /// </summary>
+    public string? IconMemberPath
+    {
+        get => (string?)GetValue(IconMemberPathProperty);
+        set => SetValue(IconMemberPathProperty, value);
     }
 
     /// <summary>
@@ -261,6 +299,24 @@ public partial class ComboBox : ContentView
         private set => SetValue(ListMaxHeightProperty, value);
     }
 
+    /// <summary>
+    /// Gets the selected item's icon source.
+    /// </summary>
+    public string? SelectedIconSource
+    {
+        get => (string?)GetValue(SelectedIconSourceProperty);
+        private set => SetValue(SelectedIconSourceProperty, value);
+    }
+
+    /// <summary>
+    /// Gets whether the selected item has an icon.
+    /// </summary>
+    public bool HasSelectedIcon
+    {
+        get => (bool)GetValue(HasSelectedIconProperty);
+        private set => SetValue(HasSelectedIconProperty, value);
+    }
+
     #endregion
 
     #region Events
@@ -324,6 +380,14 @@ public partial class ComboBox : ContentView
     }
 
     private static void OnDisplayMemberPathChanged(BindableObject bindable, object oldValue, object newValue)
+    {
+        if (bindable is ComboBox comboBox)
+        {
+            comboBox.SetupItemTemplate();
+        }
+    }
+
+    private static void OnIconMemberPathChanged(BindableObject bindable, object oldValue, object newValue)
     {
         if (bindable is ComboBox comboBox)
         {
@@ -460,24 +524,49 @@ public partial class ComboBox : ContentView
     #region Private Methods
 
     /// <summary>
-    /// Sets up the ItemTemplate dynamically to support DisplayMemberPath.
+    /// Sets up the ItemTemplate dynamically to support DisplayMemberPath and IconMemberPath.
     /// </summary>
     private void SetupItemTemplate()
     {
         var displayMemberPath = DisplayMemberPath;
+        var iconMemberPath = IconMemberPath;
+        var hasIcon = !string.IsNullOrEmpty(iconMemberPath);
 
         itemsList.ItemTemplate = new DataTemplate(() =>
         {
             var grid = new Grid
             {
-                Padding = new Thickness(12, 12),
-                BackgroundColor = Colors.Transparent
+                Padding = new Thickness(12, 10),
+                BackgroundColor = Colors.Transparent,
+                ColumnSpacing = 10
             };
+
+            // Configure columns based on whether we have icons
+            if (hasIcon)
+            {
+                grid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(28)));
+                grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            }
 
             // Add tap gesture
             var tapGesture = new TapGestureRecognizer();
             tapGesture.Tapped += OnItemTapped;
             grid.GestureRecognizers.Add(tapGesture);
+
+            // Add icon image if IconMemberPath is set
+            if (hasIcon)
+            {
+                var image = new Image
+                {
+                    WidthRequest = 28,
+                    HeightRequest = 28,
+                    VerticalOptions = LayoutOptions.Center,
+                    Aspect = Aspect.AspectFit
+                };
+                image.SetBinding(Image.SourceProperty, new Binding(iconMemberPath));
+                Grid.SetColumn(image, 0);
+                grid.Add(image);
+            }
 
             // Create label with theme-aware colors
             var label = new Label
@@ -499,6 +588,10 @@ public partial class ComboBox : ContentView
                 label.SetBinding(Label.TextProperty, new Binding("."));
             }
 
+            if (hasIcon)
+            {
+                Grid.SetColumn(label, 1);
+            }
             grid.Add(label);
 
             // Visual states for hover effect
@@ -684,11 +777,25 @@ public partial class ComboBox : ContentView
             DisplayTextColor = Application.Current?.RequestedTheme == AppTheme.Dark
                 ? Colors.White
                 : Color.FromArgb("#1F1F1F");
+
+            // Update selected icon if IconMemberPath is set
+            if (!string.IsNullOrEmpty(IconMemberPath))
+            {
+                SelectedIconSource = GetPropertyValue(SelectedItem, IconMemberPath)?.ToString();
+                HasSelectedIcon = !string.IsNullOrEmpty(SelectedIconSource);
+            }
+            else
+            {
+                SelectedIconSource = null;
+                HasSelectedIcon = false;
+            }
         }
         else
         {
             DisplayText = Placeholder;
             HasSelection = false;
+            SelectedIconSource = null;
+            HasSelectedIcon = false;
             // Placeholder color
             DisplayTextColor = Application.Current?.RequestedTheme == AppTheme.Dark
                 ? Color.FromArgb("#9CA3AF")

@@ -18,6 +18,16 @@ namespace WayfarerMobile.ViewModels;
 /// </summary>
 public partial class MainViewModel : BaseViewModel
 {
+    #region Constants
+
+    /// <summary>
+    /// Preferences key for storing the currently loaded trip ID.
+    /// Used to allow "Back to Trip" navigation from My Trips.
+    /// </summary>
+    public const string LoadedTripIdKey = "loaded_trip_id";
+
+    #endregion
+
     #region Fields
 
     private readonly ILocationBridge _locationBridge;
@@ -1480,6 +1490,16 @@ public partial class MainViewModel : BaseViewModel
     }
 
     /// <summary>
+    /// Navigates to My Trips tab in the Trips page.
+    /// </summary>
+    [RelayCommand]
+    private async Task GoToMyTripsAsync()
+    {
+        IsTripSheetOpen = false;
+        await Shell.Current.GoToAsync("//trips");
+    }
+
+    /// <summary>
     /// Goes back from details to overview in trip sheet.
     /// Handles nested navigation (notes views go back to their parent item).
     /// </summary>
@@ -1601,12 +1621,37 @@ public partial class MainViewModel : BaseViewModel
 
     /// <summary>
     /// Navigates to the selected trip place.
+    /// Prompts the user to select a transport mode before starting navigation.
     /// </summary>
     [RelayCommand]
     private async Task NavigateToTripPlaceAsync()
     {
         if (SelectedTripPlace == null)
             return;
+
+        // Show transport mode picker
+        var transportModes = new[] { "Walk", "Drive", "Cycle" };
+
+        var selected = await Shell.Current.DisplayActionSheetAsync(
+            "Navigation Mode",
+            "Cancel",
+            null,
+            transportModes);
+
+        if (string.IsNullOrEmpty(selected) || selected == "Cancel")
+            return;
+
+        // Map display name to OSRM profile
+        var profile = selected switch
+        {
+            "Walk" => "foot",
+            "Drive" => "car",
+            "Cycle" => "bike",
+            _ => "foot"
+        };
+
+        // Save selection for next time
+        _settingsService.LastTransportMode = profile;
 
         await StartNavigationToPlaceAsync(SelectedTripPlace.Id.ToString());
         IsTripSheetOpen = false;
@@ -2116,6 +2161,59 @@ public partial class MainViewModel : BaseViewModel
     }
 
     /// <summary>
+    /// Deletes a trip region after confirmation.
+    /// </summary>
+    [RelayCommand]
+    private async Task DeleteRegionAsync(TripRegion? region)
+    {
+        if (region == null || LoadedTrip == null)
+            return;
+
+        // Don't allow deleting the "Unassigned Places" region
+        if (region.Name == TripRegion.UnassignedPlacesName)
+        {
+            await _toastService.ShowWarningAsync("Cannot delete the Unassigned Places region");
+            return;
+        }
+
+        // Show confirmation dialog
+        var page = Application.Current?.Windows.FirstOrDefault()?.Page;
+        if (page == null)
+            return;
+
+        var placesCount = region.Places.Count;
+        var message = placesCount > 0
+            ? $"Delete region '{region.Name}' and its {placesCount} place{(placesCount == 1 ? "" : "s")}? This action cannot be undone."
+            : $"Delete region '{region.Name}'? This action cannot be undone.";
+
+        var confirm = await page.DisplayAlertAsync(
+            "Delete Region",
+            message,
+            "Delete",
+            "Cancel");
+
+        if (!confirm)
+            return;
+
+        try
+        {
+            // Queue server sync for deletion
+            await _tripSyncService.DeleteRegionAsync(region.Id, LoadedTrip.Id);
+
+            // Remove from local collection
+            LoadedTrip.Regions.Remove(region);
+            LoadedTrip.NotifySortedRegionsChanged();
+
+            await _toastService.ShowSuccessAsync("Region deleted");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete region");
+            await _toastService.ShowErrorAsync($"Failed to delete: {ex.Message}");
+        }
+    }
+
+    /// <summary>
     /// Moves a region up in the display order.
     /// </summary>
     [RelayCommand]
@@ -2202,6 +2300,86 @@ public partial class MainViewModel : BaseViewModel
     }
 
     /// <summary>
+    /// Moves a place up in the display order within its region.
+    /// </summary>
+    [RelayCommand]
+    private async Task MovePlaceUpAsync(TripPlace? place)
+    {
+        if (place == null || LoadedTrip == null)
+            return;
+
+        // Find the region containing this place
+        var region = LoadedTrip.Regions.FirstOrDefault(r => r.Places.Any(p => p.Id == place.Id));
+        if (region == null)
+            return;
+
+        // Get ordered places in this region
+        var places = region.Places.OrderBy(p => p.SortOrder ?? 0).ToList();
+        var currentIndex = places.FindIndex(p => p.Id == place.Id);
+
+        if (currentIndex <= 0)
+            return; // Already at top
+
+        // Find the actual place objects
+        var actualPlace = places[currentIndex];
+        var previousPlace = places[currentIndex - 1];
+
+        // Swap sort orders
+        var tempOrder = actualPlace.SortOrder ?? currentIndex;
+        actualPlace.SortOrder = previousPlace.SortOrder ?? (currentIndex - 1);
+        previousPlace.SortOrder = tempOrder;
+
+        // Queue server syncs for both places
+        await _tripSyncService.UpdatePlaceAsync(actualPlace.Id, LoadedTrip.Id, displayOrder: actualPlace.SortOrder);
+        await _tripSyncService.UpdatePlaceAsync(previousPlace.Id, LoadedTrip.Id, displayOrder: previousPlace.SortOrder);
+
+        // Refresh the sorted regions view
+        LoadedTrip.NotifySortedRegionsChanged();
+
+        await _toastService.ShowSuccessAsync("Place moved up");
+    }
+
+    /// <summary>
+    /// Moves a place down in the display order within its region.
+    /// </summary>
+    [RelayCommand]
+    private async Task MovePlaceDownAsync(TripPlace? place)
+    {
+        if (place == null || LoadedTrip == null)
+            return;
+
+        // Find the region containing this place
+        var region = LoadedTrip.Regions.FirstOrDefault(r => r.Places.Any(p => p.Id == place.Id));
+        if (region == null)
+            return;
+
+        // Get ordered places in this region
+        var places = region.Places.OrderBy(p => p.SortOrder ?? 0).ToList();
+        var currentIndex = places.FindIndex(p => p.Id == place.Id);
+
+        if (currentIndex < 0 || currentIndex >= places.Count - 1)
+            return; // Already at bottom
+
+        // Find the actual place objects
+        var actualPlace = places[currentIndex];
+        var nextPlace = places[currentIndex + 1];
+
+        // Swap sort orders
+        var tempOrder = actualPlace.SortOrder ?? currentIndex;
+        actualPlace.SortOrder = nextPlace.SortOrder ?? (currentIndex + 1);
+        nextPlace.SortOrder = tempOrder;
+
+        // Queue server syncs for both places
+        await _tripSyncService.UpdatePlaceAsync(actualPlace.Id, LoadedTrip.Id, displayOrder: actualPlace.SortOrder);
+        await _tripSyncService.UpdatePlaceAsync(nextPlace.Id, LoadedTrip.Id, displayOrder: nextPlace.SortOrder);
+
+        // Refresh the sorted regions view
+        LoadedTrip.NotifySortedRegionsChanged();
+
+        await _toastService.ShowSuccessAsync("Place moved down");
+    }
+
+    /// <summary>
     /// Opens selected trip area in external maps app.
     /// </summary>
     [RelayCommand]
@@ -2243,6 +2421,272 @@ public partial class MainViewModel : BaseViewModel
         {
             await _toastService.ShowWarningAsync("No Wikipedia article found nearby");
         }
+    }
+
+    /// <summary>
+    /// Shows edit options for the selected area (currently just notes).
+    /// </summary>
+    [RelayCommand]
+    private async Task EditAreaAsync()
+    {
+        if (SelectedTripArea == null || LoadedTrip == null)
+            return;
+
+        // Navigate to notes editor
+        var navParams = new Dictionary<string, object>
+        {
+            { "tripId", LoadedTrip.Id.ToString() },
+            { "entityId", SelectedTripArea.Id.ToString() },
+            { "notes", SelectedTripArea.Notes ?? string.Empty },
+            { "entityType", "Area" }
+        };
+
+        await Shell.Current.GoToAsync("notesEditor", navParams);
+    }
+
+    /// <summary>
+    /// Shows edit options for the selected segment (currently just notes).
+    /// </summary>
+    [RelayCommand]
+    private async Task EditSegmentAsync()
+    {
+        if (SelectedTripSegment == null || LoadedTrip == null)
+            return;
+
+        // Navigate to notes editor
+        var navParams = new Dictionary<string, object>
+        {
+            { "tripId", LoadedTrip.Id.ToString() },
+            { "entityId", SelectedTripSegment.Id.ToString() },
+            { "notes", SelectedTripSegment.Notes ?? string.Empty },
+            { "entityType", "Segment" }
+        };
+
+        await Shell.Current.GoToAsync("notesEditor", navParams);
+    }
+
+    /// <summary>
+    /// Shows options to add a new region or place to the trip.
+    /// </summary>
+    [RelayCommand]
+    private async Task AddToTripAsync()
+    {
+        if (LoadedTrip == null)
+            return;
+
+        var action = await Shell.Current.DisplayActionSheetAsync(
+            "Add to Trip",
+            "Cancel",
+            null,
+            "Add Region",
+            "Add Place (to current location)");
+
+        switch (action)
+        {
+            case "Add Region":
+                await AddRegionAsync();
+                break;
+            case "Add Place (to current location)":
+                await AddPlaceToCurrentLocationAsync();
+                break;
+        }
+    }
+
+    private async Task AddRegionAsync()
+    {
+        if (LoadedTrip == null)
+            return;
+
+        var name = await Shell.Current.DisplayPromptAsync(
+            "Add Region",
+            "Enter region name:",
+            placeholder: "Region name",
+            maxLength: 200,
+            keyboard: Keyboard.Text);
+
+        if (string.IsNullOrWhiteSpace(name))
+            return;
+
+        try
+        {
+            // Create new region with a temporary client-side ID
+            var tempId = Guid.NewGuid();
+            var newRegion = new TripRegion
+            {
+                Id = tempId,
+                Name = name.Trim(),
+                SortOrder = LoadedTrip.Regions.Count
+            };
+
+            // Add to local collection
+            LoadedTrip.Regions.Add(newRegion);
+            LoadedTrip.NotifySortedRegionsChanged();
+
+            // Queue server sync
+            await _tripSyncService.CreateRegionAsync(LoadedTrip.Id, name.Trim(), null, null, null, null, newRegion.SortOrder);
+
+            await _toastService.ShowSuccessAsync("Region added");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to add region");
+            await _toastService.ShowErrorAsync($"Failed to add region: {ex.Message}");
+        }
+    }
+
+    private async Task AddPlaceToCurrentLocationAsync()
+    {
+        if (LoadedTrip == null || CurrentLocation == null)
+        {
+            await _toastService.ShowWarningAsync("Current location not available");
+            return;
+        }
+
+        // Get list of regions to choose from
+        var regions = LoadedTrip.Regions
+            .Where(r => r.Name != TripRegion.UnassignedPlacesName)
+            .ToList();
+
+        if (regions.Count == 0)
+        {
+            await _toastService.ShowWarningAsync("Create a region first");
+            return;
+        }
+
+        // Ask for region selection
+        var regionNames = regions.Select(r => r.Name).ToArray();
+        var selectedRegionName = await Shell.Current.DisplayActionSheetAsync(
+            "Select Region",
+            "Cancel",
+            null,
+            regionNames);
+
+        if (selectedRegionName == null || selectedRegionName == "Cancel")
+            return;
+
+        var selectedRegion = regions.FirstOrDefault(r => r.Name == selectedRegionName);
+        if (selectedRegion == null)
+            return;
+
+        // Ask for place name
+        var placeName = await Shell.Current.DisplayPromptAsync(
+            "Add Place",
+            "Enter place name:",
+            placeholder: "Place name",
+            maxLength: 200,
+            keyboard: Keyboard.Text);
+
+        if (string.IsNullOrWhiteSpace(placeName))
+            return;
+
+        try
+        {
+            var tempId = Guid.NewGuid();
+            var newPlace = new TripPlace
+            {
+                Id = tempId,
+                Name = placeName.Trim(),
+                Latitude = CurrentLocation.Latitude,
+                Longitude = CurrentLocation.Longitude,
+                SortOrder = selectedRegion.Places.Count
+            };
+
+            // Add to local collection
+            selectedRegion.Places.Add(newPlace);
+            LoadedTrip.NotifySortedRegionsChanged();
+
+            // Queue server sync
+            await _tripSyncService.CreatePlaceAsync(
+                LoadedTrip.Id,
+                selectedRegion.Id,
+                placeName.Trim(),
+                CurrentLocation.Latitude,
+                CurrentLocation.Longitude,
+                null,
+                null,
+                null,
+                newPlace.SortOrder);
+
+            await _toastService.ShowSuccessAsync("Place added");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to add place");
+            await _toastService.ShowErrorAsync($"Failed to add place: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Shows edit options for the loaded trip (name/notes).
+    /// </summary>
+    [RelayCommand]
+    private async Task EditLoadedTripAsync()
+    {
+        if (LoadedTrip == null)
+            return;
+
+        var action = await Shell.Current.DisplayActionSheetAsync(
+            $"Edit: {LoadedTrip.Name}",
+            "Cancel",
+            null,
+            "Edit Name",
+            "Edit Notes");
+
+        switch (action)
+        {
+            case "Edit Name":
+                await EditLoadedTripNameAsync();
+                break;
+            case "Edit Notes":
+                await EditLoadedTripNotesAsync();
+                break;
+        }
+    }
+
+    private async Task EditLoadedTripNameAsync()
+    {
+        if (LoadedTrip == null)
+            return;
+
+        var newName = await Shell.Current.DisplayPromptAsync(
+            "Edit Trip Name",
+            "Enter new name:",
+            initialValue: LoadedTrip.Name,
+            maxLength: 200,
+            keyboard: Keyboard.Text);
+
+        if (string.IsNullOrWhiteSpace(newName) || newName == LoadedTrip.Name)
+            return;
+
+        try
+        {
+            LoadedTrip.Name = newName.Trim();
+
+            // Queue server sync (updates both local storage and server)
+            await _tripSyncService.UpdateTripAsync(LoadedTrip.Id, name: newName.Trim());
+
+            await _toastService.ShowSuccessAsync("Trip name updated");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update trip name");
+            await _toastService.ShowErrorAsync($"Failed to update: {ex.Message}");
+        }
+    }
+
+    private async Task EditLoadedTripNotesAsync()
+    {
+        if (LoadedTrip == null)
+            return;
+
+        var navParams = new Dictionary<string, object>
+        {
+            { "tripId", LoadedTrip.Id.ToString() },
+            { "notes", LoadedTrip.Notes ?? string.Empty },
+            { "entityType", "Trip" }
+        };
+
+        await Shell.Current.GoToAsync("notesEditor", navParams);
     }
 
     /// <summary>
@@ -2513,6 +2957,23 @@ public partial class MainViewModel : BaseViewModel
         }
     }
 
+    /// <summary>
+    /// Called when LoadedTrip changes - saves/clears the trip ID in Preferences.
+    /// </summary>
+    partial void OnLoadedTripChanged(TripDetails? value)
+    {
+        if (value != null)
+        {
+            // Save the loaded trip ID so My Trips can show "Back to Trip"
+            Preferences.Set(LoadedTripIdKey, value.Id.ToString());
+        }
+        else
+        {
+            // Clear the loaded trip ID
+            Preferences.Remove(LoadedTripIdKey);
+        }
+    }
+
     #endregion
 
     #region Lifecycle
@@ -2560,9 +3021,19 @@ public partial class MainViewModel : BaseViewModel
 
     /// <summary>
     /// Called when the view disappears.
+    /// Unloads the trip when navigating away from the map.
     /// </summary>
     public override async Task OnDisappearingAsync()
     {
+        // Unload the trip when navigating away from the map
+        if (HasLoadedTrip)
+        {
+            UnloadTrip();
+        }
+
+        // Close the trip sheet if open
+        IsTripSheetOpen = false;
+
         // Set normal mode to conserve battery when map is not visible
         if (TrackingState == TrackingState.Active)
         {

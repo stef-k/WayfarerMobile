@@ -123,11 +123,11 @@
                         <ImageButton Source="trip.png"
                                      Command="{Binding ToggleTripSheetCommand}"
                                      IsVisible="{Binding HasLoadedTrip}"
-                                     WidthRequest="48"
-                                     HeightRequest="48"
-                                     CornerRadius="24"
+                                     WidthRequest="44"
+                                     HeightRequest="44"
+                                     CornerRadius="22"
                                      Padding="10"
-                                     BackgroundColor="{StaticResource Primary}" />
+                                     BackgroundColor="{StaticResource Gray900}" />
                         <!-- 1. Drop Pin / Context Menu -->
                         <ImageButton Source="add_location_alt.png"
                                      Clicked="OnDropPinClicked"
@@ -135,7 +135,7 @@
                                      HeightRequest="44"
                                      CornerRadius="22"
                                      Padding="10"
-                                     BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}" />
+                                     BackgroundColor="{StaticResource Gray900}" />
                         <!-- 2. Recenter on user's location (MIDDLE) -->
                         <ImageButton Source="crosshair.png"
                                      Command="{Binding CenterOnLocationCommand}"
@@ -143,7 +143,7 @@
                                      HeightRequest="44"
                                      CornerRadius="22"
                                      Padding="10"
-                                     BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}" />
+                                     BackgroundColor="{StaticResource Gray900}" />
                         <!-- 3. Check-in -->
                         <ImageButton Source="check.png"
                                      Command="{Binding CheckInCommand}"
@@ -151,7 +151,7 @@
                                      HeightRequest="44"
                                      CornerRadius="22"
                                      Padding="10"
-                                     BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}" />
+                                     BackgroundColor="{StaticResource Gray900}" />
                     </VerticalStackLayout>
 
                     <!-- Navigation HUD (shown during navigation) -->

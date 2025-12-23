@@ -1404,6 +1404,11 @@ public class PlaceUpdateRequest
     /// Gets or sets the region ID.
     /// </summary>
     public Guid? RegionId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the display order.
+    /// </summary>
+    public int? DisplayOrder { get; set; }
 }
 
 /// <summary>
@@ -1532,6 +1537,38 @@ public class SegmentNotesUpdateRequest
 {
     /// <summary>
     /// Gets or sets the notes (HTML).
+    /// </summary>
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Request to update area (polygon) notes.
+/// </summary>
+public class AreaNotesUpdateRequest
+{
+    /// <summary>
+    /// Gets or sets the notes (HTML).
+    /// </summary>
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Response from area notes update.
+/// </summary>
+public class AreaUpdateResponse
+{
+    /// <summary>
+    /// Gets or sets the area ID.
+    /// </summary>
+    public Guid Id { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the operation was successful.
+    /// </summary>
+    public bool Success { get; set; }
+
+    /// <summary>
+    /// Gets or sets the updated notes.
     /// </summary>
     public string? Notes { get; set; }
 }

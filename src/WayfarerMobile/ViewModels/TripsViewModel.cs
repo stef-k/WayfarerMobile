@@ -286,6 +286,10 @@ public partial class TripsViewModel : BaseViewModel
             var serverTrips = await _apiClient.GetTripsAsync();
             var downloadedTrips = await _downloadService.GetDownloadedTripsAsync();
 
+            // Check which trip is currently loaded on the map
+            var loadedTripIdString = Preferences.Get(MainViewModel.LoadedTripIdKey, string.Empty);
+            Guid.TryParse(loadedTripIdString, out var loadedTripId);
+
             // Build grouped list
             var items = new List<TripListItem>();
 
@@ -293,7 +297,15 @@ public partial class TripsViewModel : BaseViewModel
             foreach (var trip in serverTrips.OrderByDescending(t => t.UpdatedAt))
             {
                 var downloaded = downloadedTrips.FirstOrDefault(d => d.ServerId == trip.Id);
-                items.Add(new TripListItem(trip, downloaded));
+                var item = new TripListItem(trip, downloaded);
+
+                // Mark as currently loaded if it matches
+                if (loadedTripId != Guid.Empty && trip.Id == loadedTripId)
+                {
+                    item.IsCurrentlyLoaded = true;
+                }
+
+                items.Add(item);
             }
 
             // Group by download status
@@ -428,6 +440,19 @@ public partial class TripsViewModel : BaseViewModel
             _logger.LogError(ex, "Failed to load trip to map");
             await _toastService.ShowErrorAsync($"Failed to load trip: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Navigates back to the currently loaded trip without reloading.
+    /// </summary>
+    [RelayCommand]
+    private async Task BackToTripAsync(TripListItem? item)
+    {
+        if (item == null || !item.IsCurrentlyLoaded)
+            return;
+
+        // Simply navigate to main page - trip is already loaded
+        await Shell.Current.GoToAsync("//main");
     }
 
     /// <summary>
@@ -927,18 +952,44 @@ public partial class TripListItem : ObservableObject
 
     /// <summary>
     /// Gets the stats text (dynamically calculated based on download state).
+    /// Shows regions, places, segments, areas, and tiles.
     /// </summary>
-    public string StatsText => DownloadState switch
+    public string StatsText
     {
-        TripDownloadState.Complete => DownloadedEntity != null
-            ? $"{DownloadedEntity.PlaceCount} places • {DownloadedEntity.TileCount} tiles"
-            : "Downloaded",
-        TripDownloadState.MetadataOnly => DownloadedEntity != null
-            ? $"{DownloadedEntity.PlaceCount} places • No tiles"
-            : "Metadata only",
-        TripDownloadState.Downloading => "Downloading...",
-        _ => _serverStatsText ?? "Available online"
-    };
+        get
+        {
+            if (DownloadState == TripDownloadState.Downloading)
+                return "Downloading...";
+
+            if (DownloadState == TripDownloadState.ServerOnly)
+                return _serverStatsText ?? "Available online";
+
+            // For downloaded trips (MetadataOnly or Complete), show detailed stats
+            if (DownloadedEntity == null)
+                return DownloadState == TripDownloadState.Complete ? "Downloaded" : "Metadata only";
+
+            var parts = new List<string>();
+
+            if (DownloadedEntity.RegionCount > 0)
+                parts.Add($"{DownloadedEntity.RegionCount} region{(DownloadedEntity.RegionCount == 1 ? "" : "s")}");
+
+            if (DownloadedEntity.PlaceCount > 0)
+                parts.Add($"{DownloadedEntity.PlaceCount} place{(DownloadedEntity.PlaceCount == 1 ? "" : "s")}");
+
+            if (DownloadedEntity.SegmentCount > 0)
+                parts.Add($"{DownloadedEntity.SegmentCount} segment{(DownloadedEntity.SegmentCount == 1 ? "" : "s")}");
+
+            if (DownloadedEntity.AreaCount > 0)
+                parts.Add($"{DownloadedEntity.AreaCount} area{(DownloadedEntity.AreaCount == 1 ? "" : "s")}");
+
+            if (DownloadState == TripDownloadState.Complete && DownloadedEntity.TileCount > 0)
+                parts.Add($"{DownloadedEntity.TileCount} tiles");
+            else if (DownloadState == TripDownloadState.MetadataOnly)
+                parts.Add("No tiles");
+
+            return parts.Count > 0 ? string.Join(" • ", parts) : "Empty trip";
+        }
+    }
 
     /// <summary>
     /// Server stats text (cached from initial load).
@@ -1027,10 +1078,18 @@ public partial class TripListItem : ObservableObject
 
     /// <summary>
     /// Gets whether Load to Map is available.
-    /// Only available for downloaded trips (metadata or complete).
+    /// Only available for downloaded trips (metadata or complete) that aren't already loaded.
     /// </summary>
-    public bool CanLoadToMap => DownloadState == TripDownloadState.MetadataOnly ||
-                                 DownloadState == TripDownloadState.Complete;
+    public bool CanLoadToMap => !IsCurrentlyLoaded &&
+                                 (DownloadState == TripDownloadState.MetadataOnly ||
+                                  DownloadState == TripDownloadState.Complete);
+
+    /// <summary>
+    /// Gets or sets whether this trip is currently loaded on the map.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanLoadToMap))]
+    private bool _isCurrentlyLoaded;
 
     /// <summary>
     /// Gets whether Quick Download is available.

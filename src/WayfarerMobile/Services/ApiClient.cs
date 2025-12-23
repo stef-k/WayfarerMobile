@@ -743,6 +743,52 @@ public class ApiClient : IApiClient
 
     #endregion
 
+    #region Area Operations
+
+    /// <inheritdoc/>
+    public async Task<AreaUpdateResponse?> UpdateAreaNotesAsync(
+        Guid areaId,
+        AreaNotesUpdateRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsConfigured)
+        {
+            return new AreaUpdateResponse { Success = false };
+        }
+
+        try
+        {
+            var httpRequest = CreateRequest(HttpMethod.Put, $"/api/trips/areas/{areaId}");
+            httpRequest.Content = JsonContent.Create(request, options: JsonOptions);
+
+            var response = await HttpClientInstance.SendAsync(httpRequest, cancellationToken);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<AreaUpdateResponse>(JsonOptions, cancellationToken);
+                if (result != null)
+                {
+                    result.Success = true;
+                    _logger.LogInformation("Updated area notes for {AreaId}", areaId);
+                }
+                return result;
+            }
+
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning("Failed to update area {AreaId}: {StatusCode} - {Error}",
+                areaId, response.StatusCode, errorBody);
+
+            return new AreaUpdateResponse { Success = false };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating area {AreaId}", areaId);
+            return new AreaUpdateResponse { Success = false };
+        }
+    }
+
+    #endregion
+
     /// <summary>
     /// Gets the underlying HttpClient for direct tile downloads.
     /// </summary>

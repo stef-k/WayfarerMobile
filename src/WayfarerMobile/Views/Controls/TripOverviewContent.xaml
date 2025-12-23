@@ -13,7 +13,7 @@
 
         <!-- Header -->
         <Grid Grid.Row="0" Padding="8,8,8,8" ColumnDefinitions="Auto,*,Auto">
-            <!-- Back Button (visible when showing details) -->
+            <!-- Back Button (visible when showing details - goes back to overview) -->
             <Button Grid.Column="0"
                     Text="←"
                     FontSize="18"
@@ -25,6 +25,17 @@
                     TextColor="{StaticResource Primary}"
                     Command="{Binding TripSheetBackCommand}"
                     IsVisible="{Binding IsTripSheetShowingDetails}" />
+            <!-- My Trips Button (visible when showing overview - goes to My Trips tab) -->
+            <Button Grid.Column="0"
+                    Text="← Trips"
+                    FontSize="13"
+                    HeightRequest="36"
+                    Padding="8,0"
+                    CornerRadius="18"
+                    BackgroundColor="Transparent"
+                    TextColor="{StaticResource Primary}"
+                    Command="{Binding GoToMyTripsCommand}"
+                    IsVisible="{Binding IsTripSheetShowingOverview}" />
 
             <!-- Title -->
             <VerticalStackLayout Grid.Column="1" VerticalOptions="Center">
@@ -78,13 +89,14 @@
                                FontSize="12"
                                TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
 
-                        <!-- Trip Notes (tappable to open detail view) -->
+                        <!-- Trip Notes (tappable to open detail view) - uses negative margin to extend to edges -->
                         <Border StrokeThickness="0"
                                 BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}"
-                                Padding="8,10"
+                                Margin="-8,0,-8,0"
+                                Padding="16,10"
                                 IsVisible="{Binding LoadedTrip.HasNotes}">
                             <Border.StrokeShape>
-                                <RoundRectangle CornerRadius="6" />
+                                <RoundRectangle CornerRadius="0" />
                             </Border.StrokeShape>
                             <Border.GestureRecognizers>
                                 <TapGestureRecognizer Command="{Binding ShowTripNotesCommand}" />
@@ -112,16 +124,11 @@
                                                        IsVisible="{Binding IsVisibleInUi}">
                                     <sfExpander:SfExpander.Header>
                                         <Grid MinimumHeightRequest="40" Padding="8,6"
-                                              ColumnDefinitions="*,Auto,Auto,Auto"
+                                              ColumnDefinitions="Auto,Auto,*,Auto,Auto"
+                                              ColumnSpacing="2"
                                               BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}">
-                                            <Label Grid.Column="0"
-                                                   Text="{Binding Name}"
-                                                   FontSize="14"
-                                                   FontAttributes="Bold"
-                                                   VerticalOptions="Center"
-                                                   LineBreakMode="WordWrap" />
-                                            <!-- Edit Button (hidden for Unassigned Places region) -->
-                                            <ImageButton Grid.Column="1"
+                                            <!-- Edit Button (LEFT - hidden for Unassigned Places region) -->
+                                            <ImageButton Grid.Column="0"
                                                          Source="edit.png"
                                                          Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=EditRegionCommand}"
                                                          CommandParameter="{Binding .}"
@@ -131,28 +138,46 @@
                                                          Padding="4"
                                                          BackgroundColor="Transparent"
                                                          VerticalOptions="Center" />
-                                            <!-- Move Up Button -->
-                                            <Button Grid.Column="2"
+                                            <!-- Delete Button (LEFT - hidden for Unassigned Places region) -->
+                                            <ImageButton Grid.Column="1"
+                                                         Source="delete.png"
+                                                         Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=DeleteRegionCommand}"
+                                                         CommandParameter="{Binding .}"
+                                                         IsVisible="{Binding IsUnassignedRegion, Converter={StaticResource InverseBoolConverter}}"
+                                                         WidthRequest="28"
+                                                         HeightRequest="28"
+                                                         Padding="4"
+                                                         BackgroundColor="Transparent"
+                                                         VerticalOptions="Center" />
+                                            <!-- Region Name (CENTER) -->
+                                            <Label Grid.Column="2"
+                                                   Text="{Binding Name}"
+                                                   FontSize="14"
+                                                   FontAttributes="Bold"
+                                                   VerticalOptions="Center"
+                                                   LineBreakMode="WordWrap" />
+                                            <!-- Move Up Button (RIGHT) -->
+                                            <Button Grid.Column="3"
                                                     Text="▲"
-                                                    FontSize="12"
+                                                    FontSize="10"
                                                     Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=MoveRegionUpCommand}"
                                                     CommandParameter="{Binding .}"
                                                     IsVisible="{Binding IsUnassignedRegion, Converter={StaticResource InverseBoolConverter}}"
-                                                    WidthRequest="28"
-                                                    HeightRequest="28"
+                                                    WidthRequest="24"
+                                                    HeightRequest="24"
                                                     Padding="0"
                                                     BackgroundColor="Transparent"
                                                     TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
                                                     VerticalOptions="Center" />
-                                            <!-- Move Down Button -->
-                                            <Button Grid.Column="3"
+                                            <!-- Move Down Button (RIGHT) -->
+                                            <Button Grid.Column="4"
                                                     Text="▼"
-                                                    FontSize="12"
+                                                    FontSize="10"
                                                     Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=MoveRegionDownCommand}"
                                                     CommandParameter="{Binding .}"
                                                     IsVisible="{Binding IsUnassignedRegion, Converter={StaticResource InverseBoolConverter}}"
-                                                    WidthRequest="28"
-                                                    HeightRequest="28"
+                                                    WidthRequest="24"
+                                                    HeightRequest="24"
                                                     Padding="0"
                                                     BackgroundColor="Transparent"
                                                     TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
@@ -203,11 +228,35 @@
                                                                 <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=SelectTripPlaceCommand}"
                                                                                       CommandParameter="{Binding .}" />
                                                             </Border.GestureRecognizers>
-                                                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                                            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
                                                                 <Image Grid.Column="0" Source="{Binding IconPath, Converter={StaticResource MauiAssetImageConverter}}"
                                                                        WidthRequest="32" HeightRequest="32" VerticalOptions="Center" />
                                                                 <Label Grid.Column="1" Text="{Binding Name}" FontSize="14" VerticalOptions="Center"
                                                                        LineBreakMode="WordWrap" />
+                                                                <!-- Move Up Button -->
+                                                                <Button Grid.Column="2"
+                                                                        Text="▲"
+                                                                        FontSize="10"
+                                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=MovePlaceUpCommand}"
+                                                                        CommandParameter="{Binding .}"
+                                                                        WidthRequest="24"
+                                                                        HeightRequest="24"
+                                                                        Padding="0"
+                                                                        BackgroundColor="Transparent"
+                                                                        TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
+                                                                        VerticalOptions="Center" />
+                                                                <!-- Move Down Button -->
+                                                                <Button Grid.Column="3"
+                                                                        Text="▼"
+                                                                        FontSize="10"
+                                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=MovePlaceDownCommand}"
+                                                                        CommandParameter="{Binding .}"
+                                                                        WidthRequest="24"
+                                                                        HeightRequest="24"
+                                                                        Padding="0"
+                                                                        BackgroundColor="Transparent"
+                                                                        TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
+                                                                        VerticalOptions="Center" />
                                                             </Grid>
                                                         </Border>
                                                     </DataTemplate>
@@ -492,53 +541,87 @@
         <Grid Grid.Row="2"
               BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
 
-            <!-- Unload Trip Button (Overview Mode) -->
-            <Button Text="Unload Trip"
-                    Command="{Binding ClearLoadedTripCommand}"
-                    Margin="8,6,8,12"
-                    BackgroundColor="{StaticResource Error}"
-                    TextColor="White"
-                    CornerRadius="8"
-                    HeightRequest="44"
-                    IsVisible="{Binding IsTripSheetShowingOverview}" />
-
-            <!-- Place Action Buttons (1 row of 6) -->
-            <Grid ColumnDefinitions="*,*,*,*,*,*"
-                  ColumnSpacing="4"
-                  Padding="8,6,8,12"
-                  IsVisible="{Binding IsTripSheetShowingPlace}">
-                <ImageButton Grid.Column="0" Source="copy.png" Command="{Binding CopyTripPlaceCoordsCommand}"
-                             BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                             CornerRadius="6" Padding="6" HeightRequest="40" HorizontalOptions="Fill" />
-                <ImageButton Grid.Column="1" Source="share_icon.png" Command="{Binding ShareTripPlaceCommand}"
-                             BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                             CornerRadius="6" Padding="6" HeightRequest="40" HorizontalOptions="Fill" />
-                <ImageButton Grid.Column="2" Source="edit.png" Command="{Binding EditTripPlaceCommand}"
-                             BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                             CornerRadius="6" Padding="6" HeightRequest="40" HorizontalOptions="Fill" />
-                <ImageButton Grid.Column="3" Source="wikipedia.png" Command="{Binding OpenTripPlaceWikipediaCommand}"
-                             BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                             CornerRadius="6" Padding="6" HeightRequest="40" HorizontalOptions="Fill" />
-                <ImageButton Grid.Column="4" Source="maps_google.png" Command="{Binding OpenTripPlaceInMapsCommand}"
-                             BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                             CornerRadius="6" Padding="6" HeightRequest="40" HorizontalOptions="Fill" />
-                <ImageButton Grid.Column="5" Source="navigate.png" Command="{Binding NavigateToTripPlaceCommand}"
-                             BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                             CornerRadius="6" Padding="6" HeightRequest="40" HorizontalOptions="Fill" />
+            <!-- Overview Mode Action Buttons -->
+            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="6" Padding="8,6,8,12"
+                  IsVisible="{Binding IsTripSheetShowingOverview}">
+                <!-- Add Region/Place Button -->
+                <Button Grid.Column="0"
+                        Text="+ Add"
+                        Command="{Binding AddToTripCommand}"
+                        BackgroundColor="{StaticResource Gray900}"
+                        TextColor="{StaticResource White}"
+                        CornerRadius="8"
+                        HeightRequest="44" />
+                <!-- Edit Trip Button -->
+                <Button Grid.Column="1"
+                        Text="Edit Trip"
+                        Command="{Binding EditLoadedTripCommand}"
+                        BackgroundColor="{StaticResource Gray900}"
+                        TextColor="{StaticResource White}"
+                        CornerRadius="8"
+                        HeightRequest="44" />
+                <!-- Unload Trip Button -->
+                <Button Grid.Column="2"
+                        Text="Unload"
+                        Command="{Binding ClearLoadedTripCommand}"
+                        BackgroundColor="{StaticResource Gray900}"
+                        TextColor="{StaticResource White}"
+                        CornerRadius="8"
+                        HeightRequest="44" />
             </Grid>
 
+            <!-- Place Action Buttons (FAB style, 1 row of 6) -->
+            <HorizontalStackLayout Spacing="12"
+                                   Padding="8,6,8,12"
+                                   HorizontalOptions="Center"
+                                   IsVisible="{Binding IsTripSheetShowingPlace}">
+                <ImageButton Source="copy.png" Command="{Binding CopyTripPlaceCoordsCommand}"
+                             BackgroundColor="{StaticResource Gray900}"
+                             WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="10" />
+                <ImageButton Source="share_icon.png" Command="{Binding ShareTripPlaceCommand}"
+                             BackgroundColor="{StaticResource Gray900}"
+                             WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="10" />
+                <ImageButton Source="edit.png" Command="{Binding EditTripPlaceCommand}"
+                             BackgroundColor="{StaticResource Gray900}"
+                             WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="10" />
+                <ImageButton Source="wikipedia.png" Command="{Binding OpenTripPlaceWikipediaCommand}"
+                             BackgroundColor="{StaticResource Gray900}"
+                             WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="10" />
+                <ImageButton Source="maps_google.png" Command="{Binding OpenTripPlaceInMapsCommand}"
+                             BackgroundColor="{StaticResource Gray900}"
+                             WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="10" />
+                <ImageButton Source="navigate.png" Command="{Binding NavigateToTripPlaceCommand}"
+                             BackgroundColor="{StaticResource Gray900}"
+                             WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="10" />
+            </HorizontalStackLayout>
+
             <!-- Area Action Buttons -->
-            <Grid ColumnDefinitions="*,*" ColumnSpacing="6" Padding="8,6,8,12"
+            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="6" Padding="8,6,8,12"
                   IsVisible="{Binding IsTripSheetShowingArea}">
-                <Button Grid.Column="0" ImageSource="maps_google.png" Text=" Maps" ContentLayout="Left,4"
-                        Command="{Binding OpenTripAreaInMapsCommand}"
-                        BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                        TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
+                <Button Grid.Column="0" ImageSource="edit.png" Text=" Edit" ContentLayout="Left,4"
+                        Command="{Binding EditAreaCommand}"
+                        BackgroundColor="{StaticResource Gray900}"
+                        TextColor="{StaticResource White}"
                         CornerRadius="6" HeightRequest="40" />
-                <Button Grid.Column="1" ImageSource="wikipedia.png" Text=" Wiki" ContentLayout="Left,4"
+                <Button Grid.Column="1" ImageSource="maps_google.png" Text=" Maps" ContentLayout="Left,4"
+                        Command="{Binding OpenTripAreaInMapsCommand}"
+                        BackgroundColor="{StaticResource Gray900}"
+                        TextColor="{StaticResource White}"
+                        CornerRadius="6" HeightRequest="40" />
+                <Button Grid.Column="2" ImageSource="wikipedia.png" Text=" Wiki" ContentLayout="Left,4"
                         Command="{Binding OpenTripAreaWikipediaCommand}"
-                        BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                        TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
+                        BackgroundColor="{StaticResource Gray900}"
+                        TextColor="{StaticResource White}"
+                        CornerRadius="6" HeightRequest="40" />
+            </Grid>
+
+            <!-- Segment Action Buttons -->
+            <Grid ColumnDefinitions="*" Padding="8,6,8,12"
+                  IsVisible="{Binding IsTripSheetShowingSegment}">
+                <Button Grid.Column="0" ImageSource="edit.png" Text=" Edit Notes" ContentLayout="Left,4"
+                        Command="{Binding EditSegmentCommand}"
+                        BackgroundColor="{StaticResource Gray900}"
+                        TextColor="{StaticResource White}"
                         CornerRadius="6" HeightRequest="40" />
             </Grid>
         </Grid>
