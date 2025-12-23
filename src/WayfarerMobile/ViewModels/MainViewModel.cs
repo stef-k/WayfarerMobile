@@ -1652,8 +1652,162 @@ public partial class MainViewModel : BaseViewModel
         if (SelectedTripPlace == null || LoadedTrip == null)
             return;
 
-        // TODO: Navigate to place edit page when implemented
-        await _toastService.ShowAsync("Edit feature coming soon");
+        var action = await Shell.Current.DisplayActionSheetAsync(
+            $"Edit: {SelectedTripPlace.Name}",
+            "Cancel",
+            "Delete",
+            "Edit Name",
+            "Edit Notes",
+            "Edit Coordinates",
+            "Edit Marker");
+
+        switch (action)
+        {
+            case "Edit Name":
+                await EditPlaceNameAsync(SelectedTripPlace);
+                break;
+            case "Edit Notes":
+                await EditPlaceNotesAsync(SelectedTripPlace);
+                break;
+            case "Edit Coordinates":
+                await _toastService.ShowAsync("Coordinate editing coming soon");
+                break;
+            case "Edit Marker":
+                await _toastService.ShowAsync("Marker editing coming soon");
+                break;
+            case "Delete":
+                await DeletePlaceAsync(SelectedTripPlace);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Edits the name of a trip place using an inline prompt.
+    /// </summary>
+    private async Task EditPlaceNameAsync(TripPlace place)
+    {
+        var newName = await Shell.Current.DisplayPromptAsync(
+            "Edit Place Name",
+            "Enter new name:",
+            initialValue: place.Name,
+            maxLength: 200,
+            keyboard: Keyboard.Text);
+
+        if (string.IsNullOrWhiteSpace(newName) || newName == place.Name)
+            return;
+
+        try
+        {
+            // Find the region containing this place
+            var region = LoadedTrip!.Regions.FirstOrDefault(r => r.Places.Any(p => p.Id == place.Id));
+            if (region == null)
+            {
+                await _toastService.ShowErrorAsync("Place not found in trip");
+                return;
+            }
+
+            // Find the actual place in the region
+            var actualPlace = region.Places.FirstOrDefault(p => p.Id == place.Id);
+            if (actualPlace == null)
+            {
+                await _toastService.ShowErrorAsync("Place not found");
+                return;
+            }
+
+            // Optimistically update UI
+            actualPlace.Name = newName.Trim();
+
+            // Update the selected place reference too
+            SelectedTripPlace = actualPlace;
+
+            // Refresh the sorted regions view
+            LoadedTrip.NotifySortedRegionsChanged();
+
+            // Queue server sync
+            await _tripSyncService.UpdatePlaceAsync(
+                place.Id,
+                LoadedTrip.Id,
+                name: newName.Trim());
+
+            await _toastService.ShowSuccessAsync("Place name updated");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update place name");
+            await _toastService.ShowErrorAsync($"Failed to update: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Navigates to the notes editor for a trip place.
+    /// </summary>
+    private async Task EditPlaceNotesAsync(TripPlace place)
+    {
+        var navParams = new Dictionary<string, object>
+        {
+            { "tripId", LoadedTrip!.Id.ToString() },
+            { "entityId", place.Id.ToString() },
+            { "notes", place.Notes ?? string.Empty },
+            { "entityType", "Place" }
+        };
+
+        await Shell.Current.GoToAsync("notesEditor", navParams);
+    }
+
+    /// <summary>
+    /// Deletes a trip place after confirmation.
+    /// </summary>
+    private async Task DeletePlaceAsync(TripPlace place)
+    {
+        var page = Application.Current?.Windows.FirstOrDefault()?.Page;
+        if (page == null)
+            return;
+
+        var confirm = await page.DisplayAlertAsync(
+            "Delete Place",
+            $"Are you sure you want to delete \"{place.Name}\"?\n\nThis action cannot be undone.",
+            "Delete",
+            "Cancel");
+
+        if (!confirm)
+            return;
+
+        try
+        {
+            // Find the region containing this place
+            var region = LoadedTrip!.Regions.FirstOrDefault(r => r.Places.Any(p => p.Id == place.Id));
+            if (region == null)
+            {
+                await _toastService.ShowErrorAsync("Place not found in trip");
+                return;
+            }
+
+            // Optimistically remove from UI
+            var actualPlace = region.Places.FirstOrDefault(p => p.Id == place.Id);
+            if (actualPlace != null)
+            {
+                region.Places.Remove(actualPlace);
+            }
+
+            // Clear selection and go back to overview
+            ClearTripSheetSelection();
+
+            // Refresh the sorted regions view
+            LoadedTrip.NotifySortedRegionsChanged();
+
+            // Update map layers
+            await RefreshTripOnMapAsync();
+
+            // Queue server sync
+            await _tripSyncService.DeletePlaceAsync(place.Id, LoadedTrip.Id);
+
+            await _toastService.ShowSuccessAsync("Place deleted");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete place");
+            await _toastService.ShowErrorAsync($"Failed to delete: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -2082,6 +2236,37 @@ public partial class MainViewModel : BaseViewModel
         }
 
         // Force map refresh to ensure layers are rendered
+        RefreshMap();
+    }
+
+    /// <summary>
+    /// Refreshes the trip display on the map.
+    /// Call this after modifying places, areas, or segments.
+    /// </summary>
+    private async Task RefreshTripOnMapAsync()
+    {
+        if (LoadedTrip == null)
+            return;
+
+        // Update places layer
+        if (_tripPlacesLayer != null)
+        {
+            await _tripLayerService.UpdateTripPlacesAsync(_tripPlacesLayer, LoadedTrip.AllPlaces);
+        }
+
+        // Update areas layer
+        if (_tripAreasLayer != null)
+        {
+            _tripLayerService.UpdateTripAreas(_tripAreasLayer, LoadedTrip.AllAreas);
+        }
+
+        // Update segments layer
+        if (_tripSegmentsLayer != null)
+        {
+            _tripLayerService.UpdateTripSegments(_tripSegmentsLayer, LoadedTrip.Segments);
+        }
+
+        // Force map refresh
         RefreshMap();
     }
 

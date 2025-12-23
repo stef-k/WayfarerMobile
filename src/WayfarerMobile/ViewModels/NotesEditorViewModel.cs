@@ -338,10 +338,14 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     /// <summary>
     /// Saves place notes.
     /// </summary>
-    private Task SavePlaceNotesAsync(string? notes)
+    private async Task SavePlaceNotesAsync(string? notes)
     {
-        // TODO: Implement when Place editing is added
-        throw new NotImplementedException("Place notes editing not yet implemented");
+        // Queue server sync
+        await _tripSyncService.UpdatePlaceAsync(
+            EntityId,
+            TripId,
+            notes: notes,
+            includeNotes: true);
     }
 
     /// <summary>
