@@ -206,6 +206,7 @@ public static class MauiProgram
         services.AddTransient<AboutViewModel>();
         services.AddTransient<DiagnosticsViewModel>();
         services.AddTransient<NotesEditorViewModel>();
+        services.AddTransient<MarkerEditorViewModel>();
 
         // Pages
         services.AddTransient<MainPage>();
@@ -221,6 +222,7 @@ public static class MauiProgram
         services.AddTransient<AboutPage>();
         services.AddTransient<DiagnosticsPage>();
         services.AddTransient<NotesEditorPage>();
+        services.AddTransient<MarkerEditorPage>();
 
         // Route Registration
         Routing.RegisterRoute("checkin", typeof(CheckInPage));
@@ -231,6 +233,7 @@ public static class MauiProgram
         Routing.RegisterRoute("about", typeof(AboutPage));
         Routing.RegisterRoute("diagnostics", typeof(DiagnosticsPage));
         Routing.RegisterRoute("notesEditor", typeof(NotesEditorPage));
+        Routing.RegisterRoute("markerEditor", typeof(MarkerEditorPage));
     }
 
     /// <summary>

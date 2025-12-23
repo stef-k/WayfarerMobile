@@ -250,6 +250,36 @@ public partial class MainViewModel : BaseViewModel
     [NotifyPropertyChangedFor(nameof(TripSheetTitle))]
     private bool _isShowingSegmentNotes;
 
+    /// <summary>
+    /// Gets or sets whether place coordinate editing mode is active.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsEditingPlaceCoordinates))]
+    [NotifyPropertyChangedFor(nameof(IsAnyEditModeActive))]
+    private bool _isPlaceCoordinateEditMode;
+
+    /// <summary>
+    /// Gets or sets the pending latitude during place coordinate editing.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPendingPlaceCoordinates))]
+    [NotifyPropertyChangedFor(nameof(PendingPlaceCoordinatesText))]
+    private double? _pendingPlaceLatitude;
+
+    /// <summary>
+    /// Gets or sets the pending longitude during place coordinate editing.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPendingPlaceCoordinates))]
+    [NotifyPropertyChangedFor(nameof(PendingPlaceCoordinatesText))]
+    private double? _pendingPlaceLongitude;
+
+    /// <summary>
+    /// Gets or sets the place being edited for coordinates.
+    /// </summary>
+    [ObservableProperty]
+    private TripPlace? _placeBeingEditedForCoordinates;
+
     // Legacy property for compatibility
     private TripPlace? _selectedPlace;
 
@@ -475,6 +505,28 @@ public partial class MainViewModel : BaseViewModel
             }
         }
     }
+
+    /// <summary>
+    /// Gets whether place coordinate editing mode is active (alias for binding).
+    /// </summary>
+    public bool IsEditingPlaceCoordinates => IsPlaceCoordinateEditMode;
+
+    /// <summary>
+    /// Gets whether any edit mode is currently active.
+    /// </summary>
+    public bool IsAnyEditModeActive => IsPlaceCoordinateEditMode;
+
+    /// <summary>
+    /// Gets whether there are pending place coordinates to save.
+    /// </summary>
+    public bool HasPendingPlaceCoordinates => PendingPlaceLatitude.HasValue && PendingPlaceLongitude.HasValue;
+
+    /// <summary>
+    /// Gets the pending place coordinates text for display.
+    /// </summary>
+    public string PendingPlaceCoordinatesText => HasPendingPlaceCoordinates
+        ? $"{PendingPlaceLatitude:F6}, {PendingPlaceLongitude:F6}"
+        : "Tap on map to set location";
 
     /// <summary>
     /// Gets the page title (trip name when loaded, "Map" otherwise).
@@ -1670,10 +1722,10 @@ public partial class MainViewModel : BaseViewModel
                 await EditPlaceNotesAsync(SelectedTripPlace);
                 break;
             case "Edit Coordinates":
-                await _toastService.ShowAsync("Coordinate editing coming soon");
+                EnterPlaceCoordinateEditMode(SelectedTripPlace);
                 break;
             case "Edit Marker":
-                await _toastService.ShowAsync("Marker editing coming soon");
+                await EditPlaceMarkerAsync(SelectedTripPlace);
                 break;
             case "Delete":
                 await DeletePlaceAsync(SelectedTripPlace);
@@ -1808,6 +1860,156 @@ public partial class MainViewModel : BaseViewModel
             _logger.LogError(ex, "Failed to delete place");
             await _toastService.ShowErrorAsync($"Failed to delete: {ex.Message}");
         }
+    }
+
+    #region Place Coordinate Editing
+
+    /// <summary>
+    /// Enters coordinate editing mode for a place.
+    /// Closes the bottom sheet and shows the coordinate edit overlay.
+    /// </summary>
+    /// <param name="place">The place to edit coordinates for.</param>
+    private void EnterPlaceCoordinateEditMode(TripPlace place)
+    {
+        if (place == null || LoadedTrip == null)
+            return;
+
+        // Store the place being edited
+        PlaceBeingEditedForCoordinates = place;
+
+        // Set initial pending coordinates to current place location
+        PendingPlaceLatitude = place.Latitude;
+        PendingPlaceLongitude = place.Longitude;
+
+        // Enter edit mode (triggers UI changes)
+        IsPlaceCoordinateEditMode = true;
+
+        // Close the trip sheet to expose the map
+        IsTripSheetOpen = false;
+
+        // The page code-behind will handle showing the temp marker
+    }
+
+    /// <summary>
+    /// Sets the pending place coordinates from a map tap.
+    /// Called by the page code-behind when the map is tapped during coordinate editing.
+    /// </summary>
+    /// <param name="latitude">The latitude.</param>
+    /// <param name="longitude">The longitude.</param>
+    public void SetPendingPlaceCoordinates(double latitude, double longitude)
+    {
+        if (!IsPlaceCoordinateEditMode)
+            return;
+
+        PendingPlaceLatitude = latitude;
+        PendingPlaceLongitude = longitude;
+
+        // The page code-behind will handle updating the temp marker
+    }
+
+    /// <summary>
+    /// Saves the pending place coordinates.
+    /// </summary>
+    [RelayCommand]
+    private async Task SavePlaceCoordinatesAsync()
+    {
+        if (PlaceBeingEditedForCoordinates == null || !HasPendingPlaceCoordinates || LoadedTrip == null)
+            return;
+
+        try
+        {
+            var place = PlaceBeingEditedForCoordinates;
+            var newLat = PendingPlaceLatitude!.Value;
+            var newLon = PendingPlaceLongitude!.Value;
+
+            // Find the actual place in the region
+            var region = LoadedTrip.Regions.FirstOrDefault(r => r.Places.Any(p => p.Id == place.Id));
+            var actualPlace = region?.Places.FirstOrDefault(p => p.Id == place.Id);
+
+            if (actualPlace != null)
+            {
+                // Optimistically update UI
+                actualPlace.Latitude = newLat;
+                actualPlace.Longitude = newLon;
+            }
+
+            // Exit edit mode
+            ExitPlaceCoordinateEditMode();
+
+            // Refresh map markers
+            await RefreshTripOnMapAsync();
+
+            // Queue server sync
+            await _tripSyncService.UpdatePlaceAsync(
+                place.Id,
+                LoadedTrip.Id,
+                latitude: newLat,
+                longitude: newLon);
+
+            await _toastService.ShowSuccessAsync("Location updated");
+
+            // Reopen the trip sheet with the updated place selected
+            if (actualPlace != null)
+            {
+                SelectedTripPlace = actualPlace;
+                IsTripSheetOpen = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update place coordinates");
+            await _toastService.ShowErrorAsync($"Failed to update: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Cancels place coordinate editing.
+    /// </summary>
+    [RelayCommand]
+    private void CancelPlaceCoordinateEditing()
+    {
+        var place = PlaceBeingEditedForCoordinates;
+        ExitPlaceCoordinateEditMode();
+
+        // Reopen the trip sheet with the original place selected
+        if (place != null)
+        {
+            SelectedTripPlace = place;
+            IsTripSheetOpen = true;
+        }
+    }
+
+    /// <summary>
+    /// Exits place coordinate editing mode and cleans up.
+    /// </summary>
+    private void ExitPlaceCoordinateEditMode()
+    {
+        IsPlaceCoordinateEditMode = false;
+        PendingPlaceLatitude = null;
+        PendingPlaceLongitude = null;
+        PlaceBeingEditedForCoordinates = null;
+        // The page code-behind will handle removing the temp marker
+    }
+
+    #endregion
+
+    /// <summary>
+    /// Navigates to the marker editor for a trip place.
+    /// </summary>
+    private async Task EditPlaceMarkerAsync(TripPlace place)
+    {
+        if (place == null || LoadedTrip == null)
+            return;
+
+        var navParams = new Dictionary<string, object>
+        {
+            { "tripId", LoadedTrip.Id.ToString() },
+            { "placeId", place.Id.ToString() },
+            { "currentColor", place.MarkerColor ?? IconCatalog.DefaultColor },
+            { "currentIcon", place.Icon ?? IconCatalog.DefaultIcon }
+        };
+
+        await Shell.Current.GoToAsync("markerEditor", navParams);
     }
 
     /// <summary>

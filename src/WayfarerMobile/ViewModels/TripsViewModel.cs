@@ -60,6 +60,51 @@ public partial class TripsViewModel : BaseViewModel
 
     #endregion
 
+    #region Observable Properties - Sync Queue Status
+
+    /// <summary>
+    /// Gets or sets the count of pending sync operations.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPendingSync))]
+    [NotifyPropertyChangedFor(nameof(SyncStatusText))]
+    private int _pendingSyncCount;
+
+    /// <summary>
+    /// Gets or sets the count of failed sync operations.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasFailedSync))]
+    [NotifyPropertyChangedFor(nameof(SyncStatusText))]
+    private int _failedSyncCount;
+
+    /// <summary>
+    /// Gets whether there are pending sync operations.
+    /// </summary>
+    public bool HasPendingSync => PendingSyncCount > 0;
+
+    /// <summary>
+    /// Gets whether there are failed sync operations.
+    /// </summary>
+    public bool HasFailedSync => FailedSyncCount > 0;
+
+    /// <summary>
+    /// Gets the sync status text for display.
+    /// </summary>
+    public string SyncStatusText
+    {
+        get
+        {
+            if (FailedSyncCount > 0)
+                return $"{FailedSyncCount} sync failed";
+            if (PendingSyncCount > 0)
+                return $"{PendingSyncCount} pending sync";
+            return string.Empty;
+        }
+    }
+
+    #endregion
+
     #region Observable Properties - Public Trips
 
     /// <summary>
@@ -265,6 +310,9 @@ public partial class TripsViewModel : BaseViewModel
             }
 
             _logger.LogDebug("Loaded {Count} trips", items.Count);
+
+            // Refresh sync queue status
+            await RefreshSyncStatusAsync();
         }
         catch (Exception ex)
         {
@@ -276,6 +324,76 @@ public partial class TripsViewModel : BaseViewModel
             IsLoadingTrips = false;
             // Mark initial load complete - shimmer won't show on subsequent refreshes
             IsInitialLoad = false;
+        }
+    }
+
+    /// <summary>
+    /// Refreshes the sync queue status counts.
+    /// </summary>
+    private async Task RefreshSyncStatusAsync()
+    {
+        try
+        {
+            PendingSyncCount = await _tripSyncService.GetPendingCountAsync();
+            FailedSyncCount = await _tripSyncService.GetFailedCountAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to refresh sync status");
+        }
+    }
+
+    /// <summary>
+    /// Retries failed sync operations.
+    /// </summary>
+    [RelayCommand]
+    private async Task RetrySyncAsync()
+    {
+        try
+        {
+            await _tripSyncService.ResetFailedMutationsAsync();
+            await RefreshSyncStatusAsync();
+            await _toastService.ShowSuccessAsync("Retrying sync...");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to retry sync");
+            await _toastService.ShowErrorAsync($"Failed to retry: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Cancels all pending sync operations.
+    /// </summary>
+    [RelayCommand]
+    private async Task CancelSyncAsync()
+    {
+        var page = Application.Current?.Windows.FirstOrDefault()?.Page;
+        if (page == null)
+            return;
+
+        var confirm = await page.DisplayAlertAsync(
+            "Cancel Pending Changes",
+            "This will discard all pending changes that haven't been synced to the server. This action cannot be undone.",
+            "Cancel Changes",
+            "Keep");
+
+        if (!confirm)
+            return;
+
+        try
+        {
+            await _tripSyncService.CancelPendingMutationsAsync();
+            await RefreshSyncStatusAsync();
+            await _toastService.ShowSuccessAsync("Pending changes discarded");
+
+            // Reload trips to reflect any reverted changes
+            await LoadTripsAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to cancel sync");
+            await _toastService.ShowErrorAsync($"Failed to cancel: {ex.Message}");
         }
     }
 

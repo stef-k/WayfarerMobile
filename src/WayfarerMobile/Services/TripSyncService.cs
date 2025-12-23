@@ -901,6 +901,49 @@ public class TripSyncService : ITripSyncService
             .DeleteAsync();
     }
 
+    /// <summary>
+    /// Get count of failed mutations (exhausted retries or rejected).
+    /// </summary>
+    public async Task<int> GetFailedCountAsync()
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<PendingTripMutation>()
+            .Where(m => m.IsServerRejected || m.SyncAttempts >= PendingTripMutation.MaxSyncAttempts)
+            .CountAsync();
+    }
+
+    /// <summary>
+    /// Reset retry attempts for all failed mutations.
+    /// </summary>
+    public async Task ResetFailedMutationsAsync()
+    {
+        await EnsureInitializedAsync();
+        var failed = await _database!.Table<PendingTripMutation>()
+            .Where(m => !m.IsServerRejected && m.SyncAttempts >= PendingTripMutation.MaxSyncAttempts)
+            .ToListAsync();
+
+        foreach (var mutation in failed)
+        {
+            mutation.SyncAttempts = 0;
+            await _database.UpdateAsync(mutation);
+        }
+
+        // Try to process immediately if online
+        if (IsConnected)
+        {
+            await ProcessPendingMutationsAsync();
+        }
+    }
+
+    /// <summary>
+    /// Cancel all pending mutations (discard changes).
+    /// </summary>
+    public async Task CancelPendingMutationsAsync()
+    {
+        await EnsureInitializedAsync();
+        await _database!.Table<PendingTripMutation>().DeleteAsync();
+    }
+
     private static bool IsClientError(HttpRequestException ex)
     {
         return ex.StatusCode.HasValue &&
@@ -1045,9 +1088,24 @@ public interface ITripSyncService
     Task<int> GetPendingCountAsync();
 
     /// <summary>
+    /// Get count of failed mutations (exhausted retries or rejected).
+    /// </summary>
+    Task<int> GetFailedCountAsync();
+
+    /// <summary>
     /// Clear rejected mutations.
     /// </summary>
     Task ClearRejectedMutationsAsync();
+
+    /// <summary>
+    /// Reset retry attempts for all failed mutations.
+    /// </summary>
+    Task ResetFailedMutationsAsync();
+
+    /// <summary>
+    /// Cancel all pending mutations (discard changes).
+    /// </summary>
+    Task CancelPendingMutationsAsync();
 }
 
 /// <summary>
