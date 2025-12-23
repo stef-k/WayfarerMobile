@@ -6,6 +6,7 @@ using Microsoft.Maui.ApplicationModel;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Data.Services;
 using WayfarerMobile.Helpers;
 using WayfarerMobile.Services;
 using WayfarerMobile.Services.TileCache;
@@ -49,6 +50,7 @@ public partial class MainViewModel : BaseViewModel
     private readonly IWikipediaService _wikipediaService;
     private readonly ISettingsService _settingsService;
     private readonly ITripSyncService _tripSyncService;
+    private readonly DatabaseService _databaseService;
     private readonly ILogger<MainViewModel> _logger;
 
     // Map and layers (owned by this ViewModel)
@@ -259,6 +261,24 @@ public partial class MainViewModel : BaseViewModel
     [NotifyPropertyChangedFor(nameof(IsTripSheetShowingScrollableContent))]
     [NotifyPropertyChangedFor(nameof(TripSheetTitle))]
     private bool _isShowingSegmentNotes;
+
+    /// <summary>
+    /// Gets or sets whether region notes detail view is showing.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingRegionNotes))]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingOverview))]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingDetails))]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingScrollableContent))]
+    [NotifyPropertyChangedFor(nameof(TripSheetTitle))]
+    private bool _isShowingRegionNotes;
+
+    /// <summary>
+    /// Gets or sets the selected region for notes display.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedTripRegionNotesHtml))]
+    private TripRegion? _selectedTripRegion;
 
     /// <summary>
     /// Gets or sets whether place coordinate editing mode is active.
@@ -586,7 +606,7 @@ public partial class MainViewModel : BaseViewModel
     /// Gets whether trip sheet is showing overview (no item selected).
     /// </summary>
     public bool IsTripSheetShowingOverview =>
-        SelectedTripPlace == null && SelectedTripArea == null && SelectedTripSegment == null && !IsShowingTripNotes;
+        SelectedTripPlace == null && SelectedTripArea == null && SelectedTripSegment == null && !IsShowingTripNotes && !IsShowingRegionNotes;
 
     /// <summary>
     /// Gets whether trip sheet is showing trip notes detail view.
@@ -604,10 +624,15 @@ public partial class MainViewModel : BaseViewModel
     public bool IsTripSheetShowingSegmentNotes => IsShowingSegmentNotes;
 
     /// <summary>
-    /// Gets whether the scrollable content area should be visible (Overview, Area, or Segment - not Place, TripNotes, AreaNotes, or SegmentNotes).
+    /// Gets whether trip sheet is showing region notes detail view.
+    /// </summary>
+    public bool IsTripSheetShowingRegionNotes => IsShowingRegionNotes;
+
+    /// <summary>
+    /// Gets whether the scrollable content area should be visible (Overview, Area, or Segment - not Place, TripNotes, AreaNotes, SegmentNotes, or RegionNotes).
     /// </summary>
     public bool IsTripSheetShowingScrollableContent =>
-        !IsTripSheetShowingPlace && !IsTripSheetShowingTripNotes && !IsTripSheetShowingAreaNotes && !IsTripSheetShowingSegmentNotes;
+        !IsTripSheetShowingPlace && !IsTripSheetShowingTripNotes && !IsTripSheetShowingAreaNotes && !IsTripSheetShowingSegmentNotes && !IsTripSheetShowingRegionNotes;
 
     /// <summary>
     /// Gets whether trip sheet is showing place details.
@@ -646,6 +671,8 @@ public partial class MainViewModel : BaseViewModel
                 return "Segment Notes";
             if (SelectedTripSegment != null)
                 return $"Segment: {SelectedTripSegment.TransportMode ?? "Route"}";
+            if (IsShowingRegionNotes && SelectedTripRegion != null)
+                return $"{SelectedTripRegion.Name} - Notes";
             if (IsShowingTripNotes)
                 return "Trip Notes";
             return LoadedTrip?.Name ?? "Trip";
@@ -729,6 +756,22 @@ public partial class MainViewModel : BaseViewModel
         }
     }
 
+    /// <summary>
+    /// Gets the HTML content for the selected trip region notes, wrapped for WebView display.
+    /// Uses notes-viewer.html template for proper CSP and image handling.
+    /// </summary>
+    public HtmlWebViewSource? SelectedTripRegionNotesHtml
+    {
+        get
+        {
+            if (SelectedTripRegion?.Notes == null)
+                return null;
+
+            var isDark = Application.Current?.RequestedTheme == AppTheme.Dark;
+            return NotesViewerHelper.PrepareNotesHtml(SelectedTripRegion.Notes, _settingsService.ServerUrl, isDark);
+        }
+    }
+
     #endregion
 
     #region Constructor
@@ -752,6 +795,8 @@ public partial class MainViewModel : BaseViewModel
     /// <param name="tripLayerService">The trip layer service for places and segments.</param>
     /// <param name="wikipediaService">The Wikipedia geosearch service.</param>
     /// <param name="settingsService">The settings service.</param>
+    /// <param name="tripSyncService">The trip sync service.</param>
+    /// <param name="databaseService">The database service for refreshing edited entities.</param>
     /// <param name="logger">The logger instance.</param>
     public MainViewModel(
         ILocationBridge locationBridge,
@@ -771,6 +816,7 @@ public partial class MainViewModel : BaseViewModel
         IWikipediaService wikipediaService,
         ISettingsService settingsService,
         ITripSyncService tripSyncService,
+        DatabaseService databaseService,
         ILogger<MainViewModel> logger)
     {
         _locationBridge = locationBridge;
@@ -790,6 +836,7 @@ public partial class MainViewModel : BaseViewModel
         _wikipediaService = wikipediaService;
         _settingsService = settingsService;
         _tripSyncService = tripSyncService;
+        _databaseService = databaseService;
         _logger = logger;
         Title = "WayfarerMobile";
 
@@ -1526,6 +1573,14 @@ public partial class MainViewModel : BaseViewModel
             return;
         }
 
+        // If showing region notes, go back to overview
+        if (IsShowingRegionNotes)
+        {
+            IsShowingRegionNotes = false;
+            SelectedTripRegion = null;
+            return;
+        }
+
         // Otherwise, go back to overview
         ClearTripSheetSelection();
     }
@@ -1538,9 +1593,11 @@ public partial class MainViewModel : BaseViewModel
         SelectedTripPlace = null;
         SelectedTripArea = null;
         SelectedTripSegment = null;
+        SelectedTripRegion = null;
         IsShowingTripNotes = false;
         IsShowingAreaNotes = false;
         IsShowingSegmentNotes = false;
+        IsShowingRegionNotes = false;
     }
 
     /// <summary>
@@ -1568,6 +1625,19 @@ public partial class MainViewModel : BaseViewModel
     private void ShowSegmentNotes()
     {
         IsShowingSegmentNotes = true;
+    }
+
+    /// <summary>
+    /// Shows the region notes detail view.
+    /// </summary>
+    [RelayCommand]
+    private void ShowRegionNotes(TripRegion? region)
+    {
+        if (region == null)
+            return;
+
+        SelectedTripRegion = region;
+        IsShowingRegionNotes = true;
     }
 
     /// <summary>
@@ -2993,8 +3063,17 @@ public partial class MainViewModel : BaseViewModel
     /// </summary>
     public override async Task OnAppearingAsync()
     {
+        // Check if we just returned from a sub-editor and need to refresh data
+        var wasInSubEditor = _isNavigatingToSubEditor;
+
         // Reset sub-editor navigation flag (we've returned from sub-editor)
         _isNavigatingToSubEditor = false;
+
+        // If we just returned from a sub-editor, refresh the edited entity
+        if (wasInSubEditor && LoadedTrip != null)
+        {
+            await RefreshEditedEntitiesAsync();
+        }
 
         // Ensure map is initialized
         EnsureMapInitialized();
@@ -3030,6 +3109,116 @@ public partial class MainViewModel : BaseViewModel
         }
 
         await base.OnAppearingAsync();
+    }
+
+    /// <summary>
+    /// Refreshes edited entities from the database after returning from sub-editor pages.
+    /// Updates the in-memory LoadedTrip with the latest values from the offline database.
+    /// </summary>
+    private async Task RefreshEditedEntitiesAsync()
+    {
+        try
+        {
+            // Refresh selected place if one is selected
+            if (SelectedTripPlace != null)
+            {
+                var offlinePlace = await _databaseService.GetOfflinePlaceByServerIdAsync(SelectedTripPlace.Id);
+                if (offlinePlace != null)
+                {
+                    // Find the place in LoadedTrip and update it
+                    foreach (var region in LoadedTrip!.Regions)
+                    {
+                        var place = region.Places.FirstOrDefault(p => p.Id == SelectedTripPlace.Id);
+                        if (place != null)
+                        {
+                            place.Name = offlinePlace.Name;
+                            place.Notes = offlinePlace.Notes;
+                            place.Icon = offlinePlace.IconName;
+                            place.MarkerColor = offlinePlace.MarkerColor;
+                            place.Latitude = offlinePlace.Latitude;
+                            place.Longitude = offlinePlace.Longitude;
+
+                            // Reassign SelectedTripPlace to trigger property change notifications
+                            SelectedTripPlace = place;
+
+                            // Refresh the sorted regions view (for trip overview list)
+                            LoadedTrip.NotifySortedRegionsChanged();
+
+                            // Update the map to reflect marker changes
+                            await RefreshTripOnMapAsync();
+
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Refresh selected area if one is selected
+            if (SelectedTripArea != null)
+            {
+                var offlinePolygon = await _databaseService.GetOfflinePolygonByServerIdAsync(SelectedTripArea.Id);
+                if (offlinePolygon != null)
+                {
+                    var area = LoadedTrip!.AllAreas.FirstOrDefault(a => a.Id == SelectedTripArea.Id);
+                    if (area != null)
+                    {
+                        area.Notes = offlinePolygon.Notes;
+                        SelectedTripArea = area;
+                    }
+                }
+            }
+
+            // Refresh selected segment if one is selected
+            if (SelectedTripSegment != null)
+            {
+                var offlineSegment = await _databaseService.GetOfflineSegmentByServerIdAsync(SelectedTripSegment.Id);
+                if (offlineSegment != null)
+                {
+                    var segment = LoadedTrip!.Segments.FirstOrDefault(s => s.Id == SelectedTripSegment.Id);
+                    if (segment != null)
+                    {
+                        segment.Notes = offlineSegment.Notes;
+                        SelectedTripSegment = segment;
+                    }
+                }
+            }
+
+            // Refresh selected region if viewing region notes
+            if (IsShowingRegionNotes && SelectedTripRegion != null)
+            {
+                var offlineArea = await _databaseService.GetOfflineAreaByServerIdAsync(SelectedTripRegion.Id);
+                if (offlineArea != null)
+                {
+                    var region = LoadedTrip!.Regions.FirstOrDefault(r => r.Id == SelectedTripRegion.Id);
+                    if (region != null)
+                    {
+                        region.Name = offlineArea.Name;
+                        region.Notes = offlineArea.Description;
+                        SelectedTripRegion = region;
+                        LoadedTrip.NotifySortedRegionsChanged();
+                    }
+                }
+            }
+
+            // Refresh trip notes if showing trip notes
+            if (IsShowingTripNotes)
+            {
+                var downloadedTrip = await _databaseService.GetDownloadedTripByServerIdAsync(LoadedTrip!.Id);
+                if (downloadedTrip != null)
+                {
+                    LoadedTrip.Name = downloadedTrip.Name;
+                    LoadedTrip.Notes = downloadedTrip.Notes;
+                    OnPropertyChanged(nameof(PageTitle));
+                    OnPropertyChanged(nameof(TripSheetTitle));
+                    OnPropertyChanged(nameof(TripNotesPreview));
+                    OnPropertyChanged(nameof(TripNotesHtml));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to refresh edited entities from database");
+        }
     }
 
     /// <summary>

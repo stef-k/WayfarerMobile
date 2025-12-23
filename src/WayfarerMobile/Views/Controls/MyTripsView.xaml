@@ -146,7 +146,7 @@
                                 <VerticalStackLayout Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
                                                      Spacing="4"
                                                      Margin="0,8,0,0">
-                                    <HorizontalStackLayout Spacing="6">
+                                    <HorizontalStackLayout Spacing="8">
                                         <!-- Back to Trip Button (when trip is currently loaded) -->
                                         <Button Text="← Back"
                                                 Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=BackToTripCommand}"
@@ -156,7 +156,7 @@
                                                 TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
                                                 FontSize="12"
                                                 HeightRequest="32"
-                                                Padding="8,0"
+                                                Padding="10,0"
                                                 CornerRadius="16" />
 
                                         <!-- Load to Map Button -->
@@ -168,7 +168,7 @@
                                                 TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
                                                 FontSize="12"
                                                 HeightRequest="32"
-                                                Padding="8,0"
+                                                Padding="10,0"
                                                 CornerRadius="16" />
 
                                         <!-- Download (Metadata only) -->
@@ -180,11 +180,11 @@
                                                 TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
                                                 FontSize="12"
                                                 HeightRequest="32"
-                                                Padding="8,0"
+                                                Padding="10,0"
                                                 CornerRadius="16" />
 
-                                        <!-- Download + Maps (With Tiles) -->
-                                        <Button Text="+ Maps"
+                                        <!-- Download + Offline Maps (With Tiles) -->
+                                        <Button Text="+Offline Maps"
                                                 Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=FullDownloadCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanFullDownload}"
@@ -192,7 +192,7 @@
                                                 TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
                                                 FontSize="12"
                                                 HeightRequest="32"
-                                                Padding="8,0"
+                                                Padding="10,0"
                                                 CornerRadius="16" />
 
                                         <!-- Delete Downloaded/Partial - removes local data only -->
@@ -204,7 +204,7 @@
                                                 TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
                                                 FontSize="12"
                                                 HeightRequest="32"
-                                                Padding="8,0"
+                                                Padding="10,0"
                                                 CornerRadius="16" />
                                     </HorizontalStackLayout>
 
