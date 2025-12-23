@@ -146,21 +146,21 @@
                                 <VerticalStackLayout Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
                                                      Spacing="4"
                                                      Margin="0,8,0,0">
-                                    <HorizontalStackLayout Spacing="8">
+                                    <HorizontalStackLayout Spacing="6">
                                         <!-- Back to Trip Button (when trip is currently loaded) -->
-                                        <Button Text="← Back to Trip"
+                                        <Button Text="← Back"
                                                 Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=BackToTripCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding IsCurrentlyLoaded}"
-                                                BackgroundColor="{StaticResource Primary}"
-                                                TextColor="White"
+                                                BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                                TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
                                                 FontSize="12"
                                                 HeightRequest="32"
-                                                Padding="12,0"
+                                                Padding="8,0"
                                                 CornerRadius="16" />
 
                                         <!-- Load to Map Button -->
-                                        <Button Text="Load to Map"
+                                        <Button Text="Load"
                                                 Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=LoadTripToMapCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanLoadToMap}"
@@ -168,7 +168,7 @@
                                                 TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
                                                 FontSize="12"
                                                 HeightRequest="32"
-                                                Padding="12,0"
+                                                Padding="8,0"
                                                 CornerRadius="16" />
 
                                         <!-- Download (Metadata only) -->
@@ -180,11 +180,11 @@
                                                 TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
                                                 FontSize="12"
                                                 HeightRequest="32"
-                                                Padding="12,0"
+                                                Padding="8,0"
                                                 CornerRadius="16" />
 
                                         <!-- Download + Maps (With Tiles) -->
-                                        <Button Text="+ Offline Maps"
+                                        <Button Text="+ Maps"
                                                 Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=FullDownloadCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanFullDownload}"
@@ -192,11 +192,11 @@
                                                 TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
                                                 FontSize="12"
                                                 HeightRequest="32"
-                                                Padding="12,0"
+                                                Padding="8,0"
                                                 CornerRadius="16" />
 
                                         <!-- Delete Downloaded/Partial - removes local data only -->
-                                        <Button Text="Remove Offline"
+                                        <Button Text="Remove"
                                                 Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=DeleteDownloadCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanDelete}"
@@ -204,7 +204,7 @@
                                                 TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
                                                 FontSize="12"
                                                 HeightRequest="32"
-                                                Padding="12,0"
+                                                Padding="8,0"
                                                 CornerRadius="16" />
                                     </HorizontalStackLayout>
 

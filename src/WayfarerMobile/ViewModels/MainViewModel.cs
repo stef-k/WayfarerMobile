@@ -805,6 +805,9 @@ public partial class MainViewModel : BaseViewModel
 
         // Subscribe to cache status updates (updates when location changes, NOT on startup)
         _cacheStatusService.StatusChanged += OnCacheStatusChanged;
+
+        // Clear stale loaded trip preference on cold start (no trip is loaded initially)
+        Preferences.Remove(LoadedTripIdKey);
     }
 
     #endregion
