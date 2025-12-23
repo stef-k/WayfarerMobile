@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:converters="clr-namespace:WayfarerMobile.Converters"
              x:Class="WayfarerMobile.Shared.Controls.ComboBox"
              x:Name="thisControl">
+
+    <ContentView.Resources>
+        <converters:MauiAssetImageConverter x:Key="MauiAssetImageConverter" />
+    </ContentView.Resources>
 
     <Grid RowDefinitions="Auto,Auto">
 
@@ -24,7 +29,7 @@
                 <!-- Selected Icon (only visible when IconMemberPath is set and item selected) -->
                 <Image x:Name="selectedIcon"
                        Grid.Column="0"
-                       Source="{Binding SelectedIconSource, Source={x:Reference thisControl}}"
+                       Source="{Binding SelectedIconSource, Source={x:Reference thisControl}, Converter={StaticResource MauiAssetImageConverter}}"
                        WidthRequest="28"
                        HeightRequest="28"
                        VerticalOptions="Center"

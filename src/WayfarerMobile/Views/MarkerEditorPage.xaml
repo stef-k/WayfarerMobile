@@ -12,26 +12,6 @@
         <!-- Main Content -->
         <ScrollView Grid.Row="0" Padding="16">
             <VerticalStackLayout Spacing="24">
-                <!-- Preview Section -->
-                <Border Padding="24"
-                        BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}"
-                        StrokeThickness="0">
-                    <Border.StrokeShape>
-                        <RoundRectangle CornerRadius="12" />
-                    </Border.StrokeShape>
-                    <VerticalStackLayout Spacing="12" HorizontalOptions="Center">
-                        <Label Text="Preview"
-                               FontSize="14"
-                               FontAttributes="Bold"
-                               HorizontalOptions="Center"
-                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
-                        <Image Source="{Binding PreviewImageSource}"
-                               WidthRequest="64"
-                               HeightRequest="64"
-                               HorizontalOptions="Center" />
-                    </VerticalStackLayout>
-                </Border>
-
                 <!-- Color Selection -->
                 <VerticalStackLayout Spacing="12">
                     <Label Text="Color"

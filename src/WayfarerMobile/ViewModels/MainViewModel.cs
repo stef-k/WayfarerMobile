@@ -290,6 +290,12 @@ public partial class MainViewModel : BaseViewModel
     [ObservableProperty]
     private TripPlace? _placeBeingEditedForCoordinates;
 
+    /// <summary>
+    /// Tracks whether we're navigating to a sub-editor page (notes, marker, etc.).
+    /// When true, OnDisappearingAsync should NOT unload the trip or close sheets.
+    /// </summary>
+    private bool _isNavigatingToSubEditor;
+
     // Legacy property for compatibility
     private TripPlace? _selectedPlace;
 
@@ -1840,6 +1846,8 @@ public partial class MainViewModel : BaseViewModel
     /// </summary>
     private async Task EditPlaceNotesAsync(TripPlace place)
     {
+        _isNavigatingToSubEditor = true;
+
         var navParams = new Dictionary<string, object>
         {
             { "tripId", LoadedTrip!.Id.ToString() },
@@ -2046,6 +2054,8 @@ public partial class MainViewModel : BaseViewModel
         if (place == null || LoadedTrip == null)
             return;
 
+        _isNavigatingToSubEditor = true;
+
         var navParams = new Dictionary<string, object>
         {
             { "tripId", LoadedTrip.Id.ToString() },
@@ -2149,6 +2159,8 @@ public partial class MainViewModel : BaseViewModel
     /// </summary>
     private async Task EditRegionNotesAsync(TripRegion region)
     {
+        _isNavigatingToSubEditor = true;
+
         var navParams = new Dictionary<string, object>
         {
             { "tripId", LoadedTrip!.Id.ToString() },
@@ -2432,6 +2444,8 @@ public partial class MainViewModel : BaseViewModel
         if (SelectedTripArea == null || LoadedTrip == null)
             return;
 
+        _isNavigatingToSubEditor = true;
+
         // Navigate to notes editor
         var navParams = new Dictionary<string, object>
         {
@@ -2452,6 +2466,8 @@ public partial class MainViewModel : BaseViewModel
     {
         if (SelectedTripSegment == null || LoadedTrip == null)
             return;
+
+        _isNavigatingToSubEditor = true;
 
         // Navigate to notes editor
         var navParams = new Dictionary<string, object>
@@ -2678,6 +2694,8 @@ public partial class MainViewModel : BaseViewModel
     {
         if (LoadedTrip == null)
             return;
+
+        _isNavigatingToSubEditor = true;
 
         var navParams = new Dictionary<string, object>
         {
@@ -2983,6 +3001,9 @@ public partial class MainViewModel : BaseViewModel
     /// </summary>
     public override async Task OnAppearingAsync()
     {
+        // Reset sub-editor navigation flag (we've returned from sub-editor)
+        _isNavigatingToSubEditor = false;
+
         // Ensure map is initialized
         EnsureMapInitialized();
 
@@ -3021,10 +3042,23 @@ public partial class MainViewModel : BaseViewModel
 
     /// <summary>
     /// Called when the view disappears.
-    /// Unloads the trip when navigating away from the map.
+    /// Unloads the trip when navigating away from the map (but not when navigating to sub-editors).
     /// </summary>
     public override async Task OnDisappearingAsync()
     {
+        // When navigating to sub-editors (notes, marker), don't unload trip or close sheet
+        if (_isNavigatingToSubEditor)
+        {
+            // Just reduce battery usage, keep trip/sheet state
+            if (TrackingState == TrackingState.Active)
+            {
+                await _locationBridge.SetPerformanceModeAsync(PerformanceMode.Normal);
+                PerformanceMode = PerformanceMode.Normal;
+            }
+            await base.OnDisappearingAsync();
+            return;
+        }
+
         // Unload the trip when navigating away from the map
         if (HasLoadedTrip)
         {

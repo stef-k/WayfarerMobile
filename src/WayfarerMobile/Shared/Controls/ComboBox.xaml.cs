@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.ObjectModel;
 using Microsoft.Maui.Controls.Shapes;
+using WayfarerMobile.Converters;
 
 namespace WayfarerMobile.Shared.Controls;
 
@@ -563,7 +564,8 @@ public partial class ComboBox : ContentView
                     VerticalOptions = LayoutOptions.Center,
                     Aspect = Aspect.AspectFit
                 };
-                image.SetBinding(Image.SourceProperty, new Binding(iconMemberPath));
+                // Use MauiAssetImageConverter to load raw resource images
+                image.SetBinding(Image.SourceProperty, new Binding(iconMemberPath, converter: new MauiAssetImageConverter()));
                 Grid.SetColumn(image, 0);
                 grid.Add(image);
             }
