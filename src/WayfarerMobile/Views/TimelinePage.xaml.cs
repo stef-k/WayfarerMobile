@@ -128,18 +128,19 @@ public partial class TimelinePage : ContentPage
     {
         if (_viewModel.SelectedLocation == null) return;
 
-        // Store location ID to reopen sheet when returning
-        var locationId = _viewModel.SelectedLocation.LocationId;
-        _viewModel.SetPendingLocationToReopen(locationId);
+        // Show the modal notes editor with current notes
+        await NotesEditor.ShowEditorAsync(_viewModel.SelectedLocation.Notes);
+    }
 
-        // Navigate to notes editor page with location ID and current notes
-        var navParams = new Dictionary<string, object>
-        {
-            { "locationId", locationId },
-            { "notes", _viewModel.SelectedLocation.Notes ?? string.Empty }
-        };
+    private async void OnNotesSaved(object? sender, string newNotes)
+    {
+        // Save the notes via ViewModel
+        await _viewModel.SaveNotesAsync(newNotes);
+    }
 
-        await Shell.Current.GoToAsync("notesEditor", navParams);
+    private void OnNotesEditorClosed(object? sender, EventArgs e)
+    {
+        // Notes editor was closed without saving - no action needed
     }
 
     private void OnDatePickerOkClicked(object? sender, EventArgs e)

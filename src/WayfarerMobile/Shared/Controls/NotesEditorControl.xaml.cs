@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using WayfarerMobile.Core.Helpers;
+using WayfarerMobile.Core.Interfaces;
 
 namespace WayfarerMobile.Shared.Controls;
 
@@ -53,6 +55,22 @@ public partial class NotesEditorControl : ContentView
         }
     }
 
+    /// <summary>
+    /// Gets or sets the backend base URL for image proxy conversion.
+    /// When set, images in notes will be proxied through the backend for proper display.
+    /// </summary>
+    public static readonly BindableProperty BackendBaseUrlProperty =
+        BindableProperty.Create(nameof(BackendBaseUrl), typeof(string), typeof(NotesEditorControl), null);
+
+    /// <summary>
+    /// Gets or sets the backend base URL for image proxy conversion.
+    /// </summary>
+    public string? BackendBaseUrl
+    {
+        get => (string?)GetValue(BackendBaseUrlProperty);
+        set => SetValue(BackendBaseUrlProperty, value);
+    }
+
     #endregion
 
     #region Properties
@@ -61,6 +79,33 @@ public partial class NotesEditorControl : ContentView
     /// Check if the editor is currently open.
     /// </summary>
     public bool IsEditorOpen => _isNotesModalOpen;
+
+    /// <summary>
+    /// Gets the effective backend URL for image proxy conversion.
+    /// Returns the explicitly set BackendBaseUrl, or resolves from ISettingsService if not set.
+    /// </summary>
+    private string? EffectiveBackendUrl
+    {
+        get
+        {
+            if (!string.IsNullOrEmpty(BackendBaseUrl))
+            {
+                return BackendBaseUrl;
+            }
+
+            // Fallback: resolve from ISettingsService
+            try
+            {
+                var settingsService = Application.Current?.Handler?.MauiContext?.Services
+                    .GetService<ISettingsService>();
+                return settingsService?.ServerUrl;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
 
     #endregion
 
@@ -158,7 +203,10 @@ public partial class NotesEditorControl : ContentView
             using var reader = new StreamReader(stream);
             var html = await reader.ReadToEndAsync();
 
-            var json = JsonSerializer.Serialize(initialHtml ?? string.Empty);
+            // Convert images to proxy URLs for WebView display
+            var processedContent = ImageProxyHelper.ConvertImagesToProxyUrls(initialHtml, EffectiveBackendUrl);
+
+            var json = JsonSerializer.Serialize(processedContent);
             html = html.Replace("__WF_INITIAL_CONTENT__", json);
 
             var src = new HtmlWebViewSource { Html = html };
@@ -181,7 +229,10 @@ public partial class NotesEditorControl : ContentView
             using var reader = new StreamReader(stream);
             var html = await reader.ReadToEndAsync();
 
-            var json = JsonSerializer.Serialize(notesHtml ?? string.Empty);
+            // Convert images to proxy URLs for WebView display
+            var processedContent = ImageProxyHelper.ConvertImagesToProxyUrls(notesHtml, EffectiveBackendUrl);
+
+            var json = JsonSerializer.Serialize(processedContent);
             html = html.Replace("__WF_INITIAL_CONTENT__", json);
 
             await MainThread.InvokeOnMainThreadAsync(() =>
@@ -328,6 +379,12 @@ public partial class NotesEditorControl : ContentView
                 }
             }
             catch { }
+
+            // Convert proxy URLs back to original URLs for server storage
+            if (!string.IsNullOrEmpty(newNotes))
+            {
+                newNotes = ImageProxyHelper.ConvertProxyUrlsBackToOriginal(newNotes, EffectiveBackendUrl);
+            }
 
             await CloseNotesEditorModalAsync(true);
             NotesSaved?.Invoke(this, newNotes ?? string.Empty);

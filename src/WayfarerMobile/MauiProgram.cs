@@ -205,7 +205,6 @@ public static class MauiProgram
         services.AddTransient<LockScreenViewModel>();
         services.AddTransient<AboutViewModel>();
         services.AddTransient<DiagnosticsViewModel>();
-        services.AddTransient<NotesEditorViewModel>();
 
         // Pages
         services.AddTransient<MainPage>();
@@ -220,7 +219,6 @@ public static class MauiProgram
         services.AddTransient<LockScreenPage>();
         services.AddTransient<AboutPage>();
         services.AddTransient<DiagnosticsPage>();
-        services.AddTransient<NotesEditorPage>();
 
         // Route Registration
         Routing.RegisterRoute("checkin", typeof(CheckInPage));
@@ -230,7 +228,6 @@ public static class MauiProgram
         Routing.RegisterRoute("lockscreen", typeof(LockScreenPage));
         Routing.RegisterRoute("about", typeof(AboutPage));
         Routing.RegisterRoute("diagnostics", typeof(DiagnosticsPage));
-        Routing.RegisterRoute("notesEditor", typeof(NotesEditorPage));
     }
 
     /// <summary>
