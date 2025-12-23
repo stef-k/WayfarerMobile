@@ -19,6 +19,7 @@ public partial class TripsViewModel : BaseViewModel
     private readonly TripDownloadService _downloadService;
     private readonly IToastService _toastService;
     private readonly TripNavigationService _tripNavigationService;
+    private readonly ITripSyncService _tripSyncService;
     private readonly ILogger<TripsViewModel> _logger;
 
     private CancellationTokenSource? _searchCts;
@@ -169,6 +170,7 @@ public partial class TripsViewModel : BaseViewModel
         TripDownloadService downloadService,
         IToastService toastService,
         TripNavigationService tripNavigationService,
+        ITripSyncService tripSyncService,
         ILogger<TripsViewModel> logger)
     {
         _apiClient = apiClient;
@@ -176,6 +178,7 @@ public partial class TripsViewModel : BaseViewModel
         _downloadService = downloadService;
         _toastService = toastService;
         _tripNavigationService = tripNavigationService;
+        _tripSyncService = tripSyncService;
         _logger = logger;
         Title = "Trips";
 
@@ -394,6 +397,97 @@ public partial class TripsViewModel : BaseViewModel
         _downloadCts?.Cancel();
         IsDownloading = false;
         DownloadingTripName = null;
+    }
+
+    /// <summary>
+    /// Shows edit options for a trip (name, notes).
+    /// </summary>
+    [RelayCommand]
+    private async Task EditTripAsync(TripListItem? item)
+    {
+        if (item == null)
+            return;
+
+        var action = await Shell.Current.DisplayActionSheetAsync(
+            $"Edit: {item.Name}",
+            "Cancel",
+            null,
+            "Edit Name",
+            "Edit Notes");
+
+        switch (action)
+        {
+            case "Edit Name":
+                await EditTripNameAsync(item);
+                break;
+            case "Edit Notes":
+                await EditTripNotesAsync(item);
+                break;
+        }
+    }
+
+    private async Task EditTripNameAsync(TripListItem item)
+    {
+        var newName = await Shell.Current.DisplayPromptAsync(
+            "Edit Trip Name",
+            "Enter new name:",
+            initialValue: item.Name,
+            maxLength: 200,
+            keyboard: Keyboard.Text);
+
+        if (string.IsNullOrWhiteSpace(newName) || newName == item.Name)
+            return;
+
+        try
+        {
+            // Optimistically update UI
+            var oldName = item.Name;
+
+            // Update local storage first
+            await _downloadService.UpdateTripNameAsync(item.ServerId, newName);
+
+            // Sync with server
+            await _tripSyncService.UpdateTripAsync(item.ServerId, name: newName);
+
+            // Reload trips to reflect change
+            await LoadTripsAsync();
+
+            await _toastService.ShowSuccessAsync("Trip name updated");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update trip name");
+            await _toastService.ShowErrorAsync($"Failed to update: {ex.Message}");
+        }
+    }
+
+    private async Task EditTripNotesAsync(TripListItem item)
+    {
+        try
+        {
+            // Load trip details to get current notes
+            var tripDetails = await _downloadService.GetOfflineTripDetailsAsync(item.ServerId);
+            if (tripDetails == null)
+            {
+                await _toastService.ShowErrorAsync("Trip not found. Please download it first.");
+                return;
+            }
+
+            // Navigate to notes editor with trip info
+            var navParams = new Dictionary<string, object>
+            {
+                { "tripId", item.ServerId.ToString() },
+                { "notes", tripDetails.Notes ?? string.Empty },
+                { "entityType", "Trip" }
+            };
+
+            await Shell.Current.GoToAsync("notesEditor", navParams);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to open notes editor");
+            await _toastService.ShowErrorAsync($"Failed to open editor: {ex.Message}");
+        }
     }
 
     #endregion
@@ -829,6 +923,13 @@ public partial class TripListItem : ObservableObject
     /// Gets whether Full Download is available.
     /// </summary>
     public bool CanFullDownload => DownloadState == TripDownloadState.ServerOnly || DownloadState == TripDownloadState.MetadataOnly;
+
+    /// <summary>
+    /// Gets whether editing is available.
+    /// Only available for downloaded trips (have local data to edit).
+    /// </summary>
+    public bool CanEdit => DownloadState == TripDownloadState.MetadataOnly ||
+                            DownloadState == TripDownloadState.Complete;
 
     /// <summary>
     /// Gets or sets whether downloading.

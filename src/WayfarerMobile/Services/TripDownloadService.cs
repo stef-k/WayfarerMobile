@@ -504,6 +504,48 @@ public class TripDownloadService
         }
     }
 
+    #region Trip Editing
+
+    /// <summary>
+    /// Updates a trip's name in local storage.
+    /// </summary>
+    /// <param name="tripServerId">The server-side trip ID.</param>
+    /// <param name="newName">The new trip name.</param>
+    public async Task UpdateTripNameAsync(Guid tripServerId, string newName)
+    {
+        var trip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
+        if (trip == null)
+        {
+            _logger.LogWarning("Cannot update trip name - trip {TripId} not found", tripServerId);
+            return;
+        }
+
+        trip.Name = newName;
+        await _databaseService.SaveDownloadedTripAsync(trip);
+        _logger.LogInformation("Updated trip name to '{NewName}' for trip {TripId}", newName, tripServerId);
+    }
+
+    /// <summary>
+    /// Updates a trip's notes in local storage.
+    /// </summary>
+    /// <param name="tripServerId">The server-side trip ID.</param>
+    /// <param name="newNotes">The new trip notes (HTML).</param>
+    public async Task UpdateTripNotesAsync(Guid tripServerId, string? newNotes)
+    {
+        var trip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
+        if (trip == null)
+        {
+            _logger.LogWarning("Cannot update trip notes - trip {TripId} not found", tripServerId);
+            return;
+        }
+
+        trip.Notes = newNotes;
+        await _databaseService.SaveDownloadedTripAsync(trip);
+        _logger.LogInformation("Updated trip notes for trip {TripId}", tripServerId);
+    }
+
+    #endregion
+
     #region Trip Sync/Update
 
     /// <summary>
