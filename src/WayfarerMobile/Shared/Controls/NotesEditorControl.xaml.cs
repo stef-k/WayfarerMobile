@@ -369,11 +369,12 @@ public partial class NotesEditorControl : ContentView
         {
             var newNotes = await GetEditedNotesHtmlFromModalAsync();
 
-            // Treat visually empty content as empty string
+            // Treat visually empty content as empty string (but preserve images)
             try
             {
                 var plain = Regex.Replace(newNotes ?? string.Empty, "<[^>]+>", " ");
-                if (string.IsNullOrWhiteSpace(plain))
+                var hasImages = Regex.IsMatch(newNotes ?? string.Empty, @"<img\s", RegexOptions.IgnoreCase);
+                if (string.IsNullOrWhiteSpace(plain) && !hasImages)
                 {
                     newNotes = string.Empty;
                 }

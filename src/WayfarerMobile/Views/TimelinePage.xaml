@@ -5,7 +5,6 @@
              xmlns:mapsui="clr-namespace:Mapsui.UI.Maui;assembly=Mapsui.UI.Maui"
              xmlns:bottomSheet="clr-namespace:Syncfusion.Maui.Toolkit.BottomSheet;assembly=Syncfusion.Maui.Toolkit"
              xmlns:picker="clr-namespace:Syncfusion.Maui.Toolkit.Picker;assembly=Syncfusion.Maui.Toolkit"
-             xmlns:controls="clr-namespace:WayfarerMobile.Shared.Controls"
              xmlns:sys="clr-namespace:System;assembly=netstandard"
              x:Class="WayfarerMobile.Views.TimelinePage"
              x:DataType="viewmodels:TimelineViewModel"
@@ -312,11 +311,5 @@
                 </Grid>
             </bottomSheet:SfBottomSheet.BottomSheetContent>
         </bottomSheet:SfBottomSheet>
-
-        <!-- Notes Editor Overlay (appears above bottom sheet when editing notes) -->
-        <controls:NotesEditorControl x:Name="NotesEditor"
-                                     EditorTitle="Location Notes"
-                                     NotesSaved="OnNotesSaved"
-                                     EditorClosed="OnNotesEditorClosed" />
     </Grid>
 </ContentPage>
