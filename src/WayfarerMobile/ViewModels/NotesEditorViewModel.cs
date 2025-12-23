@@ -137,12 +137,13 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
         {
             IsSaving = true;
 
-            // Treat visually empty content as empty string
+            // Treat visually empty content as empty string (but preserve images)
             var notesToSave = NotesHtml;
             if (!string.IsNullOrEmpty(notesToSave))
             {
                 var plain = Regex.Replace(notesToSave, "<[^>]+>", " ");
-                if (string.IsNullOrWhiteSpace(plain))
+                var hasImages = Regex.IsMatch(notesToSave, @"<img\s", RegexOptions.IgnoreCase);
+                if (string.IsNullOrWhiteSpace(plain) && !hasImages)
                 {
                     notesToSave = null;
                 }

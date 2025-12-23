@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Mapsui;
@@ -1241,9 +1242,26 @@ public class TimelineLocationDisplay
         : "N/A";
 
     /// <summary>
-    /// Gets whether notes are available.
+    /// Gets whether notes contain actual visible content.
+    /// Returns false for empty notes or Quill's empty markup (e.g., &lt;p&gt;&lt;br&gt;&lt;/p&gt;).
     /// </summary>
-    public bool HasNotes => !string.IsNullOrEmpty(_location.Notes);
+    public bool HasNotes
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(_location.Notes))
+                return false;
+
+            // Strip HTML tags and check for actual text content
+            var plainText = Regex.Replace(_location.Notes, "<[^>]+>", " ");
+            var hasText = !string.IsNullOrWhiteSpace(plainText);
+
+            // Also check for images (content even without text)
+            var hasImages = Regex.IsMatch(_location.Notes, @"<img\s", RegexOptions.IgnoreCase);
+
+            return hasText || hasImages;
+        }
+    }
 
     /// <summary>
     /// Gets the raw notes HTML.
@@ -1257,7 +1275,7 @@ public class TimelineLocationDisplay
     {
         get
         {
-            if (string.IsNullOrEmpty(_location.Notes))
+            if (!HasNotes)
                 return null;
 
             // Convert images to proxy URLs for WebView display

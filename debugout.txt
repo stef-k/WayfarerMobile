@@ -1,0 +1,923 @@
+Debug Address: 127.0.0.1
+Debug Port: 49581
+Debug Assets Directory: C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\\;C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\
+New vsdbg debugger process created for project 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\WayfarerMobile.csproj'...
+Starting vsdbg debug session for project 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\WayfarerMobile.csproj'...
+> am start -a "android.intent.action.MAIN" -c "android.intent.category.LAUNCHER" -n "com.wayfarer.mobile/crc6466b7a4b097787631.MainActivity"
+> Starting: Intent { act=android.intent.action.MAIN cat=[android.intent.category.LAUNCHER] cmp=com.wayfarer.mobile/crc6466b7a4b097787631.MainActivity }
+
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Private.CoreLib.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\WayfarerMobile.dll'. Symbols loaded.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Mono.Android.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Runtime.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Java.Interop.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Runtime.InteropServices.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Mono.Android.Runtime.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Collections.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Collections.Concurrent.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Threading.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Threading.Thread.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Diagnostics.StackTrace.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.Maui.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Memory.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.Maui.Essentials.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.Core.dll'. Module was built without symbols.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Console.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.ComponentModel.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.VisualStudio.DesignTools.MobileTapContracts.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\netstandard.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.Extensions.DependencyInjection.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.VisualStudio.DesignTools.TapContract.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.Extensions.Hosting.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.Maui.Controls.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.ObjectModel.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.Maui.Controls.Xaml.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\SkiaSharp.Views.Maui.Controls.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Syncfusion.Maui.Toolkit.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\ZXing.Net.MAUI.Controls.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Net.Http.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.Extensions.Configuration.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.Extensions.Configuration.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.Extensions.Diagnostics.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.Extensions.Logging.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.Extensions.Logging.Debug.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.Extensions.Primitives.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Private.Uri.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Xml.ReaderWriter.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Private.Xml.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Runtime.Loader.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:21.647 E/Zygote  (28408): isWhitelistProcess - Process is Whitelisted
+12-22 11:43:21.647 E/Zygote  (28408): accessInfo : 1
+12-22 11:43:21.653 I/wayfarer.mobil(28408): Late-enabling -Xcheck:jni
+12-22 11:43:21.681 E/wayfarer.mobil(28408): Unknown bits set in runtime_flags: 0x8000
+12-22 11:43:21.702 D/ActivityThread(28408): setConscryptValidator
+12-22 11:43:21.703 D/ActivityThread(28408): setConscryptValidator - put
+12-22 11:43:21.743 I/wayfarer.mobil(28408): The ClassLoaderContext is a special shared library.
+12-22 11:43:22.474 W/monodroid(28408): Failed to create directory '/data/user/0/com.wayfarer.mobile/files/.__override__/arm64-v8a'. File exists
+12-22 11:43:22.474 W/monodroid(28408): Creating public update directory: `/data/user/0/com.wayfarer.mobile/files/.__override__/arm64-v8a`
+12-22 11:43:22.475 W/wayfarer.mobil(28408): Attempt to remove non-JNI local reference, dumping thread
+12-22 11:43:22.475 W/monodroid-debug(28408): Trying to initialize the debugger with options: --debugger-agent=transport=dt_socket,loglevel=0,address=127.0.0.1:49581,server=y,embedding=1,timeout=30000
+12-22 11:43:22.491 D/TcpOptimizer(28408): TcpOptimizer-ON
+12-22 11:43:23.556 D/DOTNET  (28408): AndroidCryptoNative_InitLibraryOnLoad: jint AndroidCryptoNative_InitLibraryOnLoad(JavaVM *, void *) in /__w/1/s/src/runtime/src/native/libs/System.Security.Cryptography.Native.Android/pal_jni.c
+12-22 11:43:23.557 D/DOTNET  (28408): GetOptionalClassGRef: optional class com/android/org/conscrypt/OpenSSLEngineImpl was not found
+12-22 11:43:23.561 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly WayfarerMobile.dll
+12-22 11:43:23.561 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:23.561 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Mono.Android.dll
+12-22 11:43:23.561 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:23.575 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Runtime.dll
+12-22 11:43:23.575 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:23.577 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Java.Interop.dll
+12-22 11:43:23.577 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:23.582 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Runtime.InteropServices.dll
+12-22 11:43:23.582 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:23.651 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Mono.Android.Runtime.dll
+12-22 11:43:23.651 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:23.653 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Collections.dll
+12-22 11:43:23.653 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:23.657 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Collections.Concurrent.dll
+12-22 11:43:23.657 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:23.659 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Threading.dll
+12-22 11:43:23.659 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:23.770 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Threading.Thread.dll
+12-22 11:43:23.770 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:23.771 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Diagnostics.StackTrace.dll
+12-22 11:43:23.771 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:23.833 W/wayfarer.mobil(28408): Attempt to remove non-JNI local reference, dumping thread
+12-22 11:43:23.836 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.Maui.dll
+12-22 11:43:23.836 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:23.878 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Memory.dll
+12-22 11:43:23.878 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:23.907 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.Maui.Essentials.dll
+12-22 11:43:23.907 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:23.910 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.Core.dll
+12-22 11:43:23.910 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:23.938 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Console.dll
+12-22 11:43:23.938 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.002 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.ComponentModel.dll
+12-22 11:43:24.002 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.023 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.VisualStudio.DesignTools.MobileTapContracts.dll
+12-22 11:43:24.023 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.032 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly netstandard.dll
+12-22 11:43:24.032 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.068 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.Extensions.DependencyInjection.Abstractions.dll
+12-22 11:43:24.068 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.085 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.VisualStudio.DesignTools.TapContract.dll
+12-22 11:43:24.085 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.114 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.Extensions.Hosting.Abstractions.dll
+12-22 11:43:24.114 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.116 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.Maui.Controls.dll
+12-22 11:43:24.116 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.123 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.ObjectModel.dll
+12-22 11:43:24.123 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.124 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.Maui.Controls.Xaml.dll
+12-22 11:43:24.124 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.161 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly SkiaSharp.Views.Maui.Controls.dll
+12-22 11:43:24.161 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.169 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Syncfusion.Maui.Toolkit.dll
+12-22 11:43:24.169 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.180 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly ZXing.Net.MAUI.Controls.dll
+12-22 11:43:24.180 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.188 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Net.Http.dll
+12-22 11:43:24.188 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.204 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.Extensions.Configuration.dll
+12-22 11:43:24.204 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.214 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.Extensions.Configuration.Abstractions.dll
+12-22 11:43:24.214 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.215 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.Extensions.Diagnostics.Abstractions.dll
+12-22 11:43:24.215 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.216 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.Extensions.Logging.Abstractions.dll
+12-22 11:43:24.216 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.229 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.Extensions.Logging.Debug.dll
+12-22 11:43:24.229 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.276 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.Extensions.Primitives.dll
+12-22 11:43:24.276 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.303 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Private.Uri.dll
+12-22 11:43:24.303 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.304 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Xml.ReaderWriter.dll
+12-22 11:43:24.304 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.318 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Private.Xml.dll
+12-22 11:43:24.318 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.339 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Runtime.Loader.dll
+12-22 11:43:24.339 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.356 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.Maui.Graphics.dll
+12-22 11:43:24.356 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.369 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Linq.dll
+12-22 11:43:24.369 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.408 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.ComponentModel.TypeConverter.dll
+12-22 11:43:24.408 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.477 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.Google.Android.Material.dll
+12-22 11:43:24.477 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.485 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.AppCompat.dll
+12-22 11:43:24.485 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.533 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.Fragment.dll
+12-22 11:43:24.533 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.536 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.Activity.dll
+12-22 11:43:24.536 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.538 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.Lifecycle.ViewModel.Android.dll
+12-22 11:43:24.538 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.540 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.Lifecycle.Common.Jvm.dll
+12-22 11:43:24.540 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.542 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.SavedState.SavedState.Android.dll
+12-22 11:43:24.542 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.571 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.DrawerLayout.dll
+12-22 11:43:24.571 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.572 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.CustomView.dll
+12-22 11:43:24.572 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.Maui.Graphics.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Linq.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.ComponentModel.TypeConverter.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.Google.Android.Material.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.AppCompat.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.Fragment.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.Activity.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.Lifecycle.ViewModel.Android.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.Lifecycle.Common.Jvm.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.SavedState.SavedState.Android.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.DrawerLayout.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.CustomView.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.Navigation.Runtime.Android.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:24.574 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.Navigation.Runtime.Android.dll
+12-22 11:43:24.574 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.598 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Net.Primitives.dll
+12-22 11:43:24.598 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.604 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Diagnostics.TraceSource.dll
+12-22 11:43:24.604 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.616 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Runtime.Intrinsics.dll
+12-22 11:43:24.616 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.623 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Net.Sockets.dll
+12-22 11:43:24.623 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.625 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Security.Cryptography.dll
+12-22 11:43:24.625 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.635 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Net.Security.dll
+12-22 11:43:24.635 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.655 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Diagnostics.Tracing.dll
+12-22 11:43:24.655 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.702 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.Win32.Primitives.dll
+12-22 11:43:24.702 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.720 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Threading.ThreadPool.dll
+12-22 11:43:24.720 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.746 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Text.RegularExpressions.dll
+12-22 11:43:24.746 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.779 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly ZXing.Net.MAUI.dll
+12-22 11:43:24.779 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.803 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly zxing.dll
+12-22 11:43:24.803 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Net.Primitives.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Diagnostics.TraceSource.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Runtime.Intrinsics.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Net.Sockets.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Security.Cryptography.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Net.Security.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Diagnostics.Tracing.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.Win32.Primitives.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Threading.ThreadPool.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Text.RegularExpressions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\ZXing.Net.MAUI.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\zxing.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.Extensions.Logging.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.Extensions.Options.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:24.825 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.Extensions.Logging.dll
+12-22 11:43:24.825 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.843 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.Extensions.Options.dll
+12-22 11:43:24.843 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.862 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Serilog.dll
+12-22 11:43:24.862 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.866 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Serilog.Sinks.File.dll
+12-22 11:43:24.866 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.879 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Serilog.Extensions.Logging.dll
+12-22 11:43:24.879 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.949 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Collections.NonGeneric.dll
+12-22 11:43:24.949 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:24.974 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Diagnostics.DiagnosticSource.dll
+12-22 11:43:24.974 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:25.029 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Numerics.Vectors.dll
+12-22 11:43:25.029 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:25.066 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly WayfarerMobile.Core.dll
+12-22 11:43:25.066 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:25.070 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly BruTile.dll
+12-22 11:43:25.070 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:25.071 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly CommunityToolkit.Mvvm.dll
+12-22 11:43:25.072 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Serilog.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Serilog.Sinks.File.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Serilog.Extensions.Logging.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Collections.NonGeneric.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Diagnostics.DiagnosticSource.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Numerics.Vectors.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\WayfarerMobile.Core.dll'. Symbols loaded.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\BruTile.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:25.120 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.Extensions.Http.dll
+12-22 11:43:25.120 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:25.136 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.Extensions.Diagnostics.dll
+12-22 11:43:25.136 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:25.171 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly SQLite-net.dll
+12-22 11:43:25.171 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:25.190 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Polly.Core.dll
+12-22 11:43:25.190 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:25.195 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Text.Json.dll
+12-22 11:43:25.195 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:25.221 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Mapsui.dll
+12-22 11:43:25.221 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:25.243 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Mapsui.Nts.dll
+12-22 11:43:25.243 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:25.267 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Mapsui.UI.Maui.dll
+12-22 11:43:25.267 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:25.297 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.Extensions.DependencyInjection.dll
+12-22 11:43:25.297 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\CommunityToolkit.Mvvm.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.Extensions.Http.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.Extensions.Diagnostics.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\SQLite-net.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Polly.Core.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Text.Json.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Mapsui.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Mapsui.Nts.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Mapsui.UI.Maui.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.Extensions.DependencyInjection.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:25.374 D/NetworkSecurityConfig(28408): No Network Security Config specified, using platform default
+12-22 11:43:25.466 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Text.Encoding.Extensions.dll
+12-22 11:43:25.466 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Text.Encoding.Extensions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:26.007 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 13992(927KB) AllocSpace objects, 0(0B) LOS objects, 57% free, 1528KB/3576KB, paused 54us total 7.900ms
+12-22 11:43:26.259 D/libmdf  (28408): libmdf v2.9.0.0 On 64bit PLATFORM
+12-22 11:43:26.297 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Runtime.Serialization.Json.dll
+12-22 11:43:26.297 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:26.300 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Private.DataContractSerialization.dll
+12-22 11:43:26.300 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:26.303 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Runtime.Serialization.Xml.dll
+12-22 11:43:26.303 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:26.304 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Runtime.Serialization.Primitives.dll
+12-22 11:43:26.304 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Runtime.Serialization.Json.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Private.DataContractSerialization.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Runtime.Serialization.Xml.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Runtime.Serialization.Primitives.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:26.365 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Xml.XmlSerializer.dll
+12-22 11:43:26.365 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:26.444 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Reflection.Emit.ILGeneration.dll
+12-22 11:43:26.444 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:26.472 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Reflection.Emit.Lightweight.dll
+12-22 11:43:26.473 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:26.503 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Reflection.Primitives.dll
+12-22 11:43:26.503 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:26.546 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.Maui.Controls.HotReload.Forms.dll
+12-22 11:43:26.546 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Xml.XmlSerializer.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Reflection.Emit.ILGeneration.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Reflection.Emit.Lightweight.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Reflection.Primitives.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.Maui.Controls.HotReload.Forms.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:26.618 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Microsoft.VisualStudio.DesignTools.XamlTapContract.dll
+12-22 11:43:26.618 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Microsoft.VisualStudio.DesignTools.XamlTapContract.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:27.182 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 881(84KB) AllocSpace objects, 0(0B) LOS objects, 59% free, 1394KB/3442KB, paused 52us total 7.576ms
+12-22 11:43:28.640 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.Google.Crypto.Tink.Android.dll
+12-22 11:43:28.640 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:28.667 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.Security.SecurityCrypto.dll
+12-22 11:43:28.667 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:28.688 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Text.Encodings.Web.dll
+12-22 11:43:28.688 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:28.744 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.ComponentModel.Annotations.dll
+12-22 11:43:28.744 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:28.793 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.ComponentModel.Primitives.dll
+12-22 11:43:28.794 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.Google.Crypto.Tink.Android.dll'. Module was built without symbols.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.Security.SecurityCrypto.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Text.Encodings.Web.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.ComponentModel.Annotations.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.ComponentModel.Primitives.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:28.893 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Linq.Expressions.dll
+12-22 11:43:28.893 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:28.904 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getObject(Ljava/lang/Object;J)Ljava/lang/Object; (greylist, linking, allowed)
+12-22 11:43:28.904 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:43:28.905 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->objectFieldOffset(Ljava/lang/reflect/Field;)J (greylist,core-platform-api, linking, allowed)
+12-22 11:43:28.906 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putInt(Ljava/lang/Object;JI)V (greylist, linking, allowed)
+12-22 11:43:28.907 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getInt(Ljava/lang/Object;J)I (greylist, linking, allowed)
+12-22 11:43:28.907 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getLong(Ljava/lang/Object;J)J (greylist,core-platform-api, linking, allowed)
+12-22 11:43:28.913 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putLong(Ljava/lang/Object;JJ)V (greylist, linking, allowed)
+12-22 11:43:28.913 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->allocateInstance(Ljava/lang/Class;)Ljava/lang/Object; (greylist, linking, allowed)
+12-22 11:43:28.915 W/wayfarer.mobil(28408): Accessing hidden method Llibcore/io/Memory;->peekLong(JZ)J (greylist, reflection, allowed)
+12-22 11:43:28.915 W/wayfarer.mobil(28408): Accessing hidden method Llibcore/io/Memory;->pokeLong(JJZ)V (greylist, reflection, allowed)
+12-22 11:43:28.915 W/wayfarer.mobil(28408): Accessing hidden method Llibcore/io/Memory;->pokeInt(JIZ)V (greylist, reflection, allowed)
+12-22 11:43:28.915 W/wayfarer.mobil(28408): Accessing hidden method Llibcore/io/Memory;->peekInt(JZ)I (greylist, reflection, allowed)
+12-22 11:43:28.915 W/wayfarer.mobil(28408): Accessing hidden method Llibcore/io/Memory;->pokeByte(JB)V (greylist, reflection, allowed)
+12-22 11:43:28.915 W/wayfarer.mobil(28408): Accessing hidden method Llibcore/io/Memory;->peekByte(J)B (greylist, reflection, allowed)
+12-22 11:43:28.915 W/wayfarer.mobil(28408): Accessing hidden method Llibcore/io/Memory;->pokeByteArray(J[BII)V (greylist, reflection, allowed)
+12-22 11:43:28.915 W/wayfarer.mobil(28408): Accessing hidden method Llibcore/io/Memory;->peekByteArray(J[BII)V (greylist, reflection, allowed)
+12-22 11:43:28.915 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->arrayBaseOffset(Ljava/lang/Class;)I (greylist,core-platform-api, linking, allowed)
+12-22 11:43:28.915 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->arrayIndexScale(Ljava/lang/Class;)I (greylist, linking, allowed)
+12-22 11:43:28.916 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getInt(Ljava/lang/Object;J)I (greylist, reflection, allowed)
+12-22 11:43:28.916 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putInt(Ljava/lang/Object;JI)V (greylist, reflection, allowed)
+12-22 11:43:28.916 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getLong(Ljava/lang/Object;J)J (greylist,core-platform-api, reflection, allowed)
+12-22 11:43:28.916 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putLong(Ljava/lang/Object;JJ)V (greylist, reflection, allowed)
+12-22 11:43:28.916 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getObject(Ljava/lang/Object;J)Ljava/lang/Object; (greylist, reflection, allowed)
+12-22 11:43:28.916 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, reflection, allowed)
+12-22 11:43:28.916 W/wayfarer.mobil(28408): Accessing hidden field Ljava/nio/Buffer;->address:J (greylist, reflection, allowed)
+12-22 11:43:28.977 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:43:28.989 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:43:28.990 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:43:29.027 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:43:29.027 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getInt(Ljava/lang/Object;J)I (greylist, linking, allowed)
+12-22 11:43:29.027 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getObject(Ljava/lang/Object;J)Ljava/lang/Object; (greylist, linking, allowed)
+12-22 11:43:29.084 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Linq.Expressions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:29.100 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:43:29.101 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:43:29.174 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:43:29.174 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getInt(Ljava/lang/Object;J)I (greylist, linking, allowed)
+12-22 11:43:29.251 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:43:29.267 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:43:29.267 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:43:29.280 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly SQLitePCLRaw.core.dll
+12-22 11:43:29.280 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:29.299 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly SQLitePCLRaw.batteries_v2.dll
+12-22 11:43:29.299 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\SQLitePCLRaw.core.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\SQLitePCLRaw.batteries_v2.dll'. Module was built without symbols.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\SQLitePCLRaw.provider.e_sqlite3.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:29.340 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly SQLitePCLRaw.provider.e_sqlite3.dll
+12-22 11:43:29.340 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:29.362 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Runtime.InteropServices.RuntimeInformation.dll
+12-22 11:43:29.362 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Runtime.InteropServices.RuntimeInformation.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.IO.Pipelines.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+The thread 19 has exited with code 0 (0x0).
+12-22 11:43:29.401 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.IO.Pipelines.dll
+12-22 11:43:29.401 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:29.753 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.GooglePlayServices.Base.dll
+12-22 11:43:29.753 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:29.759 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.GooglePlayServices.Basement.dll
+12-22 11:43:29.759 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:29.763 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.GooglePlayServices.Location.dll
+12-22 11:43:29.763 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.GooglePlayServices.Base.dll'. Module was built without symbols.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.GooglePlayServices.Basement.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.GooglePlayServices.Location.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:29.868 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.GooglePlayServices.Tasks.dll
+12-22 11:43:29.868 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:29.959 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.RecyclerView.dll
+12-22 11:43:29.960 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:29.966 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.SwipeRefreshLayout.dll
+12-22 11:43:29.966 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:29.975 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.CardView.dll
+12-22 11:43:29.976 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:30.003 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:43:30.003 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getInt(Ljava/lang/Object;J)I (greylist, linking, allowed)
+12-22 11:43:30.043 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly SkiaSharp.Views.Maui.Core.dll
+12-22 11:43:30.043 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:30.045 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly SkiaSharp.Views.Android.dll
+12-22 11:43:30.045 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:30.060 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:43:30.073 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:43:30.073 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:43:30.079 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly SkiaSharp.dll
+12-22 11:43:30.079 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:30.103 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.Camera.View.dll
+12-22 11:43:30.103 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.GooglePlayServices.Tasks.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.RecyclerView.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.SwipeRefreshLayout.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.CardView.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\SkiaSharp.Views.Maui.Core.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\SkiaSharp.Views.Android.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\SkiaSharp.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:30.176 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.Loader.dll
+12-22 11:43:30.176 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:30.185 D/libEGL  (28408): loaded /vendor/lib64/egl/libGLES_mali.so
+12-22 11:43:30.271 D/AppCompatDelegate(28408): Checking for metadata for AppLocalesMetadataHolderService : Service not found
+12-22 11:43:30.290 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly _Microsoft.Android.Resource.Designer.dll
+12-22 11:43:30.290 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.Camera.View.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.Loader.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded '_Microsoft.Android.Resource.Designer'. Module was built without symbols.
+12-22 11:43:30.439 D/PhoneWindow(28408): forceLight changed to true [] from com.android.internal.policy.PhoneWindow.updateForceLightNavigationBar:4274 com.android.internal.policy.DecorView.updateColorViews:1547 com.android.internal.policy.PhoneWindow.dispatchWindowAttributesChanged:3252 android.view.Window.setFlags:1153 com.android.internal.policy.PhoneWindow.generateLayout:2474 
+12-22 11:43:30.440 I/MultiWindowDecorSupport(28408): [INFO] isPopOver = false
+12-22 11:43:30.440 I/MultiWindowDecorSupport(28408): updateCaptionType >> DecorView@fbf7ed0[], isFloating: false, isApplication: true, hasWindowDecorCaption: false, hasWindowControllerCallback: true
+12-22 11:43:30.440 D/MultiWindowDecorSupport(28408): setCaptionType = 0, DecorView = DecorView@fbf7ed0[]
+12-22 11:43:30.471 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.CoordinatorLayout.dll
+12-22 11:43:30.471 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.CoordinatorLayout.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:30.798 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 2043(456KB) AllocSpace objects, 0(0B) LOS objects, 45% free, 2460KB/4508KB, paused 49us total 11.407ms
+12-22 11:43:30.883 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.Lifecycle.LiveData.Core.dll
+12-22 11:43:30.883 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:30.962 W/wayfarer.mobil(28408): Accessing hidden field Landroid/content/res/Configuration;->windowConfiguration:Landroid/app/WindowConfiguration; (greylist, reflection, allowed)
+12-22 11:43:30.962 W/wayfarer.mobil(28408): Accessing hidden method Landroid/app/WindowConfiguration;->getBounds()Landroid/graphics/Rect; (greylist, reflection, allowed)
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.Lifecycle.LiveData.Core.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:31.397 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.Lifecycle.Runtime.Android.dll
+12-22 11:43:31.397 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:31.401 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.KotlinX.Coroutines.Core.Jvm.dll
+12-22 11:43:31.401 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:31.478 W/wayfarer.mobil(28408): Accessing hidden method Landroid/view/ViewGroup;->makeOptionalFitsSystemWindows()V (greylist, reflection, allowed)
+12-22 11:43:31.551 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.ViewPager2.dll
+12-22 11:43:31.551 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.Lifecycle.Runtime.Android.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.KotlinX.Coroutines.Core.Jvm.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.ViewPager2.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:31.677 W/TabLayout(28408): MODE_SCROLLABLE + GRAVITY_FILL is not supported, GRAVITY_START will be used instead
+12-22 11:43:31.756 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.ViewPager.dll
+12-22 11:43:31.756 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:31.847 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Net.Requests.dll
+12-22 11:43:31.847 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.ViewPager.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Net.Requests.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:32.026 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly mscorlib.dll
+12-22 11:43:32.027 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:32.028 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.dll
+12-22 11:43:32.028 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\mscorlib.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:32.194 D/ConnectivityManager(28408): requestNetwork; CallingUid : 10771, CallingPid : 28408
+12-22 11:43:32.223 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Text.Encoding.CodePages.dll
+12-22 11:43:32.223 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:32.243 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Threading.Channels.dll
+12-22 11:43:32.243 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:32.307 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Mapsui.Rendering.Skia.dll
+12-22 11:43:32.307 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Text.Encoding.CodePages.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Threading.Channels.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Mapsui.Rendering.Skia.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:32.763 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 2308(263KB) AllocSpace objects, 0(0B) LOS objects, 39% free, 3118KB/5166KB, paused 50us total 15.587ms
+12-22 11:43:36.736 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 114(66KB) AllocSpace objects, 0(0B) LOS objects, 39% free, 3115KB/5163KB, paused 51us total 15.355ms
+12-22 11:43:37.983 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Mapsui.Tiling.dll
+12-22 11:43:37.983 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Mapsui.Tiling.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:38.315 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly NetTopologySuite.dll
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\NetTopologySuite.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:38.315 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:38.487 I/ViewRootImpl@7f80219[MainActivity](28408): setView = com.android.internal.policy.DecorView@fbf7ed0 TM=true MM=false
+12-22 11:43:38.503 W/wayfarer.mobil(28408): Accessing hidden method Landroid/view/View;->getViewRootImpl()Landroid/view/ViewRootImpl; (greylist, reflection, allowed)
+12-22 11:43:38.503 W/wayfarer.mobil(28408): Accessing hidden field Landroid/view/View$AttachInfo;->mVisibleInsets:Landroid/graphics/Rect; (greylist, reflection, allowed)
+12-22 11:43:38.503 W/wayfarer.mobil(28408): Accessing hidden field Landroid/view/ViewRootImpl;->mAttachInfo:Landroid/view/View$AttachInfo; (greylist, reflection, allowed)
+12-22 11:43:38.637 I/ViewRootImpl@7f80219[MainActivity](28408): Relayout returned: old=(0,0,1080,2220) new=(0,0,1080,2220) req=(1080,2220)0 dur=16 res=0x7 s={true 499020963840} ch=true
+12-22 11:43:38.679 I/mali_winsys(28408): new_window_surface() [1080x2220] return: 0x3000
+12-22 11:43:39.429 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:43:39.466 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:43:39.539 D/skia    (28408): approximate: numPoints=46, lengths[0]=0.000000, totalLength=620.200073, segmentPoints[0]=[-197.600006,0.000000]
+12-22 11:43:39.539 D/skia    (28408): approximate: approximation[0]=0.000000, approximation[1]=-197.600006, approximation[2]=0.000000
+12-22 11:43:39.539 D/skia    (28408): approximate: numPoints=46, lengths[45]=620.200073, totalLength=620.200073, segmentPoints[45]=[422.600037,0.000000]
+12-22 11:43:39.539 D/skia    (28408): approximate: approximation[135]=1.000000, approximation[136]=422.600037, approximation[137]=0.000000
+12-22 11:43:39.541 D/skia    (28408): approximate: numPoints=4, lengths[0]=0.000000, totalLength=3.448155, segmentPoints[0]=[0.000000,0.100000]
+12-22 11:43:39.541 D/skia    (28408): approximate: approximation[0]=0.000000, approximation[1]=0.000000, approximation[2]=0.100000
+12-22 11:43:39.541 D/skia    (28408): approximate: numPoints=4, lengths[3]=3.448155, totalLength=3.448155, segmentPoints[3]=[3.000000,0.100000]
+12-22 11:43:39.541 D/skia    (28408): approximate: approximation[9]=1.000000, approximation[10]=3.000000, approximation[11]=0.100000
+12-22 11:43:39.544 D/skia    (28408): approximate: numPoints=43, lengths[0]=0.000000, totalLength=722.199951, segmentPoints[0]=[-522.599976,0.000000]
+12-22 11:43:39.544 D/skia    (28408): approximate: approximation[0]=0.000000, approximation[1]=-522.599976, approximation[2]=0.000000
+12-22 11:43:39.544 D/skia    (28408): approximate: numPoints=43, lengths[42]=722.199951, totalLength=722.199951, segmentPoints[42]=[199.600006,0.000000]
+12-22 11:43:39.544 D/skia    (28408): approximate: approximation[126]=1.000000, approximation[127]=199.600006, approximation[128]=0.000000
+12-22 11:43:39.545 D/skia    (28408): approximate: numPoints=3, lengths[0]=0.000000, totalLength=2.472497, segmentPoints[0]=[0.000000,0.100000]
+12-22 11:43:39.545 D/skia    (28408): approximate: approximation[0]=0.000000, approximation[1]=0.000000, approximation[2]=0.100000
+12-22 11:43:39.545 D/skia    (28408): approximate: numPoints=3, lengths[2]=2.472497, totalLength=2.472497, segmentPoints[2]=[2.000000,0.100000]
+12-22 11:43:39.546 D/skia    (28408): approximate: approximation[6]=1.000000, approximation[7]=2.000000, approximation[8]=0.100000
+12-22 11:43:39.589 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:43:39.636 I/chatty  (28408): uid=10771(com.wayfarer.mobile) identical 1 line
+12-22 11:43:39.662 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:43:39.730 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:43:40.043 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 8938(792KB) AllocSpace objects, 3(60KB) LOS objects, 60% free, 4001KB/10145KB, paused 54us total 21.480ms
+12-22 11:43:40.070 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.Emoji2.dll
+12-22 11:43:40.070 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.Emoji2.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:40.213 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:43:40.348 I/chatty  (28408): uid=10771(com.wayfarer.mobile) identical 2 lines
+12-22 11:43:40.386 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:43:40.625 I/WebViewFactory(28408): Loading com.google.android.webview version 143.0.7499.34 (code 749903433)
+12-22 11:43:40.643 W/linker  (28408): Warning: "/data/app/com.google.android.trichromelibrary_749903433-9cf-fFR3zmDQ2qWzrMM-jQ==/base.apk!/lib/arm64-v8a/libmonochrome_64.so" unused DT entry: unknown processor-specific (type 0x70000001 arg 0x0) (ignoring)
+12-22 11:43:40.761 I/cr_WVCFactoryProvider(28408): version=143.0.7499.34 (749903433) minSdkVersion=29 multiprocess=true packageId=127 splits=<none>
+12-22 11:43:40.789 E/chromium(28408): [1222/114340.786013:ERROR:android_webview/browser/variations/variations_seed_loader.cc:39] Seed missing signature.
+12-22 11:43:40.848 I/cr_LibraryLoader(28408): Successfully loaded native library
+12-22 11:43:40.852 I/cr_CachingUmaRecorder(28408): Flushed 12 samples from 12 histograms, 0 samples were dropped.
+12-22 11:43:40.864 I/cr_CombinedPProvider(28408): #registerProvider() provider:WV.jk@d983974 isPolicyCacheEnabled:false policyProvidersSize:0
+12-22 11:43:40.867 I/cr_PolicyProvider(28408): #setManagerAndSource() 0
+12-22 11:43:40.872 I/cr_DisplayManager(28408): Is Display Topology available: false
+12-22 11:43:40.963 I/cr_CombinedPProvider(28408): #linkNativeInternal() 1
+12-22 11:43:40.965 I/cr_AppResProvider(28408): #getApplicationRestrictionsFromUserManager() Bundle[EMPTY_PARCEL]
+12-22 11:43:40.965 I/cr_PolicyProvider(28408): #notifySettingsAvailable() 0
+12-22 11:43:40.965 I/cr_CombinedPProvider(28408): #onSettingsAvailable() 0
+12-22 11:43:40.965 I/cr_CombinedPProvider(28408): #flushPolicies()
+12-22 11:43:41.113 W/chromium(28408): [WARNING:android_webview/browser/network_service/net_helpers.cc:143] HTTP Cache size is: 20971520
+12-22 11:43:41.180 D/ConnectivityManager(28408): requestNetwork; CallingUid : 10771, CallingPid : 28408
+12-22 11:43:41.182 D/ConnectivityManager(28408): requestNetwork; CallingUid : 10771, CallingPid : 28408
+12-22 11:43:41.285 W/cr_media(28408): getBluetoothAdapter() requires BLUETOOTH permission
+12-22 11:43:41.285 W/cr_media(28408): registerBluetoothIntentsIfNeeded: Requires BLUETOOTH permission
+12-22 11:43:41.304 I/mali_egl(28408): eglDestroySurface() in
+12-22 11:43:41.304 I/mali_egl(28408): eglDestroySurface() out
+12-22 11:43:41.450 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:43:41.675 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:43:41.715 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:43:41.837 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:43:41.864 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:43:41.910 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:43:41.936 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:43:41.963 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:43:41.988 I/chatty  (28408): uid=10771(com.wayfarer.mobile) identical 1 line
+12-22 11:43:42.019 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:43:42.204 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Collections.Specialized.dll
+12-22 11:43:42.204 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:43:42.343 I/mali_winsys(28408): new_window_surface() [1080x1836] return: 0x3000
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Collections.Specialized.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:42.364 W/Gralloc3(28408): mapper 3.x is not supported
+12-22 11:43:42.367 I/gralloc (28408): Arm Module v1.0
+12-22 11:43:42.369 W/Gralloc3(28408): allocator 3.x is not supported
+12-22 11:43:42.681 I/CameraManagerGlobal(28408): Connecting to camera service
+12-22 11:43:42.691 D/VendorTagDescriptor(28408): addVendorDescriptor: vendor tag id 3854507339 added
+12-22 11:43:42.694 I/CameraManagerGlobal(28408): postSingleUpdate device: camera id 0 status STATUS_PRESENT
+12-22 11:43:42.694 I/CameraManagerGlobal(28408): postSingleUpdate device: camera id 1 status STATUS_PRESENT
+12-22 11:43:42.694 I/CameraManagerGlobal(28408): postSingleUpdate device: camera id 2 status STATUS_PRESENT
+12-22 11:43:42.696 I/CameraManagerGlobal(28408): Camera 0 facing CAMERA_FACING_BACK state now CAMERA_STATE_CLOSED for client com.wayfarer.mobile API Level 2
+12-22 11:43:42.697 I/CameraManagerGlobal(28408): Camera 1 facing CAMERA_FACING_FRONT state now CAMERA_STATE_CLOSED for client com.bybit.app API Level 2
+12-22 11:43:42.698 I/CameraManagerGlobal(28408): Camera 2 facing CAMERA_FACING_FRONT state now CAMERA_STATE_CLOSED for client android.system API Level 2
+12-22 11:43:42.700 I/CameraManagerGlobal(28408): Camera 20 facing CAMERA_FACING_BACK state now CAMERA_STATE_CLOSED for client com.sec.android.app.camera API Level 2
+12-22 11:43:42.703 I/CameraManagerGlobal(28408): Camera 21 facing CAMERA_FACING_BACK state now CAMERA_STATE_CLOSED for client android.system API Level 2
+12-22 11:43:42.705 I/CameraManagerGlobal(28408): Camera 50 facing CAMERA_FACING_BACK state now CAMERA_STATE_CLOSED for client android.system API Level 2
+12-22 11:43:42.706 I/CameraManagerGlobal(28408): Camera 90 facing CAMERA_FACING_FRONT state now CAMERA_STATE_CLOSED for client android.system API Level 2
+12-22 11:43:42.727 W/AudioCapabilities(28408): Unsupported mime audio/x-ima
+12-22 11:43:42.736 W/AudioCapabilities(28408): Unsupported mime audio/mpeg-L1
+12-22 11:43:42.737 W/AudioCapabilities(28408): Unsupported mime audio/mpeg-L2
+12-22 11:43:42.739 W/AudioCapabilities(28408): Unsupported mime audio/x-ms-wma
+12-22 11:43:42.748 W/AudioCapabilities(28408): Unsupported mime audio/x-ape
+12-22 11:43:42.757 W/VideoCapabilities(28408): Unsupported mime video/wvc1
+12-22 11:43:42.790 W/VideoCapabilities(28408): Unsupported mime video/avc-wfd
+12-22 11:43:42.798 I/chatty  (28408): uid=10771(com.wayfarer.mobile) ThreadPoolSingl identical 1 line
+12-22 11:43:42.799 W/VideoCapabilities(28408): Unsupported mime video/avc-wfd
+12-22 11:43:42.801 W/VideoCapabilities(28408): Unsupported mime video/hevc-wfd
+12-22 11:43:42.802 W/VideoCapabilities(28408): Unsupported mime video/hevc-wfd
+12-22 11:43:42.817 I/Choreographer(28408): Skipped 258 frames!  The application may be doing too much work on its main thread.
+12-22 11:43:42.839 W/VideoCapabilities(28408): Unsupported mime video/mp43
+12-22 11:43:42.841 W/VideoCapabilities(28408): Unrecognized profile/level 1/32 for video/mp4v-es
+12-22 11:43:42.841 W/VideoCapabilities(28408): Unrecognized profile/level 32768/2 for video/mp4v-es
+12-22 11:43:42.841 W/VideoCapabilities(28408): Unrecognized profile/level 32768/64 for video/mp4v-es
+12-22 11:43:42.842 W/VideoCapabilities(28408): Unsupported mime video/wvc1
+12-22 11:43:42.849 W/VideoCapabilities(28408): Unsupported mime video/x-ms-wmv7
+12-22 11:43:42.852 W/VideoCapabilities(28408): Unsupported mime video/x-ms-wmv8
+12-22 11:43:42.867 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:43:42.867 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getInt(Ljava/lang/Object;J)I (greylist, linking, allowed)
+12-22 11:43:42.867 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putInt(Ljava/lang/Object;JI)V (greylist, linking, allowed)
+12-22 11:43:42.867 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getObject(Ljava/lang/Object;J)Ljava/lang/Object; (greylist, linking, allowed)
+12-22 11:43:42.920 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:43:42.920 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getObject(Ljava/lang/Object;J)Ljava/lang/Object; (greylist, linking, allowed)
+12-22 11:43:42.934 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:43:42.935 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:43:43.033 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 10468(446KB) AllocSpace objects, 0(0B) LOS objects, 52% free, 5548KB/11MB, paused 60us total 32.824ms
+12-22 11:43:43.072 I/ViewRootImpl@7f80219[MainActivity](28408): MSG_WINDOW_FOCUS_CHANGED 1 1
+12-22 11:43:43.073 D/InputMethodManager(28408): prepareNavigationBarInfo() DecorView@fbf7ed0[MainActivity]
+12-22 11:43:43.073 D/InputMethodManager(28408): getNavigationBarColor() -855310
+12-22 11:43:43.079 D/EmergencyMode(28408): [EmergencyManager] android createPackageContext successful: com.wayfarer.mobile
+12-22 11:43:43.093 D/InputMethodManager(28408): prepareNavigationBarInfo() DecorView@fbf7ed0[MainActivity]
+12-22 11:43:43.093 D/InputMethodManager(28408): getNavigationBarColor() -855310
+12-22 11:43:43.093 V/InputMethodManager(28408): Starting input: tba=com.wayfarer.mobile ic=null mNaviBarColor -855310 mIsGetNaviBarColorSuccess true , NavVisible : true , NavTrans : false
+12-22 11:43:43.093 D/InputMethodManager(28408): startInputInner - Id : 0
+12-22 11:43:43.093 I/InputMethodManager(28408): startInputInner - mService.startInputOrWindowGainedFocus
+12-22 11:43:43.109 I/ViewRootImpl@7f80219[MainActivity](28408): MSG_RESIZED: frame=(0,0,1080,2220) ci=(0,72,0,144) vi=(0,72,0,144) or=1
+12-22 11:43:43.158 W/wayfarer.mobil(28408): Accessing hidden field Landroid/content/pm/ApplicationInfo;->primaryCpuAbi:Ljava/lang/String; (greylist, reflection, allowed)
+12-22 11:43:43.552 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Xamarin.AndroidX.VersionedParcelable.dll
+12-22 11:43:43.552 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Xamarin.AndroidX.VersionedParcelable.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:43:43.675 I/Choreographer(28408): Skipped 44 frames!  The application may be doing too much work on its main thread.
+12-22 11:43:43.956 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 38579(3621KB) AllocSpace objects, 8(220KB) LOS objects, 49% free, 6211KB/12MB, paused 58us total 40.231ms
+12-22 11:43:44.389 D/InputMethodManager(28408): prepareNavigationBarInfo() DecorView@fbf7ed0[MainActivity]
+12-22 11:43:44.389 D/InputMethodManager(28408): getNavigationBarColor() -855310
+12-22 11:43:44.389 V/InputMethodManager(28408): Starting input: tba=com.wayfarer.mobile ic=null mNaviBarColor -855310 mIsGetNaviBarColorSuccess true , NavVisible : true , NavTrans : false
+12-22 11:43:44.389 D/InputMethodManager(28408): startInputInner - Id : 0
+12-22 11:43:44.618 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 52733(5534KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 6326KB/12MB, paused 56us total 41.712ms
+12-22 11:43:44.759 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 19122(2046KB) AllocSpace objects, 7(140KB) LOS objects, 49% free, 6295KB/12MB, paused 57us total 38.707ms
+12-22 11:43:44.899 D/ProfileInstaller(28408): Installing profile for com.wayfarer.mobile
+12-22 11:43:44.907 I/Choreographer(28408): Skipped 52 frames!  The application may be doing too much work on its main thread.
+12-22 11:43:45.911 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 24181(1711KB) AllocSpace objects, 9(180KB) LOS objects, 49% free, 6221KB/12MB, paused 57us total 36.472ms
+12-22 11:43:50.400 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 256(53KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 6222KB/12MB, paused 86us total 43.400ms
+12-22 11:43:56.986 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 174(38KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 6222KB/12MB, paused 73us total 39.312ms
+12-22 11:43:58.207 W/wayfarer.mobil(28408): Accessing hidden method Llibcore/io/Memory;->pokeByte(JB)V (greylist, reflection, allowed)
+12-22 11:43:58.207 W/wayfarer.mobil(28408): Accessing hidden method Llibcore/io/Memory;->peekByte(J)B (greylist, reflection, allowed)
+12-22 11:43:58.207 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getLong(Ljava/lang/Object;J)J (greylist,core-platform-api, reflection, allowed)
+12-22 11:43:58.207 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getInt(Ljava/lang/Object;J)I (greylist, reflection, allowed)
+12-22 11:43:58.207 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putInt(Ljava/lang/Object;JI)V (greylist, reflection, allowed)
+12-22 11:43:58.207 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getLong(Ljava/lang/Object;J)J (greylist,core-platform-api, reflection, allowed)
+12-22 11:43:58.207 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putLong(Ljava/lang/Object;JJ)V (greylist, reflection, allowed)
+12-22 11:43:58.207 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getObject(Ljava/lang/Object;J)Ljava/lang/Object; (greylist, reflection, allowed)
+12-22 11:43:58.207 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, reflection, allowed)
+12-22 11:43:58.208 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getInt(Ljava/lang/Object;J)I (greylist, linking, allowed)
+12-22 11:43:58.208 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:43:58.209 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putInt(Ljava/lang/Object;JI)V (greylist, linking, allowed)
+12-22 11:43:58.209 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getObject(Ljava/lang/Object;J)Ljava/lang/Object; (greylist, linking, allowed)
+12-22 11:43:58.209 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putLong(Ljava/lang/Object;JJ)V (greylist, linking, allowed)
+12-22 11:43:58.212 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getLong(Ljava/lang/Object;J)J (greylist,core-platform-api, linking, allowed)
+12-22 11:43:58.214 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getInt(Ljava/lang/Object;J)I (greylist, linking, allowed)
+12-22 11:43:58.214 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putInt(Ljava/lang/Object;JI)V (greylist, linking, allowed)
+12-22 11:43:58.216 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getUnsafe()Lsun/misc/Unsafe; (greylist,core-platform-api, linking, allowed)
+12-22 11:43:58.217 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->compareAndSwapObject(Ljava/lang/Object;JLjava/lang/Object;Ljava/lang/Object;)Z (greylist, linking, allowed)
+12-22 11:43:58.218 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putInt(Ljava/lang/Object;JI)V (greylist, linking, allowed)
+12-22 11:43:58.219 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putLong(Ljava/lang/Object;JJ)V (greylist, linking, allowed)
+12-22 11:43:58.222 W/wayfarer.mobil(28408): Accessing hidden method Ldalvik/system/VMStack;->getStackClass2()Ljava/lang/Class; (greylist, reflection, allowed)
+12-22 11:43:58.223 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putLong(Ljava/lang/Object;JJ)V (greylist, linking, allowed)
+12-22 11:43:58.225 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putInt(Ljava/lang/Object;JI)V (greylist, linking, allowed)
+12-22 11:43:58.228 E/FilePhenotypeFlags(28408): Config package com.google.android.gms.clearcut_client#com.wayfarer.mobile cannot use FILE backing without declarative registration. See go/phenotype-android-integration#phenotype for more information. This will lead to stale flags.
+12-22 11:43:58.231 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:43:58.231 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putInt(Ljava/lang/Object;JI)V (greylist, linking, allowed)
+12-22 11:43:58.290 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putInt(Ljava/lang/Object;JI)V (greylist, linking, allowed)
+12-22 11:43:58.290 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getLong(Ljava/lang/Object;J)J (greylist,core-platform-api, linking, allowed)
+12-22 11:43:58.291 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getLong(Ljava/lang/Object;J)J (greylist,core-platform-api, linking, allowed)
+12-22 11:43:58.292 E/FilePhenotypeFlags(28408): Config package com.google.android.gms.clearcut_client#com.wayfarer.mobile cannot use FILE backing without declarative registration. See go/phenotype-android-integration#phenotype for more information. This will lead to stale flags.
+12-22 11:43:58.292 E/FilePhenotypeFlags(28408): Config package com.google.android.gms.clearcut_client#com.wayfarer.mobile cannot use FILE backing without declarative registration. See go/phenotype-android-integration#phenotype for more information. This will lead to stale flags.
+12-22 11:44:01.268 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putObject(Ljava/lang/Object;JLjava/lang/Object;)V (greylist, linking, allowed)
+12-22 11:44:01.268 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putInt(Ljava/lang/Object;JI)V (greylist, linking, allowed)
+12-22 11:44:01.283 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putInt(Ljava/lang/Object;JI)V (greylist, linking, allowed)
+12-22 11:44:01.283 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getLong(Ljava/lang/Object;J)J (greylist,core-platform-api, linking, allowed)
+12-22 11:44:01.284 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getLong(Ljava/lang/Object;J)J (greylist,core-platform-api, linking, allowed)
+12-22 11:44:03.620 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 199(39KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 6382KB/12MB, paused 66us total 39.842ms
+12-22 11:44:10.793 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 311(58KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 6379KB/12MB, paused 71us total 42.892ms
+12-22 11:44:12.648 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 203(59KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 6373KB/12MB, paused 60us total 41.844ms
+12-22 11:44:13.283 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 860(52KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 6354KB/12MB, paused 67us total 36.776ms
+12-22 11:44:19.854 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 166(38KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 6353KB/12MB, paused 65us total 38.194ms
+12-22 11:44:25.510 I/ViewRootImpl@7f80219[MainActivity](28408): ViewPostIme pointer 0
+12-22 11:44:25.602 I/ViewRootImpl@7f80219[MainActivity](28408): ViewPostIme pointer 1
+12-22 11:44:25.874 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 429(64KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 6362KB/12MB, paused 56us total 37.244ms
+12-22 11:44:27.179 I/ViewRootImpl@7f80219[MainActivity](28408): ViewPostIme pointer 0
+12-22 11:44:27.307 I/ViewRootImpl@7f80219[MainActivity](28408): ViewPostIme pointer 1
+12-22 11:44:27.403 W/TabLayout(28408): MODE_SCROLLABLE + GRAVITY_FILL is not supported, GRAVITY_START will be used instead
+12-22 11:44:27.733 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 2249(192KB) AllocSpace objects, 18(356KB) LOS objects, 49% free, 6429KB/12MB, paused 44us total 31.220ms
+12-22 11:44:28.657 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 1057(72KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 6421KB/12MB, paused 40us total 26.499ms
+12-22 11:44:28.782 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Net.Http.Json.dll
+12-22 11:44:28.782 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:44:28.859 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Net.Quic.dll
+12-22 11:44:28.859 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Net.Http.Json.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:44:28.901 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Net.NameResolution.dll
+12-22 11:44:28.901 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:44:28.905 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Net.NameResolution.dll
+12-22 11:44:28.905 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:44:28.956 I/Choreographer(28408): Skipped 95 frames!  The application may be doing too much work on its main thread.
+12-22 11:44:29.002 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Net.Quic.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Net.NameResolution.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:44:29.256 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:44:29.266 D/skia    (28408): approximate: numPoints=46, lengths[0]=0.000000, totalLength=620.200073, segmentPoints[0]=[-197.600006,0.000000]
+12-22 11:44:29.266 D/skia    (28408): approximate: approximation[0]=0.000000, approximation[1]=-197.600006, approximation[2]=0.000000
+12-22 11:44:29.266 D/skia    (28408): approximate: numPoints=46, lengths[45]=620.200073, totalLength=620.200073, segmentPoints[45]=[422.600037,0.000000]
+12-22 11:44:29.266 D/skia    (28408): approximate: approximation[135]=1.000000, approximation[136]=422.600037, approximation[137]=0.000000
+12-22 11:44:29.266 D/skia    (28408): approximate: numPoints=4, lengths[0]=0.000000, totalLength=3.448155, segmentPoints[0]=[0.000000,0.100000]
+12-22 11:44:29.266 D/skia    (28408): approximate: approximation[0]=0.000000, approximation[1]=0.000000, approximation[2]=0.100000
+12-22 11:44:29.266 D/skia    (28408): approximate: numPoints=4, lengths[3]=3.448155, totalLength=3.448155, segmentPoints[3]=[3.000000,0.100000]
+12-22 11:44:29.266 D/skia    (28408): approximate: approximation[9]=1.000000, approximation[10]=3.000000, approximation[11]=0.100000
+12-22 11:44:29.267 D/skia    (28408): approximate: numPoints=43, lengths[0]=0.000000, totalLength=722.199951, segmentPoints[0]=[-522.599976,0.000000]
+12-22 11:44:29.267 D/skia    (28408): approximate: approximation[0]=0.000000, approximation[1]=-522.599976, approximation[2]=0.000000
+12-22 11:44:29.267 D/skia    (28408): approximate: numPoints=43, lengths[42]=722.199951, totalLength=722.199951, segmentPoints[42]=[199.600006,0.000000]
+12-22 11:44:29.267 D/skia    (28408): approximate: approximation[126]=1.000000, approximation[127]=199.600006, approximation[128]=0.000000
+12-22 11:44:29.267 D/skia    (28408): approximate: numPoints=3, lengths[0]=0.000000, totalLength=2.472497, segmentPoints[0]=[0.000000,0.100000]
+12-22 11:44:29.267 D/skia    (28408): approximate: approximation[0]=0.000000, approximation[1]=0.000000, approximation[2]=0.100000
+12-22 11:44:29.267 D/skia    (28408): approximate: numPoints=3, lengths[2]=2.472497, totalLength=2.472497, segmentPoints[2]=[2.000000,0.100000]
+12-22 11:44:29.267 D/skia    (28408): approximate: approximation[6]=1.000000, approximation[7]=2.000000, approximation[8]=0.100000
+12-22 11:44:29.287 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:44:29.824 W/View    (28408): requestLayout() improperly called by android.widget.ProgressBar{200d164 V.ED..... ......ID 0,30-1080,150} during layout: running second layout pass
+12-22 11:44:29.984 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Formats.Asn1.dll
+12-22 11:44:29.984 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:44:29.985 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Formats.Asn1.dll
+12-22 11:44:29.985 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:44:30.014 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Runtime.Numerics.dll
+12-22 11:44:30.014 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:44:30.014 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly System.Runtime.Numerics.dll
+12-22 11:44:30.014 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+12-22 11:44:30.090 I/Choreographer(28408): Skipped 67 frames!  The application may be doing too much work on its main thread.
+12-22 11:44:30.103 I/mali_egl(28408): eglDestroySurface() in
+12-22 11:44:30.105 I/mali_winsys(28408): delete_surface() [1080x1836] return
+12-22 11:44:30.105 I/mali_egl(28408): eglDestroySurface() out
+12-22 11:44:30.105 E/BufferQueueProducer(28408): [SurfaceTexture-0-28408-0] disconnect: not connected (req=1)
+12-22 11:44:30.105 W/libEGL  (28408): EGLNativeWindowType 0x7438a3c010 disconnect failed
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Formats.Asn1.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\System.Runtime.Numerics.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+The thread 'GLThread 15' (21) has exited with code 0 (0x0).
+12-22 11:44:30.459 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 84928(3578KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 7309KB/14MB, paused 55us total 43.831ms
+12-22 11:44:31.419 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 28657(2125KB) AllocSpace objects, 8(160KB) LOS objects, 49% free, 7267KB/14MB, paused 40us total 30.236ms
+12-22 11:44:31.787 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:44:31.803 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:44:31.818 I/chatty  (28408): uid=10771(com.wayfarer.mobile) identical 1 line
+12-22 11:44:31.834 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:44:31.890 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 2409(107KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 7383KB/14MB, paused 40us total 29.858ms
+12-22 11:44:32.331 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 926(51KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 7397KB/14MB, paused 39us total 30.279ms
+12-22 11:44:32.486 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:44:32.516 I/chatty  (28408): uid=10771(com.wayfarer.mobile) identical 2 lines
+12-22 11:44:32.532 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:44:32.825 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 3751(221KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 7544KB/14MB, paused 40us total 31.148ms
+12-22 11:44:33.079 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:44:33.109 I/chatty  (28408): uid=10771(com.wayfarer.mobile) identical 2 lines
+12-22 11:44:33.123 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:44:33.296 I/Choreographer(28408): Skipped 129 frames!  The application may be doing too much work on its main thread.
+12-22 11:44:33.449 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 6397(371KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 7689KB/15MB, paused 40us total 32.282ms
+12-22 11:44:33.943 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:44:33.982 I/chatty  (28408): uid=10771(com.wayfarer.mobile) identical 2 lines
+12-22 11:44:34.000 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:44:34.371 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 3174(139KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 7822KB/15MB, paused 39us total 34.128ms
+12-22 11:44:34.589 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:44:34.617 I/chatty  (28408): uid=10771(com.wayfarer.mobile) identical 2 lines
+12-22 11:44:34.632 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:44:34.857 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 4378(224KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 7950KB/15MB, paused 39us total 34.182ms
+12-22 11:44:35.199 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 750(52KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 7930KB/15MB, paused 161us total 41.996ms
+12-22 11:44:35.233 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:44:35.261 I/chatty  (28408): uid=10771(com.wayfarer.mobile) identical 2 lines
+12-22 11:44:35.275 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:44:35.490 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 6950(328KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 7995KB/15MB, paused 40us total 33.532ms
+12-22 11:44:35.709 I/Choreographer(28408): Skipped 144 frames!  The application may be doing too much work on its main thread.
+12-22 11:44:36.243 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 42883(4442KB) AllocSpace objects, 21(412KB) LOS objects, 49% free, 7958KB/15MB, paused 56us total 36.880ms
+12-22 11:44:36.260 I/ViewRootImpl@7f80219[MainActivity](28408): ViewPostIme pointer 0
+12-22 11:44:36.279 I/ViewRootImpl@7f80219[MainActivity](28408): ViewPostIme pointer 1
+12-22 11:44:36.902 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 1984(265KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 7966KB/15MB, paused 41us total 32.985ms
+12-22 11:44:37.459 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 1002(55KB) AllocSpace objects, 1(20KB) LOS objects, 49% free, 8071KB/15MB, paused 40us total 34.494ms
+12-22 11:44:37.578 D/ConnectivityManager(28408): requestNetwork; CallingUid : 10771, CallingPid : 28408
+12-22 11:44:37.955 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 1402(162KB) AllocSpace objects, 2(264KB) LOS objects, 49% free, 8199KB/16MB, paused 40us total 35.086ms
+12-22 11:44:38.487 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 927(56KB) AllocSpace objects, 1(20KB) LOS objects, 49% free, 8303KB/16MB, paused 41us total 35.066ms
+12-22 11:44:38.926 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 408(40KB) AllocSpace objects, 2(264KB) LOS objects, 49% free, 8342KB/16MB, paused 41us total 36.454ms
+12-22 11:44:39.362 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 277(36KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 8386KB/16MB, paused 41us total 34.854ms
+12-22 11:44:39.779 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 275(36KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 8430KB/16MB, paused 40us total 35.432ms
+12-22 11:44:40.178 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 13(31KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 8430KB/16MB, paused 40us total 35.717ms
+12-22 11:44:40.706 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 895(55KB) AllocSpace objects, 1(20KB) LOS objects, 49% free, 8535KB/16MB, paused 40us total 36.123ms
+12-22 11:44:41.140 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 407(39KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 8575KB/16MB, paused 40us total 36.127ms
+12-22 11:44:41.580 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 275(35KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 8619KB/16MB, paused 40us total 35.982ms
+12-22 11:44:42.016 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 277(35KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 8664KB/16MB, paused 40us total 37.217ms
+12-22 11:44:42.455 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 275(35KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 8708KB/17MB, paused 40us total 36.516ms
+12-22 11:44:42.963 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 260(36KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 8751KB/17MB, paused 40us total 37.539ms
+12-22 11:44:43.386 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 145(25KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 8773KB/17MB, paused 40us total 37.444ms
+12-22 11:44:43.829 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 276(35KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 8817KB/17MB, paused 41us total 37.859ms
+12-22 11:44:44.263 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 275(35KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 8862KB/17MB, paused 39us total 37.644ms
+12-22 11:44:44.591 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 153(25KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 8884KB/17MB, paused 56us total 53.704ms
+12-22 11:44:45.529 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 897(55KB) AllocSpace objects, 1(20KB) LOS objects, 49% free, 8989KB/17MB, paused 40us total 38.195ms
+12-22 11:44:45.974 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 409(39KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 9029KB/17MB, paused 41us total 37.910ms
+12-22 11:44:46.309 I/Choreographer(28408): Skipped 590 frames!  The application may be doing too much work on its main thread.
+12-22 11:44:46.377 W/TabLayout(28408): MODE_SCROLLABLE + GRAVITY_FILL is not supported, GRAVITY_START will be used instead
+12-22 11:44:46.583 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 3827(333KB) AllocSpace objects, 4(528KB) LOS objects, 49% free, 9178KB/17MB, paused 100us total 57.491ms
+12-22 11:44:46.893 I/mali_winsys(28408): new_window_surface() [1080x1836] return: 0x3000
+12-22 11:44:47.076 W/monodroid-assembly(28408): open_from_bundles: failed to load bundled assembly Svg.Skia.dll
+12-22 11:44:47.076 W/monodroid-assembly(28408): open_from_bundles: the assembly might have been uploaded to the device with FastDev instead
+'WayfarerMobile.dll' (Mono: Default Domain): Loaded 'C:\Users\stef\source\repos\WayfarerMobile\src\WayfarerMobile\obj\Debug\net10.0-android\android\assets\arm64-v8a\Svg.Skia.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+12-22 11:44:47.260 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 57355(5946KB) AllocSpace objects, 9(180KB) LOS objects, 49% free, 9331KB/18MB, paused 103us total 60.929ms
+12-22 11:44:47.649 I/Choreographer(28408): Skipped 59 frames!  The application may be doing too much work on its main thread.
+12-22 11:44:47.978 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 18167(1535KB) AllocSpace objects, 3(56KB) LOS objects, 49% free, 9321KB/18MB, paused 41us total 99.325ms
+12-22 11:44:49.866 I/ViewRootImpl@7f80219[MainActivity](28408): ViewPostIme pointer 0
+12-22 11:44:49.878 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->putInt(Ljava/lang/Object;JI)V (greylist, linking, allowed)
+12-22 11:44:49.879 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getLong(Ljava/lang/Object;J)J (greylist,core-platform-api, linking, allowed)
+12-22 11:44:49.879 W/wayfarer.mobil(28408): Accessing hidden method Lsun/misc/Unsafe;->getLong(Ljava/lang/Object;J)J (greylist,core-platform-api, linking, allowed)
+12-22 11:44:49.961 I/ViewRootImpl@7f80219[MainActivity](28408): ViewPostIme pointer 1
+12-22 11:44:50.498 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 23238(700KB) AllocSpace objects, 6(120KB) LOS objects, 49% free, 9378KB/18MB, paused 41us total 40.584ms
+12-22 11:44:50.675 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 1441(164KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 10MB/20MB, paused 194us total 63.982ms
+12-22 11:44:50.816 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 10619(609KB) AllocSpace objects, 4(272KB) LOS objects, 49% free, 9468KB/18MB, paused 69us total 56.512ms
+12-22 11:44:51.341 I/Choreographer(28408): Skipped 79 frames!  The application may be doing too much work on its main thread.
+12-22 11:44:51.892 I/wayfarer.mobil(28408): NativeAlloc concurrent copying GC freed 11817(762KB) AllocSpace objects, 23(1564KB) LOS objects, 49% free, 9410KB/18MB, paused 105us total 151.837ms
+12-22 11:44:51.995 I/Choreographer(28408): Skipped 30 frames!  The application may be doing too much work on its main thread.
+12-22 11:44:52.590 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 13593(866KB) AllocSpace objects, 14(280KB) LOS objects, 49% free, 9320KB/18MB, paused 57us total 56.603ms
+12-22 11:44:53.285 I/ViewRootImpl@7f80219[MainActivity](28408): ViewPostIme pointer 0
+12-22 11:44:53.457 I/ViewRootImpl@7f80219[MainActivity](28408): ViewPostIme pointer 1
+12-22 11:44:54.262 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 17146(794KB) AllocSpace objects, 12(348KB) LOS objects, 49% free, 9257KB/18MB, paused 60us total 54.254ms
+12-22 11:44:54.581 I/ViewRootImpl@7f80219[MainActivity](28408): ViewPostIme pointer 0
+12-22 11:44:54.691 I/ViewRootImpl@7f80219[MainActivity](28408): ViewPostIme pointer 1
+12-22 11:44:54.717 W/monodroid-assembly(28408): Shared library 'liblog' not loaded, p/invoke '__android_log_print' may fail
+12-22 11:44:54.720 I/DOTNET  (28408): >>> EditTripPlaceAsync ENTRY
+12-22 11:44:54.721 I/DOTNET  (28408): >>> EditTripPlaceAsync - Showing action sheet
+12-22 11:44:54.747 D/Dialog  (28408): mIsSamsungBasicInteraction = false
+12-22 11:44:54.748 D/Dialog  (28408): mIsSamsungBasicInteraction = false, isMetaDataInActivity = false
+12-22 11:44:54.769 I/MultiWindowDecorSupport(28408): [INFO] isPopOver = false
+12-22 11:44:54.769 I/MultiWindowDecorSupport(28408): updateCaptionType >> DecorView@c7dbbff[], isFloating: true, isApplication: true, hasWindowDecorCaption: false, hasWindowControllerCallback: false
+12-22 11:44:54.769 D/MultiWindowDecorSupport(28408): setCaptionType = 0, DecorView = DecorView@c7dbbff[]
+12-22 11:44:54.793 D/ScrollView(28408): initGoToTop
+12-22 11:44:54.815 I/ViewRootImpl@fe4c7e[MainActivity](28408): setView = com.android.internal.policy.DecorView@c7dbbff TM=true MM=false
+12-22 11:44:54.847 I/ViewRootImpl@fe4c7e[MainActivity](28408): Relayout returned: old=(0,72,1080,2076) new=(27,516,1053,1631) req=(1026,1115)0 dur=6 res=0x7 s={true 471586062336} ch=true
+12-22 11:44:54.848 I/mali_winsys(28408): new_window_surface() [1218x1307] return: 0x3000
+12-22 11:44:54.857 D/AbsListView(28408):  in onLayout changed 
+12-22 11:44:54.857 D/ScrollView(28408):  onsize change changed 
+12-22 11:44:54.858 E/DecorView(28408): mWindow.mActivityCurrentConfig is null
+12-22 11:44:54.876 I/ViewRootImpl@fe4c7e[MainActivity](28408): MSG_WINDOW_FOCUS_CHANGED 1 1
+12-22 11:44:54.880 I/ViewRootImpl@fe4c7e[MainActivity](28408): MSG_RESIZED: frame=(27,516,1053,1631) ci=(0,0,0,0) vi=(0,0,0,0) or=1
+12-22 11:44:54.892 E/DecorView(28408): mWindow.mActivityCurrentConfig is null
+12-22 11:44:54.893 I/ViewRootImpl@7f80219[MainActivity](28408): MSG_WINDOW_FOCUS_CHANGED 0 1
+12-22 11:44:54.893 D/InputMethodManager(28408): prepareNavigationBarInfo() DecorView@fbf7ed0[MainActivity]
+12-22 11:44:54.893 D/InputMethodManager(28408): getNavigationBarColor() -855310
+12-22 11:44:54.926 I/wayfarer.mobil(28408): Compiler allocated 4218KB to compile void android.view.ViewRootImpl.performTraversals()
+12-22 11:44:56.547 I/ViewRootImpl@fe4c7e[MainActivity](28408): ViewPostIme pointer 0
+12-22 11:44:56.596 I/ViewRootImpl@fe4c7e[MainActivity](28408): ViewPostIme pointer 1
+12-22 11:44:56.596 D/AbsListView(28408): onTouchUp() mTouchMode : 0
+12-22 11:44:56.681 I/DOTNET  (28408): >>> EditTripPlaceAsync - User selected: Edit Marker
+12-22 11:44:56.681 I/DOTNET  (28408): >>> EditTripPlaceAsync - Calling EditPlaceMarkerAsync
+12-22 11:44:56.685 I/DOTNET  (28408): >>> EditPlaceMarkerAsync ENTRY
+12-22 11:44:56.686 I/DOTNET  (28408): >>> EditPlaceMarkerAsync - PlaceId=2cd3a215-1439-4685-849d-04a7625eedf3, Name=Paraw Beach Club
+12-22 11:44:56.703 I/DOTNET  (28408): >>> EditPlaceMarkerAsync - Showing picker for place=Paraw Beach Club
+12-22 11:44:57.003 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 5342(502KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 9528KB/18MB, paused 42us total 47.803ms
+12-22 11:44:57.383 I/mali_egl(28408): eglDestroySurface() in
+12-22 11:44:57.384 I/mali_winsys(28408): delete_surface() [1218x1307] return
+12-22 11:44:57.384 I/mali_egl(28408): eglDestroySurface() out
+12-22 11:44:57.384 W/libEGL  (28408): EGLNativeWindowType 0x6dfaaa5390 disconnect failed
+12-22 11:44:57.384 I/ViewRootImpl@fe4c7e[MainActivity](28408): dispatchDetachedFromWindow
+12-22 11:44:57.409 D/InputTransport(28408): Input channel destroyed: 'bfd381b', fd=165
+12-22 11:44:57.411 I/Choreographer(28408): Skipped 43 frames!  The application may be doing too much work on its main thread.
+12-22 11:44:57.550 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 1677(176KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 9497KB/18MB, paused 40us total 39.635ms
+12-22 11:44:57.580 D/Dialog  (28408): mIsSamsungBasicInteraction = false
+12-22 11:44:57.580 D/Dialog  (28408): mIsSamsungBasicInteraction = false, isMetaDataInActivity = false
+12-22 11:44:57.600 D/PhoneWindow(28408): forceLight changed to true [] from com.android.internal.policy.PhoneWindow.updateForceLightNavigationBar:4274 com.android.internal.policy.DecorView.updateColorViews:1547 com.android.internal.policy.PhoneWindow.dispatchWindowAttributesChanged:3252 android.view.Window.setFlags:1153 com.android.internal.policy.PhoneWindow.generateLayout:2474 
+12-22 11:44:57.600 I/MultiWindowDecorSupport(28408): [INFO] isPopOver = false
+12-22 11:44:57.600 I/MultiWindowDecorSupport(28408): updateCaptionType >> DecorView@4f6e377[], isFloating: false, isApplication: true, hasWindowDecorCaption: false, hasWindowControllerCallback: false
+12-22 11:44:57.601 D/MultiWindowDecorSupport(28408): setCaptionType = 0, DecorView = DecorView@4f6e377[]
+12-22 11:44:57.760 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:44:57.781 W/MaterialButton(28408): MaterialButton manages its own background to control elevation, shape, color and states. Consider using backgroundTint, shapeAppearance and other attributes where available. A custom background will ignore these attributes and you should consider handling interaction states such as pressed, focused and disabled
+12-22 11:44:57.799 I/ViewRootImpl@c703e1a[MainActivity](28408): setView = com.android.internal.policy.DecorView@4f6e377 TM=true MM=false
+12-22 11:44:57.895 I/ViewRootImpl@7f80219[MainActivity](28408): MSG_WINDOW_FOCUS_CHANGED 1 1
+12-22 11:44:57.895 D/InputMethodManager(28408): prepareNavigationBarInfo() DecorView@fbf7ed0[MainActivity]
+12-22 11:44:57.895 D/InputMethodManager(28408): getNavigationBarColor() -855310
+12-22 11:44:57.904 E/ViewRootImpl(28408): sendUserActionEvent() mView returned.
+12-22 11:44:57.981 I/ViewRootImpl@c703e1a[MainActivity](28408): Relayout returned: old=(0,0,1080,2220) new=(0,0,1080,2220) req=(1080,2220)0 dur=6 res=0x7 s={true 471588225024} ch=true
+12-22 11:44:57.982 I/mali_winsys(28408): new_window_surface() [1080x2220] return: 0x3000
+12-22 11:44:58.030 E/DecorView(28408): mWindow.mActivityCurrentConfig is null
+12-22 11:44:58.138 I/ViewRootImpl@c703e1a[MainActivity](28408): MSG_WINDOW_FOCUS_CHANGED 1 1
+12-22 11:44:58.138 D/InputMethodManager(28408): prepareNavigationBarInfo() DecorView@4f6e377[MainActivity]
+12-22 11:44:58.138 D/InputMethodManager(28408): getNavigationBarColor() -855310
+12-22 11:44:58.140 D/InputMethodManager(28408): prepareNavigationBarInfo() DecorView@4f6e377[MainActivity]
+12-22 11:44:58.140 D/InputMethodManager(28408): getNavigationBarColor() -855310
+12-22 11:44:58.140 V/InputMethodManager(28408): Starting input: tba=com.wayfarer.mobile ic=null mNaviBarColor -855310 mIsGetNaviBarColorSuccess true , NavVisible : true , NavTrans : false
+12-22 11:44:58.140 D/InputMethodManager(28408): startInputInner - Id : 0
+12-22 11:44:58.140 I/InputMethodManager(28408): startInputInner - mService.startInputOrWindowGainedFocus
+12-22 11:44:58.144 D/InputTransport(28408): Input channel destroyed: 'ClientS', fd=183
+12-22 11:44:58.247 I/ViewRootImpl@7f80219[MainActivity](28408): MSG_WINDOW_FOCUS_CHANGED 0 1
+12-22 11:44:58.247 D/InputMethodManager(28408): prepareNavigationBarInfo() DecorView@fbf7ed0[MainActivity]
+12-22 11:44:58.247 D/InputMethodManager(28408): getNavigationBarColor() -855310
+12-22 11:44:58.250 I/ViewRootImpl@c703e1a[MainActivity](28408): MSG_RESIZED: frame=(0,0,1080,2220) ci=(0,72,0,144) vi=(0,72,0,144) or=1
+12-22 11:44:58.264 E/DecorView(28408): mWindow.mActivityCurrentConfig is null
+12-22 11:44:59.728 I/ViewRootImpl@c703e1a[MainActivity](28408): ViewPostIme pointer 0
+12-22 11:44:59.772 I/ViewRootImpl@c703e1a[MainActivity](28408): ViewPostIme pointer 1
+12-22 11:44:59.819 E/DecorView(28408): mWindow.mActivityCurrentConfig is null
+12-22 11:45:00.338 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 1413(85KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 9699KB/18MB, paused 59us total 55.680ms
+12-22 11:45:01.214 I/ViewRootImpl@c703e1a[MainActivity](28408): ViewPostIme pointer 0
+12-22 11:45:01.267 I/ViewRootImpl@c703e1a[MainActivity](28408): ViewPostIme pointer 1
+12-22 11:45:01.508 E/DecorView(28408): mWindow.mActivityCurrentConfig is null
+12-22 11:45:01.764 E/DecorView(28408): mWindow.mActivityCurrentConfig is null
+12-22 11:45:02.646 I/ViewRootImpl@c703e1a[MainActivity](28408): ViewPostIme pointer 0
+12-22 11:45:02.689 I/ViewRootImpl@c703e1a[MainActivity](28408): ViewPostIme pointer 1
+12-22 11:45:02.752 E/DecorView(28408): mWindow.mActivityCurrentConfig is null
+12-22 11:45:02.787 E/DecorView(28408): mWindow.mActivityCurrentConfig is null
+12-22 11:45:02.822 E/DecorView(28408): mWindow.mActivityCurrentConfig is null
+12-22 11:45:03.050 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 11284(1243KB) AllocSpace objects, 18(1992KB) LOS objects, 49% free, 9967KB/19MB, paused 62us total 52.694ms
+12-22 11:45:03.925 I/ViewRootImpl@c703e1a[MainActivity](28408): ViewPostIme pointer 0
+12-22 11:45:03.966 I/ViewRootImpl@c703e1a[MainActivity](28408): ViewPostIme pointer 1
+12-22 11:45:03.981 I/DOTNET  (28408): >>> ShowMarkerPickerAsync - SELECT button clicked, color=bg-blue, icon=star
+12-22 11:45:04.047 I/mali_egl(28408): eglDestroySurface() in
+12-22 11:45:04.048 I/mali_winsys(28408): delete_surface() [1080x1836] return
+12-22 11:45:04.048 I/mali_egl(28408): eglDestroySurface() out
+12-22 11:45:04.048 E/BufferQueueProducer(28408): [SurfaceTexture-0-28408-1] disconnect: not connected (req=1)
+12-22 11:45:04.048 W/libEGL  (28408): EGLNativeWindowType 0x6dcdc22010 disconnect failed
+12-22 11:45:04.048 I/mali_winsys(28408): new_window_surface() [1080x1836] return: 0x3000
+12-22 11:45:04.373 E/ViewRootImpl@c703e1a[MainActivity](28408): Attempting to destroy the window while drawing!
+12-22 11:45:04.373 E/ViewRootImpl@c703e1a[MainActivity](28408):   window=android.view.ViewRootImpl@aee1af, title=com.wayfarer.mobile/crc6466b7a4b097787631.MainActivity
+12-22 11:45:04.415 I/DOTNET  (28408): >>> EditPlaceMarkerAsync - Picker returned, result=(bg-blue, star)
+12-22 11:45:04.645 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 3315(422KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 9971KB/19MB, paused 100us total 63.651ms
+12-22 11:45:04.670 I/mali_egl(28408): eglDestroySurface() in
+12-22 11:45:04.671 I/mali_winsys(28408): delete_surface() [1080x2220] return
+12-22 11:45:04.671 I/mali_egl(28408): eglDestroySurface() out
+12-22 11:45:04.671 W/libEGL  (28408): EGLNativeWindowType 0x6dfaaa5390 disconnect failed
+12-22 11:45:04.672 I/ViewRootImpl@c703e1a[MainActivity](28408): dispatchDetachedFromWindow
+12-22 11:45:04.675 D/InputTransport(28408): Input channel destroyed: 'c7d5c65', fd=165
+12-22 11:45:04.693 E/ViewRootImpl(28408): sendUserActionEvent() mView returned.
+12-22 11:45:04.694 I/ViewRootImpl@7f80219[MainActivity](28408): MSG_WINDOW_FOCUS_CHANGED 1 1
+12-22 11:45:04.694 D/InputMethodManager(28408): prepareNavigationBarInfo() DecorView@fbf7ed0[MainActivity]
+12-22 11:45:04.694 D/InputMethodManager(28408): getNavigationBarColor() -855310
+12-22 11:45:04.700 D/InputMethodManager(28408): prepareNavigationBarInfo() DecorView@fbf7ed0[MainActivity]
+12-22 11:45:04.701 D/InputMethodManager(28408): getNavigationBarColor() -855310
+12-22 11:45:04.701 V/InputMethodManager(28408): Starting input: tba=com.wayfarer.mobile ic=null mNaviBarColor -855310 mIsGetNaviBarColorSuccess true , NavVisible : true , NavTrans : false
+12-22 11:45:04.701 D/InputMethodManager(28408): startInputInner - Id : 0
+12-22 11:45:04.701 I/InputMethodManager(28408): startInputInner - mService.startInputOrWindowGainedFocus
+12-22 11:45:04.703 D/InputTransport(28408): Input channel destroyed: 'ClientS', fd=216
+12-22 11:45:05.477 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 5865(347KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 9770KB/19MB, paused 58us total 79.857ms
+12-22 11:45:08.898 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 1880(131KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 9716KB/18MB, paused 56us total 57.069ms
+12-22 11:45:12.003 I/wayfarer.mobil(28408): NativeAlloc concurrent copying GC freed 3454(272KB) AllocSpace objects, 2(104KB) LOS objects, 49% free, 9775KB/19MB, paused 186us total 129.270ms
+12-22 11:45:12.086 I/wayfarer.mobil(28408): Explicit concurrent copying GC freed 1751(75KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 9715KB/18MB, paused 56us total 57.847ms

@@ -11,13 +11,8 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 
-		<!-- Enable source binding compilation for better performance -->
-		<MauiEnableXamlCBindingWithSourceCompilation>true</MauiEnableXamlCBindingWithSourceCompilation>
-
-		<!-- Suppress XAML binding warnings for ContentView self-bindings with Source={x:Reference} -->
-		<!-- XC0022: Binding not compiled (expected for Source bindings) -->
-		<!-- XC0045: Property not found (false positive when x:DataType differs from Source type) -->
-		<NoWarn>$(NoWarn);XC0022;XC0045</NoWarn>
+		<!-- Disabled: Source binding compilation breaks RelativeSource bindings in DataTemplates -->
+		<!-- <MauiEnableXamlCBindingWithSourceCompilation>true</MauiEnableXamlCBindingWithSourceCompilation> -->
 
 		<!-- Display name -->
 		<ApplicationTitle>WayfarerMobile</ApplicationTitle>
