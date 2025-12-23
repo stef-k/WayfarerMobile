@@ -38,6 +38,7 @@ public partial class MainViewModel : BaseViewModel
     private readonly ITripLayerService _tripLayerService;
     private readonly IWikipediaService _wikipediaService;
     private readonly ISettingsService _settingsService;
+    private readonly ITripSyncService _tripSyncService;
     private readonly ILogger<MainViewModel> _logger;
 
     // Map and layers (owned by this ViewModel)
@@ -701,6 +702,7 @@ public partial class MainViewModel : BaseViewModel
         ITripLayerService tripLayerService,
         IWikipediaService wikipediaService,
         ISettingsService settingsService,
+        ITripSyncService tripSyncService,
         ILogger<MainViewModel> logger)
     {
         _locationBridge = locationBridge;
@@ -719,6 +721,7 @@ public partial class MainViewModel : BaseViewModel
         _tripLayerService = tripLayerService;
         _wikipediaService = wikipediaService;
         _settingsService = settingsService;
+        _tripSyncService = tripSyncService;
         _logger = logger;
         Title = "WayfarerMobile";
 
@@ -1651,6 +1654,195 @@ public partial class MainViewModel : BaseViewModel
 
         // TODO: Navigate to place edit page when implemented
         await _toastService.ShowAsync("Edit feature coming soon");
+    }
+
+    /// <summary>
+    /// Opens edit options for a trip region.
+    /// </summary>
+    [RelayCommand]
+    private async Task EditRegionAsync(TripRegion? region)
+    {
+        if (region == null || LoadedTrip == null)
+            return;
+
+        // Don't allow editing the "Unassigned Places" region
+        if (region.Name == TripRegion.UnassignedPlacesName)
+        {
+            await _toastService.ShowWarningAsync("Cannot edit the Unassigned Places region");
+            return;
+        }
+
+        var action = await Shell.Current.DisplayActionSheetAsync(
+            $"Edit: {region.Name}",
+            "Cancel",
+            null,
+            "Edit Name",
+            "Edit Notes");
+
+        switch (action)
+        {
+            case "Edit Name":
+                await EditRegionNameAsync(region);
+                break;
+            case "Edit Notes":
+                await EditRegionNotesAsync(region);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Edits the name of a trip region using an inline prompt.
+    /// </summary>
+    private async Task EditRegionNameAsync(TripRegion region)
+    {
+        var newName = await Shell.Current.DisplayPromptAsync(
+            "Edit Region Name",
+            "Enter new name:",
+            initialValue: region.Name,
+            maxLength: 200,
+            keyboard: Keyboard.Text);
+
+        if (string.IsNullOrWhiteSpace(newName) || newName == region.Name)
+            return;
+
+        // Don't allow renaming to reserved name
+        if (newName.Trim().Equals(TripRegion.UnassignedPlacesName, StringComparison.OrdinalIgnoreCase))
+        {
+            await _toastService.ShowWarningAsync("This region name is reserved");
+            return;
+        }
+
+        try
+        {
+            // Find the actual region in the Regions list (SortedRegions creates copies)
+            var actualRegion = LoadedTrip!.Regions.FirstOrDefault(r => r.Id == region.Id);
+            if (actualRegion == null)
+            {
+                await _toastService.ShowErrorAsync("Region not found");
+                return;
+            }
+
+            // Optimistically update UI
+            actualRegion.Name = newName.Trim();
+
+            // Refresh the sorted regions view
+            LoadedTrip.NotifySortedRegionsChanged();
+
+            // Queue server sync
+            await _tripSyncService.UpdateRegionAsync(
+                region.Id,
+                LoadedTrip.Id,
+                name: newName.Trim());
+
+            await _toastService.ShowSuccessAsync("Region name updated");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update region name");
+            await _toastService.ShowErrorAsync($"Failed to update: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Navigates to the notes editor for a trip region.
+    /// </summary>
+    private async Task EditRegionNotesAsync(TripRegion region)
+    {
+        var navParams = new Dictionary<string, object>
+        {
+            { "tripId", LoadedTrip!.Id.ToString() },
+            { "entityId", region.Id.ToString() },
+            { "notes", region.Notes ?? string.Empty },
+            { "entityType", "Region" }
+        };
+
+        await Shell.Current.GoToAsync("notesEditor", navParams);
+    }
+
+    /// <summary>
+    /// Moves a region up in the display order.
+    /// </summary>
+    [RelayCommand]
+    private async Task MoveRegionUpAsync(TripRegion? region)
+    {
+        if (region == null || LoadedTrip?.Regions == null)
+            return;
+
+        // Don't allow moving the "Unassigned Places" region
+        if (region.Name == TripRegion.UnassignedPlacesName)
+            return;
+
+        // Find the actual region in the Regions list (SortedRegions creates copies)
+        var actualRegion = LoadedTrip.Regions.FirstOrDefault(r => r.Id == region.Id);
+        if (actualRegion == null)
+            return;
+
+        var regions = LoadedTrip.Regions
+            .Where(r => r.Name != TripRegion.UnassignedPlacesName)
+            .OrderBy(r => r.SortOrder)
+            .ToList();
+
+        var currentIndex = regions.IndexOf(actualRegion);
+        if (currentIndex <= 0)
+            return; // Already at top
+
+        // Swap with previous region
+        var previousRegion = regions[currentIndex - 1];
+        var tempOrder = actualRegion.SortOrder;
+        actualRegion.SortOrder = previousRegion.SortOrder;
+        previousRegion.SortOrder = tempOrder;
+
+        // Queue server syncs for both regions
+        await _tripSyncService.UpdateRegionAsync(actualRegion.Id, LoadedTrip.Id, displayOrder: actualRegion.SortOrder);
+        await _tripSyncService.UpdateRegionAsync(previousRegion.Id, LoadedTrip.Id, displayOrder: previousRegion.SortOrder);
+
+        // Refresh the sorted regions view
+        LoadedTrip.NotifySortedRegionsChanged();
+
+        await _toastService.ShowSuccessAsync("Region moved up");
+    }
+
+    /// <summary>
+    /// Moves a region down in the display order.
+    /// </summary>
+    [RelayCommand]
+    private async Task MoveRegionDownAsync(TripRegion? region)
+    {
+        if (region == null || LoadedTrip?.Regions == null)
+            return;
+
+        // Don't allow moving the "Unassigned Places" region
+        if (region.Name == TripRegion.UnassignedPlacesName)
+            return;
+
+        // Find the actual region in the Regions list (SortedRegions creates copies)
+        var actualRegion = LoadedTrip.Regions.FirstOrDefault(r => r.Id == region.Id);
+        if (actualRegion == null)
+            return;
+
+        var regions = LoadedTrip.Regions
+            .Where(r => r.Name != TripRegion.UnassignedPlacesName)
+            .OrderBy(r => r.SortOrder)
+            .ToList();
+
+        var currentIndex = regions.IndexOf(actualRegion);
+        if (currentIndex < 0 || currentIndex >= regions.Count - 1)
+            return; // Already at bottom
+
+        // Swap with next region
+        var nextRegion = regions[currentIndex + 1];
+        var tempOrder = actualRegion.SortOrder;
+        actualRegion.SortOrder = nextRegion.SortOrder;
+        nextRegion.SortOrder = tempOrder;
+
+        // Queue server syncs for both regions
+        await _tripSyncService.UpdateRegionAsync(actualRegion.Id, LoadedTrip.Id, displayOrder: actualRegion.SortOrder);
+        await _tripSyncService.UpdateRegionAsync(nextRegion.Id, LoadedTrip.Id, displayOrder: nextRegion.SortOrder);
+
+        // Refresh the sorted regions view
+        LoadedTrip.NotifySortedRegionsChanged();
+
+        await _toastService.ShowSuccessAsync("Region moved down");
     }
 
     /// <summary>

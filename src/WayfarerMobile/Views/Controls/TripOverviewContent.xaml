@@ -112,12 +112,51 @@
                                                        IsVisible="{Binding IsVisibleInUi}">
                                     <sfExpander:SfExpander.Header>
                                         <Grid MinimumHeightRequest="40" Padding="8,6"
+                                              ColumnDefinitions="*,Auto,Auto,Auto"
                                               BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}">
-                                            <Label Text="{Binding Name}"
+                                            <Label Grid.Column="0"
+                                                   Text="{Binding Name}"
                                                    FontSize="14"
                                                    FontAttributes="Bold"
                                                    VerticalOptions="Center"
                                                    LineBreakMode="WordWrap" />
+                                            <!-- Edit Button (hidden for Unassigned Places region) -->
+                                            <ImageButton Grid.Column="1"
+                                                         Source="edit.png"
+                                                         Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=EditRegionCommand}"
+                                                         CommandParameter="{Binding .}"
+                                                         IsVisible="{Binding IsUnassignedRegion, Converter={StaticResource InverseBoolConverter}}"
+                                                         WidthRequest="28"
+                                                         HeightRequest="28"
+                                                         Padding="4"
+                                                         BackgroundColor="Transparent"
+                                                         VerticalOptions="Center" />
+                                            <!-- Move Up Button -->
+                                            <Button Grid.Column="2"
+                                                    Text="▲"
+                                                    FontSize="12"
+                                                    Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=MoveRegionUpCommand}"
+                                                    CommandParameter="{Binding .}"
+                                                    IsVisible="{Binding IsUnassignedRegion, Converter={StaticResource InverseBoolConverter}}"
+                                                    WidthRequest="28"
+                                                    HeightRequest="28"
+                                                    Padding="0"
+                                                    BackgroundColor="Transparent"
+                                                    TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
+                                                    VerticalOptions="Center" />
+                                            <!-- Move Down Button -->
+                                            <Button Grid.Column="3"
+                                                    Text="▼"
+                                                    FontSize="12"
+                                                    Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=MoveRegionDownCommand}"
+                                                    CommandParameter="{Binding .}"
+                                                    IsVisible="{Binding IsUnassignedRegion, Converter={StaticResource InverseBoolConverter}}"
+                                                    WidthRequest="28"
+                                                    HeightRequest="28"
+                                                    Padding="0"
+                                                    BackgroundColor="Transparent"
+                                                    TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
+                                                    VerticalOptions="Center" />
                                         </Grid>
                                     </sfExpander:SfExpander.Header>
                                     <sfExpander:SfExpander.Content>

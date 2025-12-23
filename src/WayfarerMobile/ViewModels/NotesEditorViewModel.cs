@@ -325,10 +325,14 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     /// <summary>
     /// Saves region notes.
     /// </summary>
-    private Task SaveRegionNotesAsync(string? notes)
+    private async Task SaveRegionNotesAsync(string? notes)
     {
-        // TODO: Implement when Region editing is added
-        throw new NotImplementedException("Region notes editing not yet implemented");
+        // Queue server sync
+        await _tripSyncService.UpdateRegionAsync(
+            EntityId,
+            TripId,
+            notes: notes,
+            includeNotes: true);
     }
 
     /// <summary>

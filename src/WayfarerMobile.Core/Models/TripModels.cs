@@ -112,8 +112,13 @@ public class TripTag
 /// <summary>
 /// Full trip details with places and segments.
 /// </summary>
-public class TripDetails
+public class TripDetails : INotifyPropertyChanged
 {
+    /// <summary>
+    /// Occurs when a property value changes.
+    /// </summary>
+    public event PropertyChangedEventHandler? PropertyChanged;
+
     /// <summary>
     /// Gets or sets the trip ID.
     /// </summary>
@@ -266,6 +271,15 @@ public class TripDetails
     [JsonIgnore]
     public List<TripArea> AllAreas =>
         Regions.SelectMany(r => r.Areas).ToList();
+
+    /// <summary>
+    /// Notifies that the SortedRegions property has changed.
+    /// Call this after modifying regions to refresh the UI.
+    /// </summary>
+    public void NotifySortedRegionsChanged()
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SortedRegions)));
+    }
 }
 
 /// <summary>
