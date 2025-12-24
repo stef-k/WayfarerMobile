@@ -1672,10 +1672,10 @@ public partial class MainViewModel : BaseViewModel
             _tripLayerService.UpdatePlaceSelection(_placeSelectionLayer, place);
         }
 
-        // Center map on selected place
+        // Center and zoom in on selected place for better view
         if (_map != null)
         {
-            _mapBuilder.CenterOnLocation(_map, place.Latitude, place.Longitude);
+            _mapBuilder.CenterOnLocation(_map, place.Latitude, place.Longitude, zoomLevel: 16);
         }
         IsFollowingLocation = false;
     }

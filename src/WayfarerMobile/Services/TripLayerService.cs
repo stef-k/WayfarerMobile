@@ -523,11 +523,10 @@ public class TripLayerService : ITripLayerService
         var point = new Point(x, y);
 
         // Create a ring style around the selected place using primary app color (#e45243)
-        // Match the marker's offset so ring is centered on the marker
+        // Ring is centered on coordinate (no offset - unlike pin marker which has tip offset)
         var style = new SymbolStyle
         {
-            SymbolScale = 1.4,  // Slightly larger than the marker
-            Offset = new Offset(0, -16),  // Same offset as marker icon
+            SymbolScale = 1.0,  // Compact ring around the marker base
             Fill = new Brush(Color.Transparent),
             Outline = new Pen(Color.FromArgb(220, 228, 82, 67), 3)  // Primary color ring (#e45243)
             {
