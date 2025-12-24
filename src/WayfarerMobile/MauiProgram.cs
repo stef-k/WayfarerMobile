@@ -197,7 +197,7 @@ public static class MauiProgram
         services.AddTransient<OnboardingViewModel>();
         services.AddTransient<TimelineViewModel>();
         services.AddTransient<CheckInViewModel>();
-        services.AddTransient<TripsViewModel>();
+        services.AddSingleton<TripsViewModel>();
         services.AddTransient<PinSecurityViewModel>();
         services.AddSingleton<NavigationHudViewModel>();
         services.AddTransient<QrScannerViewModel>();

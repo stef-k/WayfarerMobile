@@ -1893,6 +1893,9 @@ public partial class MainViewModel : BaseViewModel
             // Update the selected place reference too
             SelectedTripPlace = actualPlace;
 
+            // Explicitly notify TripSheetTitle since place name changed
+            OnPropertyChanged(nameof(TripSheetTitle));
+
             // Refresh the sorted regions view
             LoadedTrip.NotifySortedRegionsChanged();
 
@@ -2282,9 +2285,13 @@ public partial class MainViewModel : BaseViewModel
             // Queue server sync for deletion
             await _tripSyncService.DeleteRegionAsync(region.Id, LoadedTrip.Id);
 
-            // Remove from local collection
-            LoadedTrip.Regions.Remove(region);
-            LoadedTrip.NotifySortedRegionsChanged();
+            // Find the actual region in the Regions list (SortedRegions creates copies)
+            var actualRegion = LoadedTrip.Regions.FirstOrDefault(r => r.Id == region.Id);
+            if (actualRegion != null)
+            {
+                LoadedTrip.Regions.Remove(actualRegion);
+                LoadedTrip.NotifySortedRegionsChanged();
+            }
 
             await _toastService.ShowSuccessAsync("Region deleted");
         }
@@ -3052,6 +3059,7 @@ public partial class MainViewModel : BaseViewModel
     {
         // Update static property for cross-ViewModel access
         CurrentLoadedTripId = value?.Id;
+        _logger.LogDebug("OnLoadedTripChanged: CurrentLoadedTripId set to {TripId}", CurrentLoadedTripId);
     }
 
     #endregion
@@ -3141,6 +3149,9 @@ public partial class MainViewModel : BaseViewModel
                             // Reassign SelectedTripPlace to trigger property change notifications
                             SelectedTripPlace = place;
 
+                            // Explicitly notify TripSheetTitle (reference may not have changed)
+                            OnPropertyChanged(nameof(TripSheetTitle));
+
                             // Refresh the sorted regions view (for trip overview list)
                             LoadedTrip.NotifySortedRegionsChanged();
 
@@ -3193,7 +3204,7 @@ public partial class MainViewModel : BaseViewModel
                     if (region != null)
                     {
                         region.Name = offlineArea.Name;
-                        region.Notes = offlineArea.Description;
+                        region.Notes = offlineArea.Notes;
                         SelectedTripRegion = region;
                         LoadedTrip.NotifySortedRegionsChanged();
                     }

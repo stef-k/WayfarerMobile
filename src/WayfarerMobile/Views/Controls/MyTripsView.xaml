@@ -147,8 +147,8 @@
                                                      Spacing="4"
                                                      Margin="0,8,0,0">
                                     <HorizontalStackLayout Spacing="8">
-                                        <!-- Back to Trip Button (when trip is currently loaded) -->
-                                        <Button Text="← Back"
+                                        <!-- To Trip Button (when trip is currently loaded) -->
+                                        <Button Text="To Trip"
                                                 Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=BackToTripCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding IsCurrentlyLoaded}"

@@ -525,7 +525,7 @@ public class TripSyncService : ITripSyncService
         // 1. Read current value from offline table (for restoration if needed)
         var offlineArea = await _databaseService.GetOfflineAreaByServerIdAsync(regionId);
         string? originalName = offlineArea?.Name;
-        string? originalNotes = offlineArea?.Description; // OfflineArea uses Description for notes
+        string? originalNotes = offlineArea?.Notes;
         int? originalDisplayOrder = offlineArea?.SortOrder;
         double? originalCenterLatitude = offlineArea?.CenterLatitude;
         double? originalCenterLongitude = offlineArea?.CenterLongitude;
@@ -534,7 +534,7 @@ public class TripSyncService : ITripSyncService
         if (offlineArea != null)
         {
             if (name != null) offlineArea.Name = name;
-            if (includeNotes) offlineArea.Description = notes;
+            if (includeNotes) offlineArea.Notes = notes;
             if (displayOrder.HasValue) offlineArea.SortOrder = displayOrder.Value;
             if (centerLatitude.HasValue) offlineArea.CenterLatitude = centerLatitude;
             if (centerLongitude.HasValue) offlineArea.CenterLongitude = centerLongitude;
@@ -580,7 +580,7 @@ public class TripSyncService : ITripSyncService
             if (offlineArea != null)
             {
                 offlineArea.Name = originalName ?? offlineArea.Name;
-                if (includeNotes) offlineArea.Description = originalNotes;
+                if (includeNotes) offlineArea.Notes = originalNotes;
                 if (originalDisplayOrder.HasValue) offlineArea.SortOrder = originalDisplayOrder.Value;
                 if (originalCenterLatitude.HasValue) offlineArea.CenterLatitude = originalCenterLatitude;
                 if (originalCenterLongitude.HasValue) offlineArea.CenterLongitude = originalCenterLongitude;
@@ -787,7 +787,7 @@ public class TripSyncService : ITripSyncService
             TripId = tripId,
             // Store original values for restoration if user cancels
             OriginalName = originalArea?.Name,
-            OriginalNotes = originalArea?.Description,
+            OriginalNotes = originalArea?.Notes,
             OriginalCenterLatitude = originalArea?.CenterLatitude,
             OriginalCenterLongitude = originalArea?.CenterLongitude,
             OriginalDisplayOrder = originalArea?.SortOrder,
@@ -1594,7 +1594,7 @@ public class TripSyncService : ITripSyncService
                     {
                         ServerId = mutation.EntityId,
                         Name = mutation.OriginalName,
-                        Description = mutation.OriginalNotes,
+                        Notes = mutation.OriginalNotes,
                         CenterLatitude = mutation.OriginalCenterLatitude,
                         CenterLongitude = mutation.OriginalCenterLongitude,
                         SortOrder = mutation.OriginalDisplayOrder ?? 0
@@ -1607,7 +1607,7 @@ public class TripSyncService : ITripSyncService
                     if (existingArea != null)
                     {
                         if (mutation.OriginalName != null) existingArea.Name = mutation.OriginalName;
-                        if (mutation.IncludeNotes) existingArea.Description = mutation.OriginalNotes;
+                        if (mutation.IncludeNotes) existingArea.Notes = mutation.OriginalNotes;
                         if (mutation.OriginalCenterLatitude.HasValue) existingArea.CenterLatitude = mutation.OriginalCenterLatitude;
                         if (mutation.OriginalCenterLongitude.HasValue) existingArea.CenterLongitude = mutation.OriginalCenterLongitude;
                         if (mutation.OriginalDisplayOrder.HasValue) existingArea.SortOrder = mutation.OriginalDisplayOrder.Value;

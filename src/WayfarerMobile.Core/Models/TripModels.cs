@@ -316,6 +316,7 @@ public class TripRegion : INotifyPropertyChanged
 {
     private string _name = string.Empty;
     private string? _notes;
+    private string? _coverImageUrl;
 
     /// <summary>
     /// Occurs when a property value changes.
@@ -368,7 +369,19 @@ public class TripRegion : INotifyPropertyChanged
     /// <summary>
     /// Gets or sets the cover image URL.
     /// </summary>
-    public string? CoverImageUrl { get; set; }
+    public string? CoverImageUrl
+    {
+        get => _coverImageUrl;
+        set
+        {
+            if (_coverImageUrl != value)
+            {
+                _coverImageUrl = value;
+                OnPropertyChanged(nameof(CoverImageUrl));
+                OnPropertyChanged(nameof(HasCoverImage));
+            }
+        }
+    }
 
     /// <summary>
     /// Gets or sets the center latitude.

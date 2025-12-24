@@ -121,34 +121,46 @@
                         <BindableLayout.ItemTemplate>
                             <DataTemplate x:DataType="models:TripRegion">
                                 <sfExpander:SfExpander IsExpanded="True"
-                                                       IsVisible="{Binding IsVisibleInUi}">
+                                                       IsVisible="{Binding IsVisibleInUi}"
+                                                       HeaderIconPosition="None">
                                     <sfExpander:SfExpander.Header>
                                         <Grid MinimumHeightRequest="40" Padding="8,6"
-                                              ColumnDefinitions="Auto,Auto,*,Auto,Auto"
-                                              ColumnSpacing="2"
+                                              ColumnDefinitions="Auto,Auto,*,Auto"
+                                              ColumnSpacing="4"
                                               BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}">
-                                            <!-- Edit Button (LEFT - hidden for Unassigned Places region) -->
-                                            <ImageButton Grid.Column="0"
-                                                         Source="edit.png"
-                                                         Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=EditRegionCommand}"
-                                                         CommandParameter="{Binding .}"
-                                                         IsVisible="{Binding IsUnassignedRegion, Converter={StaticResource InverseBoolConverter}}"
-                                                         WidthRequest="28"
-                                                         HeightRequest="28"
-                                                         Padding="4"
-                                                         BackgroundColor="Transparent"
-                                                         VerticalOptions="Center" />
-                                            <!-- Delete Button (LEFT - hidden for Unassigned Places region) -->
-                                            <ImageButton Grid.Column="1"
-                                                         Source="delete.png"
-                                                         Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=DeleteRegionCommand}"
-                                                         CommandParameter="{Binding .}"
-                                                         IsVisible="{Binding IsUnassignedRegion, Converter={StaticResource InverseBoolConverter}}"
-                                                         WidthRequest="28"
-                                                         HeightRequest="28"
-                                                         Padding="4"
-                                                         BackgroundColor="Transparent"
-                                                         VerticalOptions="Center" />
+                                            <!-- Edit Button (LEFT - tappable) -->
+                                            <Border Grid.Column="0"
+                                                    WidthRequest="25"
+                                                    HeightRequest="25"
+                                                    Margin="2,0"
+                                                    StrokeThickness="0"
+                                                    BackgroundColor="Transparent"
+                                                    IsVisible="{Binding IsUnassignedRegion, Converter={StaticResource InvertedBoolConverter}}"
+                                                    VerticalOptions="Center">
+                                                <Border.GestureRecognizers>
+                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=EditRegionCommand}"
+                                                                          CommandParameter="{Binding .}" />
+                                                </Border.GestureRecognizers>
+                                                <Image Source="edit.png" WidthRequest="20" HeightRequest="20" VerticalOptions="Center" HorizontalOptions="Center" />
+                                            </Border>
+                                            <!-- Delete Button (LEFT - tappable, danger background) -->
+                                            <Border Grid.Column="1"
+                                                    WidthRequest="25"
+                                                    HeightRequest="25"
+                                                    Margin="2,0"
+                                                    StrokeThickness="0"
+                                                    BackgroundColor="#C62828"
+                                                    IsVisible="{Binding IsUnassignedRegion, Converter={StaticResource InvertedBoolConverter}}"
+                                                    VerticalOptions="Center">
+                                                <Border.StrokeShape>
+                                                    <RoundRectangle CornerRadius="12" />
+                                                </Border.StrokeShape>
+                                                <Border.GestureRecognizers>
+                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=DeleteRegionCommand}"
+                                                                          CommandParameter="{Binding .}" />
+                                                </Border.GestureRecognizers>
+                                                <Image Source="delete.png" WidthRequest="20" HeightRequest="20" VerticalOptions="Center" HorizontalOptions="Center" />
+                                            </Border>
                                             <!-- Region Name (CENTER) -->
                                             <Label Grid.Column="2"
                                                    Text="{Binding Name}"
@@ -156,32 +168,28 @@
                                                    FontAttributes="Bold"
                                                    VerticalOptions="Center"
                                                    LineBreakMode="WordWrap" />
-                                            <!-- Move Up Button (RIGHT) -->
-                                            <Button Grid.Column="3"
-                                                    Text="▲"
-                                                    FontSize="10"
-                                                    Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=MoveRegionUpCommand}"
-                                                    CommandParameter="{Binding .}"
-                                                    IsVisible="{Binding IsUnassignedRegion, Converter={StaticResource InverseBoolConverter}}"
-                                                    WidthRequest="24"
-                                                    HeightRequest="24"
-                                                    Padding="0"
-                                                    BackgroundColor="Transparent"
-                                                    TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
-                                                    VerticalOptions="Center" />
-                                            <!-- Move Down Button (RIGHT) -->
-                                            <Button Grid.Column="4"
-                                                    Text="▼"
-                                                    FontSize="10"
-                                                    Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=MoveRegionDownCommand}"
-                                                    CommandParameter="{Binding .}"
-                                                    IsVisible="{Binding IsUnassignedRegion, Converter={StaticResource InverseBoolConverter}}"
-                                                    WidthRequest="24"
-                                                    HeightRequest="24"
-                                                    Padding="0"
-                                                    BackgroundColor="Transparent"
-                                                    TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
-                                                    VerticalOptions="Center" />
+                                            <!-- Move Up/Down Buttons (RIGHT - compact with negative margins) -->
+                                            <HorizontalStackLayout Grid.Column="3" Spacing="-8" VerticalOptions="Center"
+                                                                   IsVisible="{Binding IsUnassignedRegion, Converter={StaticResource InvertedBoolConverter}}">
+                                                <Button Text="▲"
+                                                        FontSize="10"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=MoveRegionUpCommand}"
+                                                        CommandParameter="{Binding .}"
+                                                        WidthRequest="28"
+                                                        HeightRequest="28"
+                                                        Padding="0"
+                                                        BackgroundColor="Transparent"
+                                                        TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
+                                                <Button Text="▼"
+                                                        FontSize="10"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=MoveRegionDownCommand}"
+                                                        CommandParameter="{Binding .}"
+                                                        WidthRequest="28"
+                                                        HeightRequest="28"
+                                                        Padding="0"
+                                                        BackgroundColor="Transparent"
+                                                        TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
+                                            </HorizontalStackLayout>
                                         </Grid>
                                     </sfExpander:SfExpander.Header>
                                     <sfExpander:SfExpander.Content>
@@ -192,19 +200,24 @@
                                                 <Border.StrokeShape><RoundRectangle CornerRadius="6" /></Border.StrokeShape>
                                                 <Image Source="{Binding CoverImageUrl}" Aspect="AspectFill" />
                                             </Border>
-                                            <!-- Region Notes (button to show details, like trip notes) -->
-                                            <Border StrokeThickness="0" Margin="0,0,0,1"
-                                                    BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}"
-                                                    Padding="8,8"
+                                            <!-- Region Notes (button to show details, styled like trip notes) -->
+                                            <Border StrokeThickness="0"
+                                                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}"
+                                                    Margin="0,0,0,1"
+                                                    Padding="16,10"
                                                     IsVisible="{Binding HasNotes}">
+                                                <Border.StrokeShape>
+                                                    <RoundRectangle CornerRadius="0" />
+                                                </Border.StrokeShape>
                                                 <Border.GestureRecognizers>
                                                     <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=ShowRegionNotesCommand}"
                                                                           CommandParameter="{Binding .}" />
                                                 </Border.GestureRecognizers>
                                                 <Grid ColumnDefinitions="*,Auto">
                                                     <Label Grid.Column="0"
-                                                           Text="Notes"
+                                                           Text="Region Notes"
                                                            FontSize="13"
+                                                           FontAttributes="Bold"
                                                            VerticalOptions="Center" />
                                                     <Label Grid.Column="1"
                                                            Text="→"
@@ -223,35 +236,32 @@
                                                                 <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=SelectTripPlaceCommand}"
                                                                                       CommandParameter="{Binding .}" />
                                                             </Border.GestureRecognizers>
-                                                            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+                                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="4">
                                                                 <Image Grid.Column="0" Source="{Binding IconPath, Converter={StaticResource MauiAssetImageConverter}}"
                                                                        WidthRequest="32" HeightRequest="32" VerticalOptions="Center" />
                                                                 <Label Grid.Column="1" Text="{Binding Name}" FontSize="14" VerticalOptions="Center"
                                                                        LineBreakMode="WordWrap" />
-                                                                <!-- Move Up Button -->
-                                                                <Button Grid.Column="2"
-                                                                        Text="▲"
-                                                                        FontSize="10"
-                                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=MovePlaceUpCommand}"
-                                                                        CommandParameter="{Binding .}"
-                                                                        WidthRequest="24"
-                                                                        HeightRequest="24"
-                                                                        Padding="0"
-                                                                        BackgroundColor="Transparent"
-                                                                        TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
-                                                                        VerticalOptions="Center" />
-                                                                <!-- Move Down Button -->
-                                                                <Button Grid.Column="3"
-                                                                        Text="▼"
-                                                                        FontSize="10"
-                                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=MovePlaceDownCommand}"
-                                                                        CommandParameter="{Binding .}"
-                                                                        WidthRequest="24"
-                                                                        HeightRequest="24"
-                                                                        Padding="0"
-                                                                        BackgroundColor="Transparent"
-                                                                        TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
-                                                                        VerticalOptions="Center" />
+                                                                <!-- Move Up/Down Buttons (compact with negative margins) -->
+                                                                <HorizontalStackLayout Grid.Column="2" Spacing="-8" VerticalOptions="Center">
+                                                                    <Button Text="▲"
+                                                                            FontSize="10"
+                                                                            Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=MovePlaceUpCommand}"
+                                                                            CommandParameter="{Binding .}"
+                                                                            WidthRequest="28"
+                                                                            HeightRequest="28"
+                                                                            Padding="0"
+                                                                            BackgroundColor="Transparent"
+                                                                            TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
+                                                                    <Button Text="▼"
+                                                                            FontSize="10"
+                                                                            Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=MovePlaceDownCommand}"
+                                                                            CommandParameter="{Binding .}"
+                                                                            WidthRequest="28"
+                                                                            HeightRequest="28"
+                                                                            Padding="0"
+                                                                            BackgroundColor="Transparent"
+                                                                            TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
+                                                                </HorizontalStackLayout>
                                                             </Grid>
                                                         </Border>
                                                     </DataTemplate>
@@ -438,7 +448,7 @@
               RowSpacing="8"
               IsVisible="{Binding IsTripSheetShowingPlace}">
 
-            <!-- Row 0: Place Header -->
+            <!-- Row 0: Place Header with Icon and Name -->
             <Grid Grid.Row="0" ColumnDefinitions="Auto,*" ColumnSpacing="8">
                 <Image Grid.Column="0" Source="{Binding SelectedTripPlace.IconPath, Converter={StaticResource MauiAssetImageConverter}}"
                        WidthRequest="36" HeightRequest="36" VerticalOptions="Start" />

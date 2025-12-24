@@ -288,6 +288,7 @@ public partial class TripsViewModel : BaseViewModel
 
             // Check which trip is currently loaded on the map
             var loadedTripId = MainViewModel.CurrentLoadedTripId;
+            _logger.LogDebug("LoadTripsAsync: CurrentLoadedTripId = {TripId}", loadedTripId);
 
             // Build grouped list
             var items = new List<TripListItem>();
@@ -301,6 +302,7 @@ public partial class TripsViewModel : BaseViewModel
                 // Mark as currently loaded if it matches
                 if (loadedTripId.HasValue && trip.Id == loadedTripId.Value)
                 {
+                    _logger.LogDebug("LoadTripsAsync: Marking trip {TripName} ({TripId}) as currently loaded", trip.Name, trip.Id);
                     item.IsCurrentlyLoaded = true;
                 }
 
@@ -428,6 +430,15 @@ public partial class TripsViewModel : BaseViewModel
                 return;
             }
 
+            // Mark this trip as loaded and clear others BEFORE navigating
+            foreach (var group in MyTrips)
+            {
+                foreach (var tripItem in group)
+                {
+                    tripItem.IsCurrentlyLoaded = tripItem.ServerId == item.ServerId;
+                }
+            }
+
             // Navigate to main page with trip
             await Shell.Current.GoToAsync("//main", new Dictionary<string, object>
             {
@@ -498,8 +509,8 @@ public partial class TripsViewModel : BaseViewModel
 
         try
         {
-            // Check if this trip is currently loaded on the map
-            var isCurrentlyLoaded = _tripNavigationService.CurrentTripId == item.ServerId;
+            // Check if this trip is currently loaded using single source of truth
+            var isCurrentlyLoaded = MainViewModel.CurrentLoadedTripId == item.ServerId;
 
             await _downloadService.DeleteTripAsync(item.ServerId);
 
@@ -516,10 +527,10 @@ public partial class TripsViewModel : BaseViewModel
                 });
             }
 
-            // Update item directly instead of full reload (avoids shimmer)
+            // Update item state directly
             item.DownloadState = TripDownloadState.ServerOnly;
             item.DownloadedEntity = null;
-            OnPropertyChanged(nameof(MyTrips));
+            item.IsCurrentlyLoaded = false;  // Clear loaded state since trip data is deleted
 
             await _toastService.ShowSuccessAsync("Offline data deleted");
         }
@@ -890,16 +901,18 @@ public partial class TripsViewModel : BaseViewModel
     /// <inheritdoc/>
     public override async Task OnAppearingAsync()
     {
+        _logger.LogDebug("OnAppearingAsync: MyTrips.Count = {Count}", MyTrips.Count);
+
         // Load my trips if empty
         if (MyTrips.Count == 0)
         {
+            _logger.LogDebug("OnAppearingAsync: Calling LoadTripsAsync");
             await LoadTripsAsync();
         }
-        else
-        {
-            // Update loaded state for all trips (in case user loaded/unloaded a trip)
-            RefreshLoadedTripState();
-        }
+
+        // Always refresh loaded state (even after LoadTripsAsync, in case there's timing issues)
+        _logger.LogDebug("OnAppearingAsync: Calling RefreshLoadedTripState");
+        RefreshLoadedTripState();
 
         await base.OnAppearingAsync();
     }
@@ -911,6 +924,7 @@ public partial class TripsViewModel : BaseViewModel
     private void RefreshLoadedTripState()
     {
         var loadedTripId = MainViewModel.CurrentLoadedTripId;
+        _logger.LogDebug("RefreshLoadedTripState: CurrentLoadedTripId = {TripId}", loadedTripId);
 
         foreach (var group in MyTrips)
         {
@@ -919,6 +933,8 @@ public partial class TripsViewModel : BaseViewModel
                 var isLoaded = loadedTripId.HasValue && item.ServerId == loadedTripId.Value;
                 if (item.IsCurrentlyLoaded != isLoaded)
                 {
+                    _logger.LogDebug("RefreshLoadedTripState: Setting {TripName} ({ServerId}) IsCurrentlyLoaded = {IsLoaded}",
+                        item.Name, item.ServerId, isLoaded);
                     item.IsCurrentlyLoaded = isLoaded;
                 }
             }

@@ -32,9 +32,14 @@ public class OfflineAreaEntity
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the area description.
+    /// Gets or sets the region notes (HTML). Also known as "Description" for legacy compatibility.
     /// </summary>
-    public string? Description { get; set; }
+    public string? Notes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the cover image URL.
+    /// </summary>
+    public string? CoverImageUrl { get; set; }
 
     /// <summary>
     /// Gets or sets the center latitude.

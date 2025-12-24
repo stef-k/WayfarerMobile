@@ -139,6 +139,8 @@ public class TripDownloadService
             {
                 ServerId = r.Id,
                 Name = r.Name,
+                Notes = r.Notes,
+                CoverImageUrl = r.CoverImageUrl,
                 SortOrder = r.SortOrder > 0 ? r.SortOrder : index,
                 PlaceCount = r.Places.Count
             }).ToList();
@@ -404,6 +406,8 @@ public class TripDownloadService
             {
                 Id = regionGroup.Key,
                 Name = area?.Name ?? regionGroup.First().RegionName ?? "Places",
+                Notes = area?.Notes,
+                CoverImageUrl = area?.CoverImageUrl,
                 SortOrder = area?.SortOrder ?? 0,
                 Places = regionGroup.Select(p => new TripPlace
                 {
@@ -644,6 +648,8 @@ public class TripDownloadService
             {
                 ServerId = r.Id,
                 Name = r.Name,
+                Notes = r.Notes,
+                CoverImageUrl = r.CoverImageUrl,
                 SortOrder = r.SortOrder > 0 ? r.SortOrder : index,
                 PlaceCount = r.Places.Count
             }).ToList();
