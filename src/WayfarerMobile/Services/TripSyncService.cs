@@ -102,7 +102,7 @@ public class TripSyncService : ITripSyncService
             Latitude = latitude,
             Longitude = longitude,
             Notes = notes,
-            Icon = iconName,
+            IconName = iconName,
             MarkerColor = markerColor,
             DisplayOrder = displayOrder
         };
@@ -192,7 +192,7 @@ public class TripSyncService : ITripSyncService
             Latitude = latitude,
             Longitude = longitude,
             Notes = includeNotes ? notes : null,
-            Icon = iconName,
+            IconName = iconName,
             MarkerColor = markerColor,
             DisplayOrder = displayOrder
         };
@@ -1277,7 +1277,7 @@ public class TripSyncService : ITripSyncService
             Latitude = mutation.Latitude ?? 0,
             Longitude = mutation.Longitude ?? 0,
             Notes = mutation.IncludeNotes ? mutation.Notes : null,
-            Icon = mutation.IconName,
+            IconName = mutation.IconName,
             MarkerColor = mutation.MarkerColor,
             DisplayOrder = mutation.DisplayOrder
         };
@@ -1306,7 +1306,7 @@ public class TripSyncService : ITripSyncService
             Latitude = mutation.Latitude,
             Longitude = mutation.Longitude,
             Notes = mutation.IncludeNotes ? mutation.Notes : null,
-            Icon = mutation.IconName,
+            IconName = mutation.IconName,
             MarkerColor = mutation.MarkerColor,
             DisplayOrder = mutation.DisplayOrder
         };

@@ -1410,41 +1410,49 @@ public class PlaceCreateRequest
     /// <summary>
     /// Gets or sets the region ID (optional).
     /// </summary>
+    [JsonPropertyName("regionId")]
     public Guid? RegionId { get; set; }
 
     /// <summary>
     /// Gets or sets the place name.
     /// </summary>
+    [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the latitude.
     /// </summary>
+    [JsonPropertyName("latitude")]
     public double Latitude { get; set; }
 
     /// <summary>
     /// Gets or sets the longitude.
     /// </summary>
+    [JsonPropertyName("longitude")]
     public double Longitude { get; set; }
 
     /// <summary>
     /// Gets or sets the notes.
     /// </summary>
+    [JsonPropertyName("notes")]
     public string? Notes { get; set; }
 
     /// <summary>
     /// Gets or sets the icon name.
     /// </summary>
-    public string? Icon { get; set; }
+    [JsonPropertyName("iconName")]
+    public string? IconName { get; set; }
 
     /// <summary>
     /// Gets or sets the marker color.
     /// </summary>
+    [JsonPropertyName("markerColor")]
     public string? MarkerColor { get; set; }
 
     /// <summary>
     /// Gets or sets the display order.
     /// </summary>
+    [JsonPropertyName("displayOrder")]
     public int? DisplayOrder { get; set; }
 
     /// <summary>
@@ -1452,7 +1460,7 @@ public class PlaceCreateRequest
     /// Uses IconCatalog to resolve the icon and color to a resource path.
     /// </summary>
     [JsonIgnore]
-    public string IconPath => Helpers.IconCatalog.GetIconResourcePath(Icon, MarkerColor);
+    public string IconPath => Helpers.IconCatalog.GetIconResourcePath(IconName, MarkerColor);
 }
 
 /// <summary>
@@ -1463,41 +1471,49 @@ public class PlaceUpdateRequest
     /// <summary>
     /// Gets or sets the place name.
     /// </summary>
+    [JsonPropertyName("name")]
     public string? Name { get; set; }
 
     /// <summary>
     /// Gets or sets the latitude.
     /// </summary>
+    [JsonPropertyName("latitude")]
     public double? Latitude { get; set; }
 
     /// <summary>
     /// Gets or sets the longitude.
     /// </summary>
+    [JsonPropertyName("longitude")]
     public double? Longitude { get; set; }
 
     /// <summary>
     /// Gets or sets the notes.
     /// </summary>
+    [JsonPropertyName("notes")]
     public string? Notes { get; set; }
 
     /// <summary>
     /// Gets or sets the icon name.
     /// </summary>
-    public string? Icon { get; set; }
+    [JsonPropertyName("iconName")]
+    public string? IconName { get; set; }
 
     /// <summary>
     /// Gets or sets the marker color.
     /// </summary>
+    [JsonPropertyName("markerColor")]
     public string? MarkerColor { get; set; }
 
     /// <summary>
     /// Gets or sets the region ID.
     /// </summary>
+    [JsonPropertyName("regionId")]
     public Guid? RegionId { get; set; }
 
     /// <summary>
     /// Gets or sets the display order.
     /// </summary>
+    [JsonPropertyName("displayOrder")]
     public int? DisplayOrder { get; set; }
 }
 

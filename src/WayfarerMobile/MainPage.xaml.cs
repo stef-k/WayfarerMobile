@@ -293,6 +293,13 @@ public partial class MainPage : ContentPage, IQueryAttributable
         // Only handle when sheet becomes hidden (closed)
         if (e.NewState == Syncfusion.Maui.Toolkit.BottomSheet.BottomSheetState.Hidden)
         {
+            // Don't run cleanup if navigating to sub-editor (notes, marker, etc.)
+            // The sheet goes hidden during navigation but we want to preserve selection
+            if (_viewModel.IsNavigatingToSubEditor)
+            {
+                return;
+            }
+
             // Handle check-in sheet cleanup if it was open
             if (_viewModel.IsCheckInSheetOpen)
             {

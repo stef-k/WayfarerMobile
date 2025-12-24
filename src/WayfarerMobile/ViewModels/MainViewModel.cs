@@ -314,8 +314,9 @@ public partial class MainViewModel : BaseViewModel
     /// <summary>
     /// Tracks whether we're navigating to a sub-editor page (notes, marker, etc.).
     /// When true, OnDisappearingAsync should NOT unload the trip or close sheets.
+    /// Also checked by MainPage to avoid clearing selection when navigating to sub-editors.
     /// </summary>
-    private bool _isNavigatingToSubEditor;
+    public bool IsNavigatingToSubEditor { get; private set; }
 
     // Legacy property for compatibility
     private TripPlace? _selectedPlace;
@@ -1938,7 +1939,7 @@ public partial class MainViewModel : BaseViewModel
     /// </summary>
     private async Task EditPlaceNotesAsync(TripPlace place)
     {
-        _isNavigatingToSubEditor = true;
+        IsNavigatingToSubEditor = true;
 
         var navParams = new Dictionary<string, object>
         {
@@ -2146,7 +2147,7 @@ public partial class MainViewModel : BaseViewModel
         if (place == null || LoadedTrip == null)
             return;
 
-        _isNavigatingToSubEditor = true;
+        IsNavigatingToSubEditor = true;
 
         var navParams = new Dictionary<string, object>
         {
@@ -2251,7 +2252,7 @@ public partial class MainViewModel : BaseViewModel
     /// </summary>
     private async Task EditRegionNotesAsync(TripRegion region)
     {
-        _isNavigatingToSubEditor = true;
+        IsNavigatingToSubEditor = true;
 
         var navParams = new Dictionary<string, object>
         {
@@ -2540,7 +2541,7 @@ public partial class MainViewModel : BaseViewModel
         if (SelectedTripArea == null || LoadedTrip == null)
             return;
 
-        _isNavigatingToSubEditor = true;
+        IsNavigatingToSubEditor = true;
 
         // Navigate to notes editor
         var navParams = new Dictionary<string, object>
@@ -2563,7 +2564,7 @@ public partial class MainViewModel : BaseViewModel
         if (SelectedTripSegment == null || LoadedTrip == null)
             return;
 
-        _isNavigatingToSubEditor = true;
+        IsNavigatingToSubEditor = true;
 
         // Navigate to notes editor
         var navParams = new Dictionary<string, object>
@@ -2791,7 +2792,7 @@ public partial class MainViewModel : BaseViewModel
         if (LoadedTrip == null)
             return;
 
-        _isNavigatingToSubEditor = true;
+        IsNavigatingToSubEditor = true;
 
         var navParams = new Dictionary<string, object>
         {
@@ -3098,10 +3099,10 @@ public partial class MainViewModel : BaseViewModel
     public override async Task OnAppearingAsync()
     {
         // Check if we just returned from a sub-editor and need to refresh data
-        var wasInSubEditor = _isNavigatingToSubEditor;
+        var wasInSubEditor = IsNavigatingToSubEditor;
 
         // Reset sub-editor navigation flag (we've returned from sub-editor)
-        _isNavigatingToSubEditor = false;
+        IsNavigatingToSubEditor = false;
 
         // If we just returned from a sub-editor, refresh the edited entity
         if (wasInSubEditor && LoadedTrip != null)
@@ -3267,7 +3268,7 @@ public partial class MainViewModel : BaseViewModel
     {
         // Close the trip sheet when navigating away (but keep trip loaded in memory)
         // Don't close if navigating to sub-editors (notes, marker)
-        if (!_isNavigatingToSubEditor)
+        if (!IsNavigatingToSubEditor)
         {
             IsTripSheetOpen = false;
         }
