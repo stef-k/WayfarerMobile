@@ -522,12 +522,14 @@ public class TripLayerService : ITripLayerService
         var (x, y) = SphericalMercator.FromLonLat(place.Longitude, place.Latitude);
         var point = new Point(x, y);
 
-        // Create a ring style around the selected place
+        // Create a ring style around the selected place using primary app color (#e45243)
+        // Match the marker's offset so ring is centered on the marker
         var style = new SymbolStyle
         {
-            SymbolScale = 1.8,  // Larger than the marker
+            SymbolScale = 1.4,  // Slightly larger than the marker
+            Offset = new Offset(0, -16),  // Same offset as marker icon
             Fill = new Brush(Color.Transparent),
-            Outline = new Pen(Color.FromArgb(200, 66, 133, 244), 3)  // Blue ring
+            Outline = new Pen(Color.FromArgb(220, 228, 82, 67), 3)  // Primary color ring (#e45243)
             {
                 PenStrokeCap = PenStrokeCap.Round
             },
@@ -538,6 +540,9 @@ public class TripLayerService : ITripLayerService
         {
             Styles = new[] { style }
         };
+
+        // Add PlaceId so tapping on the ring still selects the same place
+        feature["PlaceId"] = place.Id;
 
         layer.Add(feature);
         layer.DataHasChanged();

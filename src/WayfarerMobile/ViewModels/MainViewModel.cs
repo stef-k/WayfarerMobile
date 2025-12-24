@@ -1605,7 +1605,14 @@ public partial class MainViewModel : BaseViewModel
         // Clear selection ring on map
         if (_placeSelectionLayer != null)
         {
-            _tripLayerService.ClearPlaceSelection(_placeSelectionLayer);
+            try
+            {
+                _tripLayerService.ClearPlaceSelection(_placeSelectionLayer);
+            }
+            catch (ObjectDisposedException)
+            {
+                // Ignore - can happen during app lifecycle transitions
+            }
         }
     }
 
@@ -1665,7 +1672,14 @@ public partial class MainViewModel : BaseViewModel
         // Show selection ring on map
         if (_placeSelectionLayer != null)
         {
-            _tripLayerService.UpdatePlaceSelection(_placeSelectionLayer, place);
+            try
+            {
+                _tripLayerService.UpdatePlaceSelection(_placeSelectionLayer, place);
+            }
+            catch (ObjectDisposedException)
+            {
+                // Ignore - can happen during app lifecycle transitions
+            }
         }
 
         // Center map on selected place
@@ -3058,7 +3072,14 @@ public partial class MainViewModel : BaseViewModel
 
         if (_placeSelectionLayer != null)
         {
-            _tripLayerService.ClearPlaceSelection(_placeSelectionLayer);
+            try
+            {
+                _tripLayerService.ClearPlaceSelection(_placeSelectionLayer);
+            }
+            catch (ObjectDisposedException)
+            {
+                // Ignore - can happen during app lifecycle transitions
+            }
         }
 
         // Resume following user location when trip is unloaded
