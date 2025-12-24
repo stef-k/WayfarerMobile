@@ -1605,14 +1605,9 @@ public partial class MainViewModel : BaseViewModel
         // Clear selection ring on map
         if (_placeSelectionLayer != null)
         {
-            try
-            {
-                _tripLayerService.ClearPlaceSelection(_placeSelectionLayer);
-            }
-            catch (ObjectDisposedException)
-            {
-                // Ignore - can happen during app lifecycle transitions
-            }
+            _logger.LogDebug("ClearPlaceSelection: layer features before={Count}",
+                _placeSelectionLayer.GetFeatures().Count());
+            _tripLayerService.ClearPlaceSelection(_placeSelectionLayer);
         }
     }
 
@@ -1672,14 +1667,9 @@ public partial class MainViewModel : BaseViewModel
         // Show selection ring on map
         if (_placeSelectionLayer != null)
         {
-            try
-            {
-                _tripLayerService.UpdatePlaceSelection(_placeSelectionLayer, place);
-            }
-            catch (ObjectDisposedException)
-            {
-                // Ignore - can happen during app lifecycle transitions
-            }
+            _logger.LogDebug("UpdatePlaceSelection: place={PlaceId}, layer features before={Count}",
+                place.Id, _placeSelectionLayer.GetFeatures().Count());
+            _tripLayerService.UpdatePlaceSelection(_placeSelectionLayer, place);
         }
 
         // Center map on selected place
@@ -3072,14 +3062,9 @@ public partial class MainViewModel : BaseViewModel
 
         if (_placeSelectionLayer != null)
         {
-            try
-            {
-                _tripLayerService.ClearPlaceSelection(_placeSelectionLayer);
-            }
-            catch (ObjectDisposedException)
-            {
-                // Ignore - can happen during app lifecycle transitions
-            }
+            _logger.LogDebug("UnloadTrip.ClearPlaceSelection: layer features before={Count}",
+                _placeSelectionLayer.GetFeatures().Count());
+            _tripLayerService.ClearPlaceSelection(_placeSelectionLayer);
         }
 
         // Resume following user location when trip is unloaded
