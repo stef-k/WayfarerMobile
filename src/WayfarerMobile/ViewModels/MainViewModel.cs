@@ -62,6 +62,7 @@ public partial class MainViewModel : BaseViewModel
     private WritableLayer? _tripPlacesLayer;
     private WritableLayer? _tripAreasLayer;
     private WritableLayer? _tripSegmentsLayer;
+    private WritableLayer? _placeSelectionLayer;
 
     #endregion
 
@@ -867,17 +868,19 @@ public partial class MainViewModel : BaseViewModel
         _locationLayer = _mapBuilder.CreateLayer(_locationLayerService.LocationLayerName);
         _tripAreasLayer = _mapBuilder.CreateLayer(_tripLayerService.TripAreasLayerName);
         _tripSegmentsLayer = _mapBuilder.CreateLayer(_tripLayerService.TripSegmentsLayerName);
+        _placeSelectionLayer = _mapBuilder.CreateLayer(_tripLayerService.PlaceSelectionLayerName);
         _tripPlacesLayer = _mapBuilder.CreateLayer(_tripLayerService.TripPlacesLayerName);
         _navigationRouteCompletedLayer = _mapBuilder.CreateLayer("NavigationRouteCompleted");
         _navigationRouteLayer = _mapBuilder.CreateLayer("NavigationRoute");
         _droppedPinLayer = _mapBuilder.CreateLayer(_droppedPinLayerService.DroppedPinLayerName);
 
-        // Create map with all layers (order: areas under segments under places under location)
+        // Create map with all layers (order: areas under segments under selection under places under location)
         var map = _mapBuilder.CreateMap(
             _tripAreasLayer,
             _tripSegmentsLayer,
             _navigationRouteCompletedLayer,
             _navigationRouteLayer,
+            _placeSelectionLayer,
             _tripPlacesLayer,
             _droppedPinLayer,
             _locationLayer);
@@ -1598,6 +1601,12 @@ public partial class MainViewModel : BaseViewModel
         IsShowingAreaNotes = false;
         IsShowingSegmentNotes = false;
         IsShowingRegionNotes = false;
+
+        // Clear selection ring on map
+        if (_placeSelectionLayer != null)
+        {
+            _tripLayerService.ClearPlaceSelection(_placeSelectionLayer);
+        }
     }
 
     /// <summary>
@@ -1652,6 +1661,12 @@ public partial class MainViewModel : BaseViewModel
         ClearTripSheetSelection();
         SelectedTripPlace = place;
         SelectedPlace = place; // Legacy compatibility
+
+        // Show selection ring on map
+        if (_placeSelectionLayer != null)
+        {
+            _tripLayerService.UpdatePlaceSelection(_placeSelectionLayer, place);
+        }
 
         // Center map on selected place
         if (_map != null)
@@ -3041,6 +3056,11 @@ public partial class MainViewModel : BaseViewModel
             _tripLayerService.ClearTripSegments(_tripSegmentsLayer);
         }
 
+        if (_placeSelectionLayer != null)
+        {
+            _tripLayerService.ClearPlaceSelection(_placeSelectionLayer);
+        }
+
         // Resume following user location when trip is unloaded
         IsFollowingLocation = true;
 
@@ -3234,31 +3254,17 @@ public partial class MainViewModel : BaseViewModel
 
     /// <summary>
     /// Called when the view disappears.
-    /// Unloads the trip when navigating away from the map (but not when navigating to sub-editors).
+    /// Keeps trip loaded so user can return via "To Trip" button in My Trips.
+    /// Trip is only unloaded when user explicitly taps "Unload Trip" button.
     /// </summary>
     public override async Task OnDisappearingAsync()
     {
-        // When navigating to sub-editors (notes, marker), don't unload trip or close sheet
-        if (_isNavigatingToSubEditor)
+        // Close the trip sheet when navigating away (but keep trip loaded in memory)
+        // Don't close if navigating to sub-editors (notes, marker)
+        if (!_isNavigatingToSubEditor)
         {
-            // Just reduce battery usage, keep trip/sheet state
-            if (TrackingState == TrackingState.Active)
-            {
-                await _locationBridge.SetPerformanceModeAsync(PerformanceMode.Normal);
-                PerformanceMode = PerformanceMode.Normal;
-            }
-            await base.OnDisappearingAsync();
-            return;
+            IsTripSheetOpen = false;
         }
-
-        // Unload the trip when navigating away from the map
-        if (HasLoadedTrip)
-        {
-            UnloadTrip();
-        }
-
-        // Close the trip sheet if open
-        IsTripSheetOpen = false;
 
         // Set normal mode to conserve battery when map is not visible
         if (TrackingState == TrackingState.Active)
