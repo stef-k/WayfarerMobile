@@ -70,7 +70,7 @@ public static class MauiProgram
         // Ensure directory exists
         Directory.CreateDirectory(logDirectory);
 
-        var logPath = Path.Combine(logDirectory, "wayfarer-.log");
+        var logPath = Path.Combine(logDirectory, "wayfarer-app-.log");
 
         // Configure Serilog
         Log.Logger = new LoggerConfiguration()

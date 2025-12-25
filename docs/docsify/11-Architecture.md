@@ -422,7 +422,7 @@ Log.Logger = new LoggerConfiguration()
     .CreateLogger();
 ```
 
-Log files are stored in `FileSystem.AppDataDirectory/logs/wayfarer-{date}.log`
+Log files are stored in `FileSystem.AppDataDirectory/logs/wayfarer-app-{date}.log`
 
 ## State Management
 
