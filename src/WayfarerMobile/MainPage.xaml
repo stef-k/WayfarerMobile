@@ -110,7 +110,7 @@
                                  HeightRequest="44"
                                  CornerRadius="22"
                                  Padding="10"
-                                 BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}"
+                                 BackgroundColor="{StaticResource Gray900}"
                                  ZIndex="5" />
 
                     <!-- Bottom Right: Action FABs (vertical, top to bottom) -->

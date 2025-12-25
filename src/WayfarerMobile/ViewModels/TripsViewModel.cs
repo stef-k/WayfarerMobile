@@ -357,6 +357,72 @@ public partial class TripsViewModel : BaseViewModel
     }
 
     /// <summary>
+    /// Moves a trip item to the correct group based on its current GroupName.
+    /// Used after download completes to move from "Available on Server" to "Downloaded".
+    /// </summary>
+    private void MoveItemToCorrectGroup(TripListItem item)
+    {
+        var targetGroupName = item.GroupName;
+
+        // Find current group containing the item
+        TripGrouping? currentGroup = null;
+        foreach (var group in MyTrips)
+        {
+            if (group.Contains(item))
+            {
+                currentGroup = group;
+                break;
+            }
+        }
+
+        if (currentGroup == null)
+        {
+            _logger.LogWarning("Item {Name} not found in any group", item.Name);
+            return;
+        }
+
+        // Already in correct group?
+        if (currentGroup.Name == targetGroupName)
+        {
+            return;
+        }
+
+        // Remove from current group
+        currentGroup.Remove(item);
+
+        // Remove empty groups
+        if (currentGroup.Count == 0)
+        {
+            MyTrips.Remove(currentGroup);
+        }
+
+        // Find or create target group
+        var targetGroup = MyTrips.FirstOrDefault(g => g.Name == targetGroupName);
+        if (targetGroup == null)
+        {
+            // Create new group and insert in correct position
+            targetGroup = new TripGrouping(targetGroupName, new[] { item });
+
+            // Insert in order: Downloaded (0), Metadata Only (1), Available on Server (2)
+            var insertIndex = targetGroupName switch
+            {
+                "Downloaded" => 0,
+                "Metadata Only" => MyTrips.Any(g => g.Name == "Downloaded") ? 1 : 0,
+                _ => MyTrips.Count
+            };
+
+            MyTrips.Insert(Math.Min(insertIndex, MyTrips.Count), targetGroup);
+        }
+        else
+        {
+            // Add to existing group at the top (most recently modified)
+            targetGroup.Insert(0, item);
+        }
+
+        _logger.LogDebug("Moved trip {Name} from '{From}' to '{To}'", item.Name, currentGroup.Name, targetGroupName);
+    }
+
+    /// <summary>
     /// Retries failed sync operations.
     /// </summary>
     [RelayCommand]
@@ -795,10 +861,12 @@ public partial class TripsViewModel : BaseViewModel
 
             if (result != null)
             {
-                // Update item directly instead of full reload (avoids shimmer)
+                // Update item state
                 item.DownloadState = includeTiles ? TripDownloadState.Complete : TripDownloadState.MetadataOnly;
                 item.DownloadedEntity = result;
-                OnPropertyChanged(nameof(MyTrips));
+
+                // Move item to the correct group based on new state
+                MoveItemToCorrectGroup(item);
 
                 await _toastService.ShowSuccessAsync($"'{item.Name}' downloaded");
             }
