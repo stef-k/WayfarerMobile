@@ -666,15 +666,17 @@ public partial class SettingsViewModel : BaseViewModel
                     _ => "Unknown"
                 };
 
+                // Use invariant culture for numeric formatting to avoid comma decimal separators
+                var inv = CultureInfo.InvariantCulture;
                 csv.AppendLine(
                     $"{loc.Id}," +
                     $"{loc.Timestamp:yyyy-MM-dd HH:mm:ss}," +
-                    $"{loc.Latitude:F6}," +
-                    $"{loc.Longitude:F6}," +
-                    $"{loc.Altitude?.ToString("F1") ?? ""}," +
-                    $"{loc.Accuracy?.ToString("F1") ?? ""}," +
-                    $"{loc.Speed?.ToString("F1") ?? ""}," +
-                    $"{loc.Bearing?.ToString("F1") ?? ""}," +
+                    $"{loc.Latitude.ToString("F6", inv)}," +
+                    $"{loc.Longitude.ToString("F6", inv)}," +
+                    $"{loc.Altitude?.ToString("F1", inv) ?? ""}," +
+                    $"{loc.Accuracy?.ToString("F1", inv) ?? ""}," +
+                    $"{loc.Speed?.ToString("F1", inv) ?? ""}," +
+                    $"{loc.Bearing?.ToString("F1", inv) ?? ""}," +
                     $"\"{loc.Provider ?? ""}\"," +
                     $"{status}," +
                     $"{loc.SyncAttempts}," +
