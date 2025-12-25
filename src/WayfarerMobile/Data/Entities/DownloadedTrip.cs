@@ -67,12 +67,17 @@ public class DownloadedTripEntity
     public int PlaceCount { get; set; }
 
     /// <summary>
+    /// Gets or sets the number of regions in this trip.
+    /// </summary>
+    public int RegionCount { get; set; }
+
+    /// <summary>
     /// Gets or sets the number of segments in this trip.
     /// </summary>
     public int SegmentCount { get; set; }
 
     /// <summary>
-    /// Gets or sets the number of areas/regions in this trip.
+    /// Gets or sets the number of areas (geographic polygons) in this trip.
     /// </summary>
     public int AreaCount { get; set; }
 

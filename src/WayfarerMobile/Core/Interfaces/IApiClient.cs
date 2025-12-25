@@ -175,6 +175,46 @@ public interface IApiClient
     /// <returns>Clone response with new trip ID.</returns>
     Task<CloneTripResponse?> CloneTripAsync(Guid tripId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Updates an existing trip's metadata (name, notes).
+    /// </summary>
+    /// <param name="tripId">The trip ID.</param>
+    /// <param name="request">The trip update request.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Trip update response or null on failure.</returns>
+    Task<TripUpdateResponse?> UpdateTripAsync(
+        Guid tripId,
+        TripUpdateRequest request,
+        CancellationToken cancellationToken = default);
+
+    #endregion
+
+    #region Segment Operations
+
+    /// <summary>
+    /// Updates a segment's notes.
+    /// </summary>
+    /// <param name="segmentId">The segment ID.</param>
+    /// <param name="request">The segment notes update request.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Segment update response or null on failure.</returns>
+    Task<SegmentUpdateResponse?> UpdateSegmentNotesAsync(
+        Guid segmentId,
+        SegmentNotesUpdateRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Updates an area's (polygon) notes.
+    /// </summary>
+    /// <param name="areaId">The area ID.</param>
+    /// <param name="request">The area notes update request.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Area update response or null on failure.</returns>
+    Task<AreaUpdateResponse?> UpdateAreaNotesAsync(
+        Guid areaId,
+        AreaNotesUpdateRequest request,
+        CancellationToken cancellationToken = default);
+
     #endregion
 
     #region Timeline Operations

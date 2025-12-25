@@ -102,7 +102,7 @@ public class TripSyncService : ITripSyncService
             Latitude = latitude,
             Longitude = longitude,
             Notes = notes,
-            Icon = iconName,
+            IconName = iconName,
             MarkerColor = markerColor,
             DisplayOrder = displayOrder
         };
@@ -144,6 +144,10 @@ public class TripSyncService : ITripSyncService
 
     /// <summary>
     /// Updates a place with optimistic UI pattern.
+    /// 1. Reads current value from offline table (original)
+    /// 2. Updates offline table with new values (optimistic)
+    /// 3. Stores original in queue for restoration if needed
+    /// 4. Tries to sync to server
     /// </summary>
     public async Task UpdatePlaceAsync(
         Guid placeId,
@@ -159,19 +163,46 @@ public class TripSyncService : ITripSyncService
     {
         await EnsureInitializedAsync();
 
+        // 1. Read current value from offline table (for restoration if needed)
+        var offlinePlace = await _databaseService.GetOfflinePlaceByServerIdAsync(placeId);
+        string? originalName = offlinePlace?.Name;
+        double? originalLatitude = offlinePlace?.Latitude;
+        double? originalLongitude = offlinePlace?.Longitude;
+        string? originalNotes = offlinePlace?.Notes;
+        string? originalIconName = offlinePlace?.IconName;
+        string? originalMarkerColor = offlinePlace?.MarkerColor;
+        int? originalDisplayOrder = offlinePlace?.SortOrder;
+
+        // 2. Update offline table with new values (optimistic update)
+        if (offlinePlace != null)
+        {
+            if (name != null) offlinePlace.Name = name;
+            if (latitude.HasValue) offlinePlace.Latitude = latitude.Value;
+            if (longitude.HasValue) offlinePlace.Longitude = longitude.Value;
+            if (includeNotes) offlinePlace.Notes = notes;
+            if (iconName != null) offlinePlace.IconName = iconName;
+            if (markerColor != null) offlinePlace.MarkerColor = markerColor;
+            if (displayOrder.HasValue) offlinePlace.SortOrder = displayOrder.Value;
+            await _databaseService.UpdateOfflinePlaceAsync(offlinePlace);
+        }
+
         var request = new PlaceUpdateRequest
         {
             Name = name,
             Latitude = latitude,
             Longitude = longitude,
             Notes = includeNotes ? notes : null,
-            Icon = iconName,
-            MarkerColor = markerColor
+            IconName = iconName,
+            MarkerColor = markerColor,
+            DisplayOrder = displayOrder
         };
 
         if (!IsConnected)
         {
-            await EnqueuePlaceMutationAsync("Update", placeId, tripId, null, name, latitude, longitude, notes, iconName, markerColor, displayOrder, includeNotes, null);
+            // 3. Store original values in queue for restoration
+            await EnqueuePlaceMutationWithOriginalAsync("Update", placeId, tripId, null,
+                name, latitude, longitude, notes, iconName, markerColor, displayOrder, includeNotes, null,
+                originalName, originalLatitude, originalLongitude, originalNotes, originalIconName, originalMarkerColor, originalDisplayOrder);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = placeId, Message = "Saved offline - will sync when online" });
             return;
         }
@@ -186,30 +217,59 @@ public class TripSyncService : ITripSyncService
                 return;
             }
 
-            await EnqueuePlaceMutationAsync("Update", placeId, tripId, null, name, latitude, longitude, notes, iconName, markerColor, displayOrder, includeNotes, null);
+            // Sync failed - queue for retry with original values for restoration
+            await EnqueuePlaceMutationWithOriginalAsync("Update", placeId, tripId, null,
+                name, latitude, longitude, notes, iconName, markerColor, displayOrder, includeNotes, null,
+                originalName, originalLatitude, originalLongitude, originalNotes, originalIconName, originalMarkerColor, originalDisplayOrder);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = placeId, Message = "Sync failed - will retry" });
         }
         catch (HttpRequestException ex) when (IsClientError(ex))
         {
+            // Server rejected - restore original values in offline table
+            if (offlinePlace != null)
+            {
+                offlinePlace.Name = originalName ?? offlinePlace.Name;
+                if (originalLatitude.HasValue) offlinePlace.Latitude = originalLatitude.Value;
+                if (originalLongitude.HasValue) offlinePlace.Longitude = originalLongitude.Value;
+                if (includeNotes) offlinePlace.Notes = originalNotes;
+                offlinePlace.IconName = originalIconName;
+                offlinePlace.MarkerColor = originalMarkerColor;
+                if (originalDisplayOrder.HasValue) offlinePlace.SortOrder = originalDisplayOrder.Value;
+                await _databaseService.UpdateOfflinePlaceAsync(offlinePlace);
+            }
             SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = placeId, ErrorMessage = $"Server rejected: {ex.Message}", IsClientError = true });
         }
         catch (Exception ex)
         {
-            await EnqueuePlaceMutationAsync("Update", placeId, tripId, null, name, latitude, longitude, notes, iconName, markerColor, displayOrder, includeNotes, null);
+            // Network/server error - queue for retry with original values
+            await EnqueuePlaceMutationWithOriginalAsync("Update", placeId, tripId, null,
+                name, latitude, longitude, notes, iconName, markerColor, displayOrder, includeNotes, null,
+                originalName, originalLatitude, originalLongitude, originalNotes, originalIconName, originalMarkerColor, originalDisplayOrder);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = placeId, Message = $"Sync failed: {ex.Message} - will retry" });
         }
     }
 
     /// <summary>
     /// Deletes a place with optimistic UI pattern.
+    /// 1. Reads full place data for restoration
+    /// 2. Deletes from offline table (optimistic)
+    /// 3. Stores original data in queue for restoration
+    /// 4. Syncs to server
     /// </summary>
     public async Task DeletePlaceAsync(Guid placeId, Guid tripId)
     {
         await EnsureInitializedAsync();
 
+        // 1. Read full place data for restoration
+        var offlinePlace = await _databaseService.GetOfflinePlaceByServerIdAsync(placeId);
+
+        // 2. Delete from offline table (optimistic)
+        await _databaseService.DeleteOfflinePlaceByServerIdAsync(placeId);
+
         if (!IsConnected)
         {
-            await EnqueueDeleteMutationAsync("Place", placeId, tripId);
+            // 3. Store original data in queue for restoration if user cancels
+            await EnqueueDeleteMutationWithOriginalAsync("Place", placeId, tripId, offlinePlace);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = placeId, Message = "Deleted offline - will sync when online" });
             return;
         }
@@ -224,16 +284,22 @@ public class TripSyncService : ITripSyncService
                 return;
             }
 
-            await EnqueueDeleteMutationAsync("Place", placeId, tripId);
+            await EnqueueDeleteMutationWithOriginalAsync("Place", placeId, tripId, offlinePlace);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = placeId, Message = "Delete failed - will retry" });
         }
         catch (HttpRequestException ex) when (IsClientError(ex))
         {
+            // Server rejected - restore the place in offline table
+            if (offlinePlace != null)
+            {
+                offlinePlace.Id = 0; // Reset for insert
+                await _databaseService.InsertOfflinePlaceAsync(offlinePlace);
+            }
             SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = placeId, ErrorMessage = $"Server rejected: {ex.Message}", IsClientError = true });
         }
         catch (Exception ex)
         {
-            await EnqueueDeleteMutationAsync("Place", placeId, tripId);
+            await EnqueueDeleteMutationWithOriginalAsync("Place", placeId, tripId, offlinePlace);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = placeId, Message = $"Delete failed: {ex.Message} - will retry" });
         }
     }
@@ -291,6 +357,81 @@ public class TripSyncService : ITripSyncService
             IconName = iconName,
             MarkerColor = markerColor,
             DisplayOrder = displayOrder,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _database!.InsertAsync(mutation);
+    }
+
+    private async Task EnqueuePlaceMutationWithOriginalAsync(
+        string operationType,
+        Guid entityId,
+        Guid tripId,
+        Guid? regionId,
+        string? name,
+        double? latitude,
+        double? longitude,
+        string? notes,
+        string? iconName,
+        string? markerColor,
+        int? displayOrder,
+        bool includeNotes,
+        Guid? tempClientId,
+        string? originalName,
+        double? originalLatitude,
+        double? originalLongitude,
+        string? originalNotes,
+        string? originalIconName,
+        string? originalMarkerColor,
+        int? originalDisplayOrder)
+    {
+        // For updates, check if there's an existing mutation to merge
+        if (operationType == "Update")
+        {
+            var existing = await _database!.Table<PendingTripMutation>()
+                .Where(m => m.EntityId == entityId && m.EntityType == "Place" && !m.IsServerRejected && m.OperationType != "Delete")
+                .FirstOrDefaultAsync();
+
+            if (existing != null)
+            {
+                // Update new values
+                if (name != null) existing.Name = name;
+                if (latitude.HasValue) existing.Latitude = latitude;
+                if (longitude.HasValue) existing.Longitude = longitude;
+                if (includeNotes) { existing.Notes = notes; existing.IncludeNotes = true; }
+                if (iconName != null) existing.IconName = iconName;
+                if (markerColor != null) existing.MarkerColor = markerColor;
+                if (displayOrder.HasValue) existing.DisplayOrder = displayOrder;
+                // Keep original values from first mutation (don't overwrite)
+                existing.CreatedAt = DateTime.UtcNow;
+                await _database.UpdateAsync(existing);
+                return;
+            }
+        }
+
+        var mutation = new PendingTripMutation
+        {
+            EntityType = "Place",
+            OperationType = operationType,
+            EntityId = entityId,
+            TripId = tripId,
+            RegionId = regionId,
+            TempClientId = tempClientId,
+            Name = name,
+            Latitude = latitude,
+            Longitude = longitude,
+            Notes = notes,
+            IncludeNotes = includeNotes,
+            IconName = iconName,
+            MarkerColor = markerColor,
+            DisplayOrder = displayOrder,
+            // Store original values for restoration
+            OriginalName = originalName,
+            OriginalLatitude = originalLatitude,
+            OriginalLongitude = originalLongitude,
+            OriginalNotes = originalNotes,
+            OriginalIconName = originalIconName,
+            OriginalMarkerColor = originalMarkerColor,
+            OriginalDisplayOrder = originalDisplayOrder,
             CreatedAt = DateTime.UtcNow
         };
         await _database!.InsertAsync(mutation);
@@ -363,6 +504,10 @@ public class TripSyncService : ITripSyncService
 
     /// <summary>
     /// Updates a region with optimistic UI pattern.
+    /// 1. Reads current value from offline table (original)
+    /// 2. Updates offline table with new values (optimistic)
+    /// 3. Stores original in queue for restoration if needed
+    /// 4. Tries to sync to server
     /// </summary>
     public async Task UpdateRegionAsync(
         Guid regionId,
@@ -377,6 +522,25 @@ public class TripSyncService : ITripSyncService
     {
         await EnsureInitializedAsync();
 
+        // 1. Read current value from offline table (for restoration if needed)
+        var offlineArea = await _databaseService.GetOfflineAreaByServerIdAsync(regionId);
+        string? originalName = offlineArea?.Name;
+        string? originalNotes = offlineArea?.Notes;
+        int? originalDisplayOrder = offlineArea?.SortOrder;
+        double? originalCenterLatitude = offlineArea?.CenterLatitude;
+        double? originalCenterLongitude = offlineArea?.CenterLongitude;
+
+        // 2. Update offline table with new values (optimistic update)
+        if (offlineArea != null)
+        {
+            if (name != null) offlineArea.Name = name;
+            if (includeNotes) offlineArea.Notes = notes;
+            if (displayOrder.HasValue) offlineArea.SortOrder = displayOrder.Value;
+            if (centerLatitude.HasValue) offlineArea.CenterLatitude = centerLatitude;
+            if (centerLongitude.HasValue) offlineArea.CenterLongitude = centerLongitude;
+            await _databaseService.UpdateOfflineAreaAsync(offlineArea);
+        }
+
         var request = new RegionUpdateRequest
         {
             Name = name,
@@ -389,7 +553,9 @@ public class TripSyncService : ITripSyncService
 
         if (!IsConnected)
         {
-            await EnqueueRegionMutationAsync("Update", regionId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, includeNotes, null);
+            // 3. Store original values in queue for restoration
+            await EnqueueRegionMutationWithOriginalAsync("Update", regionId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, includeNotes, null,
+                originalName, originalNotes, null, originalCenterLatitude, originalCenterLongitude, originalDisplayOrder);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = regionId, Message = "Saved offline - will sync when online" });
             return;
         }
@@ -404,30 +570,54 @@ public class TripSyncService : ITripSyncService
                 return;
             }
 
-            await EnqueueRegionMutationAsync("Update", regionId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, includeNotes, null);
+            await EnqueueRegionMutationWithOriginalAsync("Update", regionId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, includeNotes, null,
+                originalName, originalNotes, null, originalCenterLatitude, originalCenterLongitude, originalDisplayOrder);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = regionId, Message = "Sync failed - will retry" });
         }
         catch (HttpRequestException ex) when (IsClientError(ex))
         {
+            // Server rejected - restore original values in offline table
+            if (offlineArea != null)
+            {
+                offlineArea.Name = originalName ?? offlineArea.Name;
+                if (includeNotes) offlineArea.Notes = originalNotes;
+                if (originalDisplayOrder.HasValue) offlineArea.SortOrder = originalDisplayOrder.Value;
+                if (originalCenterLatitude.HasValue) offlineArea.CenterLatitude = originalCenterLatitude;
+                if (originalCenterLongitude.HasValue) offlineArea.CenterLongitude = originalCenterLongitude;
+                await _databaseService.UpdateOfflineAreaAsync(offlineArea);
+            }
             SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = regionId, ErrorMessage = $"Server rejected: {ex.Message}", IsClientError = true });
         }
         catch (Exception ex)
         {
-            await EnqueueRegionMutationAsync("Update", regionId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, includeNotes, null);
+            // Network/server error - queue for retry with original values
+            await EnqueueRegionMutationWithOriginalAsync("Update", regionId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, includeNotes, null,
+                originalName, originalNotes, null, originalCenterLatitude, originalCenterLongitude, originalDisplayOrder);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = regionId, Message = $"Sync failed: {ex.Message} - will retry" });
         }
     }
 
     /// <summary>
     /// Deletes a region with optimistic UI pattern.
+    /// 1. Reads full region data for restoration
+    /// 2. Deletes from offline table (optimistic)
+    /// 3. Stores original data in queue for restoration
+    /// 4. Syncs to server
     /// </summary>
     public async Task DeleteRegionAsync(Guid regionId, Guid tripId)
     {
         await EnsureInitializedAsync();
 
+        // 1. Read full region data for restoration
+        var offlineArea = await _databaseService.GetOfflineAreaByServerIdAsync(regionId);
+
+        // 2. Delete from offline table (optimistic)
+        await _databaseService.DeleteOfflineAreaByServerIdAsync(regionId);
+
         if (!IsConnected)
         {
-            await EnqueueDeleteMutationAsync("Region", regionId, tripId);
+            // 3. Store original data in queue for restoration if user cancels
+            await EnqueueDeleteRegionMutationWithOriginalAsync(regionId, tripId, offlineArea);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = regionId, Message = "Deleted offline - will sync when online" });
             return;
         }
@@ -442,16 +632,22 @@ public class TripSyncService : ITripSyncService
                 return;
             }
 
-            await EnqueueDeleteMutationAsync("Region", regionId, tripId);
+            await EnqueueDeleteRegionMutationWithOriginalAsync(regionId, tripId, offlineArea);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = regionId, Message = "Delete failed - will retry" });
         }
         catch (HttpRequestException ex) when (IsClientError(ex))
         {
+            // Server rejected - restore the region in offline table
+            if (offlineArea != null)
+            {
+                offlineArea.Id = 0; // Reset for insert
+                await _databaseService.InsertOfflineAreaAsync(offlineArea);
+            }
             SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = regionId, ErrorMessage = $"Server rejected: {ex.Message}", IsClientError = true });
         }
         catch (Exception ex)
         {
-            await EnqueueDeleteMutationAsync("Region", regionId, tripId);
+            await EnqueueDeleteRegionMutationWithOriginalAsync(regionId, tripId, offlineArea);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = regionId, Message = $"Delete failed: {ex.Message} - will retry" });
         }
     }
@@ -508,6 +704,451 @@ public class TripSyncService : ITripSyncService
         await _database!.InsertAsync(mutation);
     }
 
+    private async Task EnqueueRegionMutationWithOriginalAsync(
+        string operationType,
+        Guid entityId,
+        Guid tripId,
+        string? name,
+        string? notes,
+        string? coverImageUrl,
+        double? centerLatitude,
+        double? centerLongitude,
+        int? displayOrder,
+        bool includeNotes,
+        Guid? tempClientId,
+        string? originalName,
+        string? originalNotes,
+        string? originalCoverImageUrl,
+        double? originalCenterLatitude,
+        double? originalCenterLongitude,
+        int? originalDisplayOrder)
+    {
+        // For updates, check if there's an existing mutation to merge
+        if (operationType == "Update")
+        {
+            var existing = await _database!.Table<PendingTripMutation>()
+                .Where(m => m.EntityId == entityId && m.EntityType == "Region" && !m.IsServerRejected && m.OperationType != "Delete")
+                .FirstOrDefaultAsync();
+
+            if (existing != null)
+            {
+                // Update new values
+                if (name != null) existing.Name = name;
+                if (includeNotes) { existing.Notes = notes; existing.IncludeNotes = true; }
+                if (coverImageUrl != null) existing.CoverImageUrl = coverImageUrl;
+                if (centerLatitude.HasValue) existing.CenterLatitude = centerLatitude;
+                if (centerLongitude.HasValue) existing.CenterLongitude = centerLongitude;
+                if (displayOrder.HasValue) existing.DisplayOrder = displayOrder;
+                // Keep original values from first mutation (don't overwrite)
+                existing.CreatedAt = DateTime.UtcNow;
+                await _database.UpdateAsync(existing);
+                return;
+            }
+        }
+
+        var mutation = new PendingTripMutation
+        {
+            EntityType = "Region",
+            OperationType = operationType,
+            EntityId = entityId,
+            TripId = tripId,
+            TempClientId = tempClientId,
+            Name = name,
+            Notes = notes,
+            IncludeNotes = includeNotes,
+            CoverImageUrl = coverImageUrl,
+            CenterLatitude = centerLatitude,
+            CenterLongitude = centerLongitude,
+            DisplayOrder = displayOrder,
+            // Store original values for restoration
+            OriginalName = originalName,
+            OriginalNotes = originalNotes,
+            OriginalCoverImageUrl = originalCoverImageUrl,
+            OriginalCenterLatitude = originalCenterLatitude,
+            OriginalCenterLongitude = originalCenterLongitude,
+            OriginalDisplayOrder = originalDisplayOrder,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _database!.InsertAsync(mutation);
+    }
+
+    private async Task EnqueueDeleteRegionMutationWithOriginalAsync(Guid entityId, Guid tripId, OfflineAreaEntity? originalArea)
+    {
+        // Remove any pending creates/updates for this entity
+        await _database!.Table<PendingTripMutation>()
+            .Where(m => m.EntityId == entityId && m.EntityType == "Region")
+            .DeleteAsync();
+
+        var mutation = new PendingTripMutation
+        {
+            EntityType = "Region",
+            OperationType = "Delete",
+            EntityId = entityId,
+            TripId = tripId,
+            // Store original values for restoration if user cancels
+            OriginalName = originalArea?.Name,
+            OriginalNotes = originalArea?.Notes,
+            OriginalCenterLatitude = originalArea?.CenterLatitude,
+            OriginalCenterLongitude = originalArea?.CenterLongitude,
+            OriginalDisplayOrder = originalArea?.SortOrder,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _database.InsertAsync(mutation);
+    }
+
+    #endregion
+
+    #region Trip Operations
+
+    /// <summary>
+    /// Updates a trip's metadata with optimistic UI pattern.
+    /// </summary>
+    public async Task UpdateTripAsync(
+        Guid tripId,
+        string? name = null,
+        string? notes = null,
+        bool includeNotes = false)
+    {
+        await EnsureInitializedAsync();
+
+        var request = new TripUpdateRequest
+        {
+            Name = name,
+            Notes = includeNotes ? notes : null
+        };
+
+        if (!IsConnected)
+        {
+            await EnqueueTripMutationAsync(tripId, name, notes, includeNotes);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tripId, Message = "Updated offline - will sync when online" });
+            return;
+        }
+
+        try
+        {
+            var response = await _apiClient.UpdateTripAsync(tripId, request);
+
+            if (response?.Success == true)
+            {
+                SyncCompleted?.Invoke(this, new SyncSuccessEventArgs { EntityId = tripId });
+                return;
+            }
+
+            await EnqueueTripMutationAsync(tripId, name, notes, includeNotes);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tripId, Message = "Sync failed - will retry" });
+        }
+        catch (HttpRequestException ex) when (IsClientError(ex))
+        {
+            SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = tripId, ErrorMessage = $"Server rejected: {ex.Message}", IsClientError = true });
+        }
+        catch (Exception ex)
+        {
+            await EnqueueTripMutationAsync(tripId, name, notes, includeNotes);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tripId, Message = $"Sync failed: {ex.Message} - will retry" });
+        }
+    }
+
+    private async Task EnqueueTripMutationAsync(
+        Guid tripId,
+        string? name,
+        string? notes,
+        bool includeNotes)
+    {
+        var existing = await _database!.Table<PendingTripMutation>()
+            .Where(m => m.EntityId == tripId && m.EntityType == "Trip" && !m.IsServerRejected)
+            .FirstOrDefaultAsync();
+
+        if (existing != null)
+        {
+            if (name != null) existing.Name = name;
+            if (includeNotes) { existing.Notes = notes; existing.IncludeNotes = true; }
+            existing.CreatedAt = DateTime.UtcNow;
+            await _database.UpdateAsync(existing);
+            return;
+        }
+
+        var mutation = new PendingTripMutation
+        {
+            EntityType = "Trip",
+            OperationType = "Update",
+            EntityId = tripId,
+            TripId = tripId,
+            Name = name,
+            Notes = notes,
+            IncludeNotes = includeNotes,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _database!.InsertAsync(mutation);
+    }
+
+    #endregion
+
+    #region Segment Operations
+
+    /// <summary>
+    /// Updates a segment's notes with optimistic UI pattern.
+    /// 1. Reads current notes from offline table
+    /// 2. Updates offline table (optimistic)
+    /// 3. Stores original in queue for restoration
+    /// 4. Syncs to server
+    /// </summary>
+    public async Task UpdateSegmentNotesAsync(
+        Guid segmentId,
+        Guid tripId,
+        string? notes)
+    {
+        await EnsureInitializedAsync();
+
+        // 1. Read original from offline table
+        var offlineSegment = await _databaseService.GetOfflineSegmentByServerIdAsync(segmentId);
+        string? originalNotes = offlineSegment?.Notes;
+
+        // 2. Update offline table (optimistic)
+        if (offlineSegment != null)
+        {
+            offlineSegment.Notes = notes;
+            await _databaseService.UpdateOfflineSegmentAsync(offlineSegment);
+        }
+
+        var request = new SegmentNotesUpdateRequest { Notes = notes };
+
+        if (!IsConnected)
+        {
+            // 3. Store original in queue for restoration
+            await EnqueueSegmentMutationWithOriginalAsync(segmentId, tripId, notes, originalNotes);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = segmentId, Message = "Updated offline - will sync when online" });
+            return;
+        }
+
+        try
+        {
+            var response = await _apiClient.UpdateSegmentNotesAsync(segmentId, request);
+
+            if (response?.Success == true)
+            {
+                SyncCompleted?.Invoke(this, new SyncSuccessEventArgs { EntityId = segmentId });
+                return;
+            }
+
+            await EnqueueSegmentMutationWithOriginalAsync(segmentId, tripId, notes, originalNotes);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = segmentId, Message = "Sync failed - will retry" });
+        }
+        catch (HttpRequestException ex) when (IsClientError(ex))
+        {
+            // Server rejected - restore original
+            if (offlineSegment != null)
+            {
+                offlineSegment.Notes = originalNotes;
+                await _databaseService.UpdateOfflineSegmentAsync(offlineSegment);
+            }
+            SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = segmentId, ErrorMessage = $"Server rejected: {ex.Message}", IsClientError = true });
+        }
+        catch (Exception ex)
+        {
+            await EnqueueSegmentMutationWithOriginalAsync(segmentId, tripId, notes, originalNotes);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = segmentId, Message = $"Sync failed: {ex.Message} - will retry" });
+        }
+    }
+
+    private async Task EnqueueSegmentMutationAsync(
+        Guid segmentId,
+        Guid tripId,
+        string? notes)
+    {
+        var existing = await _database!.Table<PendingTripMutation>()
+            .Where(m => m.EntityId == segmentId && m.EntityType == "Segment" && !m.IsServerRejected)
+            .FirstOrDefaultAsync();
+
+        if (existing != null)
+        {
+            existing.Notes = notes;
+            existing.IncludeNotes = true;
+            existing.CreatedAt = DateTime.UtcNow;
+            await _database.UpdateAsync(existing);
+            return;
+        }
+
+        var mutation = new PendingTripMutation
+        {
+            EntityType = "Segment",
+            OperationType = "Update",
+            EntityId = segmentId,
+            TripId = tripId,
+            Notes = notes,
+            IncludeNotes = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _database!.InsertAsync(mutation);
+    }
+
+    private async Task EnqueueSegmentMutationWithOriginalAsync(
+        Guid segmentId,
+        Guid tripId,
+        string? notes,
+        string? originalNotes)
+    {
+        var existing = await _database!.Table<PendingTripMutation>()
+            .Where(m => m.EntityId == segmentId && m.EntityType == "Segment" && !m.IsServerRejected)
+            .FirstOrDefaultAsync();
+
+        if (existing != null)
+        {
+            existing.Notes = notes;
+            existing.IncludeNotes = true;
+            // Keep original notes from first mutation (don't overwrite)
+            existing.CreatedAt = DateTime.UtcNow;
+            await _database.UpdateAsync(existing);
+            return;
+        }
+
+        var mutation = new PendingTripMutation
+        {
+            EntityType = "Segment",
+            OperationType = "Update",
+            EntityId = segmentId,
+            TripId = tripId,
+            Notes = notes,
+            IncludeNotes = true,
+            OriginalNotes = originalNotes,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _database!.InsertAsync(mutation);
+    }
+
+    #endregion
+
+    #region Area Operations
+
+    /// <summary>
+    /// Updates an area's (polygon) notes with optimistic UI pattern.
+    /// 1. Reads current notes from offline table
+    /// 2. Updates offline table (optimistic)
+    /// 3. Stores original in queue for restoration
+    /// 4. Syncs to server
+    /// </summary>
+    public async Task UpdateAreaNotesAsync(
+        Guid tripId,
+        Guid areaId,
+        string? notes)
+    {
+        await EnsureInitializedAsync();
+
+        // 1. Read original from offline table
+        var offlinePolygon = await _databaseService.GetOfflinePolygonByServerIdAsync(areaId);
+        string? originalNotes = offlinePolygon?.Notes;
+
+        // 2. Update offline table (optimistic)
+        if (offlinePolygon != null)
+        {
+            offlinePolygon.Notes = notes;
+            await _databaseService.UpdateOfflinePolygonAsync(offlinePolygon);
+        }
+
+        var request = new AreaNotesUpdateRequest { Notes = notes };
+
+        if (!IsConnected)
+        {
+            // 3. Store original in queue for restoration
+            await EnqueueAreaMutationWithOriginalAsync(areaId, tripId, notes, originalNotes);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = areaId, Message = "Updated offline - will sync when online" });
+            return;
+        }
+
+        try
+        {
+            var response = await _apiClient.UpdateAreaNotesAsync(areaId, request);
+
+            if (response?.Success == true)
+            {
+                SyncCompleted?.Invoke(this, new SyncSuccessEventArgs { EntityId = areaId });
+                return;
+            }
+
+            await EnqueueAreaMutationWithOriginalAsync(areaId, tripId, notes, originalNotes);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = areaId, Message = "Sync failed - will retry" });
+        }
+        catch (HttpRequestException ex) when (IsClientError(ex))
+        {
+            // Server rejected - restore original
+            if (offlinePolygon != null)
+            {
+                offlinePolygon.Notes = originalNotes;
+                await _databaseService.UpdateOfflinePolygonAsync(offlinePolygon);
+            }
+            SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = areaId, ErrorMessage = $"Server rejected: {ex.Message}", IsClientError = true });
+        }
+        catch (Exception ex)
+        {
+            await EnqueueAreaMutationWithOriginalAsync(areaId, tripId, notes, originalNotes);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = areaId, Message = $"Sync failed: {ex.Message} - will retry" });
+        }
+    }
+
+    private async Task EnqueueAreaMutationAsync(
+        Guid areaId,
+        Guid tripId,
+        string? notes)
+    {
+        var existing = await _database!.Table<PendingTripMutation>()
+            .Where(m => m.EntityId == areaId && m.EntityType == "Area" && !m.IsServerRejected)
+            .FirstOrDefaultAsync();
+
+        if (existing != null)
+        {
+            existing.Notes = notes;
+            existing.IncludeNotes = true;
+            existing.CreatedAt = DateTime.UtcNow;
+            await _database.UpdateAsync(existing);
+            return;
+        }
+
+        var mutation = new PendingTripMutation
+        {
+            EntityType = "Area",
+            OperationType = "Update",
+            EntityId = areaId,
+            TripId = tripId,
+            Notes = notes,
+            IncludeNotes = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _database!.InsertAsync(mutation);
+    }
+
+    private async Task EnqueueAreaMutationWithOriginalAsync(
+        Guid areaId,
+        Guid tripId,
+        string? notes,
+        string? originalNotes)
+    {
+        var existing = await _database!.Table<PendingTripMutation>()
+            .Where(m => m.EntityId == areaId && m.EntityType == "Area" && !m.IsServerRejected)
+            .FirstOrDefaultAsync();
+
+        if (existing != null)
+        {
+            existing.Notes = notes;
+            existing.IncludeNotes = true;
+            // Keep original notes from first mutation (don't overwrite)
+            existing.CreatedAt = DateTime.UtcNow;
+            await _database.UpdateAsync(existing);
+            return;
+        }
+
+        var mutation = new PendingTripMutation
+        {
+            EntityType = "Area",
+            OperationType = "Update",
+            EntityId = areaId,
+            TripId = tripId,
+            Notes = notes,
+            IncludeNotes = true,
+            OriginalNotes = originalNotes,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _database!.InsertAsync(mutation);
+    }
+
     #endregion
 
     #region Delete Helper
@@ -525,6 +1166,33 @@ public class TripSyncService : ITripSyncService
             OperationType = "Delete",
             EntityId = entityId,
             TripId = tripId,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _database.InsertAsync(mutation);
+    }
+
+    private async Task EnqueueDeleteMutationWithOriginalAsync(string entityType, Guid entityId, Guid tripId, OfflinePlaceEntity? originalPlace)
+    {
+        // Remove any pending creates/updates for this entity
+        await _database!.Table<PendingTripMutation>()
+            .Where(m => m.EntityId == entityId && m.EntityType == entityType)
+            .DeleteAsync();
+
+        var mutation = new PendingTripMutation
+        {
+            EntityType = entityType,
+            OperationType = "Delete",
+            EntityId = entityId,
+            TripId = tripId,
+            RegionId = originalPlace?.RegionId,
+            // Store original values for restoration if user cancels
+            OriginalName = originalPlace?.Name,
+            OriginalLatitude = originalPlace?.Latitude,
+            OriginalLongitude = originalPlace?.Longitude,
+            OriginalNotes = originalPlace?.Notes,
+            OriginalIconName = originalPlace?.IconName,
+            OriginalMarkerColor = originalPlace?.MarkerColor,
+            OriginalDisplayOrder = originalPlace?.SortOrder,
             CreatedAt = DateTime.UtcNow
         };
         await _database.InsertAsync(mutation);
@@ -570,6 +1238,10 @@ public class TripSyncService : ITripSyncService
             }
             catch (HttpRequestException ex) when (IsClientError(ex))
             {
+                // 4xx error - server permanently rejected this mutation
+                // Roll back optimistic changes since they can never be synced
+                await RestoreOriginalValuesAsync(mutation);
+
                 mutation.IsServerRejected = true;
                 mutation.LastError = ex.Message;
                 await _database.UpdateAsync(mutation);
@@ -593,6 +1265,9 @@ public class TripSyncService : ITripSyncService
             ("Region", "Create") => await ProcessRegionCreateAsync(mutation),
             ("Region", "Update") => await ProcessRegionUpdateAsync(mutation),
             ("Region", "Delete") => await _apiClient.DeleteRegionAsync(mutation.EntityId),
+            ("Trip", "Update") => await ProcessTripUpdateAsync(mutation),
+            ("Segment", "Update") => await ProcessSegmentUpdateAsync(mutation),
+            ("Area", "Update") => await ProcessAreaUpdateAsync(mutation),
             _ => false
         };
     }
@@ -606,7 +1281,7 @@ public class TripSyncService : ITripSyncService
             Latitude = mutation.Latitude ?? 0,
             Longitude = mutation.Longitude ?? 0,
             Notes = mutation.IncludeNotes ? mutation.Notes : null,
-            Icon = mutation.IconName,
+            IconName = mutation.IconName,
             MarkerColor = mutation.MarkerColor,
             DisplayOrder = mutation.DisplayOrder
         };
@@ -635,8 +1310,9 @@ public class TripSyncService : ITripSyncService
             Latitude = mutation.Latitude,
             Longitude = mutation.Longitude,
             Notes = mutation.IncludeNotes ? mutation.Notes : null,
-            Icon = mutation.IconName,
-            MarkerColor = mutation.MarkerColor
+            IconName = mutation.IconName,
+            MarkerColor = mutation.MarkerColor,
+            DisplayOrder = mutation.DisplayOrder
         };
 
         var response = await _apiClient.UpdatePlaceAsync(mutation.EntityId, request);
@@ -687,6 +1363,40 @@ public class TripSyncService : ITripSyncService
         return response != null;
     }
 
+    private async Task<bool> ProcessTripUpdateAsync(PendingTripMutation mutation)
+    {
+        var request = new TripUpdateRequest
+        {
+            Name = mutation.Name,
+            Notes = mutation.IncludeNotes ? mutation.Notes : null
+        };
+
+        var response = await _apiClient.UpdateTripAsync(mutation.EntityId, request);
+        return response?.Success == true;
+    }
+
+    private async Task<bool> ProcessSegmentUpdateAsync(PendingTripMutation mutation)
+    {
+        var request = new SegmentNotesUpdateRequest
+        {
+            Notes = mutation.Notes
+        };
+
+        var response = await _apiClient.UpdateSegmentNotesAsync(mutation.EntityId, request);
+        return response?.Success == true;
+    }
+
+    private async Task<bool> ProcessAreaUpdateAsync(PendingTripMutation mutation)
+    {
+        var request = new AreaNotesUpdateRequest
+        {
+            Notes = mutation.Notes
+        };
+
+        var response = await _apiClient.UpdateAreaNotesAsync(mutation.EntityId, request);
+        return response?.Success == true;
+    }
+
     #endregion
 
     #region Utility Methods
@@ -711,6 +1421,255 @@ public class TripSyncService : ITripSyncService
         await _database!.Table<PendingTripMutation>()
             .Where(m => m.IsServerRejected)
             .DeleteAsync();
+    }
+
+    /// <summary>
+    /// Get count of failed mutations (exhausted retries or rejected).
+    /// </summary>
+    public async Task<int> GetFailedCountAsync()
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<PendingTripMutation>()
+            .Where(m => m.IsServerRejected || m.SyncAttempts >= PendingTripMutation.MaxSyncAttempts)
+            .CountAsync();
+    }
+
+    /// <summary>
+    /// Reset retry attempts for all failed mutations.
+    /// </summary>
+    public async Task ResetFailedMutationsAsync()
+    {
+        await EnsureInitializedAsync();
+        var failed = await _database!.Table<PendingTripMutation>()
+            .Where(m => !m.IsServerRejected && m.SyncAttempts >= PendingTripMutation.MaxSyncAttempts)
+            .ToListAsync();
+
+        foreach (var mutation in failed)
+        {
+            mutation.SyncAttempts = 0;
+            await _database.UpdateAsync(mutation);
+        }
+
+        // Try to process immediately if online
+        if (IsConnected)
+        {
+            await ProcessPendingMutationsAsync();
+        }
+    }
+
+    /// <summary>
+    /// Cancel all pending mutations (discard changes).
+    /// Restores original values in offline tables before deleting mutations.
+    /// </summary>
+    public async Task CancelPendingMutationsAsync()
+    {
+        await EnsureInitializedAsync();
+
+        // Get all pending mutations
+        var mutations = await _database!.Table<PendingTripMutation>().ToListAsync();
+
+        // Restore original values for each mutation before deleting
+        foreach (var mutation in mutations)
+        {
+            await RestoreOriginalValuesAsync(mutation);
+        }
+
+        // Delete all mutations
+        await _database.Table<PendingTripMutation>().DeleteAsync();
+    }
+
+    /// <summary>
+    /// Clears all pending mutations for a specific trip.
+    /// Call this when a trip is deleted to clean up the queue.
+    /// </summary>
+    public async Task ClearPendingMutationsForTripAsync(Guid tripId)
+    {
+        await EnsureInitializedAsync();
+        await _database!.Table<PendingTripMutation>()
+            .Where(m => m.TripId == tripId)
+            .DeleteAsync();
+    }
+
+    /// <summary>
+    /// Gets pending mutations for a specific trip that need attention (failed or rejected).
+    /// </summary>
+    public async Task<List<PendingTripMutation>> GetFailedMutationsForTripAsync(Guid tripId)
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<PendingTripMutation>()
+            .Where(m => m.TripId == tripId && (m.IsServerRejected || m.SyncAttempts >= PendingTripMutation.MaxSyncAttempts))
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Gets count of failed mutations for a specific trip.
+    /// </summary>
+    public async Task<int> GetFailedCountForTripAsync(Guid tripId)
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<PendingTripMutation>()
+            .Where(m => m.TripId == tripId && (m.IsServerRejected || m.SyncAttempts >= PendingTripMutation.MaxSyncAttempts))
+            .CountAsync();
+    }
+
+    /// <summary>
+    /// Resets retry attempts for a specific trip's failed mutations.
+    /// </summary>
+    public async Task ResetFailedMutationsForTripAsync(Guid tripId)
+    {
+        await EnsureInitializedAsync();
+        var failed = await _database!.Table<PendingTripMutation>()
+            .Where(m => m.TripId == tripId && !m.IsServerRejected && m.SyncAttempts >= PendingTripMutation.MaxSyncAttempts)
+            .ToListAsync();
+
+        foreach (var mutation in failed)
+        {
+            mutation.SyncAttempts = 0;
+            await _database.UpdateAsync(mutation);
+        }
+
+        if (IsConnected)
+        {
+            await ProcessPendingMutationsAsync();
+        }
+    }
+
+    /// <summary>
+    /// Cancels pending mutations for a specific trip (discards unsynced changes).
+    /// Also restores original values in offline tables.
+    /// </summary>
+    public async Task CancelPendingMutationsForTripAsync(Guid tripId)
+    {
+        await EnsureInitializedAsync();
+
+        // Get all pending mutations for this trip
+        var mutations = await _database!.Table<PendingTripMutation>()
+            .Where(m => m.TripId == tripId)
+            .ToListAsync();
+
+        // Restore original values for each mutation
+        foreach (var mutation in mutations)
+        {
+            await RestoreOriginalValuesAsync(mutation);
+        }
+
+        // Delete all mutations for this trip
+        await _database.Table<PendingTripMutation>()
+            .Where(m => m.TripId == tripId)
+            .DeleteAsync();
+    }
+
+    /// <summary>
+    /// Restores original values from a mutation to the offline table.
+    /// </summary>
+    private async Task RestoreOriginalValuesAsync(PendingTripMutation mutation)
+    {
+        switch (mutation.EntityType)
+        {
+            case "Place":
+                if (mutation.OperationType == "Create")
+                {
+                    // Delete offline-created place (it was never synced to server)
+                    await _databaseService.DeleteOfflinePlaceByServerIdAsync(mutation.EntityId);
+                }
+                else if (mutation.OperationType == "Delete" && mutation.OriginalName != null)
+                {
+                    // Restore deleted place - need to look up local trip ID from server trip ID
+                    var downloadedTrip = await _databaseService.GetDownloadedTripByServerIdAsync(mutation.TripId);
+                    var place = new OfflinePlaceEntity
+                    {
+                        ServerId = mutation.EntityId,
+                        TripId = downloadedTrip?.Id ?? 0,
+                        RegionId = mutation.RegionId,
+                        Name = mutation.OriginalName,
+                        Latitude = mutation.OriginalLatitude ?? 0,
+                        Longitude = mutation.OriginalLongitude ?? 0,
+                        Notes = mutation.OriginalNotes,
+                        IconName = mutation.OriginalIconName,
+                        MarkerColor = mutation.OriginalMarkerColor,
+                        SortOrder = mutation.OriginalDisplayOrder ?? 0
+                    };
+                    await _databaseService.InsertOfflinePlaceAsync(place);
+                }
+                else if (mutation.OperationType == "Update")
+                {
+                    // Restore original values
+                    var existingPlace = await _databaseService.GetOfflinePlaceByServerIdAsync(mutation.EntityId);
+                    if (existingPlace != null)
+                    {
+                        if (mutation.OriginalName != null) existingPlace.Name = mutation.OriginalName;
+                        if (mutation.OriginalLatitude.HasValue) existingPlace.Latitude = mutation.OriginalLatitude.Value;
+                        if (mutation.OriginalLongitude.HasValue) existingPlace.Longitude = mutation.OriginalLongitude.Value;
+                        if (mutation.IncludeNotes) existingPlace.Notes = mutation.OriginalNotes;
+                        if (mutation.OriginalIconName != null) existingPlace.IconName = mutation.OriginalIconName;
+                        if (mutation.OriginalMarkerColor != null) existingPlace.MarkerColor = mutation.OriginalMarkerColor;
+                        if (mutation.OriginalDisplayOrder.HasValue) existingPlace.SortOrder = mutation.OriginalDisplayOrder.Value;
+                        await _databaseService.UpdateOfflinePlaceAsync(existingPlace);
+                    }
+                }
+                break;
+
+            case "Region":
+                if (mutation.OperationType == "Create")
+                {
+                    // Delete offline-created region (it was never synced to server)
+                    await _databaseService.DeleteOfflineAreaByServerIdAsync(mutation.EntityId);
+                }
+                else if (mutation.OperationType == "Delete" && mutation.OriginalName != null)
+                {
+                    // Restore deleted region - need to look up local trip ID from server trip ID
+                    var downloadedTrip = await _databaseService.GetDownloadedTripByServerIdAsync(mutation.TripId);
+                    var area = new OfflineAreaEntity
+                    {
+                        ServerId = mutation.EntityId,
+                        TripId = downloadedTrip?.Id ?? 0,
+                        Name = mutation.OriginalName,
+                        Notes = mutation.OriginalNotes,
+                        CenterLatitude = mutation.OriginalCenterLatitude,
+                        CenterLongitude = mutation.OriginalCenterLongitude,
+                        SortOrder = mutation.OriginalDisplayOrder ?? 0
+                    };
+                    await _databaseService.InsertOfflineAreaAsync(area);
+                }
+                else if (mutation.OperationType == "Update")
+                {
+                    var existingArea = await _databaseService.GetOfflineAreaByServerIdAsync(mutation.EntityId);
+                    if (existingArea != null)
+                    {
+                        if (mutation.OriginalName != null) existingArea.Name = mutation.OriginalName;
+                        if (mutation.IncludeNotes) existingArea.Notes = mutation.OriginalNotes;
+                        if (mutation.OriginalCenterLatitude.HasValue) existingArea.CenterLatitude = mutation.OriginalCenterLatitude;
+                        if (mutation.OriginalCenterLongitude.HasValue) existingArea.CenterLongitude = mutation.OriginalCenterLongitude;
+                        if (mutation.OriginalDisplayOrder.HasValue) existingArea.SortOrder = mutation.OriginalDisplayOrder.Value;
+                        await _databaseService.UpdateOfflineAreaAsync(existingArea);
+                    }
+                }
+                break;
+
+            case "Segment":
+                if (mutation.OperationType == "Update")
+                {
+                    var segment = await _databaseService.GetOfflineSegmentByServerIdAsync(mutation.EntityId);
+                    if (segment != null)
+                    {
+                        segment.Notes = mutation.OriginalNotes;
+                        await _databaseService.UpdateOfflineSegmentAsync(segment);
+                    }
+                }
+                break;
+
+            case "Area":
+                if (mutation.OperationType == "Update")
+                {
+                    var polygon = await _databaseService.GetOfflinePolygonByServerIdAsync(mutation.EntityId);
+                    if (polygon != null)
+                    {
+                        polygon.Notes = mutation.OriginalNotes;
+                        await _databaseService.UpdateOfflinePolygonAsync(polygon);
+                    }
+                }
+                break;
+        }
     }
 
     private static bool IsClientError(HttpRequestException ex)
@@ -821,6 +1780,43 @@ public interface ITripSyncService
 
     #endregion
 
+    #region Trip Operations
+
+    /// <summary>
+    /// Update a trip's metadata (name, notes) with optimistic UI pattern.
+    /// </summary>
+    Task UpdateTripAsync(
+        Guid tripId,
+        string? name = null,
+        string? notes = null,
+        bool includeNotes = false);
+
+    #endregion
+
+    #region Segment Operations
+
+    /// <summary>
+    /// Update a segment's notes with optimistic UI pattern.
+    /// </summary>
+    Task UpdateSegmentNotesAsync(
+        Guid segmentId,
+        Guid tripId,
+        string? notes);
+
+    #endregion
+
+    #region Area Operations
+
+    /// <summary>
+    /// Update an area's (polygon) notes with optimistic UI pattern.
+    /// </summary>
+    Task UpdateAreaNotesAsync(
+        Guid tripId,
+        Guid areaId,
+        string? notes);
+
+    #endregion
+
     /// <summary>
     /// Process pending mutations when online.
     /// </summary>
@@ -832,9 +1828,46 @@ public interface ITripSyncService
     Task<int> GetPendingCountAsync();
 
     /// <summary>
+    /// Get count of failed mutations (exhausted retries or rejected).
+    /// </summary>
+    Task<int> GetFailedCountAsync();
+
+    /// <summary>
     /// Clear rejected mutations.
     /// </summary>
     Task ClearRejectedMutationsAsync();
+
+    /// <summary>
+    /// Reset retry attempts for all failed mutations.
+    /// </summary>
+    Task ResetFailedMutationsAsync();
+
+    /// <summary>
+    /// Cancel all pending mutations (discard changes).
+    /// </summary>
+    Task CancelPendingMutationsAsync();
+
+    /// <summary>
+    /// Clears all pending mutations for a specific trip.
+    /// Call this when a trip is deleted.
+    /// </summary>
+    Task ClearPendingMutationsForTripAsync(Guid tripId);
+
+    /// <summary>
+    /// Gets count of failed mutations for a specific trip.
+    /// </summary>
+    Task<int> GetFailedCountForTripAsync(Guid tripId);
+
+    /// <summary>
+    /// Resets retry attempts for a specific trip's failed mutations.
+    /// </summary>
+    Task ResetFailedMutationsForTripAsync(Guid tripId);
+
+    /// <summary>
+    /// Cancels pending mutations for a specific trip (discards unsynced changes).
+    /// Also restores original values in offline tables.
+    /// </summary>
+    Task CancelPendingMutationsForTripAsync(Guid tripId);
 }
 
 /// <summary>

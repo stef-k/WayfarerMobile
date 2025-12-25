@@ -143,6 +143,60 @@ public class PendingTripMutation
     /// </summary>
     public bool IsServerRejected { get; set; }
 
+    #region Original values for restoration
+
+    /// <summary>
+    /// Gets or sets the original name (for restoration on cancel/rejection).
+    /// </summary>
+    public string? OriginalName { get; set; }
+
+    /// <summary>
+    /// Gets or sets the original latitude (for restoration on cancel/rejection).
+    /// </summary>
+    public double? OriginalLatitude { get; set; }
+
+    /// <summary>
+    /// Gets or sets the original longitude (for restoration on cancel/rejection).
+    /// </summary>
+    public double? OriginalLongitude { get; set; }
+
+    /// <summary>
+    /// Gets or sets the original notes HTML (for restoration on cancel/rejection).
+    /// </summary>
+    public string? OriginalNotes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the original display order (for restoration on cancel/rejection).
+    /// </summary>
+    public int? OriginalDisplayOrder { get; set; }
+
+    /// <summary>
+    /// Gets or sets the original icon name (for restoration on cancel/rejection).
+    /// </summary>
+    public string? OriginalIconName { get; set; }
+
+    /// <summary>
+    /// Gets or sets the original marker color (for restoration on cancel/rejection).
+    /// </summary>
+    public string? OriginalMarkerColor { get; set; }
+
+    /// <summary>
+    /// Gets or sets the original cover image URL (for regions, for restoration).
+    /// </summary>
+    public string? OriginalCoverImageUrl { get; set; }
+
+    /// <summary>
+    /// Gets or sets the original center latitude (for regions, for restoration).
+    /// </summary>
+    public double? OriginalCenterLatitude { get; set; }
+
+    /// <summary>
+    /// Gets or sets the original center longitude (for regions, for restoration).
+    /// </summary>
+    public double? OriginalCenterLongitude { get; set; }
+
+    #endregion
+
     /// <summary>
     /// Maximum sync attempts before giving up.
     /// </summary>

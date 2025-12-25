@@ -1,10 +1,17 @@
 using Mapsui;
 using Mapsui.Layers;
+using Mapsui.Nts;
 using Mapsui.Projections;
+using Mapsui.Styles;
 using Mapsui.UI.Maui;
+using NetTopologySuite.Geometries;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.ViewModels;
 using WayfarerMobile.Views.Controls;
+using Color = Mapsui.Styles.Color;
+using Brush = Mapsui.Styles.Brush;
+using Pen = Mapsui.Styles.Pen;
+using Point = NetTopologySuite.Geometries.Point;
 
 namespace WayfarerMobile;
 
@@ -13,8 +20,10 @@ namespace WayfarerMobile;
 /// </summary>
 public partial class MainPage : ContentPage, IQueryAttributable
 {
+    private const string TempMarkerLayerName = "PlaceCoordinateEditTempMarker";
     private readonly MainViewModel _viewModel;
     private TripDetails? _pendingTrip;
+    private WritableLayer? _tempMarkerLayer;
 
     /// <summary>
     /// Creates a new instance of MainPage.
@@ -99,7 +108,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
     #endregion
 
     /// <summary>
-    /// Handles map info events for drop pin mode, trip feature taps, and other interactions.
+    /// Handles map info events for drop pin mode, trip feature taps, coordinate editing, and other interactions.
     /// </summary>
     private void OnMapInfo(object? sender, MapInfoEventArgs e)
     {
@@ -116,15 +125,23 @@ public partial class MainPage : ContentPage, IQueryAttributable
 
         try
         {
+            // Convert world position (Web Mercator) to lat/lon
+            var worldPos = mapInfo.WorldPosition;
+            var lonLat = SphericalMercator.ToLonLat(worldPos.X, worldPos.Y);
+
+            // Handle place coordinate editing mode first (takes priority)
+            if (_viewModel.IsPlaceCoordinateEditMode)
+            {
+                _viewModel.SetPendingPlaceCoordinates(lonLat.lat, lonLat.lon);
+                UpdateTempMarker(lonLat.lat, lonLat.lon);
+                return;
+            }
+
             // Check if user tapped on a trip place or area feature
             if (HandleTripFeatureTap(mapInfo))
             {
                 return;
             }
-
-            // Convert world position (Web Mercator) to lat/lon
-            var worldPos = mapInfo.WorldPosition;
-            var lonLat = SphericalMercator.ToLonLat(worldPos.X, worldPos.Y);
 
             // Check if tapping on existing dropped pin (when not in drop pin mode)
             if (!_viewModel.IsDropPinModeActive && _viewModel.HasDroppedPin)
@@ -240,6 +257,17 @@ public partial class MainPage : ContentPage, IQueryAttributable
         {
             _viewModel.UnloadTrip();
         }
+
+        // Handle selection restoration from sub-editors (notes, marker)
+        if (query.TryGetValue("restoreEntityType", out var entityTypeObj) &&
+            query.TryGetValue("restoreEntityId", out var entityIdObj))
+        {
+            var entityType = entityTypeObj?.ToString();
+            if (Guid.TryParse(entityIdObj?.ToString(), out var entityId))
+            {
+                _viewModel.RestoreSelectionFromSubEditor(entityType, entityId);
+            }
+        }
     }
 
     /// <summary>
@@ -273,12 +301,26 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// </summary>
     private async void OnMainSheetStateChanged(object? sender, Syncfusion.Maui.Toolkit.BottomSheet.StateChangedEventArgs e)
     {
+        System.Diagnostics.Debug.WriteLine($"[MainPage] SheetStateChanged: {e.OldState} -> {e.NewState}, " +
+            $"IsNavigatingToSubEditor={_viewModel.IsNavigatingToSubEditor}, " +
+            $"IsTripSheetOpen={_viewModel.IsTripSheetOpen}, " +
+            $"SelectedPlace={_viewModel.SelectedTripPlace?.Name ?? "null"}");
+
         // Only handle when sheet becomes hidden (closed)
         if (e.NewState == Syncfusion.Maui.Toolkit.BottomSheet.BottomSheetState.Hidden)
         {
+            // Don't run cleanup if navigating to sub-editor (notes, marker, etc.)
+            // The sheet goes hidden during navigation but we want to preserve selection
+            if (_viewModel.IsNavigatingToSubEditor)
+            {
+                System.Diagnostics.Debug.WriteLine("[MainPage] Skipping cleanup - navigating to sub-editor");
+                return;
+            }
+
             // Handle check-in sheet cleanup if it was open
             if (_viewModel.IsCheckInSheetOpen)
             {
+                System.Diagnostics.Debug.WriteLine("[MainPage] Running check-in sheet cleanup");
                 _viewModel.IsCheckInSheetOpen = false;
                 await _viewModel.OnCheckInSheetClosedAsync();
             }
@@ -286,6 +328,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
             // Handle trip sheet cleanup if it was open
             if (_viewModel.IsTripSheetOpen)
             {
+                System.Diagnostics.Debug.WriteLine("[MainPage] Running trip sheet cleanup - calling TripSheetBackCommand");
                 _viewModel.IsTripSheetOpen = false;
                 _viewModel.TripSheetBackCommand.Execute(null);
             }
@@ -362,7 +405,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
     }
 
     /// <summary>
-    /// Handles ViewModel property changes to manage sheet state.
+    /// Handles ViewModel property changes to manage sheet state and coordinate editing.
     /// </summary>
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -376,7 +419,102 @@ public partial class MainPage : ContentPage, IQueryAttributable
         {
             MainBottomSheet.State = Syncfusion.Maui.Toolkit.BottomSheet.BottomSheetState.FullExpanded;
         }
+
+        // Handle place coordinate editing mode changes
+        if (e.PropertyName == nameof(MainViewModel.IsPlaceCoordinateEditMode))
+        {
+            if (_viewModel.IsPlaceCoordinateEditMode)
+            {
+                // Entering edit mode - show temp marker at current place location
+                EnsureTempMarkerLayer();
+                if (_viewModel.PendingPlaceLatitude.HasValue && _viewModel.PendingPlaceLongitude.HasValue)
+                {
+                    UpdateTempMarker(_viewModel.PendingPlaceLatitude.Value, _viewModel.PendingPlaceLongitude.Value);
+                }
+            }
+            else
+            {
+                // Exiting edit mode - remove temp marker
+                RemoveTempMarker();
+            }
+        }
     }
+
+    #region Temp Marker Helpers
+
+    /// <summary>
+    /// Ensures the temp marker layer exists on the map.
+    /// </summary>
+    private void EnsureTempMarkerLayer()
+    {
+        var map = MapControl.Map;
+        if (map == null)
+            return;
+
+        // Check if layer already exists
+        _tempMarkerLayer = map.Layers.FirstOrDefault(l => l.Name == TempMarkerLayerName) as WritableLayer;
+        if (_tempMarkerLayer != null)
+            return;
+
+        // Create and add the layer
+        _tempMarkerLayer = new WritableLayer { Name = TempMarkerLayerName };
+        map.Layers.Add(_tempMarkerLayer);
+    }
+
+    /// <summary>
+    /// Updates or creates the temporary marker at the specified coordinates.
+    /// </summary>
+    /// <param name="latitude">The latitude.</param>
+    /// <param name="longitude">The longitude.</param>
+    private void UpdateTempMarker(double latitude, double longitude)
+    {
+        if (_tempMarkerLayer == null)
+        {
+            EnsureTempMarkerLayer();
+            if (_tempMarkerLayer == null)
+                return;
+        }
+
+        _tempMarkerLayer.Clear();
+
+        var (x, y) = SphericalMercator.FromLonLat(longitude, latitude);
+        var point = new Point(x, y);
+        var feature = new GeometryFeature(point)
+        {
+            Styles = new[] { CreateTempMarkerStyle() }
+        };
+
+        _tempMarkerLayer.Add(feature);
+        _tempMarkerLayer.DataHasChanged();
+    }
+
+    /// <summary>
+    /// Removes the temporary marker from the map.
+    /// </summary>
+    private void RemoveTempMarker()
+    {
+        if (_tempMarkerLayer == null)
+            return;
+
+        _tempMarkerLayer.Clear();
+        _tempMarkerLayer.DataHasChanged();
+    }
+
+    /// <summary>
+    /// Creates the style for the temporary marker (distinct from regular markers).
+    /// </summary>
+    private static IStyle CreateTempMarkerStyle()
+    {
+        return new SymbolStyle
+        {
+            SymbolScale = 0.8,
+            Fill = new Brush(Color.FromArgb(255, 255, 87, 34)), // Orange (Material Deep Orange)
+            Outline = new Pen(Color.White, 3),
+            SymbolType = SymbolType.Ellipse
+        };
+    }
+
+    #endregion
 
     /// <summary>
     /// Shows the navigation method picker and returns the selected method.

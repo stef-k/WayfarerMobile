@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json.Serialization;
+using WayfarerMobile.Core.Helpers;
 
 namespace WayfarerMobile.Core.Models;
 
@@ -112,8 +113,13 @@ public class TripTag
 /// <summary>
 /// Full trip details with places and segments.
 /// </summary>
-public class TripDetails
+public class TripDetails : INotifyPropertyChanged
 {
+    /// <summary>
+    /// Occurs when a property value changes.
+    /// </summary>
+    public event PropertyChangedEventHandler? PropertyChanged;
+
     /// <summary>
     /// Gets or sets the trip ID.
     /// </summary>
@@ -214,6 +220,13 @@ public class TripDetails
     public bool HasCoverImage => !string.IsNullOrEmpty(CoverImageUrl);
 
     /// <summary>
+    /// Gets the cover image URL with any proxy wrapping removed.
+    /// Use this for display instead of CoverImageUrl to handle double-proxied URLs.
+    /// </summary>
+    [JsonIgnore]
+    public string? CleanCoverImageUrl => ImageProxyHelper.UnwrapProxyUrl(CoverImageUrl);
+
+    /// <summary>
     /// Gets whether this trip has meaningful notes content.
     /// Filters out empty HTML like Quill.js default &lt;p&gt;&lt;/p&gt; or &lt;p&gt;&lt;br&gt;&lt;/p&gt;.
     /// </summary>
@@ -266,6 +279,15 @@ public class TripDetails
     [JsonIgnore]
     public List<TripArea> AllAreas =>
         Regions.SelectMany(r => r.Areas).ToList();
+
+    /// <summary>
+    /// Notifies that the SortedRegions property has changed.
+    /// Call this after modifying regions to refresh the UI.
+    /// </summary>
+    public void NotifySortedRegionsChanged()
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SortedRegions)));
+    }
 }
 
 /// <summary>
@@ -301,6 +323,8 @@ public class BoundingBox
 public class TripRegion : INotifyPropertyChanged
 {
     private string _name = string.Empty;
+    private string? _notes;
+    private string? _coverImageUrl;
 
     /// <summary>
     /// Occurs when a property value changes.
@@ -336,12 +360,36 @@ public class TripRegion : INotifyPropertyChanged
     /// <summary>
     /// Gets or sets the region notes (HTML).
     /// </summary>
-    public string? Notes { get; set; }
+    public string? Notes
+    {
+        get => _notes;
+        set
+        {
+            if (_notes != value)
+            {
+                _notes = value;
+                OnPropertyChanged(nameof(Notes));
+                OnPropertyChanged(nameof(HasNotes));
+            }
+        }
+    }
 
     /// <summary>
     /// Gets or sets the cover image URL.
     /// </summary>
-    public string? CoverImageUrl { get; set; }
+    public string? CoverImageUrl
+    {
+        get => _coverImageUrl;
+        set
+        {
+            if (_coverImageUrl != value)
+            {
+                _coverImageUrl = value;
+                OnPropertyChanged(nameof(CoverImageUrl));
+                OnPropertyChanged(nameof(HasCoverImage));
+            }
+        }
+    }
 
     /// <summary>
     /// Gets or sets the center latitude.
@@ -432,6 +480,13 @@ public class TripRegion : INotifyPropertyChanged
     /// </summary>
     [JsonIgnore]
     public bool HasCoverImage => !string.IsNullOrEmpty(CoverImageUrl);
+
+    /// <summary>
+    /// Gets the cover image URL with any proxy wrapping removed.
+    /// Use this for display instead of CoverImageUrl to handle double-proxied URLs.
+    /// </summary>
+    [JsonIgnore]
+    public string? CleanCoverImageUrl => ImageProxyHelper.UnwrapProxyUrl(CoverImageUrl);
 
     /// <summary>
     /// Gets whether this region has meaningful notes content.
@@ -634,8 +689,18 @@ public class GeoCoordinate
 /// <summary>
 /// Place within a trip.
 /// </summary>
-public class TripPlace
+public class TripPlace : INotifyPropertyChanged
 {
+    private string _name = string.Empty;
+    private string? _notes;
+    private string? _icon;
+    private string? _markerColor;
+
+    /// <summary>
+    /// Occurs when a property value changes.
+    /// </summary>
+    public event PropertyChangedEventHandler? PropertyChanged;
+
     /// <summary>
     /// Gets or sets the place ID.
     /// </summary>
@@ -644,7 +709,18 @@ public class TripPlace
     /// <summary>
     /// Gets or sets the place name.
     /// </summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name
+    {
+        get => _name;
+        set
+        {
+            if (_name != value)
+            {
+                _name = value;
+                OnPropertyChanged(nameof(Name));
+            }
+        }
+    }
 
     /// <summary>
     /// Gets or sets the latitude.
@@ -681,19 +757,54 @@ public class TripPlace
     /// <summary>
     /// Gets or sets the place notes (HTML).
     /// </summary>
-    public string? Notes { get; set; }
+    public string? Notes
+    {
+        get => _notes;
+        set
+        {
+            if (_notes != value)
+            {
+                _notes = value;
+                OnPropertyChanged(nameof(Notes));
+            }
+        }
+    }
 
     /// <summary>
     /// Gets or sets the icon name.
     /// Server sends as "iconName".
     /// </summary>
     [JsonPropertyName("iconName")]
-    public string? Icon { get; set; }
+    public string? Icon
+    {
+        get => _icon;
+        set
+        {
+            if (_icon != value)
+            {
+                _icon = value;
+                OnPropertyChanged(nameof(Icon));
+                OnPropertyChanged(nameof(IconPath));
+            }
+        }
+    }
 
     /// <summary>
     /// Gets or sets the marker color.
     /// </summary>
-    public string? MarkerColor { get; set; }
+    public string? MarkerColor
+    {
+        get => _markerColor;
+        set
+        {
+            if (_markerColor != value)
+            {
+                _markerColor = value;
+                OnPropertyChanged(nameof(MarkerColor));
+                OnPropertyChanged(nameof(IconPath));
+            }
+        }
+    }
 
     /// <summary>
     /// Gets or sets the address of the place.
@@ -715,6 +826,14 @@ public class TripPlace
     /// </summary>
     [JsonIgnore]
     public string IconPath => Helpers.IconCatalog.GetIconResourcePath(Icon, MarkerColor);
+
+    /// <summary>
+    /// Raises the PropertyChanged event.
+    /// </summary>
+    protected virtual void OnPropertyChanged(string propertyName)
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
 }
 
 /// <summary>
@@ -1306,41 +1425,49 @@ public class PlaceCreateRequest
     /// <summary>
     /// Gets or sets the region ID (optional).
     /// </summary>
+    [JsonPropertyName("regionId")]
     public Guid? RegionId { get; set; }
 
     /// <summary>
     /// Gets or sets the place name.
     /// </summary>
+    [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the latitude.
     /// </summary>
+    [JsonPropertyName("latitude")]
     public double Latitude { get; set; }
 
     /// <summary>
     /// Gets or sets the longitude.
     /// </summary>
+    [JsonPropertyName("longitude")]
     public double Longitude { get; set; }
 
     /// <summary>
     /// Gets or sets the notes.
     /// </summary>
+    [JsonPropertyName("notes")]
     public string? Notes { get; set; }
 
     /// <summary>
     /// Gets or sets the icon name.
     /// </summary>
-    public string? Icon { get; set; }
+    [JsonPropertyName("iconName")]
+    public string? IconName { get; set; }
 
     /// <summary>
     /// Gets or sets the marker color.
     /// </summary>
+    [JsonPropertyName("markerColor")]
     public string? MarkerColor { get; set; }
 
     /// <summary>
     /// Gets or sets the display order.
     /// </summary>
+    [JsonPropertyName("displayOrder")]
     public int? DisplayOrder { get; set; }
 
     /// <summary>
@@ -1348,7 +1475,7 @@ public class PlaceCreateRequest
     /// Uses IconCatalog to resolve the icon and color to a resource path.
     /// </summary>
     [JsonIgnore]
-    public string IconPath => Helpers.IconCatalog.GetIconResourcePath(Icon, MarkerColor);
+    public string IconPath => Helpers.IconCatalog.GetIconResourcePath(IconName, MarkerColor);
 }
 
 /// <summary>
@@ -1359,37 +1486,50 @@ public class PlaceUpdateRequest
     /// <summary>
     /// Gets or sets the place name.
     /// </summary>
+    [JsonPropertyName("name")]
     public string? Name { get; set; }
 
     /// <summary>
     /// Gets or sets the latitude.
     /// </summary>
+    [JsonPropertyName("latitude")]
     public double? Latitude { get; set; }
 
     /// <summary>
     /// Gets or sets the longitude.
     /// </summary>
+    [JsonPropertyName("longitude")]
     public double? Longitude { get; set; }
 
     /// <summary>
     /// Gets or sets the notes.
     /// </summary>
+    [JsonPropertyName("notes")]
     public string? Notes { get; set; }
 
     /// <summary>
     /// Gets or sets the icon name.
     /// </summary>
-    public string? Icon { get; set; }
+    [JsonPropertyName("iconName")]
+    public string? IconName { get; set; }
 
     /// <summary>
     /// Gets or sets the marker color.
     /// </summary>
+    [JsonPropertyName("markerColor")]
     public string? MarkerColor { get; set; }
 
     /// <summary>
     /// Gets or sets the region ID.
     /// </summary>
+    [JsonPropertyName("regionId")]
     public Guid? RegionId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the display order.
+    /// </summary>
+    [JsonPropertyName("displayOrder")]
+    public int? DisplayOrder { get; set; }
 }
 
 /// <summary>
@@ -1462,6 +1602,122 @@ public class RegionUpdateRequest
     /// Gets or sets the display order.
     /// </summary>
     public int? DisplayOrder { get; set; }
+}
+
+/// <summary>
+/// Request to update a trip.
+/// </summary>
+public class TripUpdateRequest
+{
+    /// <summary>
+    /// Gets or sets the trip name.
+    /// </summary>
+    public string? Name { get; set; }
+
+    /// <summary>
+    /// Gets or sets the notes (HTML).
+    /// </summary>
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Response from trip update.
+/// </summary>
+public class TripUpdateResponse
+{
+    /// <summary>
+    /// Gets or sets the trip ID.
+    /// </summary>
+    public Guid Id { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the operation was successful.
+    /// </summary>
+    public bool Success { get; set; }
+
+    /// <summary>
+    /// Gets or sets the updated trip name.
+    /// </summary>
+    public string? Name { get; set; }
+
+    /// <summary>
+    /// Gets or sets the updated trip notes.
+    /// </summary>
+    public string? Notes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the error message if failed.
+    /// </summary>
+    public string? Error { get; set; }
+}
+
+/// <summary>
+/// Request to update segment notes.
+/// </summary>
+public class SegmentNotesUpdateRequest
+{
+    /// <summary>
+    /// Gets or sets the notes (HTML).
+    /// </summary>
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Request to update area (polygon) notes.
+/// </summary>
+public class AreaNotesUpdateRequest
+{
+    /// <summary>
+    /// Gets or sets the notes (HTML).
+    /// </summary>
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Response from area notes update.
+/// </summary>
+public class AreaUpdateResponse
+{
+    /// <summary>
+    /// Gets or sets the area ID.
+    /// </summary>
+    public Guid Id { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the operation was successful.
+    /// </summary>
+    public bool Success { get; set; }
+
+    /// <summary>
+    /// Gets or sets the updated notes.
+    /// </summary>
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Response from segment notes update.
+/// </summary>
+public class SegmentUpdateResponse
+{
+    /// <summary>
+    /// Gets or sets the segment ID.
+    /// </summary>
+    public Guid Id { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the operation was successful.
+    /// </summary>
+    public bool Success { get; set; }
+
+    /// <summary>
+    /// Gets or sets the updated notes.
+    /// </summary>
+    public string? Notes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the error message if failed.
+    /// </summary>
+    public string? Error { get; set; }
 }
 
 /// <summary>

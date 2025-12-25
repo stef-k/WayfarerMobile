@@ -15,6 +15,7 @@ public class TripDownloadService
     private readonly IApiClient _apiClient;
     private readonly DatabaseService _databaseService;
     private readonly ISettingsService _settingsService;
+    private readonly ITripSyncService _tripSyncService;
     private readonly ILogger<TripDownloadService> _logger;
 
     // Tile download configuration - use centralized constants for consistency
@@ -43,11 +44,13 @@ public class TripDownloadService
         IApiClient apiClient,
         DatabaseService databaseService,
         ISettingsService settingsService,
+        ITripSyncService tripSyncService,
         ILogger<TripDownloadService> logger)
     {
         _apiClient = apiClient;
         _databaseService = databaseService;
         _settingsService = settingsService;
+        _tripSyncService = tripSyncService;
         _logger = logger;
     }
 
@@ -136,12 +139,14 @@ public class TripDownloadService
             {
                 ServerId = r.Id,
                 Name = r.Name,
+                Notes = r.Notes,
+                CoverImageUrl = r.CoverImageUrl,
                 SortOrder = r.SortOrder > 0 ? r.SortOrder : index,
                 PlaceCount = r.Places.Count
             }).ToList();
 
             await _databaseService.SaveOfflineAreasAsync(tripEntity.Id, areas);
-            tripEntity.AreaCount = areas.Count;
+            tripEntity.RegionCount = areas.Count;
 
             RaiseProgress(tripEntity.Id, 30, "Saving places...");
 
@@ -227,6 +232,7 @@ public class TripDownloadService
                 }
             }
             await _databaseService.SaveOfflinePolygonsAsync(tripEntity.Id, polygons);
+            tripEntity.AreaCount = polygons.Count;
 
             tripEntity.ProgressPercent = 50;
             await _databaseService.SaveDownloadedTripAsync(tripEntity);
@@ -400,6 +406,8 @@ public class TripDownloadService
             {
                 Id = regionGroup.Key,
                 Name = area?.Name ?? regionGroup.First().RegionName ?? "Places",
+                Notes = area?.Notes,
+                CoverImageUrl = area?.CoverImageUrl,
                 SortOrder = area?.SortOrder ?? 0,
                 Places = regionGroup.Select(p => new TripPlace
                 {
@@ -492,17 +500,62 @@ public class TripDownloadService
     }
 
     /// <summary>
-    /// Deletes a downloaded trip.
+    /// Deletes a downloaded trip and clears any pending mutations.
     /// </summary>
     public async Task DeleteTripAsync(Guid tripServerId)
     {
         var trip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
         if (trip != null)
         {
+            // Clear pending mutations for this trip first
+            await _tripSyncService.ClearPendingMutationsForTripAsync(tripServerId);
+
             await _databaseService.DeleteDownloadedTripAsync(trip.Id);
-            _logger.LogInformation("Deleted trip: {TripId}", tripServerId);
+            _logger.LogInformation("Deleted trip and cleared pending mutations: {TripId}", tripServerId);
         }
     }
+
+    #region Trip Editing
+
+    /// <summary>
+    /// Updates a trip's name in local storage.
+    /// </summary>
+    /// <param name="tripServerId">The server-side trip ID.</param>
+    /// <param name="newName">The new trip name.</param>
+    public async Task UpdateTripNameAsync(Guid tripServerId, string newName)
+    {
+        var trip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
+        if (trip == null)
+        {
+            _logger.LogWarning("Cannot update trip name - trip {TripId} not found", tripServerId);
+            return;
+        }
+
+        trip.Name = newName;
+        await _databaseService.SaveDownloadedTripAsync(trip);
+        _logger.LogInformation("Updated trip name to '{NewName}' for trip {TripId}", newName, tripServerId);
+    }
+
+    /// <summary>
+    /// Updates a trip's notes in local storage.
+    /// </summary>
+    /// <param name="tripServerId">The server-side trip ID.</param>
+    /// <param name="newNotes">The new trip notes (HTML).</param>
+    public async Task UpdateTripNotesAsync(Guid tripServerId, string? newNotes)
+    {
+        var trip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
+        if (trip == null)
+        {
+            _logger.LogWarning("Cannot update trip notes - trip {TripId} not found", tripServerId);
+            return;
+        }
+
+        trip.Notes = newNotes;
+        await _databaseService.SaveDownloadedTripAsync(trip);
+        _logger.LogInformation("Updated trip notes for trip {TripId}", tripServerId);
+    }
+
+    #endregion
 
     #region Trip Sync/Update
 
@@ -595,12 +648,14 @@ public class TripDownloadService
             {
                 ServerId = r.Id,
                 Name = r.Name,
+                Notes = r.Notes,
+                CoverImageUrl = r.CoverImageUrl,
                 SortOrder = r.SortOrder > 0 ? r.SortOrder : index,
                 PlaceCount = r.Places.Count
             }).ToList();
 
             await _databaseService.SaveOfflineAreasAsync(localTrip.Id, areas);
-            localTrip.AreaCount = areas.Count;
+            localTrip.RegionCount = areas.Count;
 
             RaiseProgress(localTrip.Id, 35, "Updating places...");
 
@@ -687,6 +742,7 @@ public class TripDownloadService
                 }
             }
             await _databaseService.SaveOfflinePolygonsAsync(localTrip.Id, polygons);
+            localTrip.AreaCount = polygons.Count;
 
             RaiseProgress(localTrip.Id, 75, "Checking map coverage...");
 

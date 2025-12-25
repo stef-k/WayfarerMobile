@@ -19,6 +19,7 @@ public partial class TripsViewModel : BaseViewModel
     private readonly TripDownloadService _downloadService;
     private readonly IToastService _toastService;
     private readonly TripNavigationService _tripNavigationService;
+    private readonly ITripSyncService _tripSyncService;
     private readonly ILogger<TripsViewModel> _logger;
 
     private CancellationTokenSource? _searchCts;
@@ -56,6 +57,51 @@ public partial class TripsViewModel : BaseViewModel
     /// </summary>
     [ObservableProperty]
     private bool _isInitialLoad = true;
+
+    #endregion
+
+    #region Observable Properties - Sync Queue Status
+
+    /// <summary>
+    /// Gets or sets the count of pending sync operations.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPendingSync))]
+    [NotifyPropertyChangedFor(nameof(SyncStatusText))]
+    private int _pendingSyncCount;
+
+    /// <summary>
+    /// Gets or sets the count of failed sync operations.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasFailedSync))]
+    [NotifyPropertyChangedFor(nameof(SyncStatusText))]
+    private int _failedSyncCount;
+
+    /// <summary>
+    /// Gets whether there are pending sync operations.
+    /// </summary>
+    public bool HasPendingSync => PendingSyncCount > 0;
+
+    /// <summary>
+    /// Gets whether there are failed sync operations.
+    /// </summary>
+    public bool HasFailedSync => FailedSyncCount > 0;
+
+    /// <summary>
+    /// Gets the sync status text for display.
+    /// </summary>
+    public string SyncStatusText
+    {
+        get
+        {
+            if (FailedSyncCount > 0)
+                return $"{FailedSyncCount} sync failed";
+            if (PendingSyncCount > 0)
+                return $"{PendingSyncCount} pending sync";
+            return string.Empty;
+        }
+    }
 
     #endregion
 
@@ -169,6 +215,7 @@ public partial class TripsViewModel : BaseViewModel
         TripDownloadService downloadService,
         IToastService toastService,
         TripNavigationService tripNavigationService,
+        ITripSyncService tripSyncService,
         ILogger<TripsViewModel> logger)
     {
         _apiClient = apiClient;
@@ -176,6 +223,7 @@ public partial class TripsViewModel : BaseViewModel
         _downloadService = downloadService;
         _toastService = toastService;
         _tripNavigationService = tripNavigationService;
+        _tripSyncService = tripSyncService;
         _logger = logger;
         Title = "Trips";
 
@@ -238,6 +286,10 @@ public partial class TripsViewModel : BaseViewModel
             var serverTrips = await _apiClient.GetTripsAsync();
             var downloadedTrips = await _downloadService.GetDownloadedTripsAsync();
 
+            // Check which trip is currently loaded on the map
+            var loadedTripId = MainViewModel.CurrentLoadedTripId;
+            _logger.LogDebug("LoadTripsAsync: CurrentLoadedTripId = {TripId}", loadedTripId);
+
             // Build grouped list
             var items = new List<TripListItem>();
 
@@ -245,7 +297,16 @@ public partial class TripsViewModel : BaseViewModel
             foreach (var trip in serverTrips.OrderByDescending(t => t.UpdatedAt))
             {
                 var downloaded = downloadedTrips.FirstOrDefault(d => d.ServerId == trip.Id);
-                items.Add(new TripListItem(trip, downloaded));
+                var item = new TripListItem(trip, downloaded);
+
+                // Mark as currently loaded if it matches
+                if (loadedTripId.HasValue && trip.Id == loadedTripId.Value)
+                {
+                    _logger.LogDebug("LoadTripsAsync: Marking trip {TripName} ({TripId}) as currently loaded", trip.Name, trip.Id);
+                    item.IsCurrentlyLoaded = true;
+                }
+
+                items.Add(item);
             }
 
             // Group by download status
@@ -262,6 +323,9 @@ public partial class TripsViewModel : BaseViewModel
             }
 
             _logger.LogDebug("Loaded {Count} trips", items.Count);
+
+            // Refresh sync queue status
+            await RefreshSyncStatusAsync();
         }
         catch (Exception ex)
         {
@@ -273,6 +337,142 @@ public partial class TripsViewModel : BaseViewModel
             IsLoadingTrips = false;
             // Mark initial load complete - shimmer won't show on subsequent refreshes
             IsInitialLoad = false;
+        }
+    }
+
+    /// <summary>
+    /// Refreshes the sync queue status counts.
+    /// </summary>
+    private async Task RefreshSyncStatusAsync()
+    {
+        try
+        {
+            PendingSyncCount = await _tripSyncService.GetPendingCountAsync();
+            FailedSyncCount = await _tripSyncService.GetFailedCountAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to refresh sync status");
+        }
+    }
+
+    /// <summary>
+    /// Moves a trip item to the correct group based on its current GroupName.
+    /// Used after download completes to move from "Available on Server" to "Downloaded".
+    /// </summary>
+    private void MoveItemToCorrectGroup(TripListItem item)
+    {
+        var targetGroupName = item.GroupName;
+
+        // Find current group containing the item
+        TripGrouping? currentGroup = null;
+        foreach (var group in MyTrips)
+        {
+            if (group.Contains(item))
+            {
+                currentGroup = group;
+                break;
+            }
+        }
+
+        if (currentGroup == null)
+        {
+            _logger.LogWarning("Item {Name} not found in any group", item.Name);
+            return;
+        }
+
+        // Already in correct group?
+        if (currentGroup.Name == targetGroupName)
+        {
+            return;
+        }
+
+        // Remove from current group
+        currentGroup.Remove(item);
+
+        // Remove empty groups
+        if (currentGroup.Count == 0)
+        {
+            MyTrips.Remove(currentGroup);
+        }
+
+        // Find or create target group
+        var targetGroup = MyTrips.FirstOrDefault(g => g.Name == targetGroupName);
+        if (targetGroup == null)
+        {
+            // Create new group and insert in correct position
+            targetGroup = new TripGrouping(targetGroupName, new[] { item });
+
+            // Insert in order: Downloaded (0), Metadata Only (1), Available on Server (2)
+            var insertIndex = targetGroupName switch
+            {
+                "Downloaded" => 0,
+                "Metadata Only" => MyTrips.Any(g => g.Name == "Downloaded") ? 1 : 0,
+                _ => MyTrips.Count
+            };
+
+            MyTrips.Insert(Math.Min(insertIndex, MyTrips.Count), targetGroup);
+        }
+        else
+        {
+            // Add to existing group at the top (most recently modified)
+            targetGroup.Insert(0, item);
+        }
+
+        _logger.LogDebug("Moved trip {Name} from '{From}' to '{To}'", item.Name, currentGroup.Name, targetGroupName);
+    }
+
+    /// <summary>
+    /// Retries failed sync operations.
+    /// </summary>
+    [RelayCommand]
+    private async Task RetrySyncAsync()
+    {
+        try
+        {
+            await _tripSyncService.ResetFailedMutationsAsync();
+            await RefreshSyncStatusAsync();
+            await _toastService.ShowSuccessAsync("Retrying sync...");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to retry sync");
+            await _toastService.ShowErrorAsync($"Failed to retry: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Cancels all pending sync operations.
+    /// </summary>
+    [RelayCommand]
+    private async Task CancelSyncAsync()
+    {
+        var page = Application.Current?.Windows.FirstOrDefault()?.Page;
+        if (page == null)
+            return;
+
+        var confirm = await page.DisplayAlertAsync(
+            "Cancel Pending Changes",
+            "This will discard all pending changes that haven't been synced to the server. This action cannot be undone.",
+            "Cancel Changes",
+            "Keep");
+
+        if (!confirm)
+            return;
+
+        try
+        {
+            await _tripSyncService.CancelPendingMutationsAsync();
+            await RefreshSyncStatusAsync();
+            await _toastService.ShowSuccessAsync("Pending changes discarded");
+
+            // Reload trips to reflect any reverted changes
+            await LoadTripsAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to cancel sync");
+            await _toastService.ShowErrorAsync($"Failed to cancel: {ex.Message}");
         }
     }
 
@@ -296,6 +496,15 @@ public partial class TripsViewModel : BaseViewModel
                 return;
             }
 
+            // Mark this trip as loaded and clear others BEFORE navigating
+            foreach (var group in MyTrips)
+            {
+                foreach (var tripItem in group)
+                {
+                    tripItem.IsCurrentlyLoaded = tripItem.ServerId == item.ServerId;
+                }
+            }
+
             // Navigate to main page with trip
             await Shell.Current.GoToAsync("//main", new Dictionary<string, object>
             {
@@ -307,6 +516,19 @@ public partial class TripsViewModel : BaseViewModel
             _logger.LogError(ex, "Failed to load trip to map");
             await _toastService.ShowErrorAsync($"Failed to load trip: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Navigates back to the currently loaded trip without reloading.
+    /// </summary>
+    [RelayCommand]
+    private async Task BackToTripAsync(TripListItem? item)
+    {
+        if (item == null || !item.IsCurrentlyLoaded)
+            return;
+
+        // Simply navigate to main page - trip is already loaded
+        await Shell.Current.GoToAsync("//main");
     }
 
     /// <summary>
@@ -353,8 +575,8 @@ public partial class TripsViewModel : BaseViewModel
 
         try
         {
-            // Check if this trip is currently loaded on the map
-            var isCurrentlyLoaded = _tripNavigationService.CurrentTripId == item.ServerId;
+            // Check if this trip is currently loaded using single source of truth
+            var isCurrentlyLoaded = MainViewModel.CurrentLoadedTripId == item.ServerId;
 
             await _downloadService.DeleteTripAsync(item.ServerId);
 
@@ -371,10 +593,13 @@ public partial class TripsViewModel : BaseViewModel
                 });
             }
 
-            // Update item directly instead of full reload (avoids shimmer)
-            item.DownloadState = TripDownloadState.ServerOnly;
+            // Clear entity FIRST so StatsText shows correct value when DownloadState triggers notification
             item.DownloadedEntity = null;
-            OnPropertyChanged(nameof(MyTrips));
+            item.DownloadState = TripDownloadState.ServerOnly;
+            item.IsCurrentlyLoaded = false;  // Clear loaded state since trip data is deleted
+
+            // Move item to correct group based on new state
+            MoveItemToCorrectGroup(item);
 
             await _toastService.ShowSuccessAsync("Offline data deleted");
         }
@@ -394,6 +619,97 @@ public partial class TripsViewModel : BaseViewModel
         _downloadCts?.Cancel();
         IsDownloading = false;
         DownloadingTripName = null;
+    }
+
+    /// <summary>
+    /// Shows edit options for a trip (name, notes).
+    /// </summary>
+    [RelayCommand]
+    private async Task EditTripAsync(TripListItem? item)
+    {
+        if (item == null)
+            return;
+
+        var action = await Shell.Current.DisplayActionSheetAsync(
+            $"Edit: {item.Name}",
+            "Cancel",
+            null,
+            "Edit Name",
+            "Edit Notes");
+
+        switch (action)
+        {
+            case "Edit Name":
+                await EditTripNameAsync(item);
+                break;
+            case "Edit Notes":
+                await EditTripNotesAsync(item);
+                break;
+        }
+    }
+
+    private async Task EditTripNameAsync(TripListItem item)
+    {
+        var newName = await Shell.Current.DisplayPromptAsync(
+            "Edit Trip Name",
+            "Enter new name:",
+            initialValue: item.Name,
+            maxLength: 200,
+            keyboard: Keyboard.Text);
+
+        if (string.IsNullOrWhiteSpace(newName) || newName == item.Name)
+            return;
+
+        try
+        {
+            // Optimistically update UI
+            var oldName = item.Name;
+
+            // Update local storage first
+            await _downloadService.UpdateTripNameAsync(item.ServerId, newName);
+
+            // Sync with server
+            await _tripSyncService.UpdateTripAsync(item.ServerId, name: newName);
+
+            // Reload trips to reflect change
+            await LoadTripsAsync();
+
+            await _toastService.ShowSuccessAsync("Trip name updated");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update trip name");
+            await _toastService.ShowErrorAsync($"Failed to update: {ex.Message}");
+        }
+    }
+
+    private async Task EditTripNotesAsync(TripListItem item)
+    {
+        try
+        {
+            // Load trip details to get current notes
+            var tripDetails = await _downloadService.GetOfflineTripDetailsAsync(item.ServerId);
+            if (tripDetails == null)
+            {
+                await _toastService.ShowErrorAsync("Trip not found. Please download it first.");
+                return;
+            }
+
+            // Navigate to notes editor with trip info
+            var navParams = new Dictionary<string, object>
+            {
+                { "tripId", item.ServerId.ToString() },
+                { "notes", tripDetails.Notes ?? string.Empty },
+                { "entityType", "Trip" }
+            };
+
+            await Shell.Current.GoToAsync("notesEditor", navParams);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to open notes editor");
+            await _toastService.ShowErrorAsync($"Failed to open editor: {ex.Message}");
+        }
     }
 
     #endregion
@@ -548,10 +864,12 @@ public partial class TripsViewModel : BaseViewModel
 
             if (result != null)
             {
-                // Update item directly instead of full reload (avoids shimmer)
-                item.DownloadState = includeTiles ? TripDownloadState.Complete : TripDownloadState.MetadataOnly;
+                // Set entity FIRST so StatsText has access to counts when DownloadState triggers notification
                 item.DownloadedEntity = result;
-                OnPropertyChanged(nameof(MyTrips));
+                item.DownloadState = includeTiles ? TripDownloadState.Complete : TripDownloadState.MetadataOnly;
+
+                // Move item to the correct group based on new state
+                MoveItemToCorrectGroup(item);
 
                 await _toastService.ShowSuccessAsync($"'{item.Name}' downloaded");
             }
@@ -654,13 +972,44 @@ public partial class TripsViewModel : BaseViewModel
     /// <inheritdoc/>
     public override async Task OnAppearingAsync()
     {
+        _logger.LogDebug("OnAppearingAsync: MyTrips.Count = {Count}", MyTrips.Count);
+
         // Load my trips if empty
         if (MyTrips.Count == 0)
         {
+            _logger.LogDebug("OnAppearingAsync: Calling LoadTripsAsync");
             await LoadTripsAsync();
         }
 
+        // Always refresh loaded state (even after LoadTripsAsync, in case there's timing issues)
+        _logger.LogDebug("OnAppearingAsync: Calling RefreshLoadedTripState");
+        RefreshLoadedTripState();
+
         await base.OnAppearingAsync();
+    }
+
+    /// <summary>
+    /// Updates the IsCurrentlyLoaded state for all trip items.
+    /// Called when returning to this page to reflect current MainViewModel state.
+    /// </summary>
+    private void RefreshLoadedTripState()
+    {
+        var loadedTripId = MainViewModel.CurrentLoadedTripId;
+        _logger.LogDebug("RefreshLoadedTripState: CurrentLoadedTripId = {TripId}", loadedTripId);
+
+        foreach (var group in MyTrips)
+        {
+            foreach (var item in group)
+            {
+                var isLoaded = loadedTripId.HasValue && item.ServerId == loadedTripId.Value;
+                if (item.IsCurrentlyLoaded != isLoaded)
+                {
+                    _logger.LogDebug("RefreshLoadedTripState: Setting {TripName} ({ServerId}) IsCurrentlyLoaded = {IsLoaded}",
+                        item.Name, item.ServerId, isLoaded);
+                    item.IsCurrentlyLoaded = isLoaded;
+                }
+            }
+        }
     }
 
     /// <inheritdoc/>
@@ -715,18 +1064,44 @@ public partial class TripListItem : ObservableObject
 
     /// <summary>
     /// Gets the stats text (dynamically calculated based on download state).
+    /// Shows regions, places, segments, areas, and tiles.
     /// </summary>
-    public string StatsText => DownloadState switch
+    public string StatsText
     {
-        TripDownloadState.Complete => DownloadedEntity != null
-            ? $"{DownloadedEntity.PlaceCount} places • {DownloadedEntity.TileCount} tiles"
-            : "Downloaded",
-        TripDownloadState.MetadataOnly => DownloadedEntity != null
-            ? $"{DownloadedEntity.PlaceCount} places • No tiles"
-            : "Metadata only",
-        TripDownloadState.Downloading => "Downloading...",
-        _ => _serverStatsText ?? "Available online"
-    };
+        get
+        {
+            if (DownloadState == TripDownloadState.Downloading)
+                return "Downloading...";
+
+            if (DownloadState == TripDownloadState.ServerOnly)
+                return _serverStatsText ?? "Available online";
+
+            // For downloaded trips (MetadataOnly or Complete), show detailed stats
+            if (DownloadedEntity == null)
+                return DownloadState == TripDownloadState.Complete ? "Downloaded" : "Metadata only";
+
+            var parts = new List<string>();
+
+            if (DownloadedEntity.RegionCount > 0)
+                parts.Add($"{DownloadedEntity.RegionCount} region{(DownloadedEntity.RegionCount == 1 ? "" : "s")}");
+
+            if (DownloadedEntity.PlaceCount > 0)
+                parts.Add($"{DownloadedEntity.PlaceCount} place{(DownloadedEntity.PlaceCount == 1 ? "" : "s")}");
+
+            if (DownloadedEntity.SegmentCount > 0)
+                parts.Add($"{DownloadedEntity.SegmentCount} segment{(DownloadedEntity.SegmentCount == 1 ? "" : "s")}");
+
+            if (DownloadedEntity.AreaCount > 0)
+                parts.Add($"{DownloadedEntity.AreaCount} area{(DownloadedEntity.AreaCount == 1 ? "" : "s")}");
+
+            if (DownloadState == TripDownloadState.Complete && DownloadedEntity.TileCount > 0)
+                parts.Add($"{DownloadedEntity.TileCount} tiles");
+            else if (DownloadState == TripDownloadState.MetadataOnly)
+                parts.Add("No tiles");
+
+            return parts.Count > 0 ? string.Join(" • ", parts) : "Empty trip";
+        }
+    }
 
     /// <summary>
     /// Server stats text (cached from initial load).
@@ -815,10 +1190,18 @@ public partial class TripListItem : ObservableObject
 
     /// <summary>
     /// Gets whether Load to Map is available.
-    /// Only available for downloaded trips (metadata or complete).
+    /// Only available for downloaded trips (metadata or complete) that aren't already loaded.
     /// </summary>
-    public bool CanLoadToMap => DownloadState == TripDownloadState.MetadataOnly ||
-                                 DownloadState == TripDownloadState.Complete;
+    public bool CanLoadToMap => !IsCurrentlyLoaded &&
+                                 (DownloadState == TripDownloadState.MetadataOnly ||
+                                  DownloadState == TripDownloadState.Complete);
+
+    /// <summary>
+    /// Gets or sets whether this trip is currently loaded on the map.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanLoadToMap))]
+    private bool _isCurrentlyLoaded;
 
     /// <summary>
     /// Gets whether Quick Download is available.
@@ -829,6 +1212,13 @@ public partial class TripListItem : ObservableObject
     /// Gets whether Full Download is available.
     /// </summary>
     public bool CanFullDownload => DownloadState == TripDownloadState.ServerOnly || DownloadState == TripDownloadState.MetadataOnly;
+
+    /// <summary>
+    /// Gets whether editing is available.
+    /// Only available for downloaded trips (have local data to edit).
+    /// </summary>
+    public bool CanEdit => DownloadState == TripDownloadState.MetadataOnly ||
+                            DownloadState == TripDownloadState.Complete;
 
     /// <summary>
     /// Gets or sets whether downloading.

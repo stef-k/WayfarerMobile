@@ -669,6 +669,128 @@ public class DatabaseService : IAsyncDisposable
 
     #endregion
 
+    #region Individual Offline Entity Operations
+
+    /// <summary>
+    /// Gets an offline place by server ID.
+    /// </summary>
+    public async Task<OfflinePlaceEntity?> GetOfflinePlaceByServerIdAsync(Guid serverId)
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<OfflinePlaceEntity>()
+            .Where(p => p.ServerId == serverId)
+            .FirstOrDefaultAsync();
+    }
+
+    /// <summary>
+    /// Updates an offline place.
+    /// </summary>
+    public async Task UpdateOfflinePlaceAsync(OfflinePlaceEntity place)
+    {
+        await EnsureInitializedAsync();
+        await _database!.UpdateAsync(place);
+    }
+
+    /// <summary>
+    /// Deletes an offline place by server ID.
+    /// </summary>
+    public async Task DeleteOfflinePlaceByServerIdAsync(Guid serverId)
+    {
+        await EnsureInitializedAsync();
+        await _database!.ExecuteAsync(
+            "DELETE FROM OfflinePlaces WHERE ServerId = ?", serverId.ToString());
+    }
+
+    /// <summary>
+    /// Gets an offline area/region by server ID.
+    /// </summary>
+    public async Task<OfflineAreaEntity?> GetOfflineAreaByServerIdAsync(Guid serverId)
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<OfflineAreaEntity>()
+            .Where(a => a.ServerId == serverId)
+            .FirstOrDefaultAsync();
+    }
+
+    /// <summary>
+    /// Updates an offline area/region.
+    /// </summary>
+    public async Task UpdateOfflineAreaAsync(OfflineAreaEntity area)
+    {
+        await EnsureInitializedAsync();
+        await _database!.UpdateAsync(area);
+    }
+
+    /// <summary>
+    /// Deletes an offline area/region by server ID.
+    /// </summary>
+    public async Task DeleteOfflineAreaByServerIdAsync(Guid serverId)
+    {
+        await EnsureInitializedAsync();
+        await _database!.ExecuteAsync(
+            "DELETE FROM OfflineAreas WHERE ServerId = ?", serverId.ToString());
+    }
+
+    /// <summary>
+    /// Inserts a new offline place.
+    /// </summary>
+    public async Task InsertOfflinePlaceAsync(OfflinePlaceEntity place)
+    {
+        await EnsureInitializedAsync();
+        await _database!.InsertAsync(place);
+    }
+
+    /// <summary>
+    /// Inserts a new offline area/region.
+    /// </summary>
+    public async Task InsertOfflineAreaAsync(OfflineAreaEntity area)
+    {
+        await EnsureInitializedAsync();
+        await _database!.InsertAsync(area);
+    }
+
+    /// <summary>
+    /// Gets an offline segment by server ID.
+    /// </summary>
+    public async Task<OfflineSegmentEntity?> GetOfflineSegmentByServerIdAsync(Guid serverId)
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<OfflineSegmentEntity>()
+            .Where(s => s.ServerId == serverId)
+            .FirstOrDefaultAsync();
+    }
+
+    /// <summary>
+    /// Updates an offline segment.
+    /// </summary>
+    public async Task UpdateOfflineSegmentAsync(OfflineSegmentEntity segment)
+    {
+        await EnsureInitializedAsync();
+        await _database!.UpdateAsync(segment);
+    }
+
+    /// <summary>
+    /// Gets an offline polygon by server ID.
+    /// </summary>
+    public async Task<OfflinePolygonEntity?> GetOfflinePolygonByServerIdAsync(Guid serverId)
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<OfflinePolygonEntity>()
+            .Where(p => p.ServerId == serverId)
+            .FirstOrDefaultAsync();
+    }
+
+    /// <summary>
+    /// Updates an offline polygon.
+    /// </summary>
+    public async Task UpdateOfflinePolygonAsync(OfflinePolygonEntity polygon)
+    {
+        await EnsureInitializedAsync();
+        await _database!.UpdateAsync(polygon);
+    }
+
+    #endregion
+
     #region Trip Tiles
 
     /// <summary>

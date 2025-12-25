@@ -59,6 +59,9 @@ public class TripLayerService : ITripLayerService
     public string TripSegmentsLayerName => "TripSegments";
 
     /// <inheritdoc />
+    public string PlaceSelectionLayerName => "PlaceSelection";
+
+    /// <inheritdoc />
     public async Task<List<MPoint>> UpdateTripPlacesAsync(WritableLayer layer, IEnumerable<TripPlace> places)
     {
         layer.Clear();
@@ -499,6 +502,58 @@ public class TripLayerService : ITripLayerService
             // Default - gray solid line
             _ => (Color.FromArgb(200, 158, 158, 158), 3, null)
         };
+    }
+
+    #endregion
+
+    #region Place Selection
+
+    /// <inheritdoc />
+    public void UpdatePlaceSelection(WritableLayer layer, TripPlace? place)
+    {
+        layer.Clear();
+
+        if (place == null || (place.Latitude == 0 && place.Longitude == 0))
+        {
+            layer.DataHasChanged();
+            return;
+        }
+
+        var (x, y) = SphericalMercator.FromLonLat(place.Longitude, place.Latitude);
+        var point = new Point(x, y);
+
+        // Create a ring style around the selected place using primary app color (#e45243)
+        // Ring offset matches marker offset (-16) to align with marker tip
+        var style = new SymbolStyle
+        {
+            SymbolScale = 1.0,
+            Offset = new Offset(0, -16),
+            Fill = new Brush(Color.Transparent),
+            Outline = new Pen(Color.FromArgb(220, 228, 82, 67), 3)  // Primary color ring (#e45243)
+            {
+                PenStrokeCap = PenStrokeCap.Round
+            },
+            SymbolType = SymbolType.Ellipse
+        };
+
+        var feature = new GeometryFeature(point)
+        {
+            Styles = new[] { style }
+        };
+
+        // Add PlaceId so tapping on the ring still selects the same place
+        feature["PlaceId"] = place.Id;
+
+        layer.Add(feature);
+        layer.DataHasChanged();
+        _logger.LogDebug("Updated place selection ring for place {PlaceId}", place.Id);
+    }
+
+    /// <inheritdoc />
+    public void ClearPlaceSelection(WritableLayer layer)
+    {
+        layer.Clear();
+        layer.DataHasChanged();
     }
 
     #endregion

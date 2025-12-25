@@ -74,7 +74,7 @@
                                    State="FullExpanded"
                                    AllowedState="All"
                                    HalfExpandedRatio="0.5"
-                                   FullExpandedRatio="0.98"
+                                   FullExpandedRatio="1.0"
                                    CollapsedHeight="0"
                                    EnableSwiping="True"
                                    IsModal="True"

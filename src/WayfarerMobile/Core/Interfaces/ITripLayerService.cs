@@ -19,6 +19,9 @@ public interface ITripLayerService
     /// <summary>Layer name for trip segment polylines.</summary>
     string TripSegmentsLayerName { get; }
 
+    /// <summary>Layer name for place selection ring.</summary>
+    string PlaceSelectionLayerName { get; }
+
     /// <summary>
     /// Updates the trip place markers on the specified layer.
     /// </summary>
@@ -68,4 +71,17 @@ public interface ITripLayerService
     /// <param name="color">Color variant to validate (default: bg-blue).</param>
     /// <returns>Array of priority icon names that exist.</returns>
     Task<string[]> GetValidatedPriorityIconsAsync(string? color = null);
+
+    /// <summary>
+    /// Shows a selection ring around the specified place.
+    /// </summary>
+    /// <param name="layer">The selection ring layer.</param>
+    /// <param name="place">The place to highlight, or null to clear.</param>
+    void UpdatePlaceSelection(WritableLayer layer, TripPlace? place);
+
+    /// <summary>
+    /// Clears the place selection ring.
+    /// </summary>
+    /// <param name="layer">The selection ring layer.</param>
+    void ClearPlaceSelection(WritableLayer layer);
 }

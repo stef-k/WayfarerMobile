@@ -6,6 +6,7 @@ using Microsoft.Maui.ApplicationModel;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Data.Services;
 using WayfarerMobile.Helpers;
 using WayfarerMobile.Services;
 using WayfarerMobile.Services.TileCache;
@@ -18,6 +19,16 @@ namespace WayfarerMobile.ViewModels;
 /// </summary>
 public partial class MainViewModel : BaseViewModel
 {
+    #region Static State
+
+    /// <summary>
+    /// The currently loaded trip ID (in-memory, not persisted).
+    /// Used by TripsViewModel to show "Back" button for loaded trip.
+    /// </summary>
+    public static Guid? CurrentLoadedTripId { get; private set; }
+
+    #endregion
+
     #region Fields
 
     private readonly ILocationBridge _locationBridge;
@@ -38,6 +49,8 @@ public partial class MainViewModel : BaseViewModel
     private readonly ITripLayerService _tripLayerService;
     private readonly IWikipediaService _wikipediaService;
     private readonly ISettingsService _settingsService;
+    private readonly ITripSyncService _tripSyncService;
+    private readonly DatabaseService _databaseService;
     private readonly ILogger<MainViewModel> _logger;
 
     // Map and layers (owned by this ViewModel)
@@ -49,6 +62,7 @@ public partial class MainViewModel : BaseViewModel
     private WritableLayer? _tripPlacesLayer;
     private WritableLayer? _tripAreasLayer;
     private WritableLayer? _tripSegmentsLayer;
+    private WritableLayer? _placeSelectionLayer;
 
     #endregion
 
@@ -248,6 +262,67 @@ public partial class MainViewModel : BaseViewModel
     [NotifyPropertyChangedFor(nameof(IsTripSheetShowingScrollableContent))]
     [NotifyPropertyChangedFor(nameof(TripSheetTitle))]
     private bool _isShowingSegmentNotes;
+
+    /// <summary>
+    /// Gets or sets whether region notes detail view is showing.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingRegionNotes))]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingOverview))]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingDetails))]
+    [NotifyPropertyChangedFor(nameof(IsTripSheetShowingScrollableContent))]
+    [NotifyPropertyChangedFor(nameof(TripSheetTitle))]
+    private bool _isShowingRegionNotes;
+
+    /// <summary>
+    /// Gets or sets the selected region for notes display.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedTripRegionNotesHtml))]
+    private TripRegion? _selectedTripRegion;
+
+    /// <summary>
+    /// Gets or sets whether place coordinate editing mode is active.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsEditingPlaceCoordinates))]
+    [NotifyPropertyChangedFor(nameof(IsAnyEditModeActive))]
+    private bool _isPlaceCoordinateEditMode;
+
+    /// <summary>
+    /// Gets or sets the pending latitude during place coordinate editing.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPendingPlaceCoordinates))]
+    [NotifyPropertyChangedFor(nameof(PendingPlaceCoordinatesText))]
+    private double? _pendingPlaceLatitude;
+
+    /// <summary>
+    /// Gets or sets the pending longitude during place coordinate editing.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPendingPlaceCoordinates))]
+    [NotifyPropertyChangedFor(nameof(PendingPlaceCoordinatesText))]
+    private double? _pendingPlaceLongitude;
+
+    /// <summary>
+    /// Gets or sets the place being edited for coordinates.
+    /// </summary>
+    [ObservableProperty]
+    private TripPlace? _placeBeingEditedForCoordinates;
+
+    /// <summary>
+    /// Tracks whether we're navigating to a sub-editor page (notes, marker, etc.).
+    /// When true, OnDisappearingAsync should NOT unload the trip or close sheets.
+    /// Also checked by MainPage to avoid clearing selection when navigating to sub-editors.
+    /// </summary>
+    public bool IsNavigatingToSubEditor { get; private set; }
+
+    /// <summary>
+    /// Pending entity ID for selection restoration from sub-editor navigation.
+    /// Set by ApplyQueryAttributes, consumed by OnAppearingAsync.
+    /// </summary>
+    private (string? EntityType, Guid EntityId)? _pendingSelectionRestore;
 
     // Legacy property for compatibility
     private TripPlace? _selectedPlace;
@@ -476,6 +551,43 @@ public partial class MainViewModel : BaseViewModel
     }
 
     /// <summary>
+    /// Gets whether place coordinate editing mode is active (alias for binding).
+    /// </summary>
+    public bool IsEditingPlaceCoordinates => IsPlaceCoordinateEditMode;
+
+    /// <summary>
+    /// Gets whether any edit mode is currently active.
+    /// </summary>
+    public bool IsAnyEditModeActive => IsPlaceCoordinateEditMode;
+
+    /// <summary>
+    /// Stores entity info for selection restoration after sub-editor navigation.
+    /// Called from MainPage.ApplyQueryAttributes when returning from notes/marker editors.
+    /// </summary>
+    /// <param name="entityType">The entity type (Place, Area, Segment, Region).</param>
+    /// <param name="entityId">The entity ID to restore selection for.</param>
+    public void RestoreSelectionFromSubEditor(string? entityType, Guid entityId)
+    {
+        if (string.IsNullOrEmpty(entityType) || entityId == Guid.Empty)
+            return;
+
+        _logger.LogDebug("RestoreSelectionFromSubEditor: entityType={Type}, entityId={Id}", entityType, entityId);
+        _pendingSelectionRestore = (entityType, entityId);
+    }
+
+    /// <summary>
+    /// Gets whether there are pending place coordinates to save.
+    /// </summary>
+    public bool HasPendingPlaceCoordinates => PendingPlaceLatitude.HasValue && PendingPlaceLongitude.HasValue;
+
+    /// <summary>
+    /// Gets the pending place coordinates text for display.
+    /// </summary>
+    public string PendingPlaceCoordinatesText => HasPendingPlaceCoordinates
+        ? $"{PendingPlaceLatitude:F6}, {PendingPlaceLongitude:F6}"
+        : "Tap on map to set location";
+
+    /// <summary>
     /// Gets the page title (trip name when loaded, "Map" otherwise).
     /// </summary>
     public string PageTitle => LoadedTrip?.Name ?? "Map";
@@ -517,7 +629,7 @@ public partial class MainViewModel : BaseViewModel
     /// Gets whether trip sheet is showing overview (no item selected).
     /// </summary>
     public bool IsTripSheetShowingOverview =>
-        SelectedTripPlace == null && SelectedTripArea == null && SelectedTripSegment == null && !IsShowingTripNotes;
+        SelectedTripPlace == null && SelectedTripArea == null && SelectedTripSegment == null && !IsShowingTripNotes && !IsShowingRegionNotes;
 
     /// <summary>
     /// Gets whether trip sheet is showing trip notes detail view.
@@ -535,10 +647,15 @@ public partial class MainViewModel : BaseViewModel
     public bool IsTripSheetShowingSegmentNotes => IsShowingSegmentNotes;
 
     /// <summary>
-    /// Gets whether the scrollable content area should be visible (Overview, Area, or Segment - not Place, TripNotes, AreaNotes, or SegmentNotes).
+    /// Gets whether trip sheet is showing region notes detail view.
+    /// </summary>
+    public bool IsTripSheetShowingRegionNotes => IsShowingRegionNotes;
+
+    /// <summary>
+    /// Gets whether the scrollable content area should be visible (Overview, Area, or Segment - not Place, TripNotes, AreaNotes, SegmentNotes, or RegionNotes).
     /// </summary>
     public bool IsTripSheetShowingScrollableContent =>
-        !IsTripSheetShowingPlace && !IsTripSheetShowingTripNotes && !IsTripSheetShowingAreaNotes && !IsTripSheetShowingSegmentNotes;
+        !IsTripSheetShowingPlace && !IsTripSheetShowingTripNotes && !IsTripSheetShowingAreaNotes && !IsTripSheetShowingSegmentNotes && !IsTripSheetShowingRegionNotes;
 
     /// <summary>
     /// Gets whether trip sheet is showing place details.
@@ -568,7 +685,7 @@ public partial class MainViewModel : BaseViewModel
         get
         {
             if (SelectedTripPlace != null)
-                return SelectedTripPlace.Name;
+                return "Trip Overview";
             if (IsShowingAreaNotes && SelectedTripArea != null)
                 return $"{SelectedTripArea.Name} - Notes";
             if (SelectedTripArea != null)
@@ -577,6 +694,8 @@ public partial class MainViewModel : BaseViewModel
                 return "Segment Notes";
             if (SelectedTripSegment != null)
                 return $"Segment: {SelectedTripSegment.TransportMode ?? "Route"}";
+            if (IsShowingRegionNotes && SelectedTripRegion != null)
+                return $"{SelectedTripRegion.Name} - Notes";
             if (IsShowingTripNotes)
                 return "Trip Notes";
             return LoadedTrip?.Name ?? "Trip";
@@ -602,6 +721,90 @@ public partial class MainViewModel : BaseViewModel
                 return string.Join(" • ", parts);
             }
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets whether the place search bar is visible.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isPlaceSearchVisible;
+
+    /// <summary>
+    /// Gets or sets the place search query text.
+    /// </summary>
+    [ObservableProperty]
+    private string _placeSearchQuery = string.Empty;
+
+    /// <summary>
+    /// Cached search results to avoid recomputation on every property access.
+    /// </summary>
+    private List<TripPlace> _cachedSearchResults = new();
+
+    /// <summary>
+    /// Called when PlaceSearchQuery changes - updates cached results.
+    /// </summary>
+    partial void OnPlaceSearchQueryChanged(string value)
+    {
+        UpdateSearchResults();
+    }
+
+    /// <summary>
+    /// Updates the cached search results.
+    /// </summary>
+    private void UpdateSearchResults()
+    {
+        if (LoadedTrip == null || string.IsNullOrWhiteSpace(PlaceSearchQuery))
+        {
+            _cachedSearchResults = new List<TripPlace>();
+        }
+        else
+        {
+            var query = PlaceSearchQuery.Trim();
+            _cachedSearchResults = LoadedTrip.AllPlaces
+                .Where(p =>
+                    (p.Name?.Contains(query, StringComparison.OrdinalIgnoreCase) == true) ||
+                    (p.Address?.Contains(query, StringComparison.OrdinalIgnoreCase) == true))
+                .ToList();
+        }
+
+        OnPropertyChanged(nameof(PlaceSearchResults));
+        OnPropertyChanged(nameof(HasPlaceSearchResults));
+    }
+
+    /// <summary>
+    /// Gets the filtered list of places matching the search query.
+    /// </summary>
+    public List<TripPlace> PlaceSearchResults => _cachedSearchResults;
+
+    /// <summary>
+    /// Gets whether there are search results to display.
+    /// </summary>
+    public bool HasPlaceSearchResults => _cachedSearchResults.Count > 0;
+
+    /// <summary>
+    /// Toggles the place search bar visibility.
+    /// </summary>
+    [RelayCommand]
+    private void TogglePlaceSearch()
+    {
+        IsPlaceSearchVisible = !IsPlaceSearchVisible;
+        if (!IsPlaceSearchVisible)
+        {
+            // Clear search when closing
+            PlaceSearchQuery = string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Closes the place search and resets to normal view.
+    /// </summary>
+    private void CloseSearchIfActive()
+    {
+        if (IsPlaceSearchVisible)
+        {
+            IsPlaceSearchVisible = false;
+            PlaceSearchQuery = string.Empty;
         }
     }
 
@@ -660,6 +863,22 @@ public partial class MainViewModel : BaseViewModel
         }
     }
 
+    /// <summary>
+    /// Gets the HTML content for the selected trip region notes, wrapped for WebView display.
+    /// Uses notes-viewer.html template for proper CSP and image handling.
+    /// </summary>
+    public HtmlWebViewSource? SelectedTripRegionNotesHtml
+    {
+        get
+        {
+            if (SelectedTripRegion?.Notes == null)
+                return null;
+
+            var isDark = Application.Current?.RequestedTheme == AppTheme.Dark;
+            return NotesViewerHelper.PrepareNotesHtml(SelectedTripRegion.Notes, _settingsService.ServerUrl, isDark);
+        }
+    }
+
     #endregion
 
     #region Constructor
@@ -683,6 +902,8 @@ public partial class MainViewModel : BaseViewModel
     /// <param name="tripLayerService">The trip layer service for places and segments.</param>
     /// <param name="wikipediaService">The Wikipedia geosearch service.</param>
     /// <param name="settingsService">The settings service.</param>
+    /// <param name="tripSyncService">The trip sync service.</param>
+    /// <param name="databaseService">The database service for refreshing edited entities.</param>
     /// <param name="logger">The logger instance.</param>
     public MainViewModel(
         ILocationBridge locationBridge,
@@ -701,6 +922,8 @@ public partial class MainViewModel : BaseViewModel
         ITripLayerService tripLayerService,
         IWikipediaService wikipediaService,
         ISettingsService settingsService,
+        ITripSyncService tripSyncService,
+        DatabaseService databaseService,
         ILogger<MainViewModel> logger)
     {
         _locationBridge = locationBridge;
@@ -719,6 +942,8 @@ public partial class MainViewModel : BaseViewModel
         _tripLayerService = tripLayerService;
         _wikipediaService = wikipediaService;
         _settingsService = settingsService;
+        _tripSyncService = tripSyncService;
+        _databaseService = databaseService;
         _logger = logger;
         Title = "WayfarerMobile";
 
@@ -749,17 +974,19 @@ public partial class MainViewModel : BaseViewModel
         _locationLayer = _mapBuilder.CreateLayer(_locationLayerService.LocationLayerName);
         _tripAreasLayer = _mapBuilder.CreateLayer(_tripLayerService.TripAreasLayerName);
         _tripSegmentsLayer = _mapBuilder.CreateLayer(_tripLayerService.TripSegmentsLayerName);
+        _placeSelectionLayer = _mapBuilder.CreateLayer(_tripLayerService.PlaceSelectionLayerName);
         _tripPlacesLayer = _mapBuilder.CreateLayer(_tripLayerService.TripPlacesLayerName);
         _navigationRouteCompletedLayer = _mapBuilder.CreateLayer("NavigationRouteCompleted");
         _navigationRouteLayer = _mapBuilder.CreateLayer("NavigationRoute");
         _droppedPinLayer = _mapBuilder.CreateLayer(_droppedPinLayerService.DroppedPinLayerName);
 
-        // Create map with all layers (order: areas under segments under places under location)
+        // Create map with all layers (order: areas under segments under selection under places under location)
         var map = _mapBuilder.CreateMap(
             _tripAreasLayer,
             _tripSegmentsLayer,
             _navigationRouteCompletedLayer,
             _navigationRouteLayer,
+            _placeSelectionLayer,
             _tripPlacesLayer,
             _droppedPinLayer,
             _locationLayer);
@@ -1425,12 +1652,24 @@ public partial class MainViewModel : BaseViewModel
     }
 
     /// <summary>
+    /// Navigates to My Trips tab in the Trips page.
+    /// </summary>
+    [RelayCommand]
+    private async Task GoToMyTripsAsync()
+    {
+        IsTripSheetOpen = false;
+        await Shell.Current.GoToAsync("//trips");
+    }
+
+    /// <summary>
     /// Goes back from details to overview in trip sheet.
     /// Handles nested navigation (notes views go back to their parent item).
     /// </summary>
     [RelayCommand]
     private void TripSheetBack()
     {
+        _logger.LogDebug("TripSheetBack: SelectedPlace={Place}", SelectedTripPlace?.Name ?? "null");
+
         // If showing area notes, go back to area details
         if (IsShowingAreaNotes)
         {
@@ -1445,6 +1684,14 @@ public partial class MainViewModel : BaseViewModel
             return;
         }
 
+        // If showing region notes, go back to overview
+        if (IsShowingRegionNotes)
+        {
+            IsShowingRegionNotes = false;
+            SelectedTripRegion = null;
+            return;
+        }
+
         // Otherwise, go back to overview
         ClearTripSheetSelection();
     }
@@ -1454,12 +1701,23 @@ public partial class MainViewModel : BaseViewModel
     /// </summary>
     private void ClearTripSheetSelection()
     {
+        _logger.LogDebug("ClearTripSheetSelection: Clearing selection (was: {Place})", SelectedTripPlace?.Name ?? "null");
         SelectedTripPlace = null;
         SelectedTripArea = null;
         SelectedTripSegment = null;
+        SelectedTripRegion = null;
         IsShowingTripNotes = false;
         IsShowingAreaNotes = false;
         IsShowingSegmentNotes = false;
+        IsShowingRegionNotes = false;
+
+        // Clear selection ring on map
+        if (_placeSelectionLayer != null)
+        {
+            _logger.LogDebug("ClearPlaceSelection: layer features before={Count}",
+                _placeSelectionLayer.GetFeatures().Count());
+            _tripLayerService.ClearPlaceSelection(_placeSelectionLayer);
+        }
     }
 
     /// <summary>
@@ -1490,6 +1748,19 @@ public partial class MainViewModel : BaseViewModel
     }
 
     /// <summary>
+    /// Shows the region notes detail view.
+    /// </summary>
+    [RelayCommand]
+    private void ShowRegionNotes(TripRegion? region)
+    {
+        if (region == null)
+            return;
+
+        SelectedTripRegion = region;
+        IsShowingRegionNotes = true;
+    }
+
+    /// <summary>
     /// Selects a place from the trip and shows details.
     /// </summary>
     [RelayCommand]
@@ -1498,14 +1769,25 @@ public partial class MainViewModel : BaseViewModel
         if (place == null)
             return;
 
+        // Close search if active (user selected from search results)
+        CloseSearchIfActive();
+
         ClearTripSheetSelection();
         SelectedTripPlace = place;
         SelectedPlace = place; // Legacy compatibility
 
-        // Center map on selected place
+        // Show selection ring on map
+        if (_placeSelectionLayer != null)
+        {
+            _logger.LogDebug("UpdatePlaceSelection: place={PlaceId}, layer features before={Count}",
+                place.Id, _placeSelectionLayer.GetFeatures().Count());
+            _tripLayerService.UpdatePlaceSelection(_placeSelectionLayer, place);
+        }
+
+        // Center and zoom in on selected place for better view
         if (_map != null)
         {
-            _mapBuilder.CenterOnLocation(_map, place.Latitude, place.Longitude);
+            _mapBuilder.CenterOnLocation(_map, place.Latitude, place.Longitude, zoomLevel: 16);
         }
         IsFollowingLocation = false;
     }
@@ -1546,12 +1828,37 @@ public partial class MainViewModel : BaseViewModel
 
     /// <summary>
     /// Navigates to the selected trip place.
+    /// Prompts the user to select a transport mode before starting navigation.
     /// </summary>
     [RelayCommand]
     private async Task NavigateToTripPlaceAsync()
     {
         if (SelectedTripPlace == null)
             return;
+
+        // Show transport mode picker
+        var transportModes = new[] { "Walk", "Drive", "Cycle" };
+
+        var selected = await Shell.Current.DisplayActionSheetAsync(
+            "Navigation Mode",
+            "Cancel",
+            null,
+            transportModes);
+
+        if (string.IsNullOrEmpty(selected) || selected == "Cancel")
+            return;
+
+        // Map display name to OSRM profile
+        var profile = selected switch
+        {
+            "Walk" => "foot",
+            "Drive" => "car",
+            "Cycle" => "bike",
+            _ => "foot"
+        };
+
+        // Save selection for next time
+        _settingsService.LastTransportMode = profile;
 
         await StartNavigationToPlaceAsync(SelectedTripPlace.Id.ToString());
         IsTripSheetOpen = false;
@@ -1649,8 +1956,649 @@ public partial class MainViewModel : BaseViewModel
         if (SelectedTripPlace == null || LoadedTrip == null)
             return;
 
-        // TODO: Navigate to place edit page when implemented
-        await _toastService.ShowAsync("Edit feature coming soon");
+        var action = await Shell.Current.DisplayActionSheetAsync(
+            $"Edit: {SelectedTripPlace.Name}",
+            "Cancel",
+            "Delete",
+            "Edit Name",
+            "Edit Notes",
+            "Edit Coordinates",
+            "Edit Marker");
+
+        switch (action)
+        {
+            case "Edit Name":
+                await EditPlaceNameAsync(SelectedTripPlace);
+                break;
+            case "Edit Notes":
+                await EditPlaceNotesAsync(SelectedTripPlace);
+                break;
+            case "Edit Coordinates":
+                EnterPlaceCoordinateEditMode(SelectedTripPlace);
+                break;
+            case "Edit Marker":
+                await EditPlaceMarkerAsync(SelectedTripPlace);
+                break;
+            case "Delete":
+                await DeletePlaceAsync(SelectedTripPlace);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Edits the name of a trip place using an inline prompt.
+    /// </summary>
+    private async Task EditPlaceNameAsync(TripPlace place)
+    {
+        var newName = await Shell.Current.DisplayPromptAsync(
+            "Edit Place Name",
+            "Enter new name:",
+            initialValue: place.Name,
+            maxLength: 200,
+            keyboard: Keyboard.Text);
+
+        if (string.IsNullOrWhiteSpace(newName) || newName == place.Name)
+            return;
+
+        try
+        {
+            // Find the region containing this place
+            var region = LoadedTrip!.Regions.FirstOrDefault(r => r.Places.Any(p => p.Id == place.Id));
+            if (region == null)
+            {
+                await _toastService.ShowErrorAsync("Place not found in trip");
+                return;
+            }
+
+            // Find the actual place in the region
+            var actualPlace = region.Places.FirstOrDefault(p => p.Id == place.Id);
+            if (actualPlace == null)
+            {
+                await _toastService.ShowErrorAsync("Place not found");
+                return;
+            }
+
+            // Optimistically update UI
+            actualPlace.Name = newName.Trim();
+
+            // Update the selected place reference too
+            SelectedTripPlace = actualPlace;
+
+            // Explicitly notify TripSheetTitle since place name changed
+            OnPropertyChanged(nameof(TripSheetTitle));
+
+            // Refresh the sorted regions view
+            LoadedTrip.NotifySortedRegionsChanged();
+
+            // Queue server sync
+            await _tripSyncService.UpdatePlaceAsync(
+                place.Id,
+                LoadedTrip.Id,
+                name: newName.Trim());
+
+            await _toastService.ShowSuccessAsync("Place name updated");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update place name");
+            await _toastService.ShowErrorAsync($"Failed to update: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Navigates to the notes editor for a trip place.
+    /// </summary>
+    private async Task EditPlaceNotesAsync(TripPlace place)
+    {
+        _logger.LogDebug("EditPlaceNotesAsync: Setting IsNavigatingToSubEditor=true, navigating to notesEditor");
+        IsNavigatingToSubEditor = true;
+
+        var navParams = new Dictionary<string, object>
+        {
+            { "tripId", LoadedTrip!.Id.ToString() },
+            { "entityId", place.Id.ToString() },
+            { "notes", place.Notes ?? string.Empty },
+            { "entityType", "Place" }
+        };
+
+        await Shell.Current.GoToAsync("notesEditor", navParams);
+    }
+
+    /// <summary>
+    /// Deletes a trip place after confirmation.
+    /// </summary>
+    private async Task DeletePlaceAsync(TripPlace place)
+    {
+        var page = Application.Current?.Windows.FirstOrDefault()?.Page;
+        if (page == null)
+            return;
+
+        var confirm = await page.DisplayAlertAsync(
+            "Delete Place",
+            $"Are you sure you want to delete \"{place.Name}\"?\n\nThis action cannot be undone.",
+            "Delete",
+            "Cancel");
+
+        if (!confirm)
+            return;
+
+        try
+        {
+            // Find the region containing this place
+            var region = LoadedTrip!.Regions.FirstOrDefault(r => r.Places.Any(p => p.Id == place.Id));
+            if (region == null)
+            {
+                await _toastService.ShowErrorAsync("Place not found in trip");
+                return;
+            }
+
+            // Optimistically remove from UI
+            var actualPlace = region.Places.FirstOrDefault(p => p.Id == place.Id);
+            if (actualPlace != null)
+            {
+                region.Places.Remove(actualPlace);
+            }
+
+            // Clear selection and go back to overview
+            ClearTripSheetSelection();
+
+            // Refresh the sorted regions view
+            LoadedTrip.NotifySortedRegionsChanged();
+
+            // Update map layers
+            await RefreshTripOnMapAsync();
+
+            // Queue server sync
+            await _tripSyncService.DeletePlaceAsync(place.Id, LoadedTrip.Id);
+
+            await _toastService.ShowSuccessAsync("Place deleted");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete place");
+            await _toastService.ShowErrorAsync($"Failed to delete: {ex.Message}");
+        }
+    }
+
+    #region Place Coordinate Editing
+
+    /// <summary>
+    /// Enters coordinate editing mode for a place.
+    /// Closes the bottom sheet and shows the coordinate edit overlay.
+    /// </summary>
+    /// <param name="place">The place to edit coordinates for.</param>
+    private void EnterPlaceCoordinateEditMode(TripPlace place)
+    {
+        if (place == null || LoadedTrip == null)
+            return;
+
+        // Store the place being edited
+        PlaceBeingEditedForCoordinates = place;
+
+        // Set initial pending coordinates to current place location
+        PendingPlaceLatitude = place.Latitude;
+        PendingPlaceLongitude = place.Longitude;
+
+        // Enter edit mode (triggers UI changes)
+        IsPlaceCoordinateEditMode = true;
+
+        // Close the trip sheet to expose the map
+        IsTripSheetOpen = false;
+
+        // The page code-behind will handle showing the temp marker
+    }
+
+    /// <summary>
+    /// Sets the pending place coordinates from a map tap.
+    /// Called by the page code-behind when the map is tapped during coordinate editing.
+    /// </summary>
+    /// <param name="latitude">The latitude.</param>
+    /// <param name="longitude">The longitude.</param>
+    public void SetPendingPlaceCoordinates(double latitude, double longitude)
+    {
+        if (!IsPlaceCoordinateEditMode)
+            return;
+
+        PendingPlaceLatitude = latitude;
+        PendingPlaceLongitude = longitude;
+
+        // The page code-behind will handle updating the temp marker
+    }
+
+    /// <summary>
+    /// Saves the pending place coordinates.
+    /// </summary>
+    [RelayCommand]
+    private async Task SavePlaceCoordinatesAsync()
+    {
+        if (PlaceBeingEditedForCoordinates == null || !HasPendingPlaceCoordinates || LoadedTrip == null)
+            return;
+
+        try
+        {
+            var place = PlaceBeingEditedForCoordinates;
+            var newLat = PendingPlaceLatitude!.Value;
+            var newLon = PendingPlaceLongitude!.Value;
+
+            // Find the actual place in the region
+            var region = LoadedTrip.Regions.FirstOrDefault(r => r.Places.Any(p => p.Id == place.Id));
+            var actualPlace = region?.Places.FirstOrDefault(p => p.Id == place.Id);
+
+            if (actualPlace != null)
+            {
+                // Optimistically update UI
+                actualPlace.Latitude = newLat;
+                actualPlace.Longitude = newLon;
+            }
+
+            // Exit edit mode
+            ExitPlaceCoordinateEditMode();
+
+            // Refresh map markers
+            await RefreshTripOnMapAsync();
+
+            // Queue server sync
+            await _tripSyncService.UpdatePlaceAsync(
+                place.Id,
+                LoadedTrip.Id,
+                latitude: newLat,
+                longitude: newLon);
+
+            await _toastService.ShowSuccessAsync("Location updated");
+
+            // Reopen the trip sheet with the updated place selected
+            if (actualPlace != null)
+            {
+                SelectedTripPlace = actualPlace;
+                IsTripSheetOpen = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update place coordinates");
+            await _toastService.ShowErrorAsync($"Failed to update: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Cancels place coordinate editing.
+    /// </summary>
+    [RelayCommand]
+    private void CancelPlaceCoordinateEditing()
+    {
+        var place = PlaceBeingEditedForCoordinates;
+        ExitPlaceCoordinateEditMode();
+
+        // Reopen the trip sheet with the original place selected
+        if (place != null)
+        {
+            SelectedTripPlace = place;
+            IsTripSheetOpen = true;
+        }
+    }
+
+    /// <summary>
+    /// Exits place coordinate editing mode and cleans up.
+    /// </summary>
+    private void ExitPlaceCoordinateEditMode()
+    {
+        IsPlaceCoordinateEditMode = false;
+        PendingPlaceLatitude = null;
+        PendingPlaceLongitude = null;
+        PlaceBeingEditedForCoordinates = null;
+        // The page code-behind will handle removing the temp marker
+    }
+
+    #endregion
+
+    /// <summary>
+    /// Navigates to the marker editor for a trip place.
+    /// </summary>
+    private async Task EditPlaceMarkerAsync(TripPlace place)
+    {
+        if (place == null || LoadedTrip == null)
+            return;
+
+        _logger.LogDebug("EditPlaceMarkerAsync: Setting IsNavigatingToSubEditor=true, navigating to markerEditor");
+        IsNavigatingToSubEditor = true;
+
+        var navParams = new Dictionary<string, object>
+        {
+            { "tripId", LoadedTrip.Id.ToString() },
+            { "placeId", place.Id.ToString() },
+            { "currentColor", place.MarkerColor ?? IconCatalog.DefaultColor },
+            { "currentIcon", place.Icon ?? IconCatalog.DefaultIcon }
+        };
+
+        await Shell.Current.GoToAsync("markerEditor", navParams);
+    }
+
+    /// <summary>
+    /// Opens edit options for a trip region.
+    /// </summary>
+    [RelayCommand]
+    private async Task EditRegionAsync(TripRegion? region)
+    {
+        if (region == null || LoadedTrip == null)
+            return;
+
+        // Don't allow editing the "Unassigned Places" region
+        if (region.Name == TripRegion.UnassignedPlacesName)
+        {
+            await _toastService.ShowWarningAsync("Cannot edit the Unassigned Places region");
+            return;
+        }
+
+        var action = await Shell.Current.DisplayActionSheetAsync(
+            $"Edit: {region.Name}",
+            "Cancel",
+            null,
+            "Edit Name",
+            "Edit Notes");
+
+        switch (action)
+        {
+            case "Edit Name":
+                await EditRegionNameAsync(region);
+                break;
+            case "Edit Notes":
+                await EditRegionNotesAsync(region);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Edits the name of a trip region using an inline prompt.
+    /// </summary>
+    private async Task EditRegionNameAsync(TripRegion region)
+    {
+        var newName = await Shell.Current.DisplayPromptAsync(
+            "Edit Region Name",
+            "Enter new name:",
+            initialValue: region.Name,
+            maxLength: 200,
+            keyboard: Keyboard.Text);
+
+        if (string.IsNullOrWhiteSpace(newName) || newName == region.Name)
+            return;
+
+        // Don't allow renaming to reserved name
+        if (newName.Trim().Equals(TripRegion.UnassignedPlacesName, StringComparison.OrdinalIgnoreCase))
+        {
+            await _toastService.ShowWarningAsync("This region name is reserved");
+            return;
+        }
+
+        try
+        {
+            // Find the actual region in the Regions list (SortedRegions creates copies)
+            var actualRegion = LoadedTrip!.Regions.FirstOrDefault(r => r.Id == region.Id);
+            if (actualRegion == null)
+            {
+                await _toastService.ShowErrorAsync("Region not found");
+                return;
+            }
+
+            // Optimistically update UI
+            actualRegion.Name = newName.Trim();
+
+            // Refresh the sorted regions view
+            LoadedTrip.NotifySortedRegionsChanged();
+
+            // Queue server sync
+            await _tripSyncService.UpdateRegionAsync(
+                region.Id,
+                LoadedTrip.Id,
+                name: newName.Trim());
+
+            await _toastService.ShowSuccessAsync("Region name updated");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update region name");
+            await _toastService.ShowErrorAsync($"Failed to update: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Navigates to the notes editor for a trip region.
+    /// </summary>
+    private async Task EditRegionNotesAsync(TripRegion region)
+    {
+        IsNavigatingToSubEditor = true;
+
+        var navParams = new Dictionary<string, object>
+        {
+            { "tripId", LoadedTrip!.Id.ToString() },
+            { "entityId", region.Id.ToString() },
+            { "notes", region.Notes ?? string.Empty },
+            { "entityType", "Region" }
+        };
+
+        await Shell.Current.GoToAsync("notesEditor", navParams);
+    }
+
+    /// <summary>
+    /// Deletes a trip region after confirmation.
+    /// </summary>
+    [RelayCommand]
+    private async Task DeleteRegionAsync(TripRegion? region)
+    {
+        if (region == null || LoadedTrip == null)
+            return;
+
+        // Don't allow deleting the "Unassigned Places" region
+        if (region.Name == TripRegion.UnassignedPlacesName)
+        {
+            await _toastService.ShowWarningAsync("Cannot delete the Unassigned Places region");
+            return;
+        }
+
+        // Show confirmation dialog
+        var page = Application.Current?.Windows.FirstOrDefault()?.Page;
+        if (page == null)
+            return;
+
+        var placesCount = region.Places.Count;
+        var message = placesCount > 0
+            ? $"Delete region '{region.Name}' and its {placesCount} place{(placesCount == 1 ? "" : "s")}? This action cannot be undone."
+            : $"Delete region '{region.Name}'? This action cannot be undone.";
+
+        var confirm = await page.DisplayAlertAsync(
+            "Delete Region",
+            message,
+            "Delete",
+            "Cancel");
+
+        if (!confirm)
+            return;
+
+        try
+        {
+            // Queue server sync for deletion
+            await _tripSyncService.DeleteRegionAsync(region.Id, LoadedTrip.Id);
+
+            // Find the actual region in the Regions list (SortedRegions creates copies)
+            var actualRegion = LoadedTrip.Regions.FirstOrDefault(r => r.Id == region.Id);
+            if (actualRegion != null)
+            {
+                LoadedTrip.Regions.Remove(actualRegion);
+                LoadedTrip.NotifySortedRegionsChanged();
+            }
+
+            await _toastService.ShowSuccessAsync("Region deleted");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete region");
+            await _toastService.ShowErrorAsync($"Failed to delete: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Moves a region up in the display order.
+    /// </summary>
+    [RelayCommand]
+    private async Task MoveRegionUpAsync(TripRegion? region)
+    {
+        if (region == null || LoadedTrip?.Regions == null)
+            return;
+
+        // Don't allow moving the "Unassigned Places" region
+        if (region.Name == TripRegion.UnassignedPlacesName)
+            return;
+
+        // Find the actual region in the Regions list (SortedRegions creates copies)
+        var actualRegion = LoadedTrip.Regions.FirstOrDefault(r => r.Id == region.Id);
+        if (actualRegion == null)
+            return;
+
+        var regions = LoadedTrip.Regions
+            .Where(r => r.Name != TripRegion.UnassignedPlacesName)
+            .OrderBy(r => r.SortOrder)
+            .ToList();
+
+        var currentIndex = regions.IndexOf(actualRegion);
+        if (currentIndex <= 0)
+            return; // Already at top
+
+        // Swap with previous region
+        var previousRegion = regions[currentIndex - 1];
+        var tempOrder = actualRegion.SortOrder;
+        actualRegion.SortOrder = previousRegion.SortOrder;
+        previousRegion.SortOrder = tempOrder;
+
+        // Queue server syncs for both regions
+        await _tripSyncService.UpdateRegionAsync(actualRegion.Id, LoadedTrip.Id, displayOrder: actualRegion.SortOrder);
+        await _tripSyncService.UpdateRegionAsync(previousRegion.Id, LoadedTrip.Id, displayOrder: previousRegion.SortOrder);
+
+        // Refresh the sorted regions view
+        LoadedTrip.NotifySortedRegionsChanged();
+
+        await _toastService.ShowSuccessAsync("Region moved up");
+    }
+
+    /// <summary>
+    /// Moves a region down in the display order.
+    /// </summary>
+    [RelayCommand]
+    private async Task MoveRegionDownAsync(TripRegion? region)
+    {
+        if (region == null || LoadedTrip?.Regions == null)
+            return;
+
+        // Don't allow moving the "Unassigned Places" region
+        if (region.Name == TripRegion.UnassignedPlacesName)
+            return;
+
+        // Find the actual region in the Regions list (SortedRegions creates copies)
+        var actualRegion = LoadedTrip.Regions.FirstOrDefault(r => r.Id == region.Id);
+        if (actualRegion == null)
+            return;
+
+        var regions = LoadedTrip.Regions
+            .Where(r => r.Name != TripRegion.UnassignedPlacesName)
+            .OrderBy(r => r.SortOrder)
+            .ToList();
+
+        var currentIndex = regions.IndexOf(actualRegion);
+        if (currentIndex < 0 || currentIndex >= regions.Count - 1)
+            return; // Already at bottom
+
+        // Swap with next region
+        var nextRegion = regions[currentIndex + 1];
+        var tempOrder = actualRegion.SortOrder;
+        actualRegion.SortOrder = nextRegion.SortOrder;
+        nextRegion.SortOrder = tempOrder;
+
+        // Queue server syncs for both regions
+        await _tripSyncService.UpdateRegionAsync(actualRegion.Id, LoadedTrip.Id, displayOrder: actualRegion.SortOrder);
+        await _tripSyncService.UpdateRegionAsync(nextRegion.Id, LoadedTrip.Id, displayOrder: nextRegion.SortOrder);
+
+        // Refresh the sorted regions view
+        LoadedTrip.NotifySortedRegionsChanged();
+
+        await _toastService.ShowSuccessAsync("Region moved down");
+    }
+
+    /// <summary>
+    /// Moves a place up in the display order within its region.
+    /// </summary>
+    [RelayCommand]
+    private async Task MovePlaceUpAsync(TripPlace? place)
+    {
+        if (place == null || LoadedTrip == null)
+            return;
+
+        // Find the region containing this place
+        var region = LoadedTrip.Regions.FirstOrDefault(r => r.Places.Any(p => p.Id == place.Id));
+        if (region == null)
+            return;
+
+        // Get ordered places in this region
+        var places = region.Places.OrderBy(p => p.SortOrder ?? 0).ToList();
+        var currentIndex = places.FindIndex(p => p.Id == place.Id);
+
+        if (currentIndex <= 0)
+            return; // Already at top
+
+        // Find the actual place objects
+        var actualPlace = places[currentIndex];
+        var previousPlace = places[currentIndex - 1];
+
+        // Swap sort orders
+        var tempOrder = actualPlace.SortOrder ?? currentIndex;
+        actualPlace.SortOrder = previousPlace.SortOrder ?? (currentIndex - 1);
+        previousPlace.SortOrder = tempOrder;
+
+        // Queue server syncs for both places
+        await _tripSyncService.UpdatePlaceAsync(actualPlace.Id, LoadedTrip.Id, displayOrder: actualPlace.SortOrder);
+        await _tripSyncService.UpdatePlaceAsync(previousPlace.Id, LoadedTrip.Id, displayOrder: previousPlace.SortOrder);
+
+        // Refresh the sorted regions view
+        LoadedTrip.NotifySortedRegionsChanged();
+
+        await _toastService.ShowSuccessAsync("Place moved up");
+    }
+
+    /// <summary>
+    /// Moves a place down in the display order within its region.
+    /// </summary>
+    [RelayCommand]
+    private async Task MovePlaceDownAsync(TripPlace? place)
+    {
+        if (place == null || LoadedTrip == null)
+            return;
+
+        // Find the region containing this place
+        var region = LoadedTrip.Regions.FirstOrDefault(r => r.Places.Any(p => p.Id == place.Id));
+        if (region == null)
+            return;
+
+        // Get ordered places in this region
+        var places = region.Places.OrderBy(p => p.SortOrder ?? 0).ToList();
+        var currentIndex = places.FindIndex(p => p.Id == place.Id);
+
+        if (currentIndex < 0 || currentIndex >= places.Count - 1)
+            return; // Already at bottom
+
+        // Find the actual place objects
+        var actualPlace = places[currentIndex];
+        var nextPlace = places[currentIndex + 1];
+
+        // Swap sort orders
+        var tempOrder = actualPlace.SortOrder ?? currentIndex;
+        actualPlace.SortOrder = nextPlace.SortOrder ?? (currentIndex + 1);
+        nextPlace.SortOrder = tempOrder;
+
+        // Queue server syncs for both places
+        await _tripSyncService.UpdatePlaceAsync(actualPlace.Id, LoadedTrip.Id, displayOrder: actualPlace.SortOrder);
+        await _tripSyncService.UpdatePlaceAsync(nextPlace.Id, LoadedTrip.Id, displayOrder: nextPlace.SortOrder);
+
+        // Refresh the sorted regions view
+        LoadedTrip.NotifySortedRegionsChanged();
+
+        await _toastService.ShowSuccessAsync("Place moved down");
     }
 
     /// <summary>
@@ -1695,6 +2643,278 @@ public partial class MainViewModel : BaseViewModel
         {
             await _toastService.ShowWarningAsync("No Wikipedia article found nearby");
         }
+    }
+
+    /// <summary>
+    /// Shows edit options for the selected area (currently just notes).
+    /// </summary>
+    [RelayCommand]
+    private async Task EditAreaAsync()
+    {
+        if (SelectedTripArea == null || LoadedTrip == null)
+            return;
+
+        IsNavigatingToSubEditor = true;
+
+        // Navigate to notes editor
+        var navParams = new Dictionary<string, object>
+        {
+            { "tripId", LoadedTrip.Id.ToString() },
+            { "entityId", SelectedTripArea.Id.ToString() },
+            { "notes", SelectedTripArea.Notes ?? string.Empty },
+            { "entityType", "Area" }
+        };
+
+        await Shell.Current.GoToAsync("notesEditor", navParams);
+    }
+
+    /// <summary>
+    /// Shows edit options for the selected segment (currently just notes).
+    /// </summary>
+    [RelayCommand]
+    private async Task EditSegmentAsync()
+    {
+        if (SelectedTripSegment == null || LoadedTrip == null)
+            return;
+
+        IsNavigatingToSubEditor = true;
+
+        // Navigate to notes editor
+        var navParams = new Dictionary<string, object>
+        {
+            { "tripId", LoadedTrip.Id.ToString() },
+            { "entityId", SelectedTripSegment.Id.ToString() },
+            { "notes", SelectedTripSegment.Notes ?? string.Empty },
+            { "entityType", "Segment" }
+        };
+
+        await Shell.Current.GoToAsync("notesEditor", navParams);
+    }
+
+    /// <summary>
+    /// Shows options to add a new region or place to the trip.
+    /// </summary>
+    [RelayCommand]
+    private async Task AddToTripAsync()
+    {
+        if (LoadedTrip == null)
+            return;
+
+        var action = await Shell.Current.DisplayActionSheetAsync(
+            "Add to Trip",
+            "Cancel",
+            null,
+            "Add Region",
+            "Add Place (to current location)");
+
+        switch (action)
+        {
+            case "Add Region":
+                await AddRegionAsync();
+                break;
+            case "Add Place (to current location)":
+                await AddPlaceToCurrentLocationAsync();
+                break;
+        }
+    }
+
+    private async Task AddRegionAsync()
+    {
+        if (LoadedTrip == null)
+            return;
+
+        var name = await Shell.Current.DisplayPromptAsync(
+            "Add Region",
+            "Enter region name:",
+            placeholder: "Region name",
+            maxLength: 200,
+            keyboard: Keyboard.Text);
+
+        if (string.IsNullOrWhiteSpace(name))
+            return;
+
+        try
+        {
+            // Create new region with a temporary client-side ID
+            var tempId = Guid.NewGuid();
+            var newRegion = new TripRegion
+            {
+                Id = tempId,
+                Name = name.Trim(),
+                SortOrder = LoadedTrip.Regions.Count
+            };
+
+            // Add to local collection
+            LoadedTrip.Regions.Add(newRegion);
+            LoadedTrip.NotifySortedRegionsChanged();
+
+            // Queue server sync
+            await _tripSyncService.CreateRegionAsync(LoadedTrip.Id, name.Trim(), null, null, null, null, newRegion.SortOrder);
+
+            await _toastService.ShowSuccessAsync("Region added");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to add region");
+            await _toastService.ShowErrorAsync($"Failed to add region: {ex.Message}");
+        }
+    }
+
+    private async Task AddPlaceToCurrentLocationAsync()
+    {
+        if (LoadedTrip == null || CurrentLocation == null)
+        {
+            await _toastService.ShowWarningAsync("Current location not available");
+            return;
+        }
+
+        // Get list of regions to choose from
+        var regions = LoadedTrip.Regions
+            .Where(r => r.Name != TripRegion.UnassignedPlacesName)
+            .ToList();
+
+        if (regions.Count == 0)
+        {
+            await _toastService.ShowWarningAsync("Create a region first");
+            return;
+        }
+
+        // Ask for region selection
+        var regionNames = regions.Select(r => r.Name).ToArray();
+        var selectedRegionName = await Shell.Current.DisplayActionSheetAsync(
+            "Select Region",
+            "Cancel",
+            null,
+            regionNames);
+
+        if (selectedRegionName == null || selectedRegionName == "Cancel")
+            return;
+
+        var selectedRegion = regions.FirstOrDefault(r => r.Name == selectedRegionName);
+        if (selectedRegion == null)
+            return;
+
+        // Ask for place name
+        var placeName = await Shell.Current.DisplayPromptAsync(
+            "Add Place",
+            "Enter place name:",
+            placeholder: "Place name",
+            maxLength: 200,
+            keyboard: Keyboard.Text);
+
+        if (string.IsNullOrWhiteSpace(placeName))
+            return;
+
+        try
+        {
+            var tempId = Guid.NewGuid();
+            var newPlace = new TripPlace
+            {
+                Id = tempId,
+                Name = placeName.Trim(),
+                Latitude = CurrentLocation.Latitude,
+                Longitude = CurrentLocation.Longitude,
+                SortOrder = selectedRegion.Places.Count
+            };
+
+            // Add to local collection
+            selectedRegion.Places.Add(newPlace);
+            LoadedTrip.NotifySortedRegionsChanged();
+
+            // Queue server sync
+            await _tripSyncService.CreatePlaceAsync(
+                LoadedTrip.Id,
+                selectedRegion.Id,
+                placeName.Trim(),
+                CurrentLocation.Latitude,
+                CurrentLocation.Longitude,
+                null,
+                null,
+                null,
+                newPlace.SortOrder);
+
+            await _toastService.ShowSuccessAsync("Place added");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to add place");
+            await _toastService.ShowErrorAsync($"Failed to add place: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Shows edit options for the loaded trip (name/notes).
+    /// </summary>
+    [RelayCommand]
+    private async Task EditLoadedTripAsync()
+    {
+        if (LoadedTrip == null)
+            return;
+
+        var action = await Shell.Current.DisplayActionSheetAsync(
+            $"Edit: {LoadedTrip.Name}",
+            "Cancel",
+            null,
+            "Edit Name",
+            "Edit Notes");
+
+        switch (action)
+        {
+            case "Edit Name":
+                await EditLoadedTripNameAsync();
+                break;
+            case "Edit Notes":
+                await EditLoadedTripNotesAsync();
+                break;
+        }
+    }
+
+    private async Task EditLoadedTripNameAsync()
+    {
+        if (LoadedTrip == null)
+            return;
+
+        var newName = await Shell.Current.DisplayPromptAsync(
+            "Edit Trip Name",
+            "Enter new name:",
+            initialValue: LoadedTrip.Name,
+            maxLength: 200,
+            keyboard: Keyboard.Text);
+
+        if (string.IsNullOrWhiteSpace(newName) || newName == LoadedTrip.Name)
+            return;
+
+        try
+        {
+            LoadedTrip.Name = newName.Trim();
+
+            // Queue server sync (updates both local storage and server)
+            await _tripSyncService.UpdateTripAsync(LoadedTrip.Id, name: newName.Trim());
+
+            await _toastService.ShowSuccessAsync("Trip name updated");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update trip name");
+            await _toastService.ShowErrorAsync($"Failed to update: {ex.Message}");
+        }
+    }
+
+    private async Task EditLoadedTripNotesAsync()
+    {
+        if (LoadedTrip == null)
+            return;
+
+        IsNavigatingToSubEditor = true;
+
+        var navParams = new Dictionary<string, object>
+        {
+            { "tripId", LoadedTrip.Id.ToString() },
+            { "notes", LoadedTrip.Notes ?? string.Empty },
+            { "entityType", "Trip" }
+        };
+
+        await Shell.Current.GoToAsync("notesEditor", navParams);
     }
 
     /// <summary>
@@ -1894,6 +3114,37 @@ public partial class MainViewModel : BaseViewModel
     }
 
     /// <summary>
+    /// Refreshes the trip display on the map.
+    /// Call this after modifying places, areas, or segments.
+    /// </summary>
+    private async Task RefreshTripOnMapAsync()
+    {
+        if (LoadedTrip == null)
+            return;
+
+        // Update places layer
+        if (_tripPlacesLayer != null)
+        {
+            await _tripLayerService.UpdateTripPlacesAsync(_tripPlacesLayer, LoadedTrip.AllPlaces);
+        }
+
+        // Update areas layer
+        if (_tripAreasLayer != null)
+        {
+            _tripLayerService.UpdateTripAreas(_tripAreasLayer, LoadedTrip.AllAreas);
+        }
+
+        // Update segments layer
+        if (_tripSegmentsLayer != null)
+        {
+            _tripLayerService.UpdateTripSegments(_tripSegmentsLayer, LoadedTrip.Segments);
+        }
+
+        // Force map refresh
+        RefreshMap();
+    }
+
+    /// <summary>
     /// Unloads the current trip.
     /// </summary>
     public void UnloadTrip()
@@ -1923,6 +3174,13 @@ public partial class MainViewModel : BaseViewModel
             _tripLayerService.ClearTripSegments(_tripSegmentsLayer);
         }
 
+        if (_placeSelectionLayer != null)
+        {
+            _logger.LogDebug("UnloadTrip.ClearPlaceSelection: layer features before={Count}",
+                _placeSelectionLayer.GetFeatures().Count());
+            _tripLayerService.ClearPlaceSelection(_placeSelectionLayer);
+        }
+
         // Resume following user location when trip is unloaded
         IsFollowingLocation = true;
 
@@ -1934,6 +3192,20 @@ public partial class MainViewModel : BaseViewModel
         }
     }
 
+    /// <summary>
+    /// Called when LoadedTrip changes - saves/clears the trip ID in Preferences.
+    /// </summary>
+    partial void OnLoadedTripChanged(TripDetails? value)
+    {
+        // Update static property for cross-ViewModel access
+        CurrentLoadedTripId = value?.Id;
+        _logger.LogDebug("OnLoadedTripChanged: CurrentLoadedTripId set to {TripId}", CurrentLoadedTripId);
+
+        // Reset search state when trip changes
+        IsPlaceSearchVisible = false;
+        PlaceSearchQuery = string.Empty;
+    }
+
     #endregion
 
     #region Lifecycle
@@ -1943,6 +3215,28 @@ public partial class MainViewModel : BaseViewModel
     /// </summary>
     public override async Task OnAppearingAsync()
     {
+        // Check if we have a pending selection to restore from sub-editor navigation
+        var pendingRestore = _pendingSelectionRestore;
+        _pendingSelectionRestore = null;
+
+        // Check if we just returned from a sub-editor
+        var wasInSubEditor = IsNavigatingToSubEditor;
+        IsNavigatingToSubEditor = false;
+
+        _logger.LogDebug("OnAppearingAsync: wasInSubEditor={WasInSubEditor}, pendingRestore={Restore}, SelectedPlace={Place}",
+            wasInSubEditor, pendingRestore?.EntityType ?? "null", SelectedTripPlace?.Name ?? "null");
+
+        // If we have a pending selection restore, apply it
+        if (pendingRestore.HasValue && LoadedTrip != null)
+        {
+            await ApplyPendingSelectionRestoreAsync(pendingRestore.Value.EntityType, pendingRestore.Value.EntityId);
+        }
+        // Otherwise, if we just returned from sub-editor, refresh in place
+        else if (wasInSubEditor && LoadedTrip != null)
+        {
+            await RefreshEditedEntitiesAsync();
+        }
+
         // Ensure map is initialized
         EnsureMapInitialized();
 
@@ -1980,10 +3274,234 @@ public partial class MainViewModel : BaseViewModel
     }
 
     /// <summary>
+    /// Applies pending selection restoration after returning from a sub-editor.
+    /// Finds the entity in the loaded trip and restores selection, then refreshes from database.
+    /// </summary>
+    private async Task ApplyPendingSelectionRestoreAsync(string? entityType, Guid entityId)
+    {
+        if (LoadedTrip == null || string.IsNullOrEmpty(entityType))
+            return;
+
+        _logger.LogDebug("ApplyPendingSelectionRestoreAsync: type={Type}, id={Id}", entityType, entityId);
+
+        try
+        {
+            switch (entityType)
+            {
+                case "Place":
+                    var place = LoadedTrip.AllPlaces.FirstOrDefault(p => p.Id == entityId);
+                    if (place != null)
+                    {
+                        // Refresh place data from database
+                        var offlinePlace = await _databaseService.GetOfflinePlaceByServerIdAsync(entityId);
+                        if (offlinePlace != null)
+                        {
+                            place.Name = offlinePlace.Name;
+                            place.Notes = offlinePlace.Notes;
+                            place.Icon = offlinePlace.IconName;
+                            place.MarkerColor = offlinePlace.MarkerColor;
+                            place.Latitude = offlinePlace.Latitude;
+                            place.Longitude = offlinePlace.Longitude;
+                        }
+
+                        // Restore selection
+                        SelectedTripPlace = place;
+                        IsTripSheetOpen = true;
+
+                        // Update UI
+                        OnPropertyChanged(nameof(TripSheetTitle));
+                        LoadedTrip.NotifySortedRegionsChanged();
+                        await RefreshTripOnMapAsync();
+
+                        _logger.LogDebug("ApplyPendingSelectionRestoreAsync: Restored place selection to {Name}", place.Name);
+                    }
+                    break;
+
+                case "Area":
+                    var area = LoadedTrip.AllAreas.FirstOrDefault(a => a.Id == entityId);
+                    if (area != null)
+                    {
+                        var offlinePolygon = await _databaseService.GetOfflinePolygonByServerIdAsync(entityId);
+                        if (offlinePolygon != null)
+                        {
+                            area.Notes = offlinePolygon.Notes;
+                        }
+
+                        SelectedTripArea = area;
+                        IsTripSheetOpen = true;
+                        _logger.LogDebug("ApplyPendingSelectionRestoreAsync: Restored area selection");
+                    }
+                    break;
+
+                case "Segment":
+                    var segment = LoadedTrip.Segments.FirstOrDefault(s => s.Id == entityId);
+                    if (segment != null)
+                    {
+                        var offlineSegment = await _databaseService.GetOfflineSegmentByServerIdAsync(entityId);
+                        if (offlineSegment != null)
+                        {
+                            segment.Notes = offlineSegment.Notes;
+                        }
+
+                        SelectedTripSegment = segment;
+                        IsTripSheetOpen = true;
+                        _logger.LogDebug("ApplyPendingSelectionRestoreAsync: Restored segment selection");
+                    }
+                    break;
+
+                case "Region":
+                    var region = LoadedTrip.Regions.FirstOrDefault(r => r.Id == entityId);
+                    if (region != null)
+                    {
+                        var offlineArea = await _databaseService.GetOfflineAreaByServerIdAsync(entityId);
+                        if (offlineArea != null)
+                        {
+                            region.Name = offlineArea.Name;
+                            region.Notes = offlineArea.Notes;
+                        }
+
+                        SelectedTripRegion = region;
+                        IsShowingRegionNotes = true;
+                        IsTripSheetOpen = true;
+                        LoadedTrip.NotifySortedRegionsChanged();
+                        _logger.LogDebug("ApplyPendingSelectionRestoreAsync: Restored region selection");
+                    }
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to restore selection for {Type}/{Id}", entityType, entityId);
+        }
+    }
+
+    /// <summary>
+    /// Refreshes edited entities from the database after returning from sub-editor pages.
+    /// Updates the in-memory LoadedTrip with the latest values from the offline database.
+    /// </summary>
+    private async Task RefreshEditedEntitiesAsync()
+    {
+        try
+        {
+            // Refresh selected place if one is selected
+            if (SelectedTripPlace != null)
+            {
+                var offlinePlace = await _databaseService.GetOfflinePlaceByServerIdAsync(SelectedTripPlace.Id);
+                if (offlinePlace != null)
+                {
+                    // Find the place in LoadedTrip and update it
+                    foreach (var region in LoadedTrip!.Regions)
+                    {
+                        var place = region.Places.FirstOrDefault(p => p.Id == SelectedTripPlace.Id);
+                        if (place != null)
+                        {
+                            place.Name = offlinePlace.Name;
+                            place.Notes = offlinePlace.Notes;
+                            place.Icon = offlinePlace.IconName;
+                            place.MarkerColor = offlinePlace.MarkerColor;
+                            place.Latitude = offlinePlace.Latitude;
+                            place.Longitude = offlinePlace.Longitude;
+
+                            // Reassign SelectedTripPlace to trigger property change notifications
+                            SelectedTripPlace = place;
+
+                            // Explicitly notify TripSheetTitle (reference may not have changed)
+                            OnPropertyChanged(nameof(TripSheetTitle));
+
+                            // Refresh the sorted regions view (for trip overview list)
+                            LoadedTrip.NotifySortedRegionsChanged();
+
+                            // Update the map to reflect marker changes
+                            await RefreshTripOnMapAsync();
+
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Refresh selected area if one is selected
+            if (SelectedTripArea != null)
+            {
+                var offlinePolygon = await _databaseService.GetOfflinePolygonByServerIdAsync(SelectedTripArea.Id);
+                if (offlinePolygon != null)
+                {
+                    var area = LoadedTrip!.AllAreas.FirstOrDefault(a => a.Id == SelectedTripArea.Id);
+                    if (area != null)
+                    {
+                        area.Notes = offlinePolygon.Notes;
+                        SelectedTripArea = area;
+                    }
+                }
+            }
+
+            // Refresh selected segment if one is selected
+            if (SelectedTripSegment != null)
+            {
+                var offlineSegment = await _databaseService.GetOfflineSegmentByServerIdAsync(SelectedTripSegment.Id);
+                if (offlineSegment != null)
+                {
+                    var segment = LoadedTrip!.Segments.FirstOrDefault(s => s.Id == SelectedTripSegment.Id);
+                    if (segment != null)
+                    {
+                        segment.Notes = offlineSegment.Notes;
+                        SelectedTripSegment = segment;
+                    }
+                }
+            }
+
+            // Refresh selected region if viewing region notes
+            if (IsShowingRegionNotes && SelectedTripRegion != null)
+            {
+                var offlineArea = await _databaseService.GetOfflineAreaByServerIdAsync(SelectedTripRegion.Id);
+                if (offlineArea != null)
+                {
+                    var region = LoadedTrip!.Regions.FirstOrDefault(r => r.Id == SelectedTripRegion.Id);
+                    if (region != null)
+                    {
+                        region.Name = offlineArea.Name;
+                        region.Notes = offlineArea.Notes;
+                        SelectedTripRegion = region;
+                        LoadedTrip.NotifySortedRegionsChanged();
+                    }
+                }
+            }
+
+            // Refresh trip notes if showing trip notes
+            if (IsShowingTripNotes)
+            {
+                var downloadedTrip = await _databaseService.GetDownloadedTripByServerIdAsync(LoadedTrip!.Id);
+                if (downloadedTrip != null)
+                {
+                    LoadedTrip.Name = downloadedTrip.Name;
+                    LoadedTrip.Notes = downloadedTrip.Notes;
+                    OnPropertyChanged(nameof(PageTitle));
+                    OnPropertyChanged(nameof(TripSheetTitle));
+                    OnPropertyChanged(nameof(TripNotesPreview));
+                    OnPropertyChanged(nameof(TripNotesHtml));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to refresh edited entities from database");
+        }
+    }
+
+    /// <summary>
     /// Called when the view disappears.
+    /// Keeps trip loaded so user can return via "To Trip" button in My Trips.
+    /// Trip is only unloaded when user explicitly taps "Unload Trip" button.
     /// </summary>
     public override async Task OnDisappearingAsync()
     {
+        // Close the trip sheet when navigating away (but keep trip loaded in memory)
+        // Don't close if navigating to sub-editors (notes, marker)
+        if (!IsNavigatingToSubEditor)
+        {
+            IsTripSheetOpen = false;
+        }
+
         // Set normal mode to conserve battery when map is not visible
         if (TrackingState == TrackingState.Active)
         {

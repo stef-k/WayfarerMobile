@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:viewmodels="clr-namespace:WayfarerMobile.ViewModels"
+             xmlns:shared="clr-namespace:WayfarerMobile.Shared.Controls"
+             x:Class="WayfarerMobile.Views.MarkerEditorPage"
+             x:DataType="viewmodels:MarkerEditorViewModel"
+             Title="{Binding Title}"
+             BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}">
+
+    <Grid RowDefinitions="*,Auto">
+        <!-- Main Content -->
+        <ScrollView Grid.Row="0" Padding="16">
+            <VerticalStackLayout Spacing="24">
+                <!-- Color Selection -->
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="Color"
+                           FontSize="16"
+                           FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}" />
+
+                    <HorizontalStackLayout Spacing="16" HorizontalOptions="Center">
+                        <BindableLayout.ItemsSource>
+                            <x:Array Type="{x:Type viewmodels:MarkerColorOption}" />
+                        </BindableLayout.ItemsSource>
+                    </HorizontalStackLayout>
+
+                    <!-- Color circles using CollectionView for proper data binding -->
+                    <CollectionView ItemsSource="{Binding Colors}"
+                                    SelectionMode="None"
+                                    HeightRequest="60">
+                        <CollectionView.ItemsLayout>
+                            <LinearItemsLayout Orientation="Horizontal"
+                                               ItemSpacing="16" />
+                        </CollectionView.ItemsLayout>
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="viewmodels:MarkerColorOption">
+                                <Border WidthRequest="48"
+                                        HeightRequest="48"
+                                        StrokeThickness="{Binding IsSelected, Converter={StaticResource BoolToStrokeThicknessConverter}}"
+                                        Stroke="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource Primary}}"
+                                        BackgroundColor="Transparent"
+                                        Padding="4">
+                                    <Border.StrokeShape>
+                                        <RoundRectangle CornerRadius="24" />
+                                    </Border.StrokeShape>
+                                    <Border.GestureRecognizers>
+                                        <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MarkerEditorViewModel}}, Path=SelectColorCommand}"
+                                                              CommandParameter="{Binding .}" />
+                                    </Border.GestureRecognizers>
+                                    <Ellipse Fill="{Binding DisplayColor}"
+                                             WidthRequest="36"
+                                             HeightRequest="36"
+                                             HorizontalOptions="Center"
+                                             VerticalOptions="Center" />
+                                </Border>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+                </VerticalStackLayout>
+
+                <!-- Icon Selection -->
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="Icon"
+                           FontSize="16"
+                           FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}" />
+
+                    <!-- Icon ComboBox with search and PNG icons -->
+                    <shared:ComboBox ItemsSource="{Binding Icons}"
+                                     SelectedItem="{Binding SelectedIconOption, Mode=TwoWay}"
+                                     DisplayMemberPath="DisplayName"
+                                     IconMemberPath="IconImageSource"
+                                     Placeholder="Select an icon..."
+                                     VisibleItemCount="6" />
+                </VerticalStackLayout>
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- Bottom Action Buttons -->
+        <Grid Grid.Row="1"
+              Padding="16"
+              ColumnDefinitions="*,*"
+              ColumnSpacing="12"
+              BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+            <Button Grid.Column="0"
+                    Text="Cancel"
+                    Command="{Binding CancelCommand}"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                    TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
+                    FontSize="16"
+                    HeightRequest="48"
+                    CornerRadius="24" />
+            <Button Grid.Column="1"
+                    Text="Save"
+                    Command="{Binding SaveCommand}"
+                    IsEnabled="{Binding IsSaving, Converter={StaticResource InvertedBoolConverter}}"
+                    BackgroundColor="{StaticResource Primary}"
+                    TextColor="White"
+                    FontSize="16"
+                    HeightRequest="48"
+                    CornerRadius="24" />
+        </Grid>
+    </Grid>
+</ContentPage>

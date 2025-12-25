@@ -30,6 +30,9 @@
             <converters:IndexToColorConverter x:Key="IndexToColorConverter" />
             <converters:HtmlToTextConverter x:Key="HtmlToTextConverter" />
             <converters:MauiAssetImageConverter x:Key="MauiAssetImageConverter" />
+            <converters:BoolToStrokeThicknessConverter x:Key="BoolToStrokeThicknessConverter" />
+            <converters:BoolToSelectionColorConverter x:Key="BoolToSelectionColorConverter" />
+            <converters:BoolToSyncBannerColorConverter x:Key="BoolToSyncBannerColorConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

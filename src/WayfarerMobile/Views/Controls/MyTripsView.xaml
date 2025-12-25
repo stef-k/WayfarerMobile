@@ -8,9 +8,61 @@
              x:Name="ThisView"
              x:DataType="viewmodels:TripsViewModel">
 
-    <Grid RowDefinitions="*">
+    <Grid RowDefinitions="Auto,*">
+        <!-- Sync Status Banner (shown when there are pending/failed syncs) -->
+        <Border Grid.Row="0"
+                Padding="12,8"
+                Margin="12,8,12,0"
+                BackgroundColor="{Binding HasFailedSync, Converter={StaticResource BoolToSyncBannerColorConverter}}"
+                StrokeThickness="0"
+                IsVisible="{Binding HasPendingSync}">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="8" />
+            </Border.StrokeShape>
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                <!-- Status Text -->
+                <HorizontalStackLayout Grid.Column="0" Spacing="8" VerticalOptions="Center">
+                    <ActivityIndicator IsRunning="{Binding HasPendingSync}"
+                                       IsVisible="{Binding HasFailedSync, Converter={StaticResource InvertedBoolConverter}}"
+                                       WidthRequest="16"
+                                       HeightRequest="16"
+                                       Color="White" />
+                    <Label Text="{Binding SyncStatusText}"
+                           FontSize="13"
+                           TextColor="White"
+                           VerticalOptions="Center" />
+                </HorizontalStackLayout>
+                <!-- Retry Button (shown when sync failed) -->
+                <Button Grid.Column="1"
+                        Text="Retry"
+                        Command="{Binding RetrySyncCommand}"
+                        IsVisible="{Binding HasFailedSync}"
+                        BackgroundColor="Transparent"
+                        BorderColor="White"
+                        BorderWidth="1"
+                        TextColor="White"
+                        FontSize="12"
+                        HeightRequest="28"
+                        Padding="10,0"
+                        CornerRadius="14" />
+                <!-- Cancel Button -->
+                <Button Grid.Column="2"
+                        Text="Cancel"
+                        Command="{Binding CancelSyncCommand}"
+                        BackgroundColor="Transparent"
+                        BorderColor="White"
+                        BorderWidth="1"
+                        TextColor="White"
+                        FontSize="12"
+                        HeightRequest="28"
+                        Padding="10,0"
+                        CornerRadius="14" />
+            </Grid>
+        </Border>
+
         <!-- RefreshView always visible - never hide it or pull-to-refresh breaks -->
-        <RefreshView Command="{Binding LoadTripsCommand}"
+        <RefreshView Grid.Row="1"
+                     Command="{Binding LoadTripsCommand}"
                      IsRefreshing="{Binding IsLoadingTrips, Mode=TwoWay}">
             <CollectionView ItemsSource="{Binding MyTrips}"
                             SelectionMode="None"
@@ -94,17 +146,29 @@
                                 <VerticalStackLayout Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
                                                      Spacing="4"
                                                      Margin="0,8,0,0">
-                                    <HorizontalStackLayout Spacing="8">
+                                    <HorizontalStackLayout Spacing="12">
+                                        <!-- To Trip Button (when trip is currently loaded) -->
+                                        <Button Text="To Trip"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=BackToTripCommand}"
+                                                CommandParameter="{Binding .}"
+                                                IsVisible="{Binding IsCurrentlyLoaded}"
+                                                BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                                TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
+                                                FontSize="12"
+                                                HeightRequest="32"
+                                                Padding="10,0"
+                                                CornerRadius="16" />
+
                                         <!-- Load to Map Button -->
-                                        <Button Text="Load to Map"
+                                        <Button Text="Load"
                                                 Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=LoadTripToMapCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanLoadToMap}"
-                                                BackgroundColor="{StaticResource Primary}"
-                                                TextColor="White"
+                                                BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                                TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
                                                 FontSize="12"
                                                 HeightRequest="32"
-                                                Padding="12,0"
+                                                Padding="10,0"
                                                 CornerRadius="16" />
 
                                         <!-- Download (Metadata only) -->
@@ -112,15 +176,15 @@
                                                 Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=QuickDownloadCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanQuickDownload}"
-                                                BackgroundColor="{StaticResource Primary}"
-                                                TextColor="White"
+                                                BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                                TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
                                                 FontSize="12"
                                                 HeightRequest="32"
-                                                Padding="12,0"
+                                                Padding="10,0"
                                                 CornerRadius="16" />
 
-                                        <!-- Download + Maps (With Tiles) -->
-                                        <Button Text="+ Offline Maps"
+                                        <!-- Download + Offline Maps (With Tiles) -->
+                                        <Button Text="+Offline Maps"
                                                 Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=FullDownloadCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanFullDownload}"
@@ -128,19 +192,19 @@
                                                 TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
                                                 FontSize="12"
                                                 HeightRequest="32"
-                                                Padding="12,0"
+                                                Padding="10,0"
                                                 CornerRadius="16" />
 
-                                        <!-- Delete Downloaded/Partial -->
-                                        <Button Text="Delete"
+                                        <!-- Delete Downloaded/Partial - removes local data only -->
+                                        <Button Text="Remove"
                                                 Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=DeleteDownloadCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanDelete}"
-                                                BackgroundColor="{StaticResource Error}"
-                                                TextColor="White"
+                                                BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                                TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
                                                 FontSize="12"
                                                 HeightRequest="32"
-                                                Padding="12,0"
+                                                Padding="10,0"
                                                 CornerRadius="16" />
                                     </HorizontalStackLayout>
 
@@ -168,7 +232,8 @@
         </RefreshView>
 
         <!-- Shimmer overlay - only shown on initial load, not on pull-to-refresh -->
-        <controls:ShimmerLoadingView IsActive="{Binding IsInitialLoad}"
+        <controls:ShimmerLoadingView Grid.Row="1"
+                                     IsActive="{Binding IsInitialLoad}"
                                      IsVisible="{Binding IsInitialLoad}"
                                      BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}" />
     </Grid>
