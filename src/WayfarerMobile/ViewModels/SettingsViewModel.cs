@@ -1,6 +1,8 @@
 using System.Globalization;
+using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Data.Services;
 
@@ -626,6 +628,79 @@ public partial class SettingsViewModel : BaseViewModel
             {
                 IsClearingQueue = false;
             }
+        }
+    }
+
+    /// <summary>
+    /// Exports the location queue to a CSV file and opens the share dialog.
+    /// </summary>
+    [RelayCommand]
+    private async Task ExportQueueAsync()
+    {
+        try
+        {
+            var locations = await _databaseService.GetAllQueuedLocationsAsync();
+
+            if (locations.Count == 0)
+            {
+                await Shell.Current.DisplayAlertAsync("No Data", "There are no locations to export.", "OK");
+                return;
+            }
+
+            // Build CSV content
+            var csv = new StringBuilder();
+
+            // Header row
+            csv.AppendLine("Id,Timestamp,Latitude,Longitude,Altitude,Accuracy,Speed,Bearing,Provider,SyncStatus,SyncAttempts,LastSyncAttempt,IsServerRejected,LastError,Notes");
+
+            // Data rows
+            foreach (var loc in locations)
+            {
+                var status = loc.SyncStatus switch
+                {
+                    SyncStatus.Pending => loc.IsServerRejected ? "ServerRejected" :
+                                         loc.SyncAttempts >= 5 ? "Failed" :
+                                         loc.SyncAttempts > 0 ? $"Retrying({loc.SyncAttempts})" : "Pending",
+                    SyncStatus.Synced => "Synced",
+                    SyncStatus.Failed => "Failed",
+                    _ => "Unknown"
+                };
+
+                // Use invariant culture for numeric formatting to avoid comma decimal separators
+                var inv = CultureInfo.InvariantCulture;
+                csv.AppendLine(
+                    $"{loc.Id}," +
+                    $"{loc.Timestamp:yyyy-MM-dd HH:mm:ss}," +
+                    $"{loc.Latitude.ToString("F6", inv)}," +
+                    $"{loc.Longitude.ToString("F6", inv)}," +
+                    $"{loc.Altitude?.ToString("F1", inv) ?? ""}," +
+                    $"{loc.Accuracy?.ToString("F1", inv) ?? ""}," +
+                    $"{loc.Speed?.ToString("F1", inv) ?? ""}," +
+                    $"{loc.Bearing?.ToString("F1", inv) ?? ""}," +
+                    $"\"{loc.Provider ?? ""}\"," +
+                    $"{status}," +
+                    $"{loc.SyncAttempts}," +
+                    $"{(loc.LastSyncAttempt.HasValue ? loc.LastSyncAttempt.Value.ToString("yyyy-MM-dd HH:mm:ss") : "")}," +
+                    $"{loc.IsServerRejected}," +
+                    $"\"{loc.LastError?.Replace("\"", "\"\"") ?? ""}\"," +
+                    $"\"{loc.Notes?.Replace("\"", "\"\"") ?? ""}\"");
+            }
+
+            // Save to temp file
+            var fileName = $"wayfarer_locations_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
+            var tempPath = Path.Combine(FileSystem.CacheDirectory, fileName);
+            await File.WriteAllTextAsync(tempPath, csv.ToString());
+
+            // Share the file
+            await Share.Default.RequestAsync(new ShareFileRequest
+            {
+                Title = "Export Location Queue",
+                File = new ShareFile(tempPath)
+            });
+        }
+        catch (Exception ex)
+        {
+            await Shell.Current.DisplayAlertAsync("Export Failed", $"Failed to export locations: {ex.Message}", "OK");
         }
     }
 
