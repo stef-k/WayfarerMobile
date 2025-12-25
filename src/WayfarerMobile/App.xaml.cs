@@ -74,6 +74,9 @@ public partial class App : Application
             SettingsViewModel.ApplyTheme(settings.ThemePreference);
             System.Diagnostics.Debug.WriteLine($"[App] Applied theme: {settings.ThemePreference}");
 
+            // Apply keep screen on setting
+            ApplyKeepScreenOn(settings.KeepScreenOn);
+
             // Note: Language preference (LanguagePreference) is only for navigation voice guidance,
             // not for changing the app's display language. The navigation service will read this
             // setting when generating voice instructions.
@@ -81,6 +84,23 @@ public partial class App : Application
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[App] Failed to apply saved settings: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Applies the keep screen on setting using the cross-platform MAUI API.
+    /// </summary>
+    /// <param name="keepScreenOn">Whether to keep the screen on.</param>
+    private static void ApplyKeepScreenOn(bool keepScreenOn)
+    {
+        try
+        {
+            DeviceDisplay.Current.KeepScreenOn = keepScreenOn;
+            System.Diagnostics.Debug.WriteLine($"[App] Keep screen on: {keepScreenOn}");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[App] Failed to apply keep screen on: {ex.Message}");
         }
     }
 
@@ -268,6 +288,13 @@ public partial class App : Application
                 await lifecycleService.OnResumingAsync();
             }
 
+            // Re-apply keep screen on setting when resuming
+            // (Android may reset this when app goes to background)
+            var settings = _serviceProvider.GetService<ISettingsService>();
+            if (settings != null)
+            {
+                ApplyKeepScreenOn(settings.KeepScreenOn);
+            }
         }
         catch (Exception ex)
         {
