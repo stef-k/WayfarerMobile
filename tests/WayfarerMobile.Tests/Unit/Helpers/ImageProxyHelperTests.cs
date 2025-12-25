@@ -344,6 +344,93 @@ public class ImageProxyHelperTests
 
     #endregion
 
+    #region UnwrapProxyUrl Tests
+
+    [Fact]
+    public void UnwrapProxyUrl_NullUrl_ReturnsNull()
+    {
+        var result = ImageProxyHelper.UnwrapProxyUrl(null);
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void UnwrapProxyUrl_EmptyUrl_ReturnsEmpty()
+    {
+        var result = ImageProxyHelper.UnwrapProxyUrl("");
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void UnwrapProxyUrl_NonProxiedUrl_ReturnsOriginal()
+    {
+        var url = "https://example.com/image.png";
+        var result = ImageProxyHelper.UnwrapProxyUrl(url);
+        result.Should().Be(url);
+    }
+
+    [Fact]
+    public void UnwrapProxyUrl_SingleProxiedUrl_UnwrapsCorrectly()
+    {
+        var originalUrl = "https://mymaps.usercontent.google.com/image.png";
+        var encodedUrl = System.Web.HttpUtility.UrlEncode(originalUrl);
+        var proxiedUrl = $"https://wayfarer.stefk.me/Public/ProxyImage?url={encodedUrl}";
+
+        var result = ImageProxyHelper.UnwrapProxyUrl(proxiedUrl);
+
+        result.Should().Be(originalUrl);
+    }
+
+    [Fact]
+    public void UnwrapProxyUrl_DoubleProxiedUrl_UnwrapsCompletely()
+    {
+        var originalUrl = "https://mymaps.usercontent.google.com/image.png";
+        var firstProxy = $"https://wayfarer.stefk.me/Public/ProxyImage?url={System.Web.HttpUtility.UrlEncode(originalUrl)}";
+        var doubleProxy = $"https://wayfarer.stefk.me/Public/ProxyImage?url={System.Web.HttpUtility.UrlEncode(firstProxy)}";
+
+        var result = ImageProxyHelper.UnwrapProxyUrl(doubleProxy);
+
+        result.Should().Be(originalUrl);
+    }
+
+    [Fact]
+    public void UnwrapProxyUrl_TripleProxiedUrl_UnwrapsCompletely()
+    {
+        var originalUrl = "https://example.com/image.png";
+        var proxy1 = $"https://backend.com/Public/ProxyImage?url={System.Web.HttpUtility.UrlEncode(originalUrl)}";
+        var proxy2 = $"https://backend.com/Public/ProxyImage?url={System.Web.HttpUtility.UrlEncode(proxy1)}";
+        var proxy3 = $"https://backend.com/Public/ProxyImage?url={System.Web.HttpUtility.UrlEncode(proxy2)}";
+
+        var result = ImageProxyHelper.UnwrapProxyUrl(proxy3);
+
+        result.Should().Be(originalUrl);
+    }
+
+    [Fact]
+    public void UnwrapProxyUrl_UrlWithQueryParams_PreservesParams()
+    {
+        var originalUrl = "https://example.com/image.png?authuser=0&fife=s16383";
+        var encodedUrl = System.Web.HttpUtility.UrlEncode(originalUrl);
+        var proxiedUrl = $"https://backend.com/Public/ProxyImage?url={encodedUrl}";
+
+        var result = ImageProxyHelper.UnwrapProxyUrl(proxiedUrl);
+
+        result.Should().Be(originalUrl);
+    }
+
+    [Fact]
+    public void UnwrapProxyUrl_CaseInsensitive_Works()
+    {
+        var originalUrl = "https://example.com/image.png";
+        var encodedUrl = System.Web.HttpUtility.UrlEncode(originalUrl);
+        var proxiedUrl = $"https://backend.com/public/proxyimage?URL={encodedUrl}";
+
+        var result = ImageProxyHelper.UnwrapProxyUrl(proxiedUrl);
+
+        result.Should().Be(originalUrl);
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static int CountOccurrences(string text, string pattern)
