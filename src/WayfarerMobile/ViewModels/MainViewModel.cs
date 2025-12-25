@@ -1219,7 +1219,23 @@ public partial class MainViewModel : BaseViewModel
                     return;
                 }
 
-                await _locationBridge.StartAsync();
+                // CRITICAL: Use MainThread.BeginInvokeOnMainThread to ensure we're at the end of
+                // any queued main thread work. This prevents Android's 5-second foreground service
+                // timeout from expiring if the main thread has pending work.
+                var tcs = new TaskCompletionSource();
+                MainThread.BeginInvokeOnMainThread(async () =>
+                {
+                    try
+                    {
+                        await _locationBridge.StartAsync();
+                        tcs.SetResult();
+                    }
+                    catch (Exception ex)
+                    {
+                        tcs.SetException(ex);
+                    }
+                });
+                await tcs.Task;
             }
         }
         finally

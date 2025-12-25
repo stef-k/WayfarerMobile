@@ -44,6 +44,11 @@ public partial class App : Application
     }
 
     /// <summary>
+    /// Tracks whether the location service start has been triggered from Window.Activated.
+    /// </summary>
+    private bool _locationServiceStartTriggered;
+
+    /// <summary>
     /// Creates the main window.
     /// </summary>
     protected override Window CreateWindow(IActivationState? activationState)
@@ -55,7 +60,51 @@ public partial class App : Application
         window.Resumed += OnWindowResumed;
         window.Stopped += OnWindowStopped;
 
+        // CRITICAL: Start location service after UI is fully ready.
+        // Window.Activated fires after first render when main thread is settling.
+        // This is deterministic - no arbitrary delays needed.
+        window.Activated += OnWindowActivatedForServiceStart;
+
         return window;
+    }
+
+    /// <summary>
+    /// Handles Window.Activated to start the location service deterministically.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This one-shot handler starts the location tracking service after the UI is fully
+    /// initialized. By waiting for Window.Activated, we ensure:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item>MAUI framework initialization is complete</item>
+    ///   <item>First render has occurred</item>
+    ///   <item>Main thread is no longer blocked by startup work</item>
+    /// </list>
+    /// <para>
+    /// This eliminates the Android 5-second foreground service timeout issue that can
+    /// occur when startForegroundService() is called while the main thread is busy.
+    /// </para>
+    /// </remarks>
+    private void OnWindowActivatedForServiceStart(object? sender, EventArgs e)
+    {
+        // One-shot: unsubscribe immediately
+        if (sender is Window window)
+        {
+            window.Activated -= OnWindowActivatedForServiceStart;
+        }
+
+        // Prevent duplicate triggers
+        if (_locationServiceStartTriggered)
+            return;
+
+        _locationServiceStartTriggered = true;
+
+        // Queue to end of main thread work queue for maximum safety
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            _ = StartLocationTrackingServiceAsync();
+        });
     }
 
     /// <summary>
@@ -149,9 +198,8 @@ public partial class App : Application
             var activitySyncService = _serviceProvider.GetService<IActivitySyncService>();
             _ = activitySyncService?.AutoSyncIfNeededAsync();
 
-            // Start location tracking service (GPS) if permissions are already granted
-            // This handles returning users who already completed onboarding
-            _ = StartLocationTrackingServiceAsync();
+            // Note: Location tracking service start is handled by OnWindowActivatedForServiceStart
+            // to ensure deterministic timing after UI is fully initialized.
         }
         catch (Exception ex)
         {
@@ -165,23 +213,21 @@ public partial class App : Application
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>CRITICAL: Android Foreground Service Timing</strong>
+    /// This method is called from <see cref="OnWindowActivatedForServiceStart"/> after
+    /// the UI is fully initialized and the main thread is free. This ensures the Android
+    /// 5-second foreground service timeout is never violated.
     /// </para>
     /// <para>
-    /// On Android 8.0+, after calling startForegroundService(), the service MUST call
-    /// startForeground() within 5 seconds. However, during MAUI app startup, the main
-    /// thread is heavily blocked loading assemblies and initializing UI components.
+    /// The service acts as a defensive restart for edge cases where:
     /// </para>
+    /// <list type="bullet">
+    ///   <item>User force-stopped the app</item>
+    ///   <item>Android killed the service (battery optimization, low memory)</item>
+    ///   <item>Service crashed</item>
+    /// </list>
     /// <para>
-    /// If we call startForegroundService() during app construction, Android queues the
-    /// service creation, but the main thread may remain blocked for 10+ seconds. When
-    /// Android finally processes the service creation, the 5-second window has expired,
-    /// causing a RemoteServiceException crash.
-    /// </para>
-    /// <para>
-    /// <strong>Solution:</strong> Use MainThread.BeginInvokeOnMainThread() to queue the
-    /// service start. This ensures startForegroundService() is called only after the
-    /// current main thread work completes, so Android can process it immediately.
+    /// If the service is already running, calling StartAsync() is a no-op - the service
+    /// receives the intent and ignores it since it's already active.
     /// </para>
     /// </remarks>
     private async Task StartLocationTrackingServiceAsync()
@@ -209,21 +255,10 @@ public partial class App : Application
                 return;
             }
 
-            // CRITICAL: Delay service start to let app fully initialize.
-            // The main thread is heavily loaded during startup (map creation, UI setup, etc.)
-            // and starting the foreground service while blocked can cause Android's 5-second
-            // timeout to expire before OnCreate/StartForeground can execute.
-            await Task.Delay(2000); // Wait for app to stabilize
-
-            try
-            {
-                await locationBridge.StartAsync();
-                System.Diagnostics.Debug.WriteLine("[App] Location tracking service started (24/7 mode)");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[App] Failed to start location tracking service: {ex.Message}");
-            }
+            // No delay needed - this method is called from Window.Activated via
+            // MainThread.BeginInvokeOnMainThread(), ensuring the main thread is free.
+            await locationBridge.StartAsync();
+            System.Diagnostics.Debug.WriteLine("[App] Location tracking service started (24/7 mode)");
         }
         catch (Exception ex)
         {
