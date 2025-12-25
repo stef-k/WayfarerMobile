@@ -71,6 +71,12 @@ public partial class SettingsViewModel : BaseViewModel
     private string _themePreference = "System";
 
     /// <summary>
+    /// Gets or sets whether to keep the screen on while the app is in the foreground.
+    /// </summary>
+    [ObservableProperty]
+    private bool _keepScreenOn = true;
+
+    /// <summary>
     /// Gets the available theme options.
     /// </summary>
     public List<string> ThemeOptions { get; } = ["System", "Light", "Dark"];
@@ -288,6 +294,7 @@ public partial class SettingsViewModel : BaseViewModel
         var savedTheme = _settingsService.ThemePreference;
         ThemePreference = ThemeOptions.Find(t => t == savedTheme) ?? ThemeOptions[0]; // Default to "System"
 
+        KeepScreenOn = _settingsService.KeepScreenOn;
         LanguagePreference = _settingsService.LanguagePreference;
         SelectedLanguageOption = LanguageOptions.Find(l => l.Code == LanguagePreference)
             ?? LanguageOptions[0]; // Default to "System"
@@ -336,6 +343,28 @@ public partial class SettingsViewModel : BaseViewModel
     {
         _settingsService.ThemePreference = value;
         ApplyTheme(value);
+    }
+
+    /// <summary>
+    /// Saves keep screen on setting and applies it immediately via wake lock service.
+    /// </summary>
+    partial void OnKeepScreenOnChanged(bool value)
+    {
+        _settingsService.KeepScreenOn = value;
+        // The wake lock will be applied/released by AppLifecycleService on next resume
+        // or immediately by the WakeLockService if we inject it here
+        ApplyKeepScreenOn(value);
+    }
+
+    /// <summary>
+    /// Applies the keep screen on setting immediately using MAUI's DeviceDisplay API.
+    /// </summary>
+    private static void ApplyKeepScreenOn(bool keepScreenOn)
+    {
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            DeviceDisplay.Current.KeepScreenOn = keepScreenOn;
+        });
     }
 
     /// <summary>

@@ -157,6 +157,12 @@ public interface ISettingsService
     string ThemePreference { get; set; }
 
     /// <summary>
+    /// Gets or sets whether to keep the screen on while the app is in the foreground.
+    /// Prevents the device from going to sleep/screensaver mode during use.
+    /// </summary>
+    bool KeepScreenOn { get; set; }
+
+    /// <summary>
     /// Gets or sets the navigation voice guidance language preference.
     /// This is used for turn-by-turn voice navigation, not for changing the app display language.
     /// "System" means use device default language.
