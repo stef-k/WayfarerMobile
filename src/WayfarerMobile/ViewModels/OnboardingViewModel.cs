@@ -560,18 +560,26 @@ public partial class OnboardingViewModel : BaseViewModel
         // Start the location tracking service if basic location permission was granted
         // - With background permission: runs 24/7
         // - Without background permission: runs only while app is in foreground (casual use)
+        //
+        // CRITICAL: Use MainThread.BeginInvokeOnMainThread to ensure we're at the end of
+        // any queued main thread work. This prevents Android's 5-second foreground service
+        // timeout from expiring if the main thread has pending work.
         if (LocationPermissionGranted)
         {
-            try
+            var backgroundGranted = BackgroundLocationGranted; // Capture for closure
+            MainThread.BeginInvokeOnMainThread(async () =>
             {
-                await _locationBridge.StartAsync();
-                var mode = BackgroundLocationGranted ? "24/7 background" : "foreground only";
-                System.Diagnostics.Debug.WriteLine($"[Onboarding] Location tracking service started ({mode} mode)");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[Onboarding] Failed to start location service: {ex.Message}");
-            }
+                try
+                {
+                    await _locationBridge.StartAsync();
+                    var mode = backgroundGranted ? "24/7 background" : "foreground only";
+                    System.Diagnostics.Debug.WriteLine($"[Onboarding] Location tracking service started ({mode} mode)");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Onboarding] Failed to start location service: {ex.Message}");
+                }
+            });
         }
 
         // Navigate to main app
