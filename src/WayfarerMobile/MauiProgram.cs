@@ -70,7 +70,11 @@ public static class MauiProgram
         // Ensure directory exists
         Directory.CreateDirectory(logDirectory);
 
-        var logPath = Path.Combine(logDirectory, "wayfarer-.log");
+        // Clean up old-format log files (wayfarer-YYYYMMDD.log without "app-" prefix)
+        // This is a one-time migration from the old naming convention
+        CleanupOldLogFiles(logDirectory);
+
+        var logPath = Path.Combine(logDirectory, "wayfarer-app-.log");
 
         // Configure Serilog
         Log.Logger = new LoggerConfiguration()
@@ -93,6 +97,44 @@ public static class MauiProgram
 
         // Add Serilog to the logging pipeline
         logging.AddSerilog(Log.Logger, dispose: true);
+    }
+
+    /// <summary>
+    /// Cleans up old-format log files that use the wayfarer-YYYYMMDD.log naming convention.
+    /// These are migrated to wayfarer-app-YYYYMMDD.log to avoid collision with backend logs.
+    /// </summary>
+    /// <param name="logDirectory">The log directory to clean.</param>
+    private static void CleanupOldLogFiles(string logDirectory)
+    {
+        try
+        {
+            // Match old format: wayfarer-YYYYMMDD.log (but not wayfarer-app-*)
+            var oldLogFiles = Directory.GetFiles(logDirectory, "wayfarer-*.log")
+                .Where(f => !Path.GetFileName(f).StartsWith("wayfarer-app-", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            foreach (var file in oldLogFiles)
+            {
+                try
+                {
+                    File.Delete(file);
+                    System.Diagnostics.Debug.WriteLine($"[MauiProgram] Deleted old log file: {Path.GetFileName(file)}");
+                }
+                catch
+                {
+                    // Ignore individual file deletion errors (file may be in use)
+                }
+            }
+
+            if (oldLogFiles.Count > 0)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MauiProgram] Cleaned up {oldLogFiles.Count} old-format log files");
+            }
+        }
+        catch
+        {
+            // Ignore cleanup errors - not critical
+        }
     }
 
     /// <summary>
