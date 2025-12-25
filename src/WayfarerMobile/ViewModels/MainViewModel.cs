@@ -991,21 +991,36 @@ public partial class MainViewModel : BaseViewModel
             _droppedPinLayer,
             _locationLayer);
 
-        // Set default zoom
-        SetDefaultZoom(map);
+        // Set initial map position based on last known location
+        SetInitialMapPosition(map);
 
         return map;
     }
 
     /// <summary>
-    /// Sets the default zoom level for the map.
+    /// Sets the initial map position based on last known location.
+    /// If no location is available, shows globe view instead of zooming into null island (0,0).
     /// </summary>
-    private static void SetDefaultZoom(Map map)
+    private void SetInitialMapPosition(Map map)
     {
-        // Zoom level 15 is good for street-level view
-        if (map.Navigator.Resolutions?.Count > 15)
+        var lastLocation = _locationBridge.LastLocation;
+
+        if (lastLocation != null)
         {
-            map.Navigator.ZoomTo(map.Navigator.Resolutions[15]);
+            // We have a cached location - center on it at street level
+            _mapBuilder.CenterOnLocation(map, lastLocation.Latitude, lastLocation.Longitude, zoomLevel: 15);
+            _logger.LogDebug("Map initialized at last known location: {Lat}, {Lon}",
+                lastLocation.Latitude, lastLocation.Longitude);
+        }
+        else
+        {
+            // No location available - show globe view (zoom 3) so user sees something useful
+            // instead of being zoomed into the ocean at 0,0
+            if (map.Navigator.Resolutions?.Count > 3)
+            {
+                map.Navigator.ZoomTo(map.Navigator.Resolutions[3]);
+            }
+            _logger.LogDebug("Map initialized at globe view (no location available)");
         }
     }
 
