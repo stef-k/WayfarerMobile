@@ -593,9 +593,9 @@ public partial class TripsViewModel : BaseViewModel
                 });
             }
 
-            // Update item state directly
-            item.DownloadState = TripDownloadState.ServerOnly;
+            // Clear entity FIRST so StatsText shows correct value when DownloadState triggers notification
             item.DownloadedEntity = null;
+            item.DownloadState = TripDownloadState.ServerOnly;
             item.IsCurrentlyLoaded = false;  // Clear loaded state since trip data is deleted
 
             // Move item to correct group based on new state
@@ -864,9 +864,9 @@ public partial class TripsViewModel : BaseViewModel
 
             if (result != null)
             {
-                // Update item state
-                item.DownloadState = includeTiles ? TripDownloadState.Complete : TripDownloadState.MetadataOnly;
+                // Set entity FIRST so StatsText has access to counts when DownloadState triggers notification
                 item.DownloadedEntity = result;
+                item.DownloadState = includeTiles ? TripDownloadState.Complete : TripDownloadState.MetadataOnly;
 
                 // Move item to the correct group based on new state
                 MoveItemToCorrectGroup(item);
