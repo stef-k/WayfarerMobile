@@ -598,6 +598,9 @@ public partial class TripsViewModel : BaseViewModel
             item.DownloadedEntity = null;
             item.IsCurrentlyLoaded = false;  // Clear loaded state since trip data is deleted
 
+            // Move item to correct group based on new state
+            MoveItemToCorrectGroup(item);
+
             await _toastService.ShowSuccessAsync("Offline data deleted");
         }
         catch (Exception ex)
