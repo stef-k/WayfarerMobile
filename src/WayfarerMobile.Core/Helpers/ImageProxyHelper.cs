@@ -115,6 +115,48 @@ public static class ImageProxyHelper
     }
 
     /// <summary>
+    /// Unwraps a URL that may be double-proxied (proxy URL wrapping another proxy URL).
+    /// Returns the innermost original URL.
+    /// </summary>
+    /// <param name="url">The URL to unwrap.</param>
+    /// <returns>The original URL with all proxy layers removed.</returns>
+    public static string? UnwrapProxyUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return url;
+        }
+
+        var currentUrl = url;
+        var maxIterations = 5; // Prevent infinite loops
+
+        while (maxIterations-- > 0 && currentUrl.Contains("/Public/ProxyImage?url=", StringComparison.OrdinalIgnoreCase))
+        {
+            // Find the url= parameter
+            var urlParamIndex = currentUrl.IndexOf("url=", StringComparison.OrdinalIgnoreCase);
+            if (urlParamIndex < 0)
+            {
+                break;
+            }
+
+            // Extract everything after "url="
+            var encodedPart = currentUrl[(urlParamIndex + 4)..];
+
+            // URL decode to get the inner URL
+            try
+            {
+                currentUrl = HttpUtility.UrlDecode(encodedPart);
+            }
+            catch
+            {
+                break;
+            }
+        }
+
+        return currentUrl;
+    }
+
+    /// <summary>
     /// Convert backend proxy URLs back to original Google MyMaps URLs for server storage.
     /// This reverses the ConvertImagesToProxyUrls transformation.
     /// </summary>

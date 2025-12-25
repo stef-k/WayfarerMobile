@@ -167,7 +167,7 @@
                             <Border.StrokeShape>
                                 <RoundRectangle CornerRadius="8" />
                             </Border.StrokeShape>
-                            <Image Source="{Binding LoadedTrip.CoverImageUrl}"
+                            <Image Source="{Binding LoadedTrip.CleanCoverImageUrl}"
                                    Aspect="AspectFill" />
                         </Border>
 
@@ -285,7 +285,7 @@
                                             <Border StrokeThickness="0" HeightRequest="100" Margin="8,4,8,6"
                                                     IsVisible="{Binding HasCoverImage}">
                                                 <Border.StrokeShape><RoundRectangle CornerRadius="6" /></Border.StrokeShape>
-                                                <Image Source="{Binding CoverImageUrl}" Aspect="AspectFill" />
+                                                <Image Source="{Binding CleanCoverImageUrl}" Aspect="AspectFill" />
                                             </Border>
                                             <!-- Region Notes (button to show details, styled like trip notes) -->
                                             <Border StrokeThickness="0"

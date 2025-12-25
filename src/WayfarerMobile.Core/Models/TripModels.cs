@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json.Serialization;
+using WayfarerMobile.Core.Helpers;
 
 namespace WayfarerMobile.Core.Models;
 
@@ -217,6 +218,13 @@ public class TripDetails : INotifyPropertyChanged
     /// </summary>
     [JsonIgnore]
     public bool HasCoverImage => !string.IsNullOrEmpty(CoverImageUrl);
+
+    /// <summary>
+    /// Gets the cover image URL with any proxy wrapping removed.
+    /// Use this for display instead of CoverImageUrl to handle double-proxied URLs.
+    /// </summary>
+    [JsonIgnore]
+    public string? CleanCoverImageUrl => ImageProxyHelper.UnwrapProxyUrl(CoverImageUrl);
 
     /// <summary>
     /// Gets whether this trip has meaningful notes content.
@@ -472,6 +480,13 @@ public class TripRegion : INotifyPropertyChanged
     /// </summary>
     [JsonIgnore]
     public bool HasCoverImage => !string.IsNullOrEmpty(CoverImageUrl);
+
+    /// <summary>
+    /// Gets the cover image URL with any proxy wrapping removed.
+    /// Use this for display instead of CoverImageUrl to handle double-proxied URLs.
+    /// </summary>
+    [JsonIgnore]
+    public string? CleanCoverImageUrl => ImageProxyHelper.UnwrapProxyUrl(CoverImageUrl);
 
     /// <summary>
     /// Gets whether this region has meaningful notes content.
