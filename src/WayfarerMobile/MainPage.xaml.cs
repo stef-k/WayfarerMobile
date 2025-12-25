@@ -257,6 +257,17 @@ public partial class MainPage : ContentPage, IQueryAttributable
         {
             _viewModel.UnloadTrip();
         }
+
+        // Handle selection restoration from sub-editors (notes, marker)
+        if (query.TryGetValue("restoreEntityType", out var entityTypeObj) &&
+            query.TryGetValue("restoreEntityId", out var entityIdObj))
+        {
+            var entityType = entityTypeObj?.ToString();
+            if (Guid.TryParse(entityIdObj?.ToString(), out var entityId))
+            {
+                _viewModel.RestoreSelectionFromSubEditor(entityType, entityId);
+            }
+        }
     }
 
     /// <summary>
@@ -290,6 +301,11 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// </summary>
     private async void OnMainSheetStateChanged(object? sender, Syncfusion.Maui.Toolkit.BottomSheet.StateChangedEventArgs e)
     {
+        System.Diagnostics.Debug.WriteLine($"[MainPage] SheetStateChanged: {e.OldState} -> {e.NewState}, " +
+            $"IsNavigatingToSubEditor={_viewModel.IsNavigatingToSubEditor}, " +
+            $"IsTripSheetOpen={_viewModel.IsTripSheetOpen}, " +
+            $"SelectedPlace={_viewModel.SelectedTripPlace?.Name ?? "null"}");
+
         // Only handle when sheet becomes hidden (closed)
         if (e.NewState == Syncfusion.Maui.Toolkit.BottomSheet.BottomSheetState.Hidden)
         {
@@ -297,12 +313,14 @@ public partial class MainPage : ContentPage, IQueryAttributable
             // The sheet goes hidden during navigation but we want to preserve selection
             if (_viewModel.IsNavigatingToSubEditor)
             {
+                System.Diagnostics.Debug.WriteLine("[MainPage] Skipping cleanup - navigating to sub-editor");
                 return;
             }
 
             // Handle check-in sheet cleanup if it was open
             if (_viewModel.IsCheckInSheetOpen)
             {
+                System.Diagnostics.Debug.WriteLine("[MainPage] Running check-in sheet cleanup");
                 _viewModel.IsCheckInSheetOpen = false;
                 await _viewModel.OnCheckInSheetClosedAsync();
             }
@@ -310,6 +328,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
             // Handle trip sheet cleanup if it was open
             if (_viewModel.IsTripSheetOpen)
             {
+                System.Diagnostics.Debug.WriteLine("[MainPage] Running trip sheet cleanup - calling TripSheetBackCommand");
                 _viewModel.IsTripSheetOpen = false;
                 _viewModel.TripSheetBackCommand.Execute(null);
             }

@@ -251,7 +251,7 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
             HasChanges = false;
 
             await _toastService.ShowSuccessAsync("Notes saved");
-            await Shell.Current.GoToAsync("..");
+            await NavigateBackWithRestoreAsync();
         }
         catch (Exception ex)
         {
@@ -398,7 +398,25 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
             }
         }
 
-        await Shell.Current.GoToAsync("..");
+        await NavigateBackWithRestoreAsync();
+    }
+
+    /// <summary>
+    /// Navigates back, passing entity info for selection restoration.
+    /// </summary>
+    private async Task NavigateBackWithRestoreAsync()
+    {
+        // For entity types that need selection restoration, pass the info back
+        var query = EntityType switch
+        {
+            NotesEntityType.Place => $"..?restoreEntityType=Place&restoreEntityId={EntityId}",
+            NotesEntityType.Area => $"..?restoreEntityType=Area&restoreEntityId={EntityId}",
+            NotesEntityType.Segment => $"..?restoreEntityType=Segment&restoreEntityId={EntityId}",
+            NotesEntityType.Region => $"..?restoreEntityType=Region&restoreEntityId={EntityId}",
+            _ => ".."
+        };
+
+        await Shell.Current.GoToAsync(query);
     }
 
     /// <summary>

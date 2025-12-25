@@ -15,7 +15,7 @@
                                AllowedState="All"
                                State="{Binding SheetState, Source={x:Reference Root}, Mode=TwoWay}"
                                HalfExpandedRatio="0.45"
-                               FullExpandedRatio="0.98"
+                               FullExpandedRatio="1.0"
                                EnableSwiping="True"
                                IsModal="False"
                                ShowGrabber="True"

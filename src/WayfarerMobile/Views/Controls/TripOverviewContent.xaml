@@ -11,8 +11,9 @@
     <!-- Main content grid - no SfBottomSheet, this is placed inside MainPage's BottomSheet -->
     <Grid RowDefinitions="Auto,*,Auto">
 
-        <!-- Header -->
-        <Grid Grid.Row="0" Padding="8,8,8,8" ColumnDefinitions="Auto,*,Auto">
+        <!-- Header (hidden when search is active in overview mode) -->
+        <Grid Grid.Row="0" Padding="8,8,8,8" ColumnDefinitions="Auto,*,Auto,Auto"
+              IsVisible="{Binding IsPlaceSearchVisible, Converter={StaticResource InvertedBoolConverter}}">
             <!-- Back Button (visible when showing details - goes back to overview) -->
             <Button Grid.Column="0"
                     Text="←"
@@ -27,10 +28,11 @@
                     IsVisible="{Binding IsTripSheetShowingDetails}" />
             <!-- My Trips Button (visible when showing overview - goes to My Trips tab) -->
             <Button Grid.Column="0"
-                    Text="← Trips"
-                    FontSize="13"
+                    Text="←"
+                    FontSize="18"
+                    WidthRequest="36"
                     HeightRequest="36"
-                    Padding="8,0"
+                    Padding="0"
                     CornerRadius="18"
                     BackgroundColor="Transparent"
                     TextColor="{StaticResource Primary}"
@@ -50,8 +52,21 @@
                        IsVisible="{Binding TripSheetSubtitle, Converter={StaticResource IsNotNullConverter}}" />
             </VerticalStackLayout>
 
-            <!-- Close Button -->
+            <!-- Search Toggle Button (visible in overview mode only) -->
             <Button Grid.Column="2"
+                    Text="🔍"
+                    FontSize="16"
+                    WidthRequest="36"
+                    HeightRequest="36"
+                    Padding="0"
+                    CornerRadius="18"
+                    BackgroundColor="Transparent"
+                    TextColor="{StaticResource Primary}"
+                    Command="{Binding TogglePlaceSearchCommand}"
+                    IsVisible="{Binding IsTripSheetShowingOverview}" />
+
+            <!-- Close Button -->
+            <Button Grid.Column="3"
                     Text="✕"
                     FontSize="16"
                     WidthRequest="36"
@@ -63,6 +78,30 @@
                     Command="{Binding CloseTripSheetCommand}" />
         </Grid>
 
+        <!-- Search Bar Header (replaces header when search is active) -->
+        <Grid Grid.Row="0"
+              Padding="8,8,8,8"
+              ColumnDefinitions="*,Auto"
+              ColumnSpacing="8"
+              IsVisible="{Binding IsPlaceSearchVisible}">
+            <SearchBar Grid.Column="0"
+                       Placeholder="Search places..."
+                       Text="{Binding PlaceSearchQuery, Mode=TwoWay}"
+                       FontSize="14"
+                       HeightRequest="44"
+                       BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}" />
+            <Button Grid.Column="1"
+                    Text="✕"
+                    FontSize="16"
+                    WidthRequest="36"
+                    HeightRequest="36"
+                    Padding="0"
+                    CornerRadius="18"
+                    BackgroundColor="Transparent"
+                    TextColor="{StaticResource TextSecondary}"
+                    Command="{Binding TogglePlaceSearchCommand}" />
+        </Grid>
+
         <!-- Content Area - ScrollView for Overview/Area/Segment modes (hidden for Place and TripNotes detail views) -->
         <ScrollView Grid.Row="1"
                     IsVisible="{Binding IsTripSheetShowingScrollableContent}">
@@ -70,6 +109,54 @@
                 <!-- Overview Mode -->
                 <VerticalStackLayout IsVisible="{Binding IsTripSheetShowingOverview}"
                                      Spacing="0">
+
+                    <!-- Search Results (shown when searching) -->
+                    <VerticalStackLayout IsVisible="{Binding IsPlaceSearchVisible}"
+                                         Spacing="0"
+                                         Padding="8">
+                        <!-- No results message -->
+                        <Label Text="No places found"
+                               FontSize="14"
+                               TextColor="{StaticResource TextSecondary}"
+                               HorizontalOptions="Center"
+                               Margin="0,20"
+                               IsVisible="{Binding HasPlaceSearchResults, Converter={StaticResource InvertedBoolConverter}}" />
+
+                        <!-- Search results list -->
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding PlaceSearchResults}"
+                                             Spacing="1">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="models:TripPlace">
+                                    <Border Padding="10,12" StrokeThickness="0"
+                                            BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
+                                        <Border.StrokeShape>
+                                            <RoundRectangle CornerRadius="8" />
+                                        </Border.StrokeShape>
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=SelectTripPlaceCommand}"
+                                                                  CommandParameter="{Binding .}" />
+                                        </Border.GestureRecognizers>
+                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                                            <Image Grid.Column="0" Source="{Binding IconPath, Converter={StaticResource MauiAssetImageConverter}}"
+                                                   WidthRequest="36" HeightRequest="36" VerticalOptions="Center" />
+                                            <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="2">
+                                                <Label Text="{Binding Name}" FontSize="15" FontAttributes="Bold"
+                                                       LineBreakMode="TailTruncation" />
+                                                <Label Text="{Binding Address}" FontSize="12"
+                                                       TextColor="{StaticResource TextSecondary}"
+                                                       LineBreakMode="TailTruncation"
+                                                       IsVisible="{Binding Address, Converter={StaticResource IsNotNullConverter}}" />
+                                            </VerticalStackLayout>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+
+                    <!-- Normal Overview Content (hidden when searching) -->
+                    <VerticalStackLayout IsVisible="{Binding IsPlaceSearchVisible, Converter={StaticResource InvertedBoolConverter}}"
+                                         Spacing="0">
 
                     <!-- Trip Info Section -->
                     <VerticalStackLayout Padding="8,0,8,8" Spacing="8">
@@ -344,7 +431,11 @@
                         </BindableLayout.ItemTemplate>
                     </VerticalStackLayout>
 
+                    </VerticalStackLayout>
+                    <!-- End Normal Overview Content -->
+
                 </VerticalStackLayout>
+                <!-- End Overview Mode -->
 
                 <!-- Area Details Mode (hidden when showing area notes) -->
                 <VerticalStackLayout IsVisible="{Binding IsTripSheetShowingArea}" Spacing="8" Padding="8,0,8,8">

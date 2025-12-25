@@ -334,7 +334,7 @@ public partial class MarkerEditorViewModel : BaseViewModel, IQueryAttributable
 
         if (!HasChanges)
         {
-            await Shell.Current.GoToAsync("..");
+            await NavigateBackWithRestoreAsync();
             return;
         }
 
@@ -350,7 +350,7 @@ public partial class MarkerEditorViewModel : BaseViewModel, IQueryAttributable
                 markerColor: SelectedColor);
 
             await _toastService.ShowSuccessAsync("Marker updated");
-            await Shell.Current.GoToAsync("..");
+            await NavigateBackWithRestoreAsync();
         }
         catch (Exception ex)
         {
@@ -387,6 +387,21 @@ public partial class MarkerEditorViewModel : BaseViewModel, IQueryAttributable
             }
         }
 
-        await Shell.Current.GoToAsync("..");
+        await NavigateBackWithRestoreAsync();
+    }
+
+    /// <summary>
+    /// Navigates back, passing place info for selection restoration.
+    /// </summary>
+    private async Task NavigateBackWithRestoreAsync()
+    {
+        if (_placeId != Guid.Empty)
+        {
+            await Shell.Current.GoToAsync($"..?restoreEntityType=Place&restoreEntityId={_placeId}");
+        }
+        else
+        {
+            await Shell.Current.GoToAsync("..");
+        }
     }
 }

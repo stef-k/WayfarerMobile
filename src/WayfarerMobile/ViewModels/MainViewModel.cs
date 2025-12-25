@@ -318,6 +318,12 @@ public partial class MainViewModel : BaseViewModel
     /// </summary>
     public bool IsNavigatingToSubEditor { get; private set; }
 
+    /// <summary>
+    /// Pending entity ID for selection restoration from sub-editor navigation.
+    /// Set by ApplyQueryAttributes, consumed by OnAppearingAsync.
+    /// </summary>
+    private (string? EntityType, Guid EntityId)? _pendingSelectionRestore;
+
     // Legacy property for compatibility
     private TripPlace? _selectedPlace;
 
@@ -555,6 +561,21 @@ public partial class MainViewModel : BaseViewModel
     public bool IsAnyEditModeActive => IsPlaceCoordinateEditMode;
 
     /// <summary>
+    /// Stores entity info for selection restoration after sub-editor navigation.
+    /// Called from MainPage.ApplyQueryAttributes when returning from notes/marker editors.
+    /// </summary>
+    /// <param name="entityType">The entity type (Place, Area, Segment, Region).</param>
+    /// <param name="entityId">The entity ID to restore selection for.</param>
+    public void RestoreSelectionFromSubEditor(string? entityType, Guid entityId)
+    {
+        if (string.IsNullOrEmpty(entityType) || entityId == Guid.Empty)
+            return;
+
+        _logger.LogDebug("RestoreSelectionFromSubEditor: entityType={Type}, entityId={Id}", entityType, entityId);
+        _pendingSelectionRestore = (entityType, entityId);
+    }
+
+    /// <summary>
     /// Gets whether there are pending place coordinates to save.
     /// </summary>
     public bool HasPendingPlaceCoordinates => PendingPlaceLatitude.HasValue && PendingPlaceLongitude.HasValue;
@@ -664,7 +685,7 @@ public partial class MainViewModel : BaseViewModel
         get
         {
             if (SelectedTripPlace != null)
-                return SelectedTripPlace.Name;
+                return "Trip Overview";
             if (IsShowingAreaNotes && SelectedTripArea != null)
                 return $"{SelectedTripArea.Name} - Notes";
             if (SelectedTripArea != null)
@@ -700,6 +721,90 @@ public partial class MainViewModel : BaseViewModel
                 return string.Join(" • ", parts);
             }
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets whether the place search bar is visible.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isPlaceSearchVisible;
+
+    /// <summary>
+    /// Gets or sets the place search query text.
+    /// </summary>
+    [ObservableProperty]
+    private string _placeSearchQuery = string.Empty;
+
+    /// <summary>
+    /// Cached search results to avoid recomputation on every property access.
+    /// </summary>
+    private List<TripPlace> _cachedSearchResults = new();
+
+    /// <summary>
+    /// Called when PlaceSearchQuery changes - updates cached results.
+    /// </summary>
+    partial void OnPlaceSearchQueryChanged(string value)
+    {
+        UpdateSearchResults();
+    }
+
+    /// <summary>
+    /// Updates the cached search results.
+    /// </summary>
+    private void UpdateSearchResults()
+    {
+        if (LoadedTrip == null || string.IsNullOrWhiteSpace(PlaceSearchQuery))
+        {
+            _cachedSearchResults = new List<TripPlace>();
+        }
+        else
+        {
+            var query = PlaceSearchQuery.Trim();
+            _cachedSearchResults = LoadedTrip.AllPlaces
+                .Where(p =>
+                    (p.Name?.Contains(query, StringComparison.OrdinalIgnoreCase) == true) ||
+                    (p.Address?.Contains(query, StringComparison.OrdinalIgnoreCase) == true))
+                .ToList();
+        }
+
+        OnPropertyChanged(nameof(PlaceSearchResults));
+        OnPropertyChanged(nameof(HasPlaceSearchResults));
+    }
+
+    /// <summary>
+    /// Gets the filtered list of places matching the search query.
+    /// </summary>
+    public List<TripPlace> PlaceSearchResults => _cachedSearchResults;
+
+    /// <summary>
+    /// Gets whether there are search results to display.
+    /// </summary>
+    public bool HasPlaceSearchResults => _cachedSearchResults.Count > 0;
+
+    /// <summary>
+    /// Toggles the place search bar visibility.
+    /// </summary>
+    [RelayCommand]
+    private void TogglePlaceSearch()
+    {
+        IsPlaceSearchVisible = !IsPlaceSearchVisible;
+        if (!IsPlaceSearchVisible)
+        {
+            // Clear search when closing
+            PlaceSearchQuery = string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Closes the place search and resets to normal view.
+    /// </summary>
+    private void CloseSearchIfActive()
+    {
+        if (IsPlaceSearchVisible)
+        {
+            IsPlaceSearchVisible = false;
+            PlaceSearchQuery = string.Empty;
         }
     }
 
@@ -1563,6 +1668,8 @@ public partial class MainViewModel : BaseViewModel
     [RelayCommand]
     private void TripSheetBack()
     {
+        _logger.LogDebug("TripSheetBack: SelectedPlace={Place}", SelectedTripPlace?.Name ?? "null");
+
         // If showing area notes, go back to area details
         if (IsShowingAreaNotes)
         {
@@ -1594,6 +1701,7 @@ public partial class MainViewModel : BaseViewModel
     /// </summary>
     private void ClearTripSheetSelection()
     {
+        _logger.LogDebug("ClearTripSheetSelection: Clearing selection (was: {Place})", SelectedTripPlace?.Name ?? "null");
         SelectedTripPlace = null;
         SelectedTripArea = null;
         SelectedTripSegment = null;
@@ -1660,6 +1768,9 @@ public partial class MainViewModel : BaseViewModel
     {
         if (place == null)
             return;
+
+        // Close search if active (user selected from search results)
+        CloseSearchIfActive();
 
         ClearTripSheetSelection();
         SelectedTripPlace = place;
@@ -1939,6 +2050,7 @@ public partial class MainViewModel : BaseViewModel
     /// </summary>
     private async Task EditPlaceNotesAsync(TripPlace place)
     {
+        _logger.LogDebug("EditPlaceNotesAsync: Setting IsNavigatingToSubEditor=true, navigating to notesEditor");
         IsNavigatingToSubEditor = true;
 
         var navParams = new Dictionary<string, object>
@@ -2147,6 +2259,7 @@ public partial class MainViewModel : BaseViewModel
         if (place == null || LoadedTrip == null)
             return;
 
+        _logger.LogDebug("EditPlaceMarkerAsync: Setting IsNavigatingToSubEditor=true, navigating to markerEditor");
         IsNavigatingToSubEditor = true;
 
         var navParams = new Dictionary<string, object>
@@ -3087,6 +3200,10 @@ public partial class MainViewModel : BaseViewModel
         // Update static property for cross-ViewModel access
         CurrentLoadedTripId = value?.Id;
         _logger.LogDebug("OnLoadedTripChanged: CurrentLoadedTripId set to {TripId}", CurrentLoadedTripId);
+
+        // Reset search state when trip changes
+        IsPlaceSearchVisible = false;
+        PlaceSearchQuery = string.Empty;
     }
 
     #endregion
@@ -3098,14 +3215,24 @@ public partial class MainViewModel : BaseViewModel
     /// </summary>
     public override async Task OnAppearingAsync()
     {
-        // Check if we just returned from a sub-editor and need to refresh data
-        var wasInSubEditor = IsNavigatingToSubEditor;
+        // Check if we have a pending selection to restore from sub-editor navigation
+        var pendingRestore = _pendingSelectionRestore;
+        _pendingSelectionRestore = null;
 
-        // Reset sub-editor navigation flag (we've returned from sub-editor)
+        // Check if we just returned from a sub-editor
+        var wasInSubEditor = IsNavigatingToSubEditor;
         IsNavigatingToSubEditor = false;
 
-        // If we just returned from a sub-editor, refresh the edited entity
-        if (wasInSubEditor && LoadedTrip != null)
+        _logger.LogDebug("OnAppearingAsync: wasInSubEditor={WasInSubEditor}, pendingRestore={Restore}, SelectedPlace={Place}",
+            wasInSubEditor, pendingRestore?.EntityType ?? "null", SelectedTripPlace?.Name ?? "null");
+
+        // If we have a pending selection restore, apply it
+        if (pendingRestore.HasValue && LoadedTrip != null)
+        {
+            await ApplyPendingSelectionRestoreAsync(pendingRestore.Value.EntityType, pendingRestore.Value.EntityId);
+        }
+        // Otherwise, if we just returned from sub-editor, refresh in place
+        else if (wasInSubEditor && LoadedTrip != null)
         {
             await RefreshEditedEntitiesAsync();
         }
@@ -3144,6 +3271,108 @@ public partial class MainViewModel : BaseViewModel
         }
 
         await base.OnAppearingAsync();
+    }
+
+    /// <summary>
+    /// Applies pending selection restoration after returning from a sub-editor.
+    /// Finds the entity in the loaded trip and restores selection, then refreshes from database.
+    /// </summary>
+    private async Task ApplyPendingSelectionRestoreAsync(string? entityType, Guid entityId)
+    {
+        if (LoadedTrip == null || string.IsNullOrEmpty(entityType))
+            return;
+
+        _logger.LogDebug("ApplyPendingSelectionRestoreAsync: type={Type}, id={Id}", entityType, entityId);
+
+        try
+        {
+            switch (entityType)
+            {
+                case "Place":
+                    var place = LoadedTrip.AllPlaces.FirstOrDefault(p => p.Id == entityId);
+                    if (place != null)
+                    {
+                        // Refresh place data from database
+                        var offlinePlace = await _databaseService.GetOfflinePlaceByServerIdAsync(entityId);
+                        if (offlinePlace != null)
+                        {
+                            place.Name = offlinePlace.Name;
+                            place.Notes = offlinePlace.Notes;
+                            place.Icon = offlinePlace.IconName;
+                            place.MarkerColor = offlinePlace.MarkerColor;
+                            place.Latitude = offlinePlace.Latitude;
+                            place.Longitude = offlinePlace.Longitude;
+                        }
+
+                        // Restore selection
+                        SelectedTripPlace = place;
+                        IsTripSheetOpen = true;
+
+                        // Update UI
+                        OnPropertyChanged(nameof(TripSheetTitle));
+                        LoadedTrip.NotifySortedRegionsChanged();
+                        await RefreshTripOnMapAsync();
+
+                        _logger.LogDebug("ApplyPendingSelectionRestoreAsync: Restored place selection to {Name}", place.Name);
+                    }
+                    break;
+
+                case "Area":
+                    var area = LoadedTrip.AllAreas.FirstOrDefault(a => a.Id == entityId);
+                    if (area != null)
+                    {
+                        var offlinePolygon = await _databaseService.GetOfflinePolygonByServerIdAsync(entityId);
+                        if (offlinePolygon != null)
+                        {
+                            area.Notes = offlinePolygon.Notes;
+                        }
+
+                        SelectedTripArea = area;
+                        IsTripSheetOpen = true;
+                        _logger.LogDebug("ApplyPendingSelectionRestoreAsync: Restored area selection");
+                    }
+                    break;
+
+                case "Segment":
+                    var segment = LoadedTrip.Segments.FirstOrDefault(s => s.Id == entityId);
+                    if (segment != null)
+                    {
+                        var offlineSegment = await _databaseService.GetOfflineSegmentByServerIdAsync(entityId);
+                        if (offlineSegment != null)
+                        {
+                            segment.Notes = offlineSegment.Notes;
+                        }
+
+                        SelectedTripSegment = segment;
+                        IsTripSheetOpen = true;
+                        _logger.LogDebug("ApplyPendingSelectionRestoreAsync: Restored segment selection");
+                    }
+                    break;
+
+                case "Region":
+                    var region = LoadedTrip.Regions.FirstOrDefault(r => r.Id == entityId);
+                    if (region != null)
+                    {
+                        var offlineArea = await _databaseService.GetOfflineAreaByServerIdAsync(entityId);
+                        if (offlineArea != null)
+                        {
+                            region.Name = offlineArea.Name;
+                            region.Notes = offlineArea.Notes;
+                        }
+
+                        SelectedTripRegion = region;
+                        IsShowingRegionNotes = true;
+                        IsTripSheetOpen = true;
+                        LoadedTrip.NotifySortedRegionsChanged();
+                        _logger.LogDebug("ApplyPendingSelectionRestoreAsync: Restored region selection");
+                    }
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to restore selection for {Type}/{Id}", entityType, entityId);
+        }
     }
 
     /// <summary>
