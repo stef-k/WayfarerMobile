@@ -21,6 +21,7 @@ public class SettingsService : ISettingsService
     private const string KeyUserEmail = "user_email";
     private const string KeyThemePreference = "theme_preference";
     private const string KeyLanguagePreference = "language_preference";
+    private const string KeyKeepScreenOn = "keep_screen_on";
     private const string KeyMapOfflineCacheEnabled = "map_offline_cache_enabled";
     private const string KeyMaxConcurrentTileDownloads = "max_concurrent_tile_downloads";
     private const string KeyMinTileRequestDelayMs = "min_tile_request_delay_ms";
@@ -234,6 +235,16 @@ public class SettingsService : ISettingsService
     {
         get => Preferences.Get(KeyThemePreference, "System");
         set => Preferences.Set(KeyThemePreference, value ?? "System");
+    }
+
+    /// <summary>
+    /// Gets or sets whether to keep the screen on while the app is in the foreground.
+    /// Default is true - screen stays on to prevent sleep during map/navigation use.
+    /// </summary>
+    public bool KeepScreenOn
+    {
+        get => Preferences.Get(KeyKeepScreenOn, true);
+        set => Preferences.Set(KeyKeepScreenOn, value);
     }
 
     /// <summary>

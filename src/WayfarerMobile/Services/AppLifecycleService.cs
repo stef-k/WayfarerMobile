@@ -12,6 +12,7 @@ public class AppLifecycleService : IAppLifecycleService
 {
     private readonly LocationSyncService _syncService;
     private readonly IWakeLockService _wakeLockService;
+    private readonly ISettingsService _settingsService;
     private readonly ILogger<AppLifecycleService> _logger;
 
     private const string NavigationStateKey = "navigation_state_snapshot";
@@ -32,14 +33,17 @@ public class AppLifecycleService : IAppLifecycleService
     /// </summary>
     /// <param name="syncService">The location sync service.</param>
     /// <param name="wakeLockService">The wake lock service.</param>
+    /// <param name="settingsService">The settings service.</param>
     /// <param name="logger">The logger instance.</param>
     public AppLifecycleService(
         LocationSyncService syncService,
         IWakeLockService wakeLockService,
+        ISettingsService settingsService,
         ILogger<AppLifecycleService> logger)
     {
         _syncService = syncService;
         _wakeLockService = wakeLockService;
+        _settingsService = settingsService;
         _logger = logger;
     }
 
@@ -103,18 +107,11 @@ public class AppLifecycleService : IAppLifecycleService
                 _ = _syncService.SyncAsync(); // Fire and forget
             }
 
-            // Check for saved navigation state
-            var savedState = GetSavedNavigationState();
-            if (savedState?.WasNavigating == true)
+            // Acquire wake lock if user setting is enabled (keeps screen on while app is in foreground)
+            if (_settingsService.KeepScreenOn)
             {
-                _logger.LogInformation(
-                    "Found saved navigation state for {Destination} (saved at {SavedAt})",
-                    savedState.DestinationName,
-                    savedState.SavedAt);
-
-                // Re-acquire wake lock if navigation should resume
-                // (The actual navigation resume is handled by the ViewModel)
                 _wakeLockService.AcquireWakeLock(keepScreenOn: true);
+                _logger.LogDebug("Wake lock acquired (KeepScreenOn setting enabled)");
             }
 
             _logger.LogInformation("App state restored successfully");
