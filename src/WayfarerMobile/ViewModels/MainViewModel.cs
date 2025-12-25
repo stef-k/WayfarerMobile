@@ -1014,11 +1014,11 @@ public partial class MainViewModel : BaseViewModel
         }
         else
         {
-            // No location available - show globe view (zoom 3) so user sees something useful
+            // No location available - show globe view (zoom 2) so user sees the full globe
             // instead of being zoomed into the ocean at 0,0
-            if (map.Navigator.Resolutions?.Count > 3)
+            if (map.Navigator.Resolutions?.Count > 2)
             {
-                map.Navigator.ZoomTo(map.Navigator.Resolutions[3]);
+                map.Navigator.ZoomTo(map.Navigator.Resolutions[2]);
             }
             _logger.LogDebug("Map initialized at globe view (no location available)");
         }
