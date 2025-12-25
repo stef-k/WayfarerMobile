@@ -1238,6 +1238,10 @@ public class TripSyncService : ITripSyncService
             }
             catch (HttpRequestException ex) when (IsClientError(ex))
             {
+                // 4xx error - server permanently rejected this mutation
+                // Roll back optimistic changes since they can never be synced
+                await RestoreOriginalValuesAsync(mutation);
+
                 mutation.IsServerRejected = true;
                 mutation.LastError = ex.Message;
                 await _database.UpdateAsync(mutation);
@@ -1455,11 +1459,23 @@ public class TripSyncService : ITripSyncService
 
     /// <summary>
     /// Cancel all pending mutations (discard changes).
+    /// Restores original values in offline tables before deleting mutations.
     /// </summary>
     public async Task CancelPendingMutationsAsync()
     {
         await EnsureInitializedAsync();
-        await _database!.Table<PendingTripMutation>().DeleteAsync();
+
+        // Get all pending mutations
+        var mutations = await _database!.Table<PendingTripMutation>().ToListAsync();
+
+        // Restore original values for each mutation before deleting
+        foreach (var mutation in mutations)
+        {
+            await RestoreOriginalValuesAsync(mutation);
+        }
+
+        // Delete all mutations
+        await _database.Table<PendingTripMutation>().DeleteAsync();
     }
 
     /// <summary>
@@ -1551,12 +1567,19 @@ public class TripSyncService : ITripSyncService
         switch (mutation.EntityType)
         {
             case "Place":
-                if (mutation.OperationType == "Delete" && mutation.OriginalName != null)
+                if (mutation.OperationType == "Create")
                 {
-                    // Restore deleted place
+                    // Delete offline-created place (it was never synced to server)
+                    await _databaseService.DeleteOfflinePlaceByServerIdAsync(mutation.EntityId);
+                }
+                else if (mutation.OperationType == "Delete" && mutation.OriginalName != null)
+                {
+                    // Restore deleted place - need to look up local trip ID from server trip ID
+                    var downloadedTrip = await _databaseService.GetDownloadedTripByServerIdAsync(mutation.TripId);
                     var place = new OfflinePlaceEntity
                     {
                         ServerId = mutation.EntityId,
+                        TripId = downloadedTrip?.Id ?? 0,
                         RegionId = mutation.RegionId,
                         Name = mutation.OriginalName,
                         Latitude = mutation.OriginalLatitude ?? 0,
@@ -1587,12 +1610,19 @@ public class TripSyncService : ITripSyncService
                 break;
 
             case "Region":
-                if (mutation.OperationType == "Delete" && mutation.OriginalName != null)
+                if (mutation.OperationType == "Create")
                 {
-                    // Restore deleted region
+                    // Delete offline-created region (it was never synced to server)
+                    await _databaseService.DeleteOfflineAreaByServerIdAsync(mutation.EntityId);
+                }
+                else if (mutation.OperationType == "Delete" && mutation.OriginalName != null)
+                {
+                    // Restore deleted region - need to look up local trip ID from server trip ID
+                    var downloadedTrip = await _databaseService.GetDownloadedTripByServerIdAsync(mutation.TripId);
                     var area = new OfflineAreaEntity
                     {
                         ServerId = mutation.EntityId,
+                        TripId = downloadedTrip?.Id ?? 0,
                         Name = mutation.OriginalName,
                         Notes = mutation.OriginalNotes,
                         CenterLatitude = mutation.OriginalCenterLatitude,
