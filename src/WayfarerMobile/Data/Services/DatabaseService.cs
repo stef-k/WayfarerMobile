@@ -977,6 +977,18 @@ public class DatabaseService : IAsyncDisposable
     }
 
     /// <summary>
+    /// Gets all queued locations for export, ordered by timestamp descending.
+    /// </summary>
+    /// <returns>All queued locations regardless of sync status.</returns>
+    public async Task<List<QueuedLocation>> GetAllQueuedLocationsAsync()
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<QueuedLocation>()
+            .OrderByDescending(l => l.Timestamp)
+            .ToListAsync();
+    }
+
+    /// <summary>
     /// Gets the total count of trip tiles across all trips.
     /// </summary>
     public async Task<int> GetTripTileCountAsync()

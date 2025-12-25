@@ -392,18 +392,23 @@
                                    Grid.Column="1" />
                         </Grid>
 
-                        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="10">
                             <Button Text="Refresh"
                                     Command="{Binding RefreshQueueCountCommand}"
                                     Style="{StaticResource DarkButton}"
                                     HeightRequest="40"
                                     Grid.Column="0" />
-                            <Button Text="Clear Queue"
+                            <Button Text="Export"
+                                    Command="{Binding ExportQueueCommand}"
+                                    Style="{StaticResource DarkButton}"
+                                    HeightRequest="40"
+                                    Grid.Column="1" />
+                            <Button Text="Clear"
                                     Command="{Binding ClearQueueCommand}"
                                     IsEnabled="{Binding IsClearingQueue, Converter={StaticResource InvertedBoolConverter}}"
                                     Style="{StaticResource DangerButton}"
                                     HeightRequest="40"
-                                    Grid.Column="1" />
+                                    Grid.Column="2" />
                         </Grid>
 
                         <Label Text="Warning: Clearing the queue will permanently delete locations that haven't been synced to the server."
