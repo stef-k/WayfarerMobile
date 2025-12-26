@@ -284,6 +284,170 @@ public class SseClientTests
         capturedAccept.Should().NotBeNull();
         capturedAccept.Should().Contain(h => h.MediaType == "text/event-stream");
     }
+
+    #region Event Parsing Tests
+
+    [Fact]
+    public async Task ProcessEventData_LocationWithTypeDiscriminator_RaisesLocationReceived()
+    {
+        var sseData = "data: {\"type\":\"location\",\"locationId\":123,\"timestampUtc\":\"2025-01-15T10:30:00Z\",\"userId\":\"user-1\",\"userName\":\"john\",\"isLive\":true,\"locationType\":\"check-in\"}\n\n";
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
+        var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(stream) };
+
+        _mockHttpHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(response);
+
+        var client = CreateClient();
+        SseLocationEventArgs? receivedArgs = null;
+        client.LocationReceived += (_, args) => receivedArgs = args;
+
+        using var cts = new CancellationTokenSource(500);
+        try { await client.SubscribeToGroupAsync("group-1", cts.Token); }
+        catch (OperationCanceledException) { }
+
+        receivedArgs.Should().NotBeNull();
+        receivedArgs!.Location.LocationId.Should().Be(123);
+        receivedArgs.Location.UserName.Should().Be("john");
+        receivedArgs.Location.UserId.Should().Be("user-1");
+        receivedArgs.Location.IsLive.Should().BeTrue();
+        receivedArgs.Location.Type.Should().Be("check-in");
+    }
+
+    [Fact]
+    public async Task ProcessEventData_VisibilityChangedWithTypeDiscriminator_RaisesMembershipReceived()
+    {
+        var sseData = "data: {\"type\":\"visibility-changed\",\"userId\":\"user-1\",\"disabled\":true}\n\n";
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
+        var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(stream) };
+
+        _mockHttpHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(response);
+
+        var client = CreateClient();
+        SseMembershipEventArgs? receivedArgs = null;
+        client.MembershipReceived += (_, args) => receivedArgs = args;
+
+        using var cts = new CancellationTokenSource(500);
+        try { await client.SubscribeToGroupAsync("group-1", cts.Token); }
+        catch (OperationCanceledException) { }
+
+        receivedArgs.Should().NotBeNull();
+        receivedArgs!.Membership.Action.Should().Be("visibility-changed");
+        receivedArgs.Membership.UserId.Should().Be("user-1");
+        receivedArgs.Membership.Disabled.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("member-left")]
+    [InlineData("member-removed")]
+    [InlineData("member-joined")]
+    [InlineData("invite-declined")]
+    [InlineData("invite-revoked")]
+    public async Task ProcessEventData_MembershipEventsWithTypeDiscriminator_RaisesMembershipReceived(string eventType)
+    {
+        var sseData = $"data: {{\"type\":\"{eventType}\",\"userId\":\"user-1\"}}\n\n";
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
+        var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(stream) };
+
+        _mockHttpHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(response);
+
+        var client = CreateClient();
+        SseMembershipEventArgs? receivedArgs = null;
+        client.MembershipReceived += (_, args) => receivedArgs = args;
+
+        using var cts = new CancellationTokenSource(500);
+        try { await client.SubscribeToGroupAsync("group-1", cts.Token); }
+        catch (OperationCanceledException) { }
+
+        receivedArgs.Should().NotBeNull();
+        receivedArgs!.Membership.Action.Should().Be(eventType);
+        receivedArgs.Membership.UserId.Should().Be("user-1");
+    }
+
+    [Fact]
+    public async Task ProcessEventData_LegacyLocationWithoutType_RaisesLocationReceived()
+    {
+        // Legacy format without type discriminator (fallback)
+        var sseData = "data: {\"locationId\":456,\"timestampUtc\":\"2025-01-15T10:30:00Z\",\"userId\":\"user-2\",\"userName\":\"jane\",\"isLive\":false}\n\n";
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
+        var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(stream) };
+
+        _mockHttpHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(response);
+
+        var client = CreateClient();
+        SseLocationEventArgs? receivedArgs = null;
+        client.LocationReceived += (_, args) => receivedArgs = args;
+
+        using var cts = new CancellationTokenSource(500);
+        try { await client.SubscribeToGroupAsync("group-1", cts.Token); }
+        catch (OperationCanceledException) { }
+
+        receivedArgs.Should().NotBeNull();
+        receivedArgs!.Location.UserName.Should().Be("jane");
+    }
+
+    [Fact]
+    public async Task ProcessEventData_LegacyMembershipWithoutType_RaisesMembershipReceived()
+    {
+        // Legacy format with action field but no type discriminator
+        var sseData = "data: {\"action\":\"peer-visibility-changed\",\"userId\":\"user-3\",\"disabled\":false}\n\n";
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
+        var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(stream) };
+
+        _mockHttpHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(response);
+
+        var client = CreateClient();
+        SseMembershipEventArgs? receivedArgs = null;
+        client.MembershipReceived += (_, args) => receivedArgs = args;
+
+        using var cts = new CancellationTokenSource(500);
+        try { await client.SubscribeToGroupAsync("group-1", cts.Token); }
+        catch (OperationCanceledException) { }
+
+        receivedArgs.Should().NotBeNull();
+        receivedArgs!.Membership.Action.Should().Be("peer-visibility-changed");
+    }
+
+    [Fact]
+    public async Task ProcessEventData_UnknownType_DoesNotRaiseEvents()
+    {
+        var sseData = "data: {\"type\":\"unknown-event\",\"userId\":\"user-1\"}\n\n";
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
+        var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(stream) };
+
+        _mockHttpHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(response);
+
+        var client = CreateClient();
+        var locationReceived = false;
+        var membershipReceived = false;
+        client.LocationReceived += (_, _) => locationReceived = true;
+        client.MembershipReceived += (_, _) => membershipReceived = true;
+
+        using var cts = new CancellationTokenSource(500);
+        try { await client.SubscribeToGroupAsync("group-1", cts.Token); }
+        catch (OperationCanceledException) { }
+
+        locationReceived.Should().BeFalse();
+        membershipReceived.Should().BeFalse();
+    }
+
+    #endregion
 }
 
 public sealed class TestSseClient : ISseClient
@@ -385,19 +549,76 @@ public sealed class TestSseClient : ISseClient
                 {
                     var json = dataBuffer.ToString();
                     dataBuffer.Clear();
-                    try
-                    {
-                        var locationEvent = JsonSerializer.Deserialize<SseLocationEvent>(json, JsonOptions);
-                        if (locationEvent != null && !string.IsNullOrEmpty(locationEvent.UserName)) LocationReceived?.Invoke(this, new SseLocationEventArgs(locationEvent));
-                        else
-                        {
-                            var membershipEvent = JsonSerializer.Deserialize<SseMembershipEvent>(json, JsonOptions);
-                            if (membershipEvent != null && !string.IsNullOrEmpty(membershipEvent.Action)) MembershipReceived?.Invoke(this, new SseMembershipEventArgs(membershipEvent));
-                        }
-                    }
-                    catch { }
+                    ProcessEventData(json);
                 }
             }
+        }
+    }
+
+    private void ProcessEventData(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            // Check for type discriminator (new consolidated format)
+            if (root.TryGetProperty("type", out var typeProp))
+            {
+                var eventType = typeProp.GetString();
+                ProcessTypedEvent(root, eventType);
+                return;
+            }
+
+            // Fallback: Try parsing as location event (legacy format)
+            var locationEvent = JsonSerializer.Deserialize<SseLocationEvent>(json, JsonOptions);
+            if (locationEvent != null && !string.IsNullOrEmpty(locationEvent.UserName))
+            {
+                LocationReceived?.Invoke(this, new SseLocationEventArgs(locationEvent));
+                return;
+            }
+
+            // Fallback: Try parsing as membership event (legacy format)
+            var membershipEvent = JsonSerializer.Deserialize<SseMembershipEvent>(json, JsonOptions);
+            if (membershipEvent != null && !string.IsNullOrEmpty(membershipEvent.Action))
+            {
+                MembershipReceived?.Invoke(this, new SseMembershipEventArgs(membershipEvent));
+            }
+        }
+        catch { }
+    }
+
+    private void ProcessTypedEvent(JsonElement root, string? eventType)
+    {
+        switch (eventType)
+        {
+            case "location":
+                var locationEvent = new SseLocationEvent
+                {
+                    LocationId = root.TryGetProperty("locationId", out var lid) ? lid.GetInt32() : 0,
+                    TimestampUtc = root.TryGetProperty("timestampUtc", out var ts) ? ts.GetDateTime() : DateTime.UtcNow,
+                    UserId = root.TryGetProperty("userId", out var uid) ? uid.GetString() ?? string.Empty : string.Empty,
+                    UserName = root.TryGetProperty("userName", out var un) ? un.GetString() ?? string.Empty : string.Empty,
+                    IsLive = root.TryGetProperty("isLive", out var live) && live.GetBoolean(),
+                    Type = root.TryGetProperty("locationType", out var lt) ? lt.GetString() : null
+                };
+                LocationReceived?.Invoke(this, new SseLocationEventArgs(locationEvent));
+                break;
+
+            case "visibility-changed":
+            case "member-left":
+            case "member-removed":
+            case "member-joined":
+            case "invite-declined":
+            case "invite-revoked":
+                var membershipEvent = new SseMembershipEvent
+                {
+                    Action = eventType,
+                    UserId = root.TryGetProperty("userId", out var muid) ? muid.GetString() : null,
+                    Disabled = root.TryGetProperty("disabled", out var dis) ? dis.GetBoolean() : null
+                };
+                MembershipReceived?.Invoke(this, new SseMembershipEventArgs(membershipEvent));
+                break;
         }
     }
 
