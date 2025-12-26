@@ -54,6 +54,9 @@ public class SseClient : ISseClient
     public event EventHandler<SseMembershipEventArgs>? MembershipReceived;
 
     /// <inheritdoc />
+    public event EventHandler<SseInviteCreatedEventArgs>? InviteCreated;
+
+    /// <inheritdoc />
     public event EventHandler? HeartbeatReceived;
 
     /// <inheritdoc />
@@ -430,9 +433,12 @@ public class SseClient : ISseClient
             if (root.TryGetProperty("type", out var typeProp))
             {
                 var eventType = typeProp.GetString();
+                _logger.LogInformation("SSE event received with type: {Type}", eventType);
                 ProcessTypedEvent(root, eventType);
                 return;
             }
+
+            _logger.LogWarning("SSE event received without type discriminator: {Json}", json);
 
             // Fallback: Try parsing as location event (legacy format)
             var locationEvent = JsonSerializer.Deserialize<SseLocationEvent>(json, JsonOptions);
@@ -507,6 +513,17 @@ public class SseClient : ISseClient
                 _logger.LogInformation("SSE membership event received: {Action} for user {UserId}",
                     membershipEvent.Action, membershipEvent.UserId);
                 MembershipReceived?.Invoke(this, new SseMembershipEventArgs(membershipEvent));
+                break;
+
+            case "invite-created":
+                var inviteEvent = new SseInviteCreatedEvent
+                {
+                    InvitationId = root.TryGetProperty("invitationId", out var invId) && invId.TryGetGuid(out var guid)
+                        ? guid
+                        : Guid.Empty
+                };
+                _logger.LogInformation("SSE invite created: {InvitationId}", inviteEvent.InvitationId);
+                InviteCreated?.Invoke(this, new SseInviteCreatedEventArgs(inviteEvent));
                 break;
 
             default:

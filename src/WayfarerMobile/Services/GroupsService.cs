@@ -309,10 +309,18 @@ public class GroupsService : IGroupsService
                             location.Longitude = lonProp.GetDouble();
                     }
 
-                    if (element.TryGetProperty("localTimestamp", out var timestamp))
-                        location.Timestamp = timestamp.GetDateTime();
-                    else if (element.TryGetProperty("timestampUtc", out var timestampUtc))
-                        location.Timestamp = timestampUtc.GetDateTime();
+                    // Always prefer timestampUtc and ensure proper DateTimeKind for correct local conversion
+                    if (element.TryGetProperty("timestampUtc", out var timestampUtc))
+                    {
+                        var utcTime = timestampUtc.GetDateTime();
+                        location.Timestamp = DateTime.SpecifyKind(utcTime, DateTimeKind.Utc);
+                    }
+                    else if (element.TryGetProperty("localTimestamp", out var timestamp))
+                    {
+                        // localTimestamp is already in user's timezone - mark as Local to prevent double conversion
+                        var localTime = timestamp.GetDateTime();
+                        location.Timestamp = DateTime.SpecifyKind(localTime, DateTimeKind.Local);
+                    }
 
                     if (element.TryGetProperty("isLive", out var isLive))
                         location.IsLive = isLive.GetBoolean();

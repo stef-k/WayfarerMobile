@@ -51,6 +51,28 @@ public class SseLocationDeletedEventArgs : EventArgs
 }
 
 /// <summary>
+/// SSE event for invitation creation.
+/// Received from consolidated channel: group-{groupId}
+/// </summary>
+public class SseInviteCreatedEvent
+{
+    /// <summary>ID of the created invitation.</summary>
+    public Guid InvitationId { get; set; }
+}
+
+/// <summary>
+/// Event arguments for invite created SSE events.
+/// </summary>
+public class SseInviteCreatedEventArgs : EventArgs
+{
+    /// <summary>The invite created event data.</summary>
+    public SseInviteCreatedEvent InviteCreated { get; }
+
+    /// <summary>Creates a new instance.</summary>
+    public SseInviteCreatedEventArgs(SseInviteCreatedEvent inviteCreated) => InviteCreated = inviteCreated;
+}
+
+/// <summary>
 /// SSE event for membership changes.
 /// Received from consolidated channel: group-{groupId}
 /// </summary>

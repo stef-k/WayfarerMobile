@@ -425,4 +425,83 @@ public class SseEventModelsTests
     }
 
     #endregion
+
+    #region SseInviteCreatedEvent Tests
+
+    [Fact]
+    public void SseInviteCreatedEvent_DefaultValues_AreCorrect()
+    {
+        // Arrange
+        var evt = new SseInviteCreatedEvent();
+
+        // Assert
+        evt.InvitationId.Should().Be(Guid.Empty);
+    }
+
+    [Fact]
+    public void SseInviteCreatedEvent_InvitationId_CanBeSetAndRetrieved()
+    {
+        // Arrange
+        var invitationId = Guid.Parse("550e8400-e29b-41d4-a716-446655440000");
+
+        var evt = new SseInviteCreatedEvent
+        {
+            InvitationId = invitationId
+        };
+
+        // Assert
+        evt.InvitationId.Should().Be(invitationId);
+    }
+
+    [Fact]
+    public void SseInviteCreatedEvent_NewGuid_CanBeSet()
+    {
+        // Arrange
+        var invitationId = Guid.NewGuid();
+
+        var evt = new SseInviteCreatedEvent
+        {
+            InvitationId = invitationId
+        };
+
+        // Assert
+        evt.InvitationId.Should().Be(invitationId);
+        evt.InvitationId.Should().NotBe(Guid.Empty);
+    }
+
+    #endregion
+
+    #region SseInviteCreatedEventArgs Tests
+
+    [Fact]
+    public void SseInviteCreatedEventArgs_Constructor_StoresInviteCreated()
+    {
+        // Arrange
+        var inviteCreated = new SseInviteCreatedEvent
+        {
+            InvitationId = Guid.Parse("123e4567-e89b-12d3-a456-426614174000")
+        };
+
+        // Act
+        var args = new SseInviteCreatedEventArgs(inviteCreated);
+
+        // Assert
+        args.InviteCreated.Should().BeSameAs(inviteCreated);
+        args.InviteCreated.InvitationId.Should().Be(Guid.Parse("123e4567-e89b-12d3-a456-426614174000"));
+    }
+
+    [Fact]
+    public void SseInviteCreatedEventArgs_InheritsFromEventArgs()
+    {
+        // Arrange
+        var inviteCreated = new SseInviteCreatedEvent();
+
+        // Act
+        var args = new SseInviteCreatedEventArgs(inviteCreated);
+
+        // Assert
+        args.Should().BeAssignableTo<EventArgs>();
+    }
+
+    #endregion
 }

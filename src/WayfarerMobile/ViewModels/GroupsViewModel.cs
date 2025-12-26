@@ -1627,6 +1627,7 @@ public partial class GroupsViewModel : BaseViewModel
             _groupSseClient.LocationReceived -= OnLocationReceived;
             _groupSseClient.LocationDeleted -= OnLocationDeleted;
             _groupSseClient.MembershipReceived -= OnMembershipReceived;
+            _groupSseClient.InviteCreated -= OnInviteCreated;
             _groupSseClient.Connected -= OnSseConnected;
             _groupSseClient.Reconnecting -= OnSseReconnecting;
         }
@@ -1690,6 +1691,7 @@ public partial class GroupsViewModel : BaseViewModel
         _groupSseClient.LocationReceived += OnLocationReceived;
         _groupSseClient.LocationDeleted += OnLocationDeleted;
         _groupSseClient.MembershipReceived += OnMembershipReceived;
+        _groupSseClient.InviteCreated += OnInviteCreated;
         _groupSseClient.Connected += OnSseConnected;
         _groupSseClient.Reconnecting += OnSseReconnecting;
 
@@ -1738,6 +1740,7 @@ public partial class GroupsViewModel : BaseViewModel
             oldGroupClient.LocationReceived -= OnLocationReceived;
             oldGroupClient.LocationDeleted -= OnLocationDeleted;
             oldGroupClient.MembershipReceived -= OnMembershipReceived;
+            oldGroupClient.InviteCreated -= OnInviteCreated;
             oldGroupClient.Connected -= OnSseConnected;
             oldGroupClient.Reconnecting -= OnSseReconnecting;
         }
@@ -1898,6 +1901,20 @@ public partial class GroupsViewModel : BaseViewModel
         {
             _logger.LogError(ex, "Error handling SSE membership event");
         }
+    }
+
+    /// <summary>
+    /// Handles invite created events from SSE.
+    /// Currently logs the event; future implementation could refresh pending invitations UI.
+    /// </summary>
+    private void OnInviteCreated(object? sender, SseInviteCreatedEventArgs e)
+    {
+        // Guard against events firing after disposal
+        if (IsDisposed)
+            return;
+
+        _logger.LogInformation("SSE invite created: {InvitationId}", e.InviteCreated.InvitationId);
+        // Future: Could refresh pending invitations list if UI is added
     }
 
     /// <summary>

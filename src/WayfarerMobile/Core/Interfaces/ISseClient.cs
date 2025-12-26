@@ -35,6 +35,11 @@ public interface ISseClient : IDisposable
     event EventHandler<SseMembershipEventArgs>? MembershipReceived;
 
     /// <summary>
+    /// Fired when an invitation is created.
+    /// </summary>
+    event EventHandler<SseInviteCreatedEventArgs>? InviteCreated;
+
+    /// <summary>
     /// Fired when a heartbeat comment is received (connection alive).
     /// </summary>
     event EventHandler? HeartbeatReceived;

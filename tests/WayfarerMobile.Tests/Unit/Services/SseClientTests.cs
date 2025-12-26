@@ -447,6 +447,30 @@ public class SseClientTests
     }
 
     [Fact]
+    public async Task ProcessEventData_InviteCreatedWithTypeDiscriminator_RaisesInviteCreated()
+    {
+        var sseData = "data: {\"type\":\"invite-created\",\"invitationId\":\"550e8400-e29b-41d4-a716-446655440000\"}\n\n";
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
+        var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(stream) };
+
+        _mockHttpHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(response);
+
+        var client = CreateClient();
+        SseInviteCreatedEventArgs? receivedArgs = null;
+        client.InviteCreated += (_, args) => receivedArgs = args;
+
+        using var cts = new CancellationTokenSource(500);
+        try { await client.SubscribeToGroupAsync("group-1", cts.Token); }
+        catch (OperationCanceledException) { }
+
+        receivedArgs.Should().NotBeNull();
+        receivedArgs!.InviteCreated.InvitationId.Should().Be(Guid.Parse("550e8400-e29b-41d4-a716-446655440000"));
+    }
+
+    [Fact]
     public async Task ProcessEventData_UnknownType_DoesNotRaiseEvents()
     {
         var sseData = "data: {\"type\":\"unknown-event\",\"userId\":\"user-1\"}\n\n";
@@ -491,6 +515,7 @@ public sealed class TestSseClient : ISseClient
     public event EventHandler<SseLocationEventArgs>? LocationReceived;
     public event EventHandler<SseLocationDeletedEventArgs>? LocationDeleted;
     public event EventHandler<SseMembershipEventArgs>? MembershipReceived;
+    public event EventHandler<SseInviteCreatedEventArgs>? InviteCreated;
     public event EventHandler? HeartbeatReceived;
     public event EventHandler? Connected;
 #pragma warning disable CS0067 // Event is never used - required by ISseClient interface
@@ -654,6 +679,16 @@ public sealed class TestSseClient : ISseClient
                 };
                 MembershipReceived?.Invoke(this, new SseMembershipEventArgs(membershipEvent));
                 break;
+
+            case "invite-created":
+                var inviteEvent = new SseInviteCreatedEvent
+                {
+                    InvitationId = root.TryGetProperty("invitationId", out var invId) && invId.TryGetGuid(out var guid)
+                        ? guid
+                        : Guid.Empty
+                };
+                InviteCreated?.Invoke(this, new SseInviteCreatedEventArgs(inviteEvent));
+                break;
         }
     }
 
@@ -675,6 +710,7 @@ public interface ISseClient : IDisposable
     event EventHandler<SseLocationEventArgs>? LocationReceived;
     event EventHandler<SseLocationDeletedEventArgs>? LocationDeleted;
     event EventHandler<SseMembershipEventArgs>? MembershipReceived;
+    event EventHandler<SseInviteCreatedEventArgs>? InviteCreated;
     event EventHandler? HeartbeatReceived;
     event EventHandler? Connected;
     event EventHandler<SseReconnectEventArgs>? Reconnecting;
