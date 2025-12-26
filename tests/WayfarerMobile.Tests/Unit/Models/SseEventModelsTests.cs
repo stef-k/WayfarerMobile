@@ -110,9 +110,13 @@ public class SseEventModelsTests
     }
 
     [Theory]
-    [InlineData("peer-visibility-changed")]
+    [InlineData("visibility-changed")]      // New consolidated format
     [InlineData("member-removed")]
     [InlineData("member-left")]
+    [InlineData("member-joined")]           // New event type
+    [InlineData("invite-declined")]         // New event type
+    [InlineData("invite-revoked")]          // New event type
+    [InlineData("peer-visibility-changed")] // Legacy format (still supported)
     public void SseMembershipEvent_Action_AcceptsValidValues(string action)
     {
         // Arrange
@@ -123,9 +127,56 @@ public class SseEventModelsTests
     }
 
     [Fact]
-    public void SseMembershipEvent_PeerVisibilityChanged_WithDisabledTrue()
+    public void SseMembershipEvent_VisibilityChanged_WithDisabledTrue()
     {
-        // Arrange
+        // Arrange - New consolidated format
+        var evt = new SseMembershipEvent
+        {
+            Action = "visibility-changed",
+            UserId = "user-xyz",
+            Disabled = true
+        };
+
+        // Assert
+        evt.Action.Should().Be("visibility-changed");
+        evt.Disabled.Should().BeTrue();
+    }
+
+    [Fact]
+    public void SseMembershipEvent_VisibilityChanged_WithDisabledFalse()
+    {
+        // Arrange - New consolidated format
+        var evt = new SseMembershipEvent
+        {
+            Action = "visibility-changed",
+            UserId = "user-xyz",
+            Disabled = false
+        };
+
+        // Assert
+        evt.Disabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public void SseMembershipEvent_MemberJoined_HasUserIdNoDisabled()
+    {
+        // Arrange - New event type
+        var evt = new SseMembershipEvent
+        {
+            Action = "member-joined",
+            UserId = "new-member"
+        };
+
+        // Assert
+        evt.Action.Should().Be("member-joined");
+        evt.UserId.Should().Be("new-member");
+        evt.Disabled.Should().BeNull();
+    }
+
+    [Fact]
+    public void SseMembershipEvent_PeerVisibilityChanged_LegacyFormat_WithDisabledTrue()
+    {
+        // Arrange - Legacy format (still supported for backward compatibility)
         var evt = new SseMembershipEvent
         {
             Action = "peer-visibility-changed",
@@ -136,21 +187,6 @@ public class SseEventModelsTests
         // Assert
         evt.Action.Should().Be("peer-visibility-changed");
         evt.Disabled.Should().BeTrue();
-    }
-
-    [Fact]
-    public void SseMembershipEvent_PeerVisibilityChanged_WithDisabledFalse()
-    {
-        // Arrange
-        var evt = new SseMembershipEvent
-        {
-            Action = "peer-visibility-changed",
-            UserId = "user-xyz",
-            Disabled = false
-        };
-
-        // Assert
-        evt.Disabled.Should().BeFalse();
     }
 
     [Fact]
