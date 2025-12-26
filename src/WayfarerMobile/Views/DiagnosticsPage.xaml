@@ -158,7 +158,7 @@
                             </Grid>
                             <BoxView HeightRequest="1" Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                                <Label Grid.Column="0" Text="Total:" FontAttributes="Bold" />
+                                <Label Grid.Column="0" Text="Total Usage:" FontAttributes="Bold" />
                                 <Label Grid.Column="1" Text="{Binding TotalCacheSize}" FontAttributes="Bold" />
                             </Grid>
                         </VerticalStackLayout>

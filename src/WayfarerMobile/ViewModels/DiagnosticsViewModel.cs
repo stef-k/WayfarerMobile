@@ -130,7 +130,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
     private int _downloadedTripCount;
 
     [ObservableProperty]
-    private string _totalCacheSize = "0 MB";
+    private string _totalCacheSize = "0 MB / 0 MB";
 
     #endregion
 
@@ -668,7 +668,8 @@ public partial class DiagnosticsViewModel : BaseViewModel
         TripCacheSize = $"{diag.TripCacheSizeMB:F1} MB";
         TripCacheUsage = $"{diag.TripCacheSizeMB:F0} MB / {diag.TripCacheMaxSizeMB} MB";
         DownloadedTripCount = diag.DownloadedTripCount;
-        TotalCacheSize = $"{diag.TotalCacheSizeMB:F1} MB";
+        var totalMaxMB = diag.LiveCacheMaxSizeMB + diag.TripCacheMaxSizeMB;
+        TotalCacheSize = $"{diag.TotalCacheSizeMB:F0} MB / {totalMaxMB} MB";
     }
 
     private void UpdateTracking(TrackingDiagnostics diag)
