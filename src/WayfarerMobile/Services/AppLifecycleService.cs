@@ -11,6 +11,7 @@ namespace WayfarerMobile.Services;
 public class AppLifecycleService : IAppLifecycleService
 {
     private readonly LocationSyncService _syncService;
+    private readonly SettingsSyncService _settingsSyncService;
     private readonly IWakeLockService _wakeLockService;
     private readonly ISettingsService _settingsService;
     private readonly ILogger<AppLifecycleService> _logger;
@@ -32,16 +33,19 @@ public class AppLifecycleService : IAppLifecycleService
     /// Creates a new instance of AppLifecycleService.
     /// </summary>
     /// <param name="syncService">The location sync service.</param>
+    /// <param name="settingsSyncService">The settings sync service.</param>
     /// <param name="wakeLockService">The wake lock service.</param>
     /// <param name="settingsService">The settings service.</param>
     /// <param name="logger">The logger instance.</param>
     public AppLifecycleService(
         LocationSyncService syncService,
+        SettingsSyncService settingsSyncService,
         IWakeLockService wakeLockService,
         ISettingsService settingsService,
         ILogger<AppLifecycleService> logger)
     {
         _syncService = syncService;
+        _settingsSyncService = settingsSyncService;
         _wakeLockService = wakeLockService;
         _settingsService = settingsService;
         _logger = logger;
@@ -106,6 +110,9 @@ public class AppLifecycleService : IAppLifecycleService
                 _logger.LogDebug("Syncing {Count} pending locations on resume", pendingCount);
                 _ = _syncService.SyncAsync(); // Fire and forget
             }
+
+            // Sync settings from server if due (6-hour interval)
+            _ = _settingsSyncService.SyncIfDueAsync(); // Fire and forget
 
             // Acquire wake lock if user setting is enabled (keeps screen on while app is in foreground)
             if (_settingsService.KeepScreenOn)
