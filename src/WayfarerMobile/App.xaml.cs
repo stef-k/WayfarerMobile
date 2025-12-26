@@ -196,8 +196,8 @@ public partial class App : Application
             syncService?.Start();
             System.Diagnostics.Debug.WriteLine("[App] Background sync service started");
 
-            // Note: Settings thresholds sync is handled by LocationTrackingService (foreground service)
-            // which runs 24/7 and syncs every 6 hours reliably
+            // Note: Settings sync is handled by SettingsSyncService, triggered opportunistically
+            // in AppLifecycleService.OnResumingAsync() with a 6-hour minimum interval
 
             // Sync activity types if needed (UI data, fire-and-forget)
             var activitySyncService = _serviceProvider.GetService<IActivitySyncService>();
