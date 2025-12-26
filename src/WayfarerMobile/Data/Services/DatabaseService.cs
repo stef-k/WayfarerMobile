@@ -305,6 +305,30 @@ public class DatabaseService : IAsyncDisposable
     }
 
     /// <summary>
+    /// Clears all synced locations from the queue.
+    /// </summary>
+    /// <returns>The number of locations deleted.</returns>
+    public async Task<int> ClearSyncedQueueAsync()
+    {
+        await EnsureInitializedAsync();
+
+        return await _database!.ExecuteAsync(
+            "DELETE FROM QueuedLocations WHERE SyncStatus = ?",
+            (int)SyncStatus.Synced);
+    }
+
+    /// <summary>
+    /// Clears all locations from the queue (pending, synced, and failed).
+    /// </summary>
+    /// <returns>The number of locations deleted.</returns>
+    public async Task<int> ClearAllQueueAsync()
+    {
+        await EnsureInitializedAsync();
+
+        return await _database!.ExecuteAsync("DELETE FROM QueuedLocations");
+    }
+
+    /// <summary>
     /// Gets all locations for a specific date.
     /// </summary>
     /// <param name="date">The date to retrieve locations for.</param>

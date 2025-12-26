@@ -8,15 +8,15 @@
              Title="Enter PIN"
              Shell.NavBarIsVisible="False"
              Shell.PresentationMode="ModalAnimated"
-             BackgroundColor="{StaticResource Primary}">
+             BackgroundColor="{StaticResource Gray900}">
 
-    <Grid RowDefinitions="*,Auto,2*" Padding="24">
+    <Grid RowDefinitions="Auto,*,2*" Padding="24">
 
         <!-- Header Section -->
         <VerticalStackLayout Grid.Row="0"
-                            VerticalOptions="End"
+                            VerticalOptions="Center"
                             Spacing="16"
-                            Padding="0,0,0,32">
+                            Padding="0,40,0,24">
 
             <!-- App Icon/Lock Icon -->
             <Border WidthRequest="80"
@@ -240,7 +240,7 @@
 
     <ContentPage.Resources>
         <Style x:Key="PinKeypadButton" TargetType="Button">
-            <Setter Property="BackgroundColor" Value="#FFFFFF20" />
+            <Setter Property="BackgroundColor" Value="#424242" />
             <Setter Property="TextColor" Value="White" />
             <Setter Property="FontSize" Value="28" />
             <Setter Property="CornerRadius" Value="32" />
@@ -253,13 +253,13 @@
                         <VisualState x:Name="Normal" />
                         <VisualState x:Name="Pressed">
                             <VisualState.Setters>
-                                <Setter Property="BackgroundColor" Value="#FFFFFF40" />
+                                <Setter Property="BackgroundColor" Value="#616161" />
                             </VisualState.Setters>
                         </VisualState>
                         <VisualState x:Name="Disabled">
                             <VisualState.Setters>
-                                <Setter Property="BackgroundColor" Value="#FFFFFF10" />
-                                <Setter Property="TextColor" Value="#FFFFFF60" />
+                                <Setter Property="BackgroundColor" Value="#303030" />
+                                <Setter Property="TextColor" Value="#757575" />
                             </VisualState.Setters>
                         </VisualState>
                     </VisualStateGroup>
