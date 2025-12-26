@@ -2,7 +2,7 @@ namespace WayfarerMobile.Core.Models;
 
 /// <summary>
 /// SSE event for location updates.
-/// Received from channels: location-update-{userName} or group-location-update-{groupId}
+/// Received from channels: location-update-{userName} or group-{groupId} (consolidated)
 /// </summary>
 public class SseLocationEvent
 {
@@ -26,18 +26,68 @@ public class SseLocationEvent
 }
 
 /// <summary>
+/// SSE event for location deletion.
+/// Received from consolidated channel: group-{groupId}
+/// </summary>
+public class SseLocationDeletedEvent
+{
+    /// <summary>ID of the deleted location.</summary>
+    public int LocationId { get; set; }
+
+    /// <summary>User ID who owned the deleted location.</summary>
+    public string UserId { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Event arguments for location deleted SSE events.
+/// </summary>
+public class SseLocationDeletedEventArgs : EventArgs
+{
+    /// <summary>The location deleted event data.</summary>
+    public SseLocationDeletedEvent LocationDeleted { get; }
+
+    /// <summary>Creates a new instance.</summary>
+    public SseLocationDeletedEventArgs(SseLocationDeletedEvent locationDeleted) => LocationDeleted = locationDeleted;
+}
+
+/// <summary>
+/// SSE event for invitation creation.
+/// Received from consolidated channel: group-{groupId}
+/// </summary>
+public class SseInviteCreatedEvent
+{
+    /// <summary>ID of the created invitation.</summary>
+    public Guid InvitationId { get; set; }
+}
+
+/// <summary>
+/// Event arguments for invite created SSE events.
+/// </summary>
+public class SseInviteCreatedEventArgs : EventArgs
+{
+    /// <summary>The invite created event data.</summary>
+    public SseInviteCreatedEvent InviteCreated { get; }
+
+    /// <summary>Creates a new instance.</summary>
+    public SseInviteCreatedEventArgs(SseInviteCreatedEvent inviteCreated) => InviteCreated = inviteCreated;
+}
+
+/// <summary>
 /// SSE event for membership changes.
-/// Received from channel: group-membership-update-{groupId}
+/// Received from consolidated channel: group-{groupId}
 /// </summary>
 public class SseMembershipEvent
 {
-    /// <summary>Action type: "peer-visibility-changed", "member-removed", "member-left".</summary>
+    /// <summary>
+    /// Event type: "visibility-changed", "member-left", "member-removed",
+    /// "member-joined", "invite-declined", "invite-revoked".
+    /// </summary>
     public string Action { get; set; } = string.Empty;
 
     /// <summary>User ID affected by the action.</summary>
     public string? UserId { get; set; }
 
-    /// <summary>For peer-visibility-changed: whether visibility is disabled.</summary>
+    /// <summary>For visibility-changed: whether visibility is disabled.</summary>
     public bool? Disabled { get; set; }
 }
 

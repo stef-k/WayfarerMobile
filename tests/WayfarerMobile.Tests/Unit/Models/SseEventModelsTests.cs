@@ -78,6 +78,72 @@ public class SseEventModelsTests
 
     #endregion
 
+    #region SseLocationDeletedEvent Tests
+
+    [Fact]
+    public void SseLocationDeletedEvent_DefaultValues_AreCorrect()
+    {
+        // Arrange
+        var evt = new SseLocationDeletedEvent();
+
+        // Assert
+        evt.LocationId.Should().Be(0);
+        evt.UserId.Should().Be(string.Empty);
+    }
+
+    [Fact]
+    public void SseLocationDeletedEvent_AllProperties_CanBeSetAndRetrieved()
+    {
+        // Arrange
+        var evt = new SseLocationDeletedEvent
+        {
+            LocationId = 12345,
+            UserId = "user-abc-123"
+        };
+
+        // Assert
+        evt.LocationId.Should().Be(12345);
+        evt.UserId.Should().Be("user-abc-123");
+    }
+
+    #endregion
+
+    #region SseLocationDeletedEventArgs Tests
+
+    [Fact]
+    public void SseLocationDeletedEventArgs_Constructor_StoresLocationDeleted()
+    {
+        // Arrange
+        var locationDeleted = new SseLocationDeletedEvent
+        {
+            LocationId = 999,
+            UserId = "test-user"
+        };
+
+        // Act
+        var args = new SseLocationDeletedEventArgs(locationDeleted);
+
+        // Assert
+        args.LocationDeleted.Should().BeSameAs(locationDeleted);
+        args.LocationDeleted.LocationId.Should().Be(999);
+        args.LocationDeleted.UserId.Should().Be("test-user");
+    }
+
+    [Fact]
+    public void SseLocationDeletedEventArgs_InheritsFromEventArgs()
+    {
+        // Arrange
+        var locationDeleted = new SseLocationDeletedEvent();
+
+        // Act
+        var args = new SseLocationDeletedEventArgs(locationDeleted);
+
+        // Assert
+        args.Should().BeAssignableTo<EventArgs>();
+    }
+
+    #endregion
+
     #region SseMembershipEvent Tests
 
     [Fact]
@@ -110,9 +176,13 @@ public class SseEventModelsTests
     }
 
     [Theory]
-    [InlineData("peer-visibility-changed")]
+    [InlineData("visibility-changed")]      // New consolidated format
     [InlineData("member-removed")]
     [InlineData("member-left")]
+    [InlineData("member-joined")]           // New event type
+    [InlineData("invite-declined")]         // New event type
+    [InlineData("invite-revoked")]          // New event type
+    [InlineData("peer-visibility-changed")] // Legacy format (still supported)
     public void SseMembershipEvent_Action_AcceptsValidValues(string action)
     {
         // Arrange
@@ -123,9 +193,56 @@ public class SseEventModelsTests
     }
 
     [Fact]
-    public void SseMembershipEvent_PeerVisibilityChanged_WithDisabledTrue()
+    public void SseMembershipEvent_VisibilityChanged_WithDisabledTrue()
     {
-        // Arrange
+        // Arrange - New consolidated format
+        var evt = new SseMembershipEvent
+        {
+            Action = "visibility-changed",
+            UserId = "user-xyz",
+            Disabled = true
+        };
+
+        // Assert
+        evt.Action.Should().Be("visibility-changed");
+        evt.Disabled.Should().BeTrue();
+    }
+
+    [Fact]
+    public void SseMembershipEvent_VisibilityChanged_WithDisabledFalse()
+    {
+        // Arrange - New consolidated format
+        var evt = new SseMembershipEvent
+        {
+            Action = "visibility-changed",
+            UserId = "user-xyz",
+            Disabled = false
+        };
+
+        // Assert
+        evt.Disabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public void SseMembershipEvent_MemberJoined_HasUserIdNoDisabled()
+    {
+        // Arrange - New event type
+        var evt = new SseMembershipEvent
+        {
+            Action = "member-joined",
+            UserId = "new-member"
+        };
+
+        // Assert
+        evt.Action.Should().Be("member-joined");
+        evt.UserId.Should().Be("new-member");
+        evt.Disabled.Should().BeNull();
+    }
+
+    [Fact]
+    public void SseMembershipEvent_PeerVisibilityChanged_LegacyFormat_WithDisabledTrue()
+    {
+        // Arrange - Legacy format (still supported for backward compatibility)
         var evt = new SseMembershipEvent
         {
             Action = "peer-visibility-changed",
@@ -136,21 +253,6 @@ public class SseEventModelsTests
         // Assert
         evt.Action.Should().Be("peer-visibility-changed");
         evt.Disabled.Should().BeTrue();
-    }
-
-    [Fact]
-    public void SseMembershipEvent_PeerVisibilityChanged_WithDisabledFalse()
-    {
-        // Arrange
-        var evt = new SseMembershipEvent
-        {
-            Action = "peer-visibility-changed",
-            UserId = "user-xyz",
-            Disabled = false
-        };
-
-        // Assert
-        evt.Disabled.Should().BeFalse();
     }
 
     [Fact]
@@ -320,6 +422,85 @@ public class SseEventModelsTests
         // Assert
         args.Attempt.Should().BeGreaterThan(1);
         args.DelayMs.Should().BeGreaterThan(1000);
+    }
+
+    #endregion
+
+    #region SseInviteCreatedEvent Tests
+
+    [Fact]
+    public void SseInviteCreatedEvent_DefaultValues_AreCorrect()
+    {
+        // Arrange
+        var evt = new SseInviteCreatedEvent();
+
+        // Assert
+        evt.InvitationId.Should().Be(Guid.Empty);
+    }
+
+    [Fact]
+    public void SseInviteCreatedEvent_InvitationId_CanBeSetAndRetrieved()
+    {
+        // Arrange
+        var invitationId = Guid.Parse("550e8400-e29b-41d4-a716-446655440000");
+
+        var evt = new SseInviteCreatedEvent
+        {
+            InvitationId = invitationId
+        };
+
+        // Assert
+        evt.InvitationId.Should().Be(invitationId);
+    }
+
+    [Fact]
+    public void SseInviteCreatedEvent_NewGuid_CanBeSet()
+    {
+        // Arrange
+        var invitationId = Guid.NewGuid();
+
+        var evt = new SseInviteCreatedEvent
+        {
+            InvitationId = invitationId
+        };
+
+        // Assert
+        evt.InvitationId.Should().Be(invitationId);
+        evt.InvitationId.Should().NotBe(Guid.Empty);
+    }
+
+    #endregion
+
+    #region SseInviteCreatedEventArgs Tests
+
+    [Fact]
+    public void SseInviteCreatedEventArgs_Constructor_StoresInviteCreated()
+    {
+        // Arrange
+        var inviteCreated = new SseInviteCreatedEvent
+        {
+            InvitationId = Guid.Parse("123e4567-e89b-12d3-a456-426614174000")
+        };
+
+        // Act
+        var args = new SseInviteCreatedEventArgs(inviteCreated);
+
+        // Assert
+        args.InviteCreated.Should().BeSameAs(inviteCreated);
+        args.InviteCreated.InvitationId.Should().Be(Guid.Parse("123e4567-e89b-12d3-a456-426614174000"));
+    }
+
+    [Fact]
+    public void SseInviteCreatedEventArgs_InheritsFromEventArgs()
+    {
+        // Arrange
+        var inviteCreated = new SseInviteCreatedEvent();
+
+        // Act
+        var args = new SseInviteCreatedEventArgs(inviteCreated);
+
+        // Assert
+        args.Should().BeAssignableTo<EventArgs>();
     }
 
     #endregion

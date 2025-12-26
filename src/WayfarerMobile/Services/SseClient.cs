@@ -48,7 +48,13 @@ public class SseClient : ISseClient
     public event EventHandler<SseLocationEventArgs>? LocationReceived;
 
     /// <inheritdoc />
+    public event EventHandler<SseLocationDeletedEventArgs>? LocationDeleted;
+
+    /// <inheritdoc />
     public event EventHandler<SseMembershipEventArgs>? MembershipReceived;
+
+    /// <inheritdoc />
+    public event EventHandler<SseInviteCreatedEventArgs>? InviteCreated;
 
     /// <inheritdoc />
     public event EventHandler? HeartbeatReceived;
@@ -126,28 +132,9 @@ public class SseClient : ISseClient
             return;
         }
 
-        string url = $"{serverUrl.TrimEnd('/')}/api/mobile/sse/group-location-update/{Uri.EscapeDataString(groupId)}";
+        // Consolidated endpoint: location + membership events in single stream
+        string url = $"{serverUrl.TrimEnd('/')}/api/mobile/sse/group/{Uri.EscapeDataString(groupId)}";
         await SubscribeAsync(url, $"group:{groupId}", cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
-    public async Task SubscribeToGroupMembershipAsync(string groupId, CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(groupId))
-        {
-            _logger.LogWarning("Cannot subscribe to SSE: groupId is empty");
-            return;
-        }
-
-        string? serverUrl = _settings.ServerUrl;
-        if (string.IsNullOrWhiteSpace(serverUrl))
-        {
-            _logger.LogError("Server URL not configured for SSE subscription");
-            return;
-        }
-
-        string url = $"{serverUrl.TrimEnd('/')}/api/sse/stream/group-membership-update/{Uri.EscapeDataString(groupId)}";
-        await SubscribeAsync(url, $"group-membership:{groupId}", cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -433,14 +420,28 @@ public class SseClient : ISseClient
 
     /// <summary>
     /// Process a single SSE event data payload.
+    /// Uses the "type" discriminator field to determine event type.
     /// </summary>
     private void ProcessEventData(string json)
     {
         try
         {
-            // Try parsing as location event first (more common)
-            var locationEvent = JsonSerializer.Deserialize<SseLocationEvent>(json, JsonOptions);
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
 
+            // Check for type discriminator (new consolidated format)
+            if (root.TryGetProperty("type", out var typeProp))
+            {
+                var eventType = typeProp.GetString();
+                _logger.LogInformation("SSE event received with type: {Type}", eventType);
+                ProcessTypedEvent(root, eventType);
+                return;
+            }
+
+            _logger.LogWarning("SSE event received without type discriminator: {Json}", json);
+
+            // Fallback: Try parsing as location event (legacy format)
+            var locationEvent = JsonSerializer.Deserialize<SseLocationEvent>(json, JsonOptions);
             if (locationEvent != null && !string.IsNullOrEmpty(locationEvent.UserName))
             {
                 _logger.LogInformation("SSE location received: {UserName} at {Timestamp}",
@@ -449,9 +450,8 @@ public class SseClient : ISseClient
                 return;
             }
 
-            // Try parsing as membership event
+            // Fallback: Try parsing as membership event (legacy format)
             var membershipEvent = JsonSerializer.Deserialize<SseMembershipEvent>(json, JsonOptions);
-
             if (membershipEvent != null && !string.IsNullOrEmpty(membershipEvent.Action))
             {
                 _logger.LogInformation("SSE membership event received: {Action} for user {UserId}",
@@ -462,6 +462,73 @@ public class SseClient : ISseClient
         catch (JsonException ex)
         {
             _logger.LogError(ex, "Failed to parse SSE data: {Json}", json);
+        }
+    }
+
+    /// <summary>
+    /// Process an event with a type discriminator.
+    /// </summary>
+    private void ProcessTypedEvent(JsonElement root, string? eventType)
+    {
+        switch (eventType)
+        {
+            case "location":
+                var locationEvent = new SseLocationEvent
+                {
+                    LocationId = root.TryGetProperty("locationId", out var lid) ? lid.GetInt32() : 0,
+                    TimestampUtc = root.TryGetProperty("timestampUtc", out var ts) ? ts.GetDateTime() : DateTime.UtcNow,
+                    UserId = root.TryGetProperty("userId", out var uid) ? uid.GetString() ?? string.Empty : string.Empty,
+                    UserName = root.TryGetProperty("userName", out var un) ? un.GetString() ?? string.Empty : string.Empty,
+                    IsLive = root.TryGetProperty("isLive", out var live) && live.GetBoolean(),
+                    Type = root.TryGetProperty("locationType", out var lt) ? lt.GetString() : null
+                };
+                _logger.LogInformation("SSE location received: {UserName} at {Timestamp}",
+                    locationEvent.UserName, locationEvent.TimestampUtc);
+                LocationReceived?.Invoke(this, new SseLocationEventArgs(locationEvent));
+                break;
+
+            case "location-deleted":
+                var deleteEvent = new SseLocationDeletedEvent
+                {
+                    LocationId = root.TryGetProperty("locationId", out var dlid) ? dlid.GetInt32() : 0,
+                    UserId = root.TryGetProperty("userId", out var duid) ? duid.GetString() ?? string.Empty : string.Empty
+                };
+                _logger.LogInformation("SSE location deleted: {LocationId} for user {UserId}",
+                    deleteEvent.LocationId, deleteEvent.UserId);
+                LocationDeleted?.Invoke(this, new SseLocationDeletedEventArgs(deleteEvent));
+                break;
+
+            case "visibility-changed":
+            case "member-left":
+            case "member-removed":
+            case "member-joined":
+            case "invite-declined":
+            case "invite-revoked":
+                var membershipEvent = new SseMembershipEvent
+                {
+                    Action = eventType,  // Use type as action for compatibility
+                    UserId = root.TryGetProperty("userId", out var muid) ? muid.GetString() : null,
+                    Disabled = root.TryGetProperty("disabled", out var dis) ? dis.GetBoolean() : null
+                };
+                _logger.LogInformation("SSE membership event received: {Action} for user {UserId}",
+                    membershipEvent.Action, membershipEvent.UserId);
+                MembershipReceived?.Invoke(this, new SseMembershipEventArgs(membershipEvent));
+                break;
+
+            case "invite-created":
+                var inviteEvent = new SseInviteCreatedEvent
+                {
+                    InvitationId = root.TryGetProperty("invitationId", out var invId) && invId.TryGetGuid(out var guid)
+                        ? guid
+                        : Guid.Empty
+                };
+                _logger.LogInformation("SSE invite created: {InvitationId}", inviteEvent.InvitationId);
+                InviteCreated?.Invoke(this, new SseInviteCreatedEventArgs(inviteEvent));
+                break;
+
+            default:
+                _logger.LogDebug("Unknown SSE event type: {Type}", eventType);
+                break;
         }
     }
 

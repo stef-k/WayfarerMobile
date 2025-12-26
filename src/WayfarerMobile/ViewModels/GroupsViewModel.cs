@@ -48,14 +48,10 @@ public partial class GroupsViewModel : BaseViewModel
     private WritableLayer? _historicalLocationsLayer;
 
     /// <summary>
-    /// SSE client for location updates.
+    /// SSE client for consolidated group events (location + membership updates).
+    /// Single client receives both location and membership events from the same stream.
     /// </summary>
-    private ISseClient? _locationSseClient;
-
-    /// <summary>
-    /// SSE client for membership updates (visibility, removals).
-    /// </summary>
-    private ISseClient? _membershipSseClient;
+    private ISseClient? _groupSseClient;
 
     /// <summary>
     /// Cancellation token source for SSE subscriptions.
@@ -1626,16 +1622,14 @@ public partial class GroupsViewModel : BaseViewModel
         _logger.LogDebug("Abandoning SSE clients (non-blocking)");
 
         // Unsubscribe from events immediately (prevents old events reaching handlers)
-        if (_locationSseClient != null)
+        if (_groupSseClient != null)
         {
-            _locationSseClient.LocationReceived -= OnLocationReceived;
-            _locationSseClient.Connected -= OnSseConnected;
-            _locationSseClient.Reconnecting -= OnSseReconnecting;
-        }
-
-        if (_membershipSseClient != null)
-        {
-            _membershipSseClient.MembershipReceived -= OnMembershipReceived;
+            _groupSseClient.LocationReceived -= OnLocationReceived;
+            _groupSseClient.LocationDeleted -= OnLocationDeleted;
+            _groupSseClient.MembershipReceived -= OnMembershipReceived;
+            _groupSseClient.InviteCreated -= OnInviteCreated;
+            _groupSseClient.Connected -= OnSseConnected;
+            _groupSseClient.Reconnecting -= OnSseReconnecting;
         }
 
         // Trigger cancellation but don't wait for it (fire and forget)
@@ -1649,127 +1643,106 @@ public partial class GroupsViewModel : BaseViewModel
             });
         }
 
-        // Clear references - old clients become orphaned, will be GC'd eventually
+        // Clear references - old client becomes orphaned, will be GC'd eventually
         _sseCts = null;
-        _locationSseClient = null;
-        _membershipSseClient = null;
+        _groupSseClient = null;
 
         // Clear throttle tracking
         _lastUpdateTimes.Clear();
     }
 
     /// <summary>
-    /// Ensures SSE clients exist. Only starts new clients if they're null.
-    /// SSE clients have auto-reconnect, so we don't restart based on IsConnected.
+    /// Ensures SSE client exists. Only starts new client if null.
+    /// SSE client has auto-reconnect, so we don't restart based on IsConnected.
     /// Called when navigating back to today's date.
     /// </summary>
     private async Task EnsureSseConnectedAsync()
     {
-        // Check if SSE clients already exist (they have auto-reconnect built in)
+        // Check if SSE client already exists (it has auto-reconnect built in)
         // Don't check IsConnected - it may be temporarily false during reconnection
-        if (_locationSseClient != null && _membershipSseClient != null)
+        if (_groupSseClient != null)
         {
-            _logger.LogDebug("SSE clients exist, skipping start (auto-reconnect handles connection)");
+            _logger.LogDebug("SSE client exists, skipping start (auto-reconnect handles connection)");
             return;
         }
 
-        _logger.LogDebug("SSE clients are null, starting new subscriptions");
-        // Start SSE only if clients don't exist
+        _logger.LogDebug("SSE client is null, starting new subscription");
+        // Start SSE only if client doesn't exist
         await StartSseSubscriptionsAsync();
     }
 
     /// <summary>
-    /// Starts SSE subscriptions for the selected group.
+    /// Starts SSE subscription for the selected group.
+    /// Uses consolidated endpoint that delivers both location and membership events.
     /// </summary>
     private async Task StartSseSubscriptionsAsync()
     {
         if (SelectedGroup == null || !IsToday)
             return;
 
-        // Abandon any existing subscriptions (instant, non-blocking)
+        // Abandon any existing subscription (instant, non-blocking)
         AbandonSseClients();
 
         _sseCts = new CancellationTokenSource();
         var groupId = SelectedGroup.Id.ToString();
 
-        // Create and start location SSE client
-        _locationSseClient = _sseClientFactory.Create();
-        _locationSseClient.LocationReceived += OnLocationReceived;
-        _locationSseClient.Connected += OnSseConnected;
-        _locationSseClient.Reconnecting += OnSseReconnecting;
+        // Create single SSE client for consolidated group stream
+        _groupSseClient = _sseClientFactory.Create();
+        _groupSseClient.LocationReceived += OnLocationReceived;
+        _groupSseClient.LocationDeleted += OnLocationDeleted;
+        _groupSseClient.MembershipReceived += OnMembershipReceived;
+        _groupSseClient.InviteCreated += OnInviteCreated;
+        _groupSseClient.Connected += OnSseConnected;
+        _groupSseClient.Reconnecting += OnSseReconnecting;
 
-        // Create and start membership SSE client
-        _membershipSseClient = _sseClientFactory.Create();
-        _membershipSseClient.MembershipReceived += OnMembershipReceived;
+        _logger.LogInformation("Starting SSE subscription for group {GroupId}", groupId);
 
-        _logger.LogInformation("Starting SSE subscriptions for group {GroupId}", groupId);
-
-        // Start subscriptions in background (fire and forget)
+        // Start subscription in background (fire and forget)
         _ = Task.Run(async () =>
         {
             try
             {
-                await _locationSseClient.SubscribeToGroupAsync(groupId, _sseCts.Token);
+                await _groupSseClient.SubscribeToGroupAsync(groupId, _sseCts.Token);
             }
             catch (OperationCanceledException)
             {
-                _logger.LogDebug("Location SSE subscription cancelled");
+                _logger.LogDebug("Group SSE subscription cancelled");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Location SSE subscription error");
-            }
-        });
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await _membershipSseClient.SubscribeToGroupMembershipAsync(groupId, _sseCts.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                _logger.LogDebug("Membership SSE subscription cancelled");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Membership SSE subscription error");
+                _logger.LogError(ex, "Group SSE subscription error");
             }
         });
     }
 
     /// <summary>
-    /// Stops all SSE subscriptions.
+    /// Stops SSE subscription.
     /// Non-blocking: cancels immediately, cleanup runs in background.
     /// </summary>
     private void StopSseSubscriptions()
     {
-        _logger.LogDebug("Stopping SSE subscriptions");
+        _logger.LogDebug("Stopping SSE subscription");
 
         // Cancel ongoing operations immediately (non-blocking)
         _sseCts?.Cancel();
 
         // Capture references for background cleanup
         var oldCts = _sseCts;
-        var oldLocationClient = _locationSseClient;
-        var oldMembershipClient = _membershipSseClient;
+        var oldGroupClient = _groupSseClient;
 
         // Clear references immediately so new subscriptions can start
         _sseCts = null;
-        _locationSseClient = null;
-        _membershipSseClient = null;
+        _groupSseClient = null;
 
         // Unsubscribe from events on main thread to prevent race conditions
-        if (oldLocationClient != null)
+        if (oldGroupClient != null)
         {
-            oldLocationClient.LocationReceived -= OnLocationReceived;
-            oldLocationClient.Connected -= OnSseConnected;
-            oldLocationClient.Reconnecting -= OnSseReconnecting;
-        }
-
-        if (oldMembershipClient != null)
-        {
-            oldMembershipClient.MembershipReceived -= OnMembershipReceived;
+            oldGroupClient.LocationReceived -= OnLocationReceived;
+            oldGroupClient.LocationDeleted -= OnLocationDeleted;
+            oldGroupClient.MembershipReceived -= OnMembershipReceived;
+            oldGroupClient.InviteCreated -= OnInviteCreated;
+            oldGroupClient.Connected -= OnSseConnected;
+            oldGroupClient.Reconnecting -= OnSseReconnecting;
         }
 
         // Dispose in background to avoid blocking main thread
@@ -1778,22 +1751,12 @@ public partial class GroupsViewModel : BaseViewModel
         {
             try
             {
-                oldLocationClient?.Stop();
-                oldLocationClient?.Dispose();
+                oldGroupClient?.Stop();
+                oldGroupClient?.Dispose();
             }
             catch (Exception ex)
             {
-                _logger.LogDebug("SSE location client cleanup error: {Message}", ex.Message);
-            }
-
-            try
-            {
-                oldMembershipClient?.Stop();
-                oldMembershipClient?.Dispose();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug("SSE membership client cleanup error: {Message}", ex.Message);
+                _logger.LogDebug("SSE client cleanup error: {Message}", ex.Message);
             }
 
             try
@@ -1855,6 +1818,38 @@ public partial class GroupsViewModel : BaseViewModel
     }
 
     /// <summary>
+    /// Handles location deleted events from SSE.
+    /// When a location is deleted, refresh the member's data to get their new latest location.
+    /// </summary>
+    private async void OnLocationDeleted(object? sender, SseLocationDeletedEventArgs e)
+    {
+        // Guard against events firing after disposal
+        if (IsDisposed)
+            return;
+
+        try
+        {
+            // Skip updates when viewing historical data
+            if (!IsToday)
+            {
+                _logger.LogDebug("SSE location deleted skipped - viewing historical date");
+                return;
+            }
+
+            var userId = e.LocationDeleted.UserId;
+            _logger.LogDebug("SSE location deleted: {LocationId} for user {UserId}",
+                e.LocationDeleted.LocationId, userId);
+
+            // Refresh the specific member's location to get their new latest
+            await RefreshMemberLocationAsync(userId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error handling SSE location deleted event");
+        }
+    }
+
+    /// <summary>
     /// Handles membership events from SSE (peer visibility changes, member removal).
     /// </summary>
     private async void OnMembershipReceived(object? sender, SseMembershipEventArgs e)
@@ -1877,13 +1872,24 @@ public partial class GroupsViewModel : BaseViewModel
 
             switch (membership.Action)
             {
-                case "peer-visibility-changed":
+                case "visibility-changed":
                     await HandlePeerVisibilityChangedAsync(membership.UserId, membership.Disabled ?? false);
                     break;
 
                 case "member-removed":
                 case "member-left":
                     await HandleMemberRemovedAsync(membership.UserId);
+                    break;
+
+                case "member-joined":
+                    // Reload members to show the new member
+                    await LoadMembersAsync();
+                    break;
+
+                case "invite-declined":
+                case "invite-revoked":
+                    // These are informational - no UI action needed
+                    _logger.LogInformation("Invite event: {Action}", membership.Action);
                     break;
 
                 default:
@@ -1895,6 +1901,20 @@ public partial class GroupsViewModel : BaseViewModel
         {
             _logger.LogError(ex, "Error handling SSE membership event");
         }
+    }
+
+    /// <summary>
+    /// Handles invite created events from SSE.
+    /// Currently logs the event; future implementation could refresh pending invitations UI.
+    /// </summary>
+    private void OnInviteCreated(object? sender, SseInviteCreatedEventArgs e)
+    {
+        // Guard against events firing after disposal
+        if (IsDisposed)
+            return;
+
+        _logger.LogInformation("SSE invite created: {InvitationId}", e.InviteCreated.InvitationId);
+        // Future: Could refresh pending invitations list if UI is added
     }
 
     /// <summary>
