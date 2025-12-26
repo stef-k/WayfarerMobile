@@ -22,7 +22,7 @@
             <Border WidthRequest="80"
                     HeightRequest="80"
                     StrokeThickness="0"
-                    BackgroundColor="#FFFFFF20"
+                    BackgroundColor="{StaticResource Primary}"
                     HorizontalOptions="Center">
                 <Border.StrokeShape>
                     <RoundRectangle CornerRadius="40" />
@@ -59,8 +59,8 @@
                 <Border WidthRequest="48"
                         HeightRequest="48"
                         StrokeThickness="2"
-                        Stroke="{Binding Digit1, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#512BD4|#FFFFFF80'}"
-                        BackgroundColor="{Binding Digit1, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#512BD4|#00000000'}">
+                        Stroke="{Binding Digit1, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#e45243|#FFFFFF80'}"
+                        BackgroundColor="{Binding Digit1, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#e45243|#00000000'}">
                     <Border.StrokeShape>
                         <RoundRectangle CornerRadius="24" />
                     </Border.StrokeShape>
@@ -75,8 +75,8 @@
                 <Border WidthRequest="48"
                         HeightRequest="48"
                         StrokeThickness="2"
-                        Stroke="{Binding Digit2, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#512BD4|#FFFFFF80'}"
-                        BackgroundColor="{Binding Digit2, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#512BD4|#00000000'}">
+                        Stroke="{Binding Digit2, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#e45243|#FFFFFF80'}"
+                        BackgroundColor="{Binding Digit2, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#e45243|#00000000'}">
                     <Border.StrokeShape>
                         <RoundRectangle CornerRadius="24" />
                     </Border.StrokeShape>
@@ -91,8 +91,8 @@
                 <Border WidthRequest="48"
                         HeightRequest="48"
                         StrokeThickness="2"
-                        Stroke="{Binding Digit3, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#512BD4|#FFFFFF80'}"
-                        BackgroundColor="{Binding Digit3, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#512BD4|#00000000'}">
+                        Stroke="{Binding Digit3, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#e45243|#FFFFFF80'}"
+                        BackgroundColor="{Binding Digit3, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#e45243|#00000000'}">
                     <Border.StrokeShape>
                         <RoundRectangle CornerRadius="24" />
                     </Border.StrokeShape>
@@ -107,8 +107,8 @@
                 <Border WidthRequest="48"
                         HeightRequest="48"
                         StrokeThickness="2"
-                        Stroke="{Binding Digit4, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#512BD4|#FFFFFF80'}"
-                        BackgroundColor="{Binding Digit4, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#512BD4|#00000000'}">
+                        Stroke="{Binding Digit4, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#e45243|#FFFFFF80'}"
+                        BackgroundColor="{Binding Digit4, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#e45243|#00000000'}">
                     <Border.StrokeShape>
                         <RoundRectangle CornerRadius="24" />
                     </Border.StrokeShape>
