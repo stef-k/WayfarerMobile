@@ -95,12 +95,30 @@ public class SettingsService : ISettingsService
     {
         if (!_serverUrlLoaded)
         {
-            _cachedServerUrl = await SecureStorage.Default.GetAsync(KeyServerUrl);
+            try
+            {
+                _cachedServerUrl = await SecureStorage.Default.GetAsync(KeyServerUrl);
+            }
+            catch (Exception ex)
+            {
+                // SecureStorage can fail after data clear - treat as empty
+                System.Diagnostics.Debug.WriteLine($"[SettingsService] Failed to load ServerUrl from SecureStorage: {ex.Message}");
+                _cachedServerUrl = null;
+            }
             _serverUrlLoaded = true;
         }
         if (!_apiTokenLoaded)
         {
-            _cachedApiToken = await SecureStorage.Default.GetAsync(KeyApiToken);
+            try
+            {
+                _cachedApiToken = await SecureStorage.Default.GetAsync(KeyApiToken);
+            }
+            catch (Exception ex)
+            {
+                // SecureStorage can fail after data clear - treat as empty
+                System.Diagnostics.Debug.WriteLine($"[SettingsService] Failed to load ApiToken from SecureStorage: {ex.Message}");
+                _cachedApiToken = null;
+            }
             _apiTokenLoaded = true;
         }
     }
@@ -115,8 +133,17 @@ public class SettingsService : ISettingsService
         {
             if (!_serverUrlLoaded)
             {
-                // First access - load from SecureStorage on background thread
-                _cachedServerUrl = Task.Run(async () => await SecureStorage.Default.GetAsync(KeyServerUrl)).Result;
+                try
+                {
+                    // First access - load from SecureStorage on background thread
+                    _cachedServerUrl = Task.Run(async () => await SecureStorage.Default.GetAsync(KeyServerUrl)).Result;
+                }
+                catch (Exception ex)
+                {
+                    // SecureStorage can fail after data clear - treat as empty
+                    System.Diagnostics.Debug.WriteLine($"[SettingsService] Failed to load ServerUrl: {ex.Message}");
+                    _cachedServerUrl = null;
+                }
                 _serverUrlLoaded = true;
             }
             return _cachedServerUrl;
@@ -146,8 +173,17 @@ public class SettingsService : ISettingsService
         {
             if (!_apiTokenLoaded)
             {
-                // First access - load from SecureStorage on background thread
-                _cachedApiToken = Task.Run(async () => await SecureStorage.Default.GetAsync(KeyApiToken)).Result;
+                try
+                {
+                    // First access - load from SecureStorage on background thread
+                    _cachedApiToken = Task.Run(async () => await SecureStorage.Default.GetAsync(KeyApiToken)).Result;
+                }
+                catch (Exception ex)
+                {
+                    // SecureStorage can fail after data clear - treat as empty
+                    System.Diagnostics.Debug.WriteLine($"[SettingsService] Failed to load ApiToken: {ex.Message}");
+                    _cachedApiToken = null;
+                }
                 _apiTokenLoaded = true;
             }
             return _cachedApiToken;
@@ -513,6 +549,53 @@ public class SettingsService : ISettingsService
         SecureStorage.Default.Remove(KeyServerUrl);
         UserId = null;
         UserEmail = null;
+    }
+
+    /// <summary>
+    /// Resets all settings to defaults. Used for recovery when app state is corrupted
+    /// (e.g., after user clears app data from Android Settings).
+    /// </summary>
+    public void ResetToDefaults()
+    {
+        System.Diagnostics.Debug.WriteLine("[SettingsService] Resetting all settings to defaults");
+
+        try
+        {
+            // Clear all preferences
+            Preferences.Clear();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[SettingsService] Failed to clear Preferences: {ex.Message}");
+        }
+
+        try
+        {
+            // Clear secure storage
+            SecureStorage.Default.RemoveAll();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[SettingsService] Failed to clear SecureStorage: {ex.Message}");
+        }
+
+        // Reset cached values
+        _cachedServerUrl = null;
+        _cachedApiToken = null;
+        _serverUrlLoaded = true;
+        _apiTokenLoaded = true;
+
+        // Ensure IsFirstRun is true so onboarding will show
+        try
+        {
+            Preferences.Set(KeyIsFirstRun, true);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[SettingsService] Failed to set IsFirstRun: {ex.Message}");
+        }
+
+        System.Diagnostics.Debug.WriteLine("[SettingsService] Reset complete - app will show onboarding");
     }
 
     #endregion

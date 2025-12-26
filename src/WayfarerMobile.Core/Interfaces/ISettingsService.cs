@@ -214,4 +214,10 @@ public interface ISettingsService
     /// Clears authentication data only (server URL and token).
     /// </summary>
     void ClearAuth();
+
+    /// <summary>
+    /// Resets all settings to defaults. Used for recovery when app state is corrupted
+    /// (e.g., after user clears app data from Android Settings).
+    /// </summary>
+    void ResetToDefaults();
 }

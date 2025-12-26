@@ -35,6 +35,7 @@ public partial class OnboardingViewModel : BaseViewModel
     [NotifyPropertyChangedFor(nameof(ShowSkipButton))]
     [NotifyPropertyChangedFor(nameof(ShowRequestButton))]
     [NotifyPropertyChangedFor(nameof(StepProgress))]
+    [NotifyPropertyChangedFor(nameof(DisplayStep))]
     private int _currentStep;
 
     /// <summary>
@@ -102,6 +103,11 @@ public partial class OnboardingViewModel : BaseViewModel
     /// Gets the progress value (0.0 to 1.0).
     /// </summary>
     public double StepProgress => (double)(CurrentStep + 1) / TotalSteps;
+
+    /// <summary>
+    /// Gets the current step as 1-based for display (1 to 6).
+    /// </summary>
+    public int DisplayStep => CurrentStep + 1;
 
     /// <summary>
     /// Gets the current step title.
