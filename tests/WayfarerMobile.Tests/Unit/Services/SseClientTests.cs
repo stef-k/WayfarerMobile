@@ -231,39 +231,8 @@ public class SseClientTests
         catch (OperationCanceledException) { }
         catch (HttpRequestException) { }
 
-        capturedUrl.Should().Be("https://api.example.com/api/mobile/sse/group-location-update/group-abc-123");
-    }
-
-    [Fact]
-    public async Task SubscribeToGroupMembershipAsync_EmptyGroupId_LogsWarningAndReturns()
-    {
-        var client = CreateClient();
-        await client.SubscribeToGroupMembershipAsync(string.Empty);
-        client.IsConnected.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task SubscribeToGroupMembershipAsync_ValidGroupId_BuildsCorrectUrl()
-    {
-        _mockSettings.Setup(s => s.ServerUrl).Returns("https://api.example.com");
-        string? capturedUrl = null;
-
-        _mockHttpHandler
-            .Protected()
-            .Setup<Task<HttpResponseMessage>>(
-                "SendAsync",
-                ItExpr.IsAny<HttpRequestMessage>(),
-                ItExpr.IsAny<CancellationToken>())
-            .Callback<HttpRequestMessage, CancellationToken>((req, _) => capturedUrl = req.RequestUri?.ToString())
-            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("") });
-
-        var client = CreateClient();
-        using var cts = new CancellationTokenSource(100);
-        try { await client.SubscribeToGroupMembershipAsync("group-xyz", cts.Token); }
-        catch (OperationCanceledException) { }
-        catch (HttpRequestException) { }
-
-        capturedUrl.Should().Be("https://api.example.com/api/sse/stream/group-membership-update/group-xyz");
+        // Consolidated endpoint for location + membership events
+        capturedUrl.Should().Be("https://api.example.com/api/mobile/sse/group/group-abc-123");
     }
 
     [Fact]
@@ -361,17 +330,9 @@ public sealed class TestSseClient : ISseClient
         if (string.IsNullOrWhiteSpace(groupId)) { _logger.LogWarning("groupId is empty"); return Task.CompletedTask; }
         var serverUrl = _settings.ServerUrl;
         if (string.IsNullOrWhiteSpace(serverUrl)) { _logger.LogError("Server URL not configured"); return Task.CompletedTask; }
-        var url = serverUrl.TrimEnd((char)47) + "/api/mobile/sse/group-location-update/" + Uri.EscapeDataString(groupId);
+        // Consolidated endpoint for location + membership events
+        var url = serverUrl.TrimEnd((char)47) + "/api/mobile/sse/group/" + Uri.EscapeDataString(groupId);
         return SubscribeAsync(url, "group:" + groupId, cancellationToken);
-    }
-
-    public Task SubscribeToGroupMembershipAsync(string groupId, CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(groupId)) { _logger.LogWarning("groupId is empty"); return Task.CompletedTask; }
-        var serverUrl = _settings.ServerUrl;
-        if (string.IsNullOrWhiteSpace(serverUrl)) { _logger.LogError("Server URL not configured"); return Task.CompletedTask; }
-        var url = serverUrl.TrimEnd((char)47) + "/api/sse/stream/group-membership-update/" + Uri.EscapeDataString(groupId);
-        return SubscribeAsync(url, "group-membership:" + groupId, cancellationToken);
     }
 
     public void Stop()
@@ -462,7 +423,6 @@ public interface ISseClient : IDisposable
     event EventHandler<SseReconnectEventArgs>? Reconnecting;
     Task SubscribeToUserAsync(string userName, CancellationToken cancellationToken = default);
     Task SubscribeToGroupAsync(string groupId, CancellationToken cancellationToken = default);
-    Task SubscribeToGroupMembershipAsync(string groupId, CancellationToken cancellationToken = default);
     void Stop();
 }
 

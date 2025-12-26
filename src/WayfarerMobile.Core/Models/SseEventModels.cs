@@ -27,17 +27,20 @@ public class SseLocationEvent
 
 /// <summary>
 /// SSE event for membership changes.
-/// Received from channel: group-membership-update-{groupId}
+/// Received from consolidated channel: group-{groupId}
 /// </summary>
 public class SseMembershipEvent
 {
-    /// <summary>Action type: "peer-visibility-changed", "member-removed", "member-left".</summary>
+    /// <summary>
+    /// Event type: "visibility-changed", "member-left", "member-removed",
+    /// "member-joined", "invite-declined", "invite-revoked".
+    /// </summary>
     public string Action { get; set; } = string.Empty;
 
     /// <summary>User ID affected by the action.</summary>
     public string? UserId { get; set; }
 
-    /// <summary>For peer-visibility-changed: whether visibility is disabled.</summary>
+    /// <summary>For visibility-changed: whether visibility is disabled.</summary>
     public bool? Disabled { get; set; }
 }
 

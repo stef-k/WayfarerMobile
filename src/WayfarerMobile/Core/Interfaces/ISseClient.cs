@@ -57,20 +57,13 @@ public interface ISseClient : IDisposable
     Task SubscribeToUserAsync(string userName, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Subscribe to group-level SSE channel for all member location updates.
+    /// Subscribe to consolidated group SSE channel for location and membership updates.
+    /// All event types (location, visibility-changed, member-left, etc.) come through this single stream.
     /// </summary>
     /// <param name="groupId">Group ID to subscribe to.</param>
     /// <param name="cancellationToken">Token to cancel the subscription.</param>
     /// <returns>Task that completes when subscription ends.</returns>
     Task SubscribeToGroupAsync(string groupId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Subscribe to group membership SSE channel for member visibility and membership changes.
-    /// </summary>
-    /// <param name="groupId">Group ID to subscribe to.</param>
-    /// <param name="cancellationToken">Token to cancel the subscription.</param>
-    /// <returns>Task that completes when subscription ends.</returns>
-    Task SubscribeToGroupMembershipAsync(string groupId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Stop the current SSE subscription.
