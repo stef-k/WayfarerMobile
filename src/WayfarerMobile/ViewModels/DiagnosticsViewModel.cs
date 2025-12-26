@@ -92,6 +92,9 @@ public partial class DiagnosticsViewModel : BaseViewModel
     [ObservableProperty]
     private string _lastSyncTime = "Never";
 
+    [ObservableProperty]
+    private string _queueDetails = "No queue data";
+
     #endregion
 
     #region Tile Cache Properties
@@ -119,6 +122,9 @@ public partial class DiagnosticsViewModel : BaseViewModel
 
     [ObservableProperty]
     private string _tripCacheSize = "0 MB";
+
+    [ObservableProperty]
+    private string _tripCacheUsage = "0 MB / 0 MB";
 
     [ObservableProperty]
     private int _downloadedTripCount;
@@ -230,6 +236,9 @@ public partial class DiagnosticsViewModel : BaseViewModel
             UpdateTileCache(await cacheTask);
             UpdateTracking(await trackingTask);
             UpdateNavigation(await navTask);
+
+            // Load queue details
+            await LoadQueueDetailsAsync();
 
             // System info
             var systemInfo = _diagnosticService.GetSystemInfo();
@@ -520,12 +529,76 @@ public partial class DiagnosticsViewModel : BaseViewModel
         {
             var queueDiag = await _appDiagnosticService.GetLocationQueueDiagnosticsAsync();
             UpdateLocationQueue(queueDiag);
+            await LoadQueueDetailsAsync();
             await _toastService.ShowSuccessAsync("Queue refreshed");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error refreshing queue");
             await _toastService.ShowErrorAsync("Failed to refresh queue");
+        }
+    }
+
+    /// <summary>
+    /// Loads recent queue entries for display.
+    /// </summary>
+    private async Task LoadQueueDetailsAsync()
+    {
+        try
+        {
+            var locations = await _databaseService.GetAllQueuedLocationsAsync();
+
+            if (locations.Count == 0)
+            {
+                QueueDetails = "Queue is empty";
+                return;
+            }
+
+            // Take most recent 50 entries, ordered by timestamp descending
+            var recentLocations = locations
+                .OrderByDescending(l => l.Timestamp)
+                .Take(50)
+                .ToList();
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Showing {recentLocations.Count} of {locations.Count} entries (newest first)");
+            sb.AppendLine(new string('-', 60));
+
+            foreach (var loc in recentLocations)
+            {
+                var status = loc.SyncStatus switch
+                {
+                    Core.Enums.SyncStatus.Pending => loc.IsServerRejected ? "REJECTED" :
+                                         loc.SyncAttempts >= 5 ? "FAILED" :
+                                         loc.SyncAttempts > 0 ? $"RETRY({loc.SyncAttempts})" : "PENDING",
+                    Core.Enums.SyncStatus.Synced => "SYNCED",
+                    Core.Enums.SyncStatus.Failed => "FAILED",
+                    _ => "?"
+                };
+
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                sb.AppendLine($"[{loc.Timestamp:HH:mm:ss}] {status}");
+                sb.AppendLine($"  Loc: {loc.Latitude.ToString("F5", inv)}, {loc.Longitude.ToString("F5", inv)}");
+
+                if (loc.Accuracy.HasValue)
+                    sb.Append($"  Acc: {loc.Accuracy.Value.ToString("F0", inv)}m");
+                if (loc.Speed.HasValue)
+                    sb.Append($"  Spd: {loc.Speed.Value.ToString("F1", inv)}m/s");
+                if (loc.Accuracy.HasValue || loc.Speed.HasValue)
+                    sb.AppendLine();
+
+                if (!string.IsNullOrEmpty(loc.LastError))
+                    sb.AppendLine($"  Err: {loc.LastError}");
+
+                sb.AppendLine();
+            }
+
+            QueueDetails = sb.ToString();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading queue details");
+            QueueDetails = $"Error loading queue details: {ex.Message}";
         }
     }
 
@@ -593,6 +666,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
         LiveCacheUsagePercent = diag.LiveCacheUsagePercent;
         TripTileCount = diag.TripCacheTileCount;
         TripCacheSize = $"{diag.TripCacheSizeMB:F1} MB";
+        TripCacheUsage = $"{diag.TripCacheSizeMB:F0} MB / {diag.TripCacheMaxSizeMB} MB";
         DownloadedTripCount = diag.DownloadedTripCount;
         TotalCacheSize = $"{diag.TotalCacheSizeMB:F1} MB";
     }

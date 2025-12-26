@@ -128,3 +128,33 @@ public class PercentToDecimalConverter : IValueConverter
         throw new NotImplementedException();
     }
 }
+
+/// <summary>
+/// Returns one of two colors based on whether the value is not null.
+/// Parameter format: "FilledColor|EmptyColor" (hex colors like #512BD4)
+/// </summary>
+public class NotNullToColorConverter : IValueConverter
+{
+    /// <summary>
+    /// Returns the first color if value is not null, otherwise the second color.
+    /// </summary>
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var colors = (parameter as string)?.Split('|');
+        if (colors == null || colors.Length < 2)
+            return Colors.Transparent;
+
+        var isNotNull = value != null;
+        var colorString = isNotNull ? colors[0] : colors[1];
+
+        return Color.FromArgb(colorString);
+    }
+
+    /// <summary>
+    /// Not implemented.
+    /// </summary>
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        throw new NotImplementedException();
+    }
+}

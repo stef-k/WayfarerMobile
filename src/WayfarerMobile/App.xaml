@@ -19,6 +19,7 @@
             <converters:InvertedBoolConverter x:Key="InvertedBoolConverter" />
             <converters:IsNotNullConverter x:Key="IsNotNullConverter" />
             <converters:IsNullConverter x:Key="IsNullConverter" />
+            <converters:NotNullToColorConverter x:Key="NotNullToColorConverter" />
             <converters:BoolToTextConverter x:Key="BoolToTextConverter" />
             <converters:BoolToColorConverter x:Key="BoolToColorConverter" />
             <converters:PercentToDecimalConverter x:Key="PercentToDecimalConverter" />
