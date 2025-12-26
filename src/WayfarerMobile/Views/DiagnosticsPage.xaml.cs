@@ -20,9 +20,10 @@ public partial class DiagnosticsPage : ContentPage
     }
 
     /// <inheritdoc/>
-    protected override async void OnAppearing()
+    protected override void OnAppearing()
     {
         base.OnAppearing();
-        await _viewModel.LoadDataCommand.ExecuteAsync(null);
+        // Fire-and-forget: let page render immediately, show loading indicator while data loads
+        _ = _viewModel.LoadDataCommand.ExecuteAsync(null);
     }
 }
