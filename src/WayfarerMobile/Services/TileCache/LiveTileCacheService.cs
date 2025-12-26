@@ -124,6 +124,10 @@ public class LiveTileCacheService
     /// <param name="longitude">Center longitude.</param>
     public async Task PrefetchAroundLocationAsync(double latitude, double longitude)
     {
+        // Check if offline caching is enabled
+        if (!_settingsService.MapOfflineCacheEnabled)
+            return;
+
         if (Connectivity.Current.NetworkAccess != NetworkAccess.Internet)
             return;
 

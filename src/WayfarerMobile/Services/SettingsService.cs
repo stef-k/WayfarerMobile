@@ -61,10 +61,11 @@ public class SettingsService : ISettingsService
     /// <summary>
     /// Gets or sets whether timeline tracking is enabled (server logging).
     /// When disabled, GPS still works for live location/navigation but locations are not sent to server.
+    /// Default is false for privacy reasons - user must explicitly enable.
     /// </summary>
     public bool TimelineTrackingEnabled
     {
-        get => Preferences.Get(KeyTimelineTrackingEnabled, true);
+        get => Preferences.Get(KeyTimelineTrackingEnabled, false);
         set => Preferences.Set(KeyTimelineTrackingEnabled, value);
     }
 
@@ -239,11 +240,11 @@ public class SettingsService : ISettingsService
 
     /// <summary>
     /// Gets or sets whether to keep the screen on while the app is in the foreground.
-    /// Default is true - screen stays on to prevent sleep during map/navigation use.
+    /// Default is false - user must explicitly enable to prevent accidental battery drain.
     /// </summary>
     public bool KeepScreenOn
     {
-        get => Preferences.Get(KeyKeepScreenOn, true);
+        get => Preferences.Get(KeyKeepScreenOn, false);
         set => Preferences.Set(KeyKeepScreenOn, value);
     }
 

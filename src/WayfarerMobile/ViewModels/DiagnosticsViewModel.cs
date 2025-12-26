@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
+using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Data.Services;
 using WayfarerMobile.Services;
 
 namespace WayfarerMobile.ViewModels;
@@ -18,6 +20,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
     private readonly AppDiagnosticService _appDiagnosticService;
     private readonly PerformanceMonitorService _performanceService;
     private readonly IToastService _toastService;
+    private readonly DatabaseService _databaseService;
 
     /// <summary>
     /// Initializes a new instance of the DiagnosticsViewModel class.
@@ -27,13 +30,15 @@ public partial class DiagnosticsViewModel : BaseViewModel
         DiagnosticService diagnosticService,
         AppDiagnosticService appDiagnosticService,
         PerformanceMonitorService performanceService,
-        IToastService toastService)
+        IToastService toastService,
+        DatabaseService databaseService)
     {
         _logger = logger;
         _diagnosticService = diagnosticService;
         _appDiagnosticService = appDiagnosticService;
         _performanceService = performanceService;
         _toastService = toastService;
+        _databaseService = databaseService;
         Title = "Diagnostics";
 
         LogFiles = [];
@@ -87,6 +92,9 @@ public partial class DiagnosticsViewModel : BaseViewModel
     [ObservableProperty]
     private string _lastSyncTime = "Never";
 
+    [ObservableProperty]
+    private string _queueDetails = "No queue data";
+
     #endregion
 
     #region Tile Cache Properties
@@ -101,10 +109,13 @@ public partial class DiagnosticsViewModel : BaseViewModel
     private string _liveCacheSize = "0 MB";
 
     [ObservableProperty]
-    private string _liveCacheUsage = "0%";
+    private string _liveCacheUsage = "0 MB / 0 MB";
 
     [ObservableProperty]
     private double _liveCacheUsagePercent;
+
+    [ObservableProperty]
+    private int _liveCacheMaxSizeMB;
 
     [ObservableProperty]
     private int _tripTileCount;
@@ -113,10 +124,13 @@ public partial class DiagnosticsViewModel : BaseViewModel
     private string _tripCacheSize = "0 MB";
 
     [ObservableProperty]
+    private string _tripCacheUsage = "0 MB / 0 MB";
+
+    [ObservableProperty]
     private int _downloadedTripCount;
 
     [ObservableProperty]
-    private string _totalCacheSize = "0 MB";
+    private string _totalCacheSize = "0 MB / 0 MB";
 
     #endregion
 
@@ -222,6 +236,9 @@ public partial class DiagnosticsViewModel : BaseViewModel
             UpdateTileCache(await cacheTask);
             UpdateTracking(await trackingTask);
             UpdateNavigation(await navTask);
+
+            // Load queue details
+            await LoadQueueDetailsAsync();
 
             // System info
             var systemInfo = _diagnosticService.GetSystemInfo();
@@ -366,6 +383,225 @@ public partial class DiagnosticsViewModel : BaseViewModel
         }
     }
 
+    /// <summary>
+    /// Clears synced locations from the queue.
+    /// </summary>
+    [RelayCommand]
+    private async Task ClearSyncedAsync()
+    {
+        if (SyncedLocations == 0)
+        {
+            await _toastService.ShowAsync("No synced locations to clear");
+            return;
+        }
+
+        var confirm = await Shell.Current.DisplayAlertAsync(
+            "Clear Synced Locations",
+            $"This will delete {SyncedLocations} synced locations. These have already been sent to the server.",
+            "Clear",
+            "Cancel");
+
+        if (confirm)
+        {
+            try
+            {
+                var deleted = await _databaseService.ClearSyncedQueueAsync();
+                await _toastService.ShowSuccessAsync($"{deleted} synced locations cleared");
+                await LoadDataAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error clearing synced queue");
+                await _toastService.ShowErrorAsync("Failed to clear synced locations");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Clears all locations from the queue with a destructive warning.
+    /// </summary>
+    [RelayCommand]
+    private async Task ClearAllQueueAsync()
+    {
+        var total = PendingLocations + SyncedLocations + FailedLocations;
+        if (total == 0)
+        {
+            await _toastService.ShowAsync("Queue is already empty");
+            return;
+        }
+
+        var confirm = await Shell.Current.DisplayAlertAsync(
+            "⚠️ Clear All Locations",
+            $"This will permanently delete ALL {total} locations including {PendingLocations} pending locations that have NOT been synced to the server.\n\nThis action cannot be undone.",
+            "Delete All",
+            "Cancel");
+
+        if (confirm)
+        {
+            try
+            {
+                var deleted = await _databaseService.ClearAllQueueAsync();
+                await _toastService.ShowSuccessAsync($"{deleted} locations cleared");
+                await LoadDataAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error clearing all queue");
+                await _toastService.ShowErrorAsync("Failed to clear queue");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Exports all queue data to CSV and shares it.
+    /// </summary>
+    [RelayCommand]
+    private async Task ExportQueueAsync()
+    {
+        try
+        {
+            var locations = await _databaseService.GetAllQueuedLocationsAsync();
+
+            if (locations.Count == 0)
+            {
+                await _toastService.ShowAsync("No locations to export");
+                return;
+            }
+
+            var csv = new StringBuilder();
+            csv.AppendLine("Id,Timestamp,Latitude,Longitude,Altitude,Accuracy,Speed,Bearing,Provider,SyncStatus,SyncAttempts,LastSyncAttempt,IsServerRejected,LastError,Notes");
+
+            foreach (var loc in locations)
+            {
+                var status = loc.SyncStatus switch
+                {
+                    Core.Enums.SyncStatus.Pending => loc.IsServerRejected ? "ServerRejected" :
+                                         loc.SyncAttempts >= 5 ? "Failed" :
+                                         loc.SyncAttempts > 0 ? $"Retrying({loc.SyncAttempts})" : "Pending",
+                    Core.Enums.SyncStatus.Synced => "Synced",
+                    Core.Enums.SyncStatus.Failed => "Failed",
+                    _ => "Unknown"
+                };
+
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                csv.AppendLine(
+                    $"{loc.Id}," +
+                    $"{loc.Timestamp:yyyy-MM-dd HH:mm:ss}," +
+                    $"{loc.Latitude.ToString("F6", inv)}," +
+                    $"{loc.Longitude.ToString("F6", inv)}," +
+                    $"{loc.Altitude?.ToString("F1", inv) ?? ""}," +
+                    $"{loc.Accuracy?.ToString("F1", inv) ?? ""}," +
+                    $"{loc.Speed?.ToString("F1", inv) ?? ""}," +
+                    $"{loc.Bearing?.ToString("F1", inv) ?? ""}," +
+                    $"\"{loc.Provider ?? ""}\"," +
+                    $"{status}," +
+                    $"{loc.SyncAttempts}," +
+                    $"{(loc.LastSyncAttempt.HasValue ? loc.LastSyncAttempt.Value.ToString("yyyy-MM-dd HH:mm:ss") : "")}," +
+                    $"{loc.IsServerRejected}," +
+                    $"\"{loc.LastError?.Replace("\"", "\"\"") ?? ""}\"," +
+                    $"\"{loc.Notes?.Replace("\"", "\"\"") ?? ""}\"");
+            }
+
+            var fileName = $"wayfarer_locations_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
+            var tempPath = Path.Combine(FileSystem.CacheDirectory, fileName);
+            await File.WriteAllTextAsync(tempPath, csv.ToString());
+
+            await Share.Default.RequestAsync(new ShareFileRequest
+            {
+                Title = "Export Location Queue",
+                File = new ShareFile(tempPath)
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting queue");
+            await _toastService.ShowErrorAsync("Failed to export queue");
+        }
+    }
+
+    /// <summary>
+    /// Refreshes the location queue data.
+    /// </summary>
+    [RelayCommand]
+    private async Task RefreshQueueAsync()
+    {
+        try
+        {
+            var queueDiag = await _appDiagnosticService.GetLocationQueueDiagnosticsAsync();
+            UpdateLocationQueue(queueDiag);
+            await LoadQueueDetailsAsync();
+            await _toastService.ShowSuccessAsync("Queue refreshed");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error refreshing queue");
+            await _toastService.ShowErrorAsync("Failed to refresh queue");
+        }
+    }
+
+    /// <summary>
+    /// Loads recent queue entries for display.
+    /// </summary>
+    private async Task LoadQueueDetailsAsync()
+    {
+        try
+        {
+            var locations = await _databaseService.GetAllQueuedLocationsAsync();
+
+            if (locations.Count == 0)
+            {
+                QueueDetails = "Queue is empty";
+                return;
+            }
+
+            // Take most recent 50 entries, ordered by timestamp descending
+            var recentLocations = locations
+                .OrderByDescending(l => l.Timestamp)
+                .Take(50)
+                .ToList();
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Showing {recentLocations.Count} of {locations.Count} entries (newest first)");
+            sb.AppendLine(new string('-', 60));
+
+            foreach (var loc in recentLocations)
+            {
+                var status = loc.SyncStatus switch
+                {
+                    Core.Enums.SyncStatus.Pending => loc.IsServerRejected ? "REJECTED" :
+                                         loc.SyncAttempts >= 5 ? "FAILED" :
+                                         loc.SyncAttempts > 0 ? $"RETRY({loc.SyncAttempts})" : "PENDING",
+                    Core.Enums.SyncStatus.Synced => "SYNCED",
+                    Core.Enums.SyncStatus.Failed => "FAILED",
+                    _ => "?"
+                };
+
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                sb.AppendLine($"[{loc.Timestamp:HH:mm:ss}] {status}");
+                sb.AppendLine($"  Loc: {loc.Latitude.ToString("F5", inv)}, {loc.Longitude.ToString("F5", inv)}");
+
+                if (loc.Accuracy.HasValue)
+                    sb.Append($"  Acc: {loc.Accuracy.Value.ToString("F0", inv)}m");
+                if (loc.Speed.HasValue)
+                    sb.Append($"  Spd: {loc.Speed.Value.ToString("F1", inv)}m/s");
+                if (loc.Accuracy.HasValue || loc.Speed.HasValue)
+                    sb.AppendLine();
+
+                if (!string.IsNullOrEmpty(loc.LastError))
+                    sb.AppendLine($"  Err: {loc.LastError}");
+
+                sb.AppendLine();
+            }
+
+            QueueDetails = sb.ToString();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading queue details");
+            QueueDetails = $"Error loading queue details: {ex.Message}";
+        }
+    }
+
     #endregion
 
     #region Update Methods
@@ -425,12 +661,15 @@ public partial class DiagnosticsViewModel : BaseViewModel
         CacheHealthStatus = diag.CacheHealthStatus;
         LiveTileCount = diag.LiveCacheTileCount;
         LiveCacheSize = $"{diag.LiveCacheSizeMB:F1} MB";
-        LiveCacheUsage = $"{diag.LiveCacheUsagePercent:F0}%";
+        LiveCacheMaxSizeMB = diag.LiveCacheMaxSizeMB;
+        LiveCacheUsage = $"{diag.LiveCacheSizeMB:F0} MB / {diag.LiveCacheMaxSizeMB} MB";
         LiveCacheUsagePercent = diag.LiveCacheUsagePercent;
         TripTileCount = diag.TripCacheTileCount;
         TripCacheSize = $"{diag.TripCacheSizeMB:F1} MB";
+        TripCacheUsage = $"{diag.TripCacheSizeMB:F0} MB / {diag.TripCacheMaxSizeMB} MB";
         DownloadedTripCount = diag.DownloadedTripCount;
-        TotalCacheSize = $"{diag.TotalCacheSizeMB:F1} MB";
+        var totalMaxMB = diag.LiveCacheMaxSizeMB + diag.TripCacheMaxSizeMB;
+        TotalCacheSize = $"{diag.TotalCacheSizeMB:F0} MB / {totalMaxMB} MB";
     }
 
     private void UpdateTracking(TrackingDiagnostics diag)

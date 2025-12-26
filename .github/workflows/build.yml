@@ -1,0 +1,62 @@
+name: Build MAUI App
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-android:
+    name: Build Android
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-maui-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-maui-
+          ${{ runner.os }}-nuget-
+
+    - name: Cache MAUI workload
+      uses: actions/cache@v4
+      id: cache-maui
+      with:
+        path: |
+          C:\Program Files\dotnet\metadata
+          C:\Program Files\dotnet\packs
+          C:\Program Files\dotnet\library-packs
+          C:\Program Files\dotnet\sdk-manifests
+        key: ${{ runner.os }}-maui-workload-${{ env.DOTNET_VERSION }}
+
+    - name: Install MAUI workload
+      if: steps.cache-maui.outputs.cache-hit != 'true'
+      run: dotnet workload install maui
+
+    - name: Restore dependencies
+      run: dotnet restore src/WayfarerMobile/WayfarerMobile.csproj
+
+    - name: Build Android
+      run: dotnet build src/WayfarerMobile/WayfarerMobile.csproj -f net10.0-android --configuration Release --no-restore
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-build
+        path: src/WayfarerMobile/bin/Release/net10.0-android/
+        retention-days: 7

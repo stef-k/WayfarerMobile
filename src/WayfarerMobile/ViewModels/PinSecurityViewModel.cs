@@ -370,6 +370,11 @@ public partial class PinSecurityViewModel : ObservableObject
         }
         else
         {
+            // Update toggle state to reflect enabled protection
+            _isLoadingSettings = true;
+            IsPinLockEnabled = true;
+            _isLoadingSettings = false;
+
             var page = GetCurrentPage();
             if (page != null)
             {

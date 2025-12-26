@@ -76,7 +76,7 @@ public partial class SettingsViewModel : BaseViewModel
     /// Gets or sets whether to keep the screen on while the app is in the foreground.
     /// </summary>
     [ObservableProperty]
-    private bool _keepScreenOn = true;
+    private bool _keepScreenOn = false;
 
     /// <summary>
     /// Gets the available theme options.

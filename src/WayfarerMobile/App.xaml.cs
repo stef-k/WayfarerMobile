@@ -19,6 +19,11 @@ public partial class App : Application
     private bool _isColdStart = true;
 
     /// <summary>
+    /// Guards against showing multiple lock screens due to rapid resume events.
+    /// </summary>
+    private bool _isShowingLockScreen;
+
+    /// <summary>
     /// Creates a new instance of the application.
     /// </summary>
     /// <param name="serviceProvider">The service provider for DI.</param>
@@ -298,7 +303,11 @@ public partial class App : Application
             appLockService?.OnAppToForeground();
 
             // Show lock screen if protection is enabled and session is locked
-            if (appLockService != null && !appLockService.IsAccessAllowed() && !appLockService.IsPromptAwaiting)
+            // Guard against rapid resume events that could show multiple lock screens
+            if (appLockService != null &&
+                !appLockService.IsAccessAllowed() &&
+                !appLockService.IsPromptAwaiting &&
+                !_isShowingLockScreen)
             {
                 await ShowLockScreenAsync();
             }
@@ -468,15 +477,33 @@ public partial class App : Application
 
     /// <summary>
     /// Shows the lock screen for PIN entry.
+    /// Uses _isShowingLockScreen flag to prevent duplicate navigations.
     /// </summary>
     private async Task ShowLockScreenAsync()
     {
+        // Double-check guard to prevent race conditions
+        if (_isShowingLockScreen)
+            return;
+
+        _isShowingLockScreen = true;
+
         try
         {
             var appLockService = _serviceProvider.GetService<IAppLockService>();
             appLockService?.SetPromptAwaiting(true);
 
-            await Shell.Current.GoToAsync("lockscreen");
+            // Check if we're already on the lock screen to prevent stacking
+            var currentRoute = Shell.Current?.CurrentState?.Location?.OriginalString ?? "";
+            if (currentRoute.Contains("lockscreen", StringComparison.OrdinalIgnoreCase))
+            {
+                System.Diagnostics.Debug.WriteLine("[App] Already on lock screen, skipping navigation");
+                return;
+            }
+
+            if (Shell.Current != null)
+            {
+                await Shell.Current.GoToAsync("lockscreen");
+            }
         }
         catch (Exception ex)
         {
@@ -485,6 +512,10 @@ public partial class App : Application
             // Reset prompt awaiting flag on error
             var appLockService = _serviceProvider.GetService<IAppLockService>();
             appLockService?.SetPromptAwaiting(false);
+        }
+        finally
+        {
+            _isShowingLockScreen = false;
         }
     }
 

@@ -8,21 +8,21 @@
              Title="Enter PIN"
              Shell.NavBarIsVisible="False"
              Shell.PresentationMode="ModalAnimated"
-             BackgroundColor="{StaticResource Primary}">
+             BackgroundColor="{StaticResource Gray900}">
 
-    <Grid RowDefinitions="*,Auto,2*" Padding="24">
+    <Grid RowDefinitions="Auto,*,2*" Padding="24">
 
         <!-- Header Section -->
         <VerticalStackLayout Grid.Row="0"
-                            VerticalOptions="End"
+                            VerticalOptions="Center"
                             Spacing="16"
-                            Padding="0,0,0,32">
+                            Padding="0,40,0,24">
 
             <!-- App Icon/Lock Icon -->
             <Border WidthRequest="80"
                     HeightRequest="80"
                     StrokeThickness="0"
-                    BackgroundColor="#FFFFFF20"
+                    BackgroundColor="{StaticResource Primary}"
                     HorizontalOptions="Center">
                 <Border.StrokeShape>
                     <RoundRectangle CornerRadius="40" />
@@ -59,8 +59,8 @@
                 <Border WidthRequest="48"
                         HeightRequest="48"
                         StrokeThickness="2"
-                        Stroke="#FFFFFF80"
-                        BackgroundColor="{Binding Digit1, Converter={StaticResource IsNotNullConverter}, ConverterParameter='#FFFFFF40|Transparent'}">
+                        Stroke="{Binding Digit1, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#e45243|#FFFFFF80'}"
+                        BackgroundColor="{Binding Digit1, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#e45243|#00000000'}">
                     <Border.StrokeShape>
                         <RoundRectangle CornerRadius="24" />
                     </Border.StrokeShape>
@@ -75,8 +75,8 @@
                 <Border WidthRequest="48"
                         HeightRequest="48"
                         StrokeThickness="2"
-                        Stroke="#FFFFFF80"
-                        BackgroundColor="{Binding Digit2, Converter={StaticResource IsNotNullConverter}, ConverterParameter='#FFFFFF40|Transparent'}">
+                        Stroke="{Binding Digit2, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#e45243|#FFFFFF80'}"
+                        BackgroundColor="{Binding Digit2, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#e45243|#00000000'}">
                     <Border.StrokeShape>
                         <RoundRectangle CornerRadius="24" />
                     </Border.StrokeShape>
@@ -91,8 +91,8 @@
                 <Border WidthRequest="48"
                         HeightRequest="48"
                         StrokeThickness="2"
-                        Stroke="#FFFFFF80"
-                        BackgroundColor="{Binding Digit3, Converter={StaticResource IsNotNullConverter}, ConverterParameter='#FFFFFF40|Transparent'}">
+                        Stroke="{Binding Digit3, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#e45243|#FFFFFF80'}"
+                        BackgroundColor="{Binding Digit3, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#e45243|#00000000'}">
                     <Border.StrokeShape>
                         <RoundRectangle CornerRadius="24" />
                     </Border.StrokeShape>
@@ -107,8 +107,8 @@
                 <Border WidthRequest="48"
                         HeightRequest="48"
                         StrokeThickness="2"
-                        Stroke="#FFFFFF80"
-                        BackgroundColor="{Binding Digit4, Converter={StaticResource IsNotNullConverter}, ConverterParameter='#FFFFFF40|Transparent'}">
+                        Stroke="{Binding Digit4, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#e45243|#FFFFFF80'}"
+                        BackgroundColor="{Binding Digit4, Converter={StaticResource NotNullToColorConverter}, ConverterParameter='#e45243|#00000000'}">
                     <Border.StrokeShape>
                         <RoundRectangle CornerRadius="24" />
                     </Border.StrokeShape>
@@ -144,13 +144,13 @@
 
         <!-- Numeric Keypad -->
         <Grid Grid.Row="2"
-              RowDefinitions="*,*,*,*"
-              ColumnDefinitions="*,*,*"
-              ColumnSpacing="16"
-              RowSpacing="12"
+              RowDefinitions="Auto,Auto,Auto,Auto"
+              ColumnDefinitions="80,80,80"
+              ColumnSpacing="20"
+              RowSpacing="16"
               VerticalOptions="Center"
-              MaximumWidthRequest="320"
-              HorizontalOptions="Center">
+              HorizontalOptions="Center"
+              Padding="0,20,0,0">
 
             <!-- Row 1: 1, 2, 3 -->
             <Button Grid.Row="0" Grid.Column="0"
@@ -240,7 +240,7 @@
 
     <ContentPage.Resources>
         <Style x:Key="PinKeypadButton" TargetType="Button">
-            <Setter Property="BackgroundColor" Value="#FFFFFF20" />
+            <Setter Property="BackgroundColor" Value="#424242" />
             <Setter Property="TextColor" Value="White" />
             <Setter Property="FontSize" Value="28" />
             <Setter Property="CornerRadius" Value="32" />
@@ -253,13 +253,13 @@
                         <VisualState x:Name="Normal" />
                         <VisualState x:Name="Pressed">
                             <VisualState.Setters>
-                                <Setter Property="BackgroundColor" Value="#FFFFFF40" />
+                                <Setter Property="BackgroundColor" Value="#616161" />
                             </VisualState.Setters>
                         </VisualState>
                         <VisualState x:Name="Disabled">
                             <VisualState.Setters>
-                                <Setter Property="BackgroundColor" Value="#FFFFFF10" />
-                                <Setter Property="TextColor" Value="#FFFFFF60" />
+                                <Setter Property="BackgroundColor" Value="#303030" />
+                                <Setter Property="TextColor" Value="#757575" />
                             </VisualState.Setters>
                         </VisualState>
                     </VisualStateGroup>
