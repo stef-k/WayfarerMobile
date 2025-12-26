@@ -904,45 +904,39 @@ public class GroupsViewModelTests
     #region SSE Management Tests
 
     /// <summary>
-    /// Documents that StartSseSubscriptionsAsync creates SSE clients.
+    /// Documents that StartSseSubscriptionsAsync creates SSE client.
     /// </summary>
     [Fact]
-    public void StartSseSubscriptionsAsync_CreatesSseClients()
+    public void StartSseSubscriptionsAsync_CreatesSseClient()
     {
         // Expected behavior from StartSseSubscriptionsAsync:
-        // _locationSseClient = _sseClientFactory.Create();
-        // _membershipSseClient = _sseClientFactory.Create();
+        // _groupSseClient = _sseClientFactory.Create();
 
-        // Two SSE clients should be created:
-        // 1. Location SSE client for real-time location updates
-        // 2. Membership SSE client for visibility/removal events
+        // Single SSE client created for consolidated group stream
+        // (both location and membership events from same connection)
 
-        var clientCount = 2;
+        var clientCount = 1;
 
-        clientCount.Should().Be(2, "Two SSE clients should be created for location and membership");
+        clientCount.Should().Be(1, "Single SSE client for consolidated group stream");
     }
 
     /// <summary>
-    /// Documents that StopSseSubscriptions disposes SSE clients.
+    /// Documents that StopSseSubscriptions disposes SSE client.
     /// </summary>
     [Fact]
-    public void StopSseSubscriptions_DisposesSseClients()
+    public void StopSseSubscriptions_DisposesSseClient()
     {
         // Expected behavior from StopSseSubscriptions:
         // _sseCts?.Cancel();
-        // _locationSseClient?.Stop();
-        // _locationSseClient?.Dispose();
-        // _membershipSseClient?.Stop();
-        // _membershipSseClient?.Dispose();
+        // _groupSseClient?.Stop();
+        // _groupSseClient?.Dispose();
 
         var operationSequence = new[]
         {
             "Cancel CancellationTokenSource",
             "Unsubscribe event handlers",
-            "Stop location SSE client",
-            "Dispose location SSE client",
-            "Stop membership SSE client",
-            "Dispose membership SSE client",
+            "Stop group SSE client",
+            "Dispose group SSE client",
             "Clear throttle tracking"
         };
 
