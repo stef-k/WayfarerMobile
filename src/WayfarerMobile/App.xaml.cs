@@ -298,6 +298,13 @@ public partial class App : Application
     {
         try
         {
+            // Check for corrupted state (e.g., user cleared data while app was backgrounded)
+            if (await CheckAndRecoverFromCorruptedStateAsync())
+            {
+                // State was corrupted and recovered - navigate to onboarding
+                return;
+            }
+
             // Handle app lock
             var appLockService = _serviceProvider.GetService<IAppLockService>();
             appLockService?.OnAppToForeground();
@@ -343,6 +350,107 @@ public partial class App : Application
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[App] Error in OnWindowResumed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Checks for corrupted app state and attempts recovery.
+    /// This handles the case where the user clears app data while the app is backgrounded.
+    /// </summary>
+    /// <returns>True if state was corrupted and recovery was triggered, false otherwise.</returns>
+    private async Task<bool> CheckAndRecoverFromCorruptedStateAsync()
+    {
+        try
+        {
+            // Try to access settings - this validates Preferences/SecureStorage are accessible
+            var settings = _serviceProvider.GetService<ISettingsService>();
+            if (settings == null)
+            {
+                System.Diagnostics.Debug.WriteLine("[App] Settings service unavailable - triggering recovery");
+                await TriggerRecoveryAsync();
+                return true;
+            }
+
+            // Use a canary value to detect if Preferences were cleared while we were backgrounded.
+            // We set this canary after successful app start. If it's missing but IsFirstRun is false
+            // (meaning we thought we were configured), then data was cleared externally.
+            const string canaryKey = "app_state_canary";
+            var canaryValue = Preferences.Get(canaryKey, (string?)null);
+            var isFirstRun = settings.IsFirstRun;
+
+            // If canary is missing but we're not on first run, we need to determine:
+            // 1. Corruption: data was cleared while app was backgrounded
+            // 2. Normal: first resume after completing onboarding (canary not set yet)
+            //
+            // To distinguish, check if configuration is actually valid
+            if (canaryValue == null && !isFirstRun)
+            {
+                // Check if we actually have valid configuration
+                // If IsConfigured is false but IsFirstRun is also false, state is corrupted
+                if (!settings.IsConfigured)
+                {
+                    System.Diagnostics.Debug.WriteLine("[App] State corruption detected (not configured, not first run, no canary) - triggering recovery");
+                    settings.ResetToDefaults();
+                    await TriggerRecoveryAsync();
+                    return true;
+                }
+
+                // State is valid - set canary for future detection
+                System.Diagnostics.Debug.WriteLine("[App] Setting state canary after successful state validation");
+                Preferences.Set(canaryKey, "active");
+            }
+
+            // If not first run and canary exists, state is valid
+            // If first run, wait for onboarding to complete before setting canary
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[App] State check failed with exception - triggering recovery: {ex.Message}");
+
+            try
+            {
+                var settings = _serviceProvider.GetService<ISettingsService>();
+                settings?.ResetToDefaults();
+            }
+            catch
+            {
+                // Direct reset if service unavailable
+                try
+                {
+                    Preferences.Clear();
+                    SecureStorage.Default.RemoveAll();
+                    Preferences.Set("is_first_run", true);
+                }
+                catch
+                {
+                    // Last resort - just navigate to onboarding
+                }
+            }
+
+            await TriggerRecoveryAsync();
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Triggers recovery by navigating to onboarding.
+    /// </summary>
+    private async Task TriggerRecoveryAsync()
+    {
+        try
+        {
+            System.Diagnostics.Debug.WriteLine("[App] Triggering recovery - navigating to onboarding");
+
+            if (Shell.Current != null)
+            {
+                await Shell.Current.GoToAsync("//onboarding");
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[App] Failed to navigate to onboarding during recovery: {ex.Message}");
         }
     }
 

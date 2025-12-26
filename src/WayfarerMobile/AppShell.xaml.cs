@@ -1,4 +1,5 @@
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Services;
 using WayfarerMobile.Views;
 using WayfarerMobile.Views.Onboarding;
 using WayfarerMobile.ViewModels;
@@ -11,8 +12,9 @@ namespace WayfarerMobile;
 public partial class AppShell : Shell
 {
     private readonly IServiceProvider _serviceProvider;
-    private readonly ISettingsService _settingsService;
-    private readonly IAppLockService _appLockService;
+    private readonly ISettingsService? _settingsService;
+    private readonly IAppLockService? _appLockService;
+    private readonly bool _recoveryMode;
 
     /// <summary>
     /// Creates a new instance of AppShell.
@@ -22,8 +24,37 @@ public partial class AppShell : Shell
     {
         InitializeComponent();
         _serviceProvider = serviceProvider;
-        _settingsService = serviceProvider.GetRequiredService<ISettingsService>();
-        _appLockService = serviceProvider.GetRequiredService<IAppLockService>();
+
+        // Try to resolve critical services with recovery fallback
+        try
+        {
+            _settingsService = serviceProvider.GetRequiredService<ISettingsService>();
+            _appLockService = serviceProvider.GetRequiredService<IAppLockService>();
+            _recoveryMode = false;
+        }
+        catch (Exception ex)
+        {
+            // DI resolution failed - likely corrupted state after data clear
+            System.Diagnostics.Debug.WriteLine($"[AppShell] Critical service resolution failed: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine("[AppShell] Entering recovery mode");
+
+            _recoveryMode = true;
+
+            // Try to recover by resetting settings
+            TryRecoverFromCorruptedState(serviceProvider);
+
+            // Try to get services again after recovery
+            try
+            {
+                _settingsService = serviceProvider.GetService<ISettingsService>();
+                _appLockService = serviceProvider.GetService<IAppLockService>();
+            }
+            catch
+            {
+                // Still failing - services will remain null, we'll handle in OnShellLoaded
+                System.Diagnostics.Debug.WriteLine("[AppShell] Services still unavailable after recovery attempt");
+            }
+        }
 
         // Set up content templates to use DI
         OnboardingContent.ContentTemplate = new DataTemplate(() =>
@@ -52,11 +83,55 @@ public partial class AppShell : Shell
     }
 
     /// <summary>
+    /// Attempts to recover from corrupted app state by resetting settings to defaults.
+    /// </summary>
+    private static void TryRecoverFromCorruptedState(IServiceProvider serviceProvider)
+    {
+        try
+        {
+            // Try to get SettingsService and reset it
+            var settings = serviceProvider.GetService<ISettingsService>();
+            if (settings != null)
+            {
+                settings.ResetToDefaults();
+                System.Diagnostics.Debug.WriteLine("[AppShell] Settings reset via service");
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[AppShell] Could not reset via service: {ex.Message}");
+        }
+
+        // If we can't get the service, try direct reset
+        try
+        {
+            System.Diagnostics.Debug.WriteLine("[AppShell] Attempting direct preferences/storage reset");
+            Preferences.Clear();
+            SecureStorage.Default.RemoveAll();
+            Preferences.Set("is_first_run", true);
+            System.Diagnostics.Debug.WriteLine("[AppShell] Direct reset complete");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[AppShell] Direct reset failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
     /// Handles shell loaded event to set initial navigation.
     /// </summary>
     private async void OnShellLoaded(object? sender, EventArgs e)
     {
         Loaded -= OnShellLoaded;
+
+        // If in recovery mode or settings unavailable, go to onboarding
+        if (_recoveryMode || _settingsService == null)
+        {
+            System.Diagnostics.Debug.WriteLine("[AppShell] Recovery mode or missing settings - navigating to onboarding");
+            await GoToAsync("//onboarding");
+            return;
+        }
 
         if (_settingsService.IsFirstRun)
         {
@@ -67,7 +142,7 @@ public partial class AppShell : Shell
         {
             // Show lock screen on cold start if protection is enabled
             // (we're already on main since it's the default)
-            if (!_appLockService.IsAccessAllowed())
+            if (_appLockService != null && !_appLockService.IsAccessAllowed())
             {
                 await GoToAsync("lockscreen");
             }

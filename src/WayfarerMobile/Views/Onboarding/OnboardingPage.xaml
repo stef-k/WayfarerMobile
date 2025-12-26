@@ -13,11 +13,14 @@
         <!-- Progress indicator at top -->
         <VerticalStackLayout Grid.Row="0" Spacing="10" Margin="0,20,0,20">
             <sfProgress:SfLinearProgressBar Progress="{Binding StepProgress}"
-                                            ProgressHeight="6"
-                                            TrackHeight="6"
+                                            Minimum="0"
+                                            Maximum="1"
+                                            ProgressHeight="10"
+                                            TrackHeight="10"
+                                            CornerRadius="5"
                                             ProgressFill="{StaticResource Primary}"
                                             TrackFill="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
-            <Label Text="{Binding CurrentStep, StringFormat='Step {0:N0} of 6'}"
+            <Label Text="{Binding DisplayStep, StringFormat='Step {0} of 6'}"
                    FontSize="12"
                    HorizontalOptions="Center"
                    TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
