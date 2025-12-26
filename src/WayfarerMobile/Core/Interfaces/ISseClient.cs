@@ -25,6 +25,11 @@ public interface ISseClient : IDisposable
     event EventHandler<SseLocationEventArgs>? LocationReceived;
 
     /// <summary>
+    /// Fired when a location is deleted.
+    /// </summary>
+    event EventHandler<SseLocationDeletedEventArgs>? LocationDeleted;
+
+    /// <summary>
     /// Fired when a membership update is received from the SSE stream.
     /// </summary>
     event EventHandler<SseMembershipEventArgs>? MembershipReceived;

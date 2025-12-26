@@ -48,6 +48,9 @@ public class SseClient : ISseClient
     public event EventHandler<SseLocationEventArgs>? LocationReceived;
 
     /// <inheritdoc />
+    public event EventHandler<SseLocationDeletedEventArgs>? LocationDeleted;
+
+    /// <inheritdoc />
     public event EventHandler<SseMembershipEventArgs>? MembershipReceived;
 
     /// <inheritdoc />
@@ -476,6 +479,17 @@ public class SseClient : ISseClient
                 _logger.LogInformation("SSE location received: {UserName} at {Timestamp}",
                     locationEvent.UserName, locationEvent.TimestampUtc);
                 LocationReceived?.Invoke(this, new SseLocationEventArgs(locationEvent));
+                break;
+
+            case "location-deleted":
+                var deleteEvent = new SseLocationDeletedEvent
+                {
+                    LocationId = root.TryGetProperty("locationId", out var dlid) ? dlid.GetInt32() : 0,
+                    UserId = root.TryGetProperty("userId", out var duid) ? duid.GetString() ?? string.Empty : string.Empty
+                };
+                _logger.LogInformation("SSE location deleted: {LocationId} for user {UserId}",
+                    deleteEvent.LocationId, deleteEvent.UserId);
+                LocationDeleted?.Invoke(this, new SseLocationDeletedEventArgs(deleteEvent));
                 break;
 
             case "visibility-changed":

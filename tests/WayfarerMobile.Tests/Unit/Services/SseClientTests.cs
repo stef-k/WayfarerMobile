@@ -422,6 +422,31 @@ public class SseClientTests
     }
 
     [Fact]
+    public async Task ProcessEventData_LocationDeletedWithTypeDiscriminator_RaisesLocationDeleted()
+    {
+        var sseData = "data: {\"type\":\"location-deleted\",\"locationId\":456,\"userId\":\"user-abc\"}\n\n";
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
+        var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(stream) };
+
+        _mockHttpHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(response);
+
+        var client = CreateClient();
+        SseLocationDeletedEventArgs? receivedArgs = null;
+        client.LocationDeleted += (_, args) => receivedArgs = args;
+
+        using var cts = new CancellationTokenSource(500);
+        try { await client.SubscribeToGroupAsync("group-1", cts.Token); }
+        catch (OperationCanceledException) { }
+
+        receivedArgs.Should().NotBeNull();
+        receivedArgs!.LocationDeleted.LocationId.Should().Be(456);
+        receivedArgs.LocationDeleted.UserId.Should().Be("user-abc");
+    }
+
+    [Fact]
     public async Task ProcessEventData_UnknownType_DoesNotRaiseEvents()
     {
         var sseData = "data: {\"type\":\"unknown-event\",\"userId\":\"user-1\"}\n\n";
@@ -464,6 +489,7 @@ public sealed class TestSseClient : ISseClient
     private static readonly int[] BackoffDelaysMs = [1000, 2000, 5000];
 
     public event EventHandler<SseLocationEventArgs>? LocationReceived;
+    public event EventHandler<SseLocationDeletedEventArgs>? LocationDeleted;
     public event EventHandler<SseMembershipEventArgs>? MembershipReceived;
     public event EventHandler? HeartbeatReceived;
     public event EventHandler? Connected;
@@ -605,6 +631,15 @@ public sealed class TestSseClient : ISseClient
                 LocationReceived?.Invoke(this, new SseLocationEventArgs(locationEvent));
                 break;
 
+            case "location-deleted":
+                var deleteEvent = new SseLocationDeletedEvent
+                {
+                    LocationId = root.TryGetProperty("locationId", out var dlid) ? dlid.GetInt32() : 0,
+                    UserId = root.TryGetProperty("userId", out var duid) ? duid.GetString() ?? string.Empty : string.Empty
+                };
+                LocationDeleted?.Invoke(this, new SseLocationDeletedEventArgs(deleteEvent));
+                break;
+
             case "visibility-changed":
             case "member-left":
             case "member-removed":
@@ -638,6 +673,7 @@ public interface ISseClient : IDisposable
 {
     bool IsConnected { get; }
     event EventHandler<SseLocationEventArgs>? LocationReceived;
+    event EventHandler<SseLocationDeletedEventArgs>? LocationDeleted;
     event EventHandler<SseMembershipEventArgs>? MembershipReceived;
     event EventHandler? HeartbeatReceived;
     event EventHandler? Connected;

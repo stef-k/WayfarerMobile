@@ -1625,6 +1625,7 @@ public partial class GroupsViewModel : BaseViewModel
         if (_groupSseClient != null)
         {
             _groupSseClient.LocationReceived -= OnLocationReceived;
+            _groupSseClient.LocationDeleted -= OnLocationDeleted;
             _groupSseClient.MembershipReceived -= OnMembershipReceived;
             _groupSseClient.Connected -= OnSseConnected;
             _groupSseClient.Reconnecting -= OnSseReconnecting;
@@ -1687,6 +1688,7 @@ public partial class GroupsViewModel : BaseViewModel
         // Create single SSE client for consolidated group stream
         _groupSseClient = _sseClientFactory.Create();
         _groupSseClient.LocationReceived += OnLocationReceived;
+        _groupSseClient.LocationDeleted += OnLocationDeleted;
         _groupSseClient.MembershipReceived += OnMembershipReceived;
         _groupSseClient.Connected += OnSseConnected;
         _groupSseClient.Reconnecting += OnSseReconnecting;
@@ -1734,6 +1736,7 @@ public partial class GroupsViewModel : BaseViewModel
         if (oldGroupClient != null)
         {
             oldGroupClient.LocationReceived -= OnLocationReceived;
+            oldGroupClient.LocationDeleted -= OnLocationDeleted;
             oldGroupClient.MembershipReceived -= OnMembershipReceived;
             oldGroupClient.Connected -= OnSseConnected;
             oldGroupClient.Reconnecting -= OnSseReconnecting;
@@ -1808,6 +1811,38 @@ public partial class GroupsViewModel : BaseViewModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error handling SSE location event");
+        }
+    }
+
+    /// <summary>
+    /// Handles location deleted events from SSE.
+    /// When a location is deleted, refresh the member's data to get their new latest location.
+    /// </summary>
+    private async void OnLocationDeleted(object? sender, SseLocationDeletedEventArgs e)
+    {
+        // Guard against events firing after disposal
+        if (IsDisposed)
+            return;
+
+        try
+        {
+            // Skip updates when viewing historical data
+            if (!IsToday)
+            {
+                _logger.LogDebug("SSE location deleted skipped - viewing historical date");
+                return;
+            }
+
+            var userId = e.LocationDeleted.UserId;
+            _logger.LogDebug("SSE location deleted: {LocationId} for user {UserId}",
+                e.LocationDeleted.LocationId, userId);
+
+            // Refresh the specific member's location to get their new latest
+            await RefreshMemberLocationAsync(userId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error handling SSE location deleted event");
         }
     }
 

@@ -78,6 +78,72 @@ public class SseEventModelsTests
 
     #endregion
 
+    #region SseLocationDeletedEvent Tests
+
+    [Fact]
+    public void SseLocationDeletedEvent_DefaultValues_AreCorrect()
+    {
+        // Arrange
+        var evt = new SseLocationDeletedEvent();
+
+        // Assert
+        evt.LocationId.Should().Be(0);
+        evt.UserId.Should().Be(string.Empty);
+    }
+
+    [Fact]
+    public void SseLocationDeletedEvent_AllProperties_CanBeSetAndRetrieved()
+    {
+        // Arrange
+        var evt = new SseLocationDeletedEvent
+        {
+            LocationId = 12345,
+            UserId = "user-abc-123"
+        };
+
+        // Assert
+        evt.LocationId.Should().Be(12345);
+        evt.UserId.Should().Be("user-abc-123");
+    }
+
+    #endregion
+
+    #region SseLocationDeletedEventArgs Tests
+
+    [Fact]
+    public void SseLocationDeletedEventArgs_Constructor_StoresLocationDeleted()
+    {
+        // Arrange
+        var locationDeleted = new SseLocationDeletedEvent
+        {
+            LocationId = 999,
+            UserId = "test-user"
+        };
+
+        // Act
+        var args = new SseLocationDeletedEventArgs(locationDeleted);
+
+        // Assert
+        args.LocationDeleted.Should().BeSameAs(locationDeleted);
+        args.LocationDeleted.LocationId.Should().Be(999);
+        args.LocationDeleted.UserId.Should().Be("test-user");
+    }
+
+    [Fact]
+    public void SseLocationDeletedEventArgs_InheritsFromEventArgs()
+    {
+        // Arrange
+        var locationDeleted = new SseLocationDeletedEvent();
+
+        // Act
+        var args = new SseLocationDeletedEventArgs(locationDeleted);
+
+        // Assert
+        args.Should().BeAssignableTo<EventArgs>();
+    }
+
+    #endregion
+
     #region SseMembershipEvent Tests
 
     [Fact]

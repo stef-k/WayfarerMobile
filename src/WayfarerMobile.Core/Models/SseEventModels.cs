@@ -26,6 +26,31 @@ public class SseLocationEvent
 }
 
 /// <summary>
+/// SSE event for location deletion.
+/// Received from consolidated channel: group-{groupId}
+/// </summary>
+public class SseLocationDeletedEvent
+{
+    /// <summary>ID of the deleted location.</summary>
+    public int LocationId { get; set; }
+
+    /// <summary>User ID who owned the deleted location.</summary>
+    public string UserId { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Event arguments for location deleted SSE events.
+/// </summary>
+public class SseLocationDeletedEventArgs : EventArgs
+{
+    /// <summary>The location deleted event data.</summary>
+    public SseLocationDeletedEvent LocationDeleted { get; }
+
+    /// <summary>Creates a new instance.</summary>
+    public SseLocationDeletedEventArgs(SseLocationDeletedEvent locationDeleted) => LocationDeleted = locationDeleted;
+}
+
+/// <summary>
 /// SSE event for membership changes.
 /// Received from consolidated channel: group-{groupId}
 /// </summary>
