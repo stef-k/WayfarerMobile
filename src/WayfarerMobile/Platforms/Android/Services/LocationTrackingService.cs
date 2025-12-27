@@ -60,11 +60,17 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
 
     // Performance mode intervals (milliseconds)
     // High: 1s for real-time map updates when app visible
-    // Normal: 95s for background - balances battery vs server's 2-min threshold
+    // Normal: Dynamic based on threshold (sleep/wake optimization)
     // PowerSaver: 5min for critical battery situations
     private const long HighPerformanceIntervalMs = 1000;
-    private const long NormalIntervalMs = 95000;
     private const long PowerSaverIntervalMs = 300000;
+
+    // Sleep/wake optimization intervals for Normal mode
+    // Wake: Short interval to acquire GPS fix quickly
+    // Sleep: Long interval (threshold - buffer) to save battery
+    private const long WakePhaseIntervalMs = 30000;  // 30s - quick GPS acquisition
+    private const long MinSleepIntervalMs = 60000;   // 60s - minimum sleep interval
+    private const int WakeBufferSeconds = 60;        // Wake up 60s before threshold
 
     // Location filtering
     private const float MinAccuracyMeters = 100f;
@@ -108,6 +114,10 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     private DateTime _lastHighAccuracyTime = DateTime.MinValue;
     private DateTime _highAccuracyStartTime = DateTime.MinValue;
     private bool _currentlyUsingHighAccuracy;
+
+    // Best location seen during wake phase (for timeout fallback)
+    private Location? _bestWakePhaseLocation;
+    private float _bestWakePhaseAccuracy = float.MaxValue;
 
     #endregion
 
@@ -526,16 +536,26 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         if (_fusedClient == null || _fusedCallback == null)
             return;
 
-        var interval = GetCurrentInterval();
+        // IMPORTANT: Order matters! Priority determines _currentlyUsingHighAccuracy,
+        // which affects interval calculation. So: priority → state → interval
         var priority = GetCurrentPriority();
         var wasUsingHighAccuracy = _currentlyUsingHighAccuracy;
-        _currentlyUsingHighAccuracy = priority == Priority.PriorityHighAccuracy;
+
+        // Only track high accuracy state for Normal mode (sleep/wake optimization)
+        // HighPerformance and PowerSaver modes don't use timeout-based GPS acquisition
+        _currentlyUsingHighAccuracy = _performanceMode == PerformanceMode.Normal
+            && priority == Priority.PriorityHighAccuracy;
+
+        // Now calculate interval (depends on updated _currentlyUsingHighAccuracy)
+        var interval = GetCurrentInterval();
 
         // Track when we TRANSITION to HighAccuracy (for timeout purposes)
         // Don't reset if we're restarting while already in HighAccuracy
         if (_currentlyUsingHighAccuracy && !wasUsingHighAccuracy)
         {
             _highAccuracyStartTime = DateTime.UtcNow;
+            _bestWakePhaseLocation = null;
+            _bestWakePhaseAccuracy = float.MaxValue;
             Log.Info(LogTag, "Entered HighAccuracy mode, starting timeout timer");
         }
 
@@ -546,8 +566,9 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
 
         _fusedClient.RequestLocationUpdates(request, _fusedCallback, Looper.MainLooper);
 
-        var priorityName = priority == Priority.PriorityHighAccuracy ? "HighAccuracy" : "Balanced";
-        Log.Info(LogTag, $"Fused updates started (interval: {interval}ms, priority: {priorityName})");
+        var priorityName = priority == Priority.PriorityHighAccuracy ? "HighAccuracy (wake)" : "Balanced (sleep)";
+        var intervalSec = interval / 1000;
+        Log.Info(LogTag, $"Mode: {priorityName}, interval: {intervalSec}s");
     }
 
     /// <summary>
@@ -570,48 +591,40 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     }
 
     /// <summary>
-    /// Determines priority for Normal mode using hybrid approach.
+    /// Determines priority for Normal mode using sleep/wake approach.
     /// Uses high accuracy when approaching the sync threshold to ensure
     /// precise GPS fix before data syncs to server.
     /// </summary>
     /// <remarks>
     /// The time threshold is server-configured (default 5 min, can be as low as 2 min).
-    /// Hybrid approach only makes sense when threshold > 1.5x interval, otherwise
-    /// we use high accuracy for every request to guarantee GPS fix per sync period.
+    /// For short thresholds (≤ 2 min), always use high accuracy.
+    /// For longer thresholds, sleep in Balanced mode and wake to HighAccuracy before sync.
     /// </remarks>
     private int GetNormalModePriority()
     {
         // Get the time threshold from settings (server-configured, default 5 minutes)
         var timeThresholdMinutes = Preferences.Get("location_time_threshold", 5);
         var thresholdSeconds = timeThresholdMinutes * 60;
-        var intervalSeconds = NormalIntervalMs / 1000; // 95 seconds
 
-        // If threshold is too short for hybrid approach (less than 1.5x interval),
-        // always use high accuracy to guarantee GPS fix per sync period
-        if (thresholdSeconds < intervalSeconds * 1.5)
+        // For short thresholds (≤ 2 min), always use high accuracy
+        // Sleep/wake optimization doesn't make sense for very short thresholds
+        if (thresholdSeconds <= 120)
         {
-            System.Diagnostics.Debug.WriteLine(
-                $"[LocationTrackingService] Normal mode: using HighAccuracy (threshold {thresholdSeconds}s too short for hybrid)");
             return Priority.PriorityHighAccuracy;
         }
 
-        // Calculate time since last high accuracy request
+        // Calculate time since last high accuracy fix
         var timeSinceHighAccuracy = DateTime.UtcNow - _lastHighAccuracyTime;
 
-        // Use high accuracy when within one interval of threshold
-        // This ensures we get at least one GPS fix per sync period
-        var bufferSeconds = intervalSeconds;
-        var highAccuracyNeeded = timeSinceHighAccuracy.TotalSeconds >= (thresholdSeconds - bufferSeconds);
+        // Use high accuracy when within buffer time of threshold
+        // This ensures we wake up in time to get GPS fix before sync
+        var highAccuracyNeeded = timeSinceHighAccuracy.TotalSeconds >= (thresholdSeconds - WakeBufferSeconds);
 
         if (highAccuracyNeeded)
         {
-            System.Diagnostics.Debug.WriteLine(
-                $"[LocationTrackingService] Normal mode: using HighAccuracy (last GPS fix: {timeSinceHighAccuracy.TotalSeconds:F0}s ago, threshold: {thresholdSeconds}s)");
             return Priority.PriorityHighAccuracy;
         }
 
-        System.Diagnostics.Debug.WriteLine(
-            $"[LocationTrackingService] Normal mode: using Balanced (last GPS fix: {timeSinceHighAccuracy.TotalSeconds:F0}s ago)");
         return Priority.PriorityBalancedPowerAccuracy;
     }
 
@@ -676,6 +689,9 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
 
     /// <summary>
     /// Gets the current polling interval based on performance mode.
+    /// For Normal mode, uses sleep/wake optimization:
+    /// - Wake phase (HighAccuracy): Short interval for quick GPS acquisition
+    /// - Sleep phase (Balanced): Long interval based on threshold to save battery
     /// </summary>
     private long GetCurrentInterval()
     {
@@ -683,8 +699,39 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         {
             PerformanceMode.HighPerformance => HighPerformanceIntervalMs,
             PerformanceMode.PowerSaver => PowerSaverIntervalMs,
-            _ => NormalIntervalMs
+            _ => GetNormalModeInterval()
         };
+    }
+
+    /// <summary>
+    /// Gets the interval for Normal mode based on current priority phase.
+    /// Wake phase uses short interval, sleep phase uses threshold-based interval.
+    /// </summary>
+    private long GetNormalModeInterval()
+    {
+        // Get threshold from settings
+        var timeThresholdMinutes = Preferences.Get("location_time_threshold", 5);
+        var thresholdSeconds = timeThresholdMinutes * 60;
+
+        // For short thresholds (≤ 2 min), use fixed short interval
+        // Sleep/wake optimization doesn't make sense for very short thresholds
+        if (thresholdSeconds <= 120)
+        {
+            return WakePhaseIntervalMs; // 30s - always quick polling
+        }
+
+        // Wake phase (HighAccuracy): Use short interval for quick GPS acquisition
+        if (_currentlyUsingHighAccuracy)
+        {
+            return WakePhaseIntervalMs; // 30s
+        }
+
+        // Sleep phase (Balanced): Use long interval based on threshold
+        // Sleep until (threshold - buffer) to save battery
+        var sleepIntervalMs = (thresholdSeconds - WakeBufferSeconds) * 1000L;
+
+        // Ensure minimum sleep interval
+        return Math.Max(sleepIntervalMs, MinSleepIntervalMs);
     }
 
     #endregion
@@ -729,11 +776,46 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     /// </summary>
     internal void ProcessLocation(Location location)
     {
-        // Filter by accuracy
-        if (location.HasAccuracy && location.Accuracy > MinAccuracyMeters)
+        var accuracy = location.HasAccuracy ? location.Accuracy : float.MaxValue;
+
+        // During wake phase, track the best location we've seen (even if rejected)
+        // This is used as fallback when timeout expires
+        if (_currentlyUsingHighAccuracy && _performanceMode == PerformanceMode.Normal)
         {
-            System.Diagnostics.Debug.WriteLine(
-                $"[LocationTrackingService] Location rejected: accuracy {location.Accuracy}m > {MinAccuracyMeters}m");
+            if (accuracy < _bestWakePhaseAccuracy)
+            {
+                _bestWakePhaseLocation = location;
+                _bestWakePhaseAccuracy = accuracy;
+                Log.Debug(LogTag, $"Best wake location updated: {accuracy:F0}m");
+            }
+        }
+
+        // Check if we're in wake phase and timeout has expired
+        var timeoutExpired = false;
+        if (_currentlyUsingHighAccuracy && _performanceMode == PerformanceMode.Normal)
+        {
+            var timeInHighAccuracy = DateTime.UtcNow - _highAccuracyStartTime;
+            if (timeInHighAccuracy.TotalSeconds >= HighAccuracyTimeoutSeconds)
+            {
+                timeoutExpired = true;
+                // Use best location we collected, not necessarily current one
+                if (_bestWakePhaseLocation != null && _bestWakePhaseAccuracy < accuracy)
+                {
+                    location = _bestWakePhaseLocation;
+                    accuracy = _bestWakePhaseAccuracy;
+                    Log.Warn(LogTag, $"Timeout! Using best collected: {accuracy:F0}m");
+                }
+                else
+                {
+                    Log.Warn(LogTag, $"Timeout! Using current: {accuracy:F0}m");
+                }
+            }
+        }
+
+        // Filter by accuracy (unless timeout expired)
+        if (!timeoutExpired && accuracy > MinAccuracyMeters)
+        {
+            Log.Debug(LogTag, $"Location rejected: {accuracy:F0}m > {MinAccuracyMeters}m");
             return;
         }
 
