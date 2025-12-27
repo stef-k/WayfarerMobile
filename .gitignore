@@ -90,3 +90,4 @@ artifacts/
 _ReSharper*/
 *.[Rr]e[Ss]harper
 .claude/settings.local.json
+adb logcat.txt

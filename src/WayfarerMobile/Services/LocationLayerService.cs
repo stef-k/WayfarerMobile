@@ -25,9 +25,6 @@ public class LocationLayerService : ILocationLayerService
     private readonly ILogger<LocationLayerService> _logger;
     private readonly LocationIndicatorService _indicatorService;
 
-    /// <summary>Animation frame interval in milliseconds (~60 FPS).</summary>
-    private const int AnimationIntervalMs = 16;
-
     // Feature reuse for location indicator
     // Note: Features are tied to a specific layer - if layer changes, features are recreated
     private GeometryFeature? _accuracyFeature;
@@ -37,13 +34,7 @@ public class LocationLayerService : ILocationLayerService
     private MPoint? _lastMapPoint;
     private double _lastAccuracy;
     private double _lastHeading = -1;
-
-    // Animation
-    private Timer? _animationTimer;
-    private bool _animationEnabled;
     private bool _disposed;
-    private WritableLayer? _animationLayer;
-    private Action? _animationCallback;
 
     /// <summary>
     /// Creates a new instance of LocationLayerService.
@@ -264,82 +255,16 @@ public class LocationLayerService : ILocationLayerService
     }
 
     /// <inheritdoc />
-    public void StartAnimation(WritableLayer layer, Action onTick)
-    {
-        if (_animationEnabled || _disposed)
-            return;
-
-        _animationEnabled = true;
-        _animationLayer = layer;
-        _animationCallback = onTick;
-        _indicatorService.IsNavigating = true;
-
-        _animationTimer = new Timer(OnAnimationTick, null, 0, AnimationIntervalMs);
-        _logger.LogDebug("Location indicator animation started");
-    }
-
-    /// <inheritdoc />
     public void StopAnimation()
     {
-        if (!_animationEnabled)
-            return;
-
-        _animationEnabled = false;
-        _indicatorService.IsNavigating = false;
-
-        _animationTimer?.Dispose();
-        _animationTimer = null;
-
-        // Reset to static display
-        if (_lastMapPoint != null && _animationLayer != null)
-        {
-            UpdateLocationFeatures(_animationLayer, _lastMapPoint, _lastAccuracy, _lastHeading);
-            _animationLayer.DataHasChanged();
-        }
-
-        _animationLayer = null;
-        _animationCallback = null;
-
-        _logger.LogDebug("Location indicator animation stopped");
+        // No-op: Animation feature was never implemented.
+        // Method kept for interface compatibility with cleanup code.
     }
 
     /// <inheritdoc />
     public void SetNavigationState(bool isOnRoute)
     {
         _indicatorService.IsOnRoute = isOnRoute;
-    }
-
-    /// <summary>
-    /// Animation tick handler - updates pulsing effect.
-    /// Thread-safe: captures all state before queuing to main thread.
-    /// </summary>
-    private void OnAnimationTick(object? state)
-    {
-        // Capture local references to avoid race conditions
-        var enabled = _animationEnabled;
-        var mapPoint = _lastMapPoint;
-        var layer = _animationLayer;
-        var accuracy = _lastAccuracy;
-        var heading = _lastHeading;
-        var callback = _animationCallback;
-
-        if (!enabled || mapPoint == null || layer == null)
-            return;
-
-        // Update indicator service animation state
-        _indicatorService.UpdateAnimation();
-
-        // Update features with new pulse scale - use captured values
-        MainThread.BeginInvokeOnMainThread(() =>
-        {
-            // Re-check enabled flag and layer validity in case StopAnimation was called
-            if (!_animationEnabled || layer == null)
-                return;
-
-            UpdateLocationFeatures(layer, mapPoint, accuracy, heading);
-            layer.DataHasChanged();
-            callback?.Invoke();
-        });
     }
 
     #region Geometry Creation
@@ -471,7 +396,6 @@ public class LocationLayerService : ILocationLayerService
             return;
 
         _disposed = true;
-        StopAnimation();
 
         // Clear cached features to release memory
         _accuracyFeature = null;
@@ -479,8 +403,6 @@ public class LocationLayerService : ILocationLayerService
         _markerFeature = null;
         _currentFeatureLayer = null;
         _lastMapPoint = null;
-        _animationLayer = null;
-        _animationCallback = null;
     }
 
     #endregion
