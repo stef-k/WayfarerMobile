@@ -44,15 +44,8 @@ public interface ILocationLayerService : IDisposable
     bool ShowLastKnownLocation(WritableLayer layer);
 
     /// <summary>
-    /// Starts the pulsing animation for the location indicator.
-    /// Call this when navigation starts or tracking is active.
-    /// </summary>
-    /// <param name="layer">The layer containing the indicator.</param>
-    /// <param name="onTick">Callback to refresh the layer on each tick.</param>
-    void StartAnimation(WritableLayer layer, Action onTick);
-
-    /// <summary>
-    /// Stops the pulsing animation.
+    /// Stops the pulsing animation (if running).
+    /// Called during cleanup - safe to call even if animation was never started.
     /// </summary>
     void StopAnimation();
 

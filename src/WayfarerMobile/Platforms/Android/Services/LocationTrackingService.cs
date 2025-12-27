@@ -90,6 +90,11 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     private bool _timelineTrackingEnabled = true;
     private readonly object _lock = new();
 
+    // Hybrid GPS priority for Normal mode: tracks when we last used high accuracy
+    // to ensure we get precise GPS fixes before sync while saving battery most of the time
+    private DateTime _lastHighAccuracyTime = DateTime.MinValue;
+    private bool _currentlyUsingHighAccuracy;
+
     #endregion
 
     #region Service Lifecycle
@@ -497,22 +502,95 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     /// Starts location updates using Google Play Services FusedLocationProvider.
     /// This provides the best accuracy by fusing GPS, WiFi, Cell, and sensors.
     /// </summary>
+    /// <remarks>
+    /// Uses hybrid priority for Normal mode:
+    /// - Most of the time: Balanced (WiFi/Cell) to save battery
+    /// - Periodically: High Accuracy (GPS) to get precise fix before sync
+    /// </remarks>
     private void StartFusedLocationUpdates()
     {
         if (_fusedClient == null || _fusedCallback == null)
             return;
 
         var interval = GetCurrentInterval();
+        var priority = GetCurrentPriority();
+        _currentlyUsingHighAccuracy = priority == Priority.PriorityHighAccuracy;
 
-        var request = new global::Android.Gms.Location.LocationRequest.Builder(Priority.PriorityHighAccuracy, interval)
+        var request = new global::Android.Gms.Location.LocationRequest.Builder(priority, interval)
             .SetMinUpdateIntervalMillis(interval / 2)
             .SetMaxUpdateDelayMillis(interval * 2)
             .Build();
 
         _fusedClient.RequestLocationUpdates(request, _fusedCallback, Looper.MainLooper);
 
+        var priorityName = priority == Priority.PriorityHighAccuracy ? "HighAccuracy" : "Balanced";
         System.Diagnostics.Debug.WriteLine(
-            $"[LocationTrackingService] Fused location updates started (interval: {interval}ms)");
+            $"[LocationTrackingService] Fused location updates started (interval: {interval}ms, priority: {priorityName})");
+    }
+
+    /// <summary>
+    /// Gets the current GPS priority based on performance mode.
+    /// </summary>
+    /// <remarks>
+    /// Priority strategy:
+    /// - HighPerformance: Always high accuracy (GPS active, real-time updates)
+    /// - Normal: Hybrid - balanced most of the time, high accuracy periodically
+    /// - PowerSaver: Always balanced (WiFi/Cell, minimal GPS)
+    /// </remarks>
+    private int GetCurrentPriority()
+    {
+        return _performanceMode switch
+        {
+            PerformanceMode.HighPerformance => Priority.PriorityHighAccuracy,
+            PerformanceMode.PowerSaver => Priority.PriorityBalancedPowerAccuracy,
+            _ => GetNormalModePriority()
+        };
+    }
+
+    /// <summary>
+    /// Determines priority for Normal mode using hybrid approach.
+    /// Uses high accuracy when approaching the sync threshold to ensure
+    /// precise GPS fix before data syncs to server.
+    /// </summary>
+    /// <remarks>
+    /// The time threshold is server-configured (default 5 min, can be as low as 2 min).
+    /// Hybrid approach only makes sense when threshold > 1.5x interval, otherwise
+    /// we use high accuracy for every request to guarantee GPS fix per sync period.
+    /// </remarks>
+    private int GetNormalModePriority()
+    {
+        // Get the time threshold from settings (server-configured, default 5 minutes)
+        var timeThresholdMinutes = Preferences.Get("location_time_threshold", 5);
+        var thresholdSeconds = timeThresholdMinutes * 60;
+        var intervalSeconds = NormalIntervalMs / 1000; // 95 seconds
+
+        // If threshold is too short for hybrid approach (less than 1.5x interval),
+        // always use high accuracy to guarantee GPS fix per sync period
+        if (thresholdSeconds < intervalSeconds * 1.5)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[LocationTrackingService] Normal mode: using HighAccuracy (threshold {thresholdSeconds}s too short for hybrid)");
+            return Priority.PriorityHighAccuracy;
+        }
+
+        // Calculate time since last high accuracy request
+        var timeSinceHighAccuracy = DateTime.UtcNow - _lastHighAccuracyTime;
+
+        // Use high accuracy when within one interval of threshold
+        // This ensures we get at least one GPS fix per sync period
+        var bufferSeconds = intervalSeconds;
+        var highAccuracyNeeded = timeSinceHighAccuracy.TotalSeconds >= (thresholdSeconds - bufferSeconds);
+
+        if (highAccuracyNeeded)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[LocationTrackingService] Normal mode: using HighAccuracy (last GPS fix: {timeSinceHighAccuracy.TotalSeconds:F0}s ago, threshold: {thresholdSeconds}s)");
+            return Priority.PriorityHighAccuracy;
+        }
+
+        System.Diagnostics.Debug.WriteLine(
+            $"[LocationTrackingService] Normal mode: using Balanced (last GPS fix: {timeSinceHighAccuracy.TotalSeconds:F0}s ago)");
+        return Priority.PriorityBalancedPowerAccuracy;
     }
 
     /// <summary>
@@ -668,6 +746,61 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         System.Diagnostics.Debug.WriteLine(
             $"[LocationTrackingService] Location: {locationData.Latitude:F6}, {locationData.Longitude:F6} " +
             $"(accuracy: {locationData.Accuracy:F1}m, provider: {locationData.Provider})");
+
+        // In Normal mode with hybrid priority: check if we need to switch priority
+        // - After HighAccuracy fix → switch to Balanced (save battery)
+        // - When approaching threshold → switch to HighAccuracy (get GPS fix)
+        CheckAndAdjustPriority();
+    }
+
+    /// <summary>
+    /// Checks if we should switch GPS priority based on current state.
+    /// Implements the hybrid priority cycling for Normal mode.
+    /// </summary>
+    private void CheckAndAdjustPriority()
+    {
+        // Only applies to Normal mode
+        if (_performanceMode != PerformanceMode.Normal)
+            return;
+
+        // When using HighAccuracy and we receive ANY location, record the time
+        // This ensures we eventually switch to Balanced even with slow GPS
+        if (_currentlyUsingHighAccuracy)
+        {
+            _lastHighAccuracyTime = DateTime.UtcNow;
+        }
+
+        var shouldUseHighAccuracy = GetNormalModePriority() == Priority.PriorityHighAccuracy;
+
+        // Case 1: Currently using HighAccuracy, got a fix, time to switch to Balanced
+        if (_currentlyUsingHighAccuracy && !shouldUseHighAccuracy)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                "[LocationTrackingService] Got location fix, switching to Balanced priority");
+            RestartLocationUpdates();
+        }
+        // Case 2: Currently using Balanced, approaching threshold → switch to HighAccuracy
+        else if (!_currentlyUsingHighAccuracy && shouldUseHighAccuracy)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                "[LocationTrackingService] Approaching sync threshold, switching to HighAccuracy priority");
+            RestartLocationUpdates();
+        }
+    }
+
+    /// <summary>
+    /// Restarts location updates with current priority settings.
+    /// </summary>
+    private void RestartLocationUpdates()
+    {
+        lock (_lock)
+        {
+            if (_currentState == TrackingState.Active)
+            {
+                StopLocationUpdates();
+                StartLocationUpdates();
+            }
+        }
     }
 
     /// <summary>
