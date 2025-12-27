@@ -68,6 +68,10 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     // Location filtering
     private const float MinAccuracyMeters = 100f;
 
+    // Accuracy threshold for considering a location a "real GPS fix"
+    // WiFi/Cell typically gives 50-100m, GPS gives < 20m
+    private const float GpsFixAccuracyThreshold = 50f;
+
     #endregion
 
     #region Fields
@@ -750,33 +754,46 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         // In Normal mode with hybrid priority: check if we need to switch priority
         // - After HighAccuracy fix → switch to Balanced (save battery)
         // - When approaching threshold → switch to HighAccuracy (get GPS fix)
-        CheckAndAdjustPriority();
+        CheckAndAdjustPriority(locationData);
     }
 
     /// <summary>
     /// Checks if we should switch GPS priority based on current state.
     /// Implements the hybrid priority cycling for Normal mode.
     /// </summary>
-    private void CheckAndAdjustPriority()
+    /// <param name="location">The location that was just received.</param>
+    private void CheckAndAdjustPriority(LocationData location)
     {
         // Only applies to Normal mode
         if (_performanceMode != PerformanceMode.Normal)
             return;
 
-        // When using HighAccuracy and we receive ANY location, record the time
-        // This ensures we eventually switch to Balanced even with slow GPS
+        // When using HighAccuracy, only record the time if we got an ACTUAL good fix.
+        // FusedLocationProvider returns cached WiFi/Cell locations first (50-100m accuracy)
+        // before GPS kicks in (< 20m accuracy). We need to wait for the real GPS fix.
         if (_currentlyUsingHighAccuracy)
         {
-            _lastHighAccuracyTime = DateTime.UtcNow;
+            var accuracy = location.Accuracy ?? float.MaxValue;
+            if (accuracy < GpsFixAccuracyThreshold)
+            {
+                _lastHighAccuracyTime = DateTime.UtcNow;
+                System.Diagnostics.Debug.WriteLine(
+                    $"[LocationTrackingService] Good GPS fix acquired ({accuracy:F0}m < {GpsFixAccuracyThreshold}m threshold)");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[LocationTrackingService] Waiting for GPS fix ({accuracy:F0}m >= {GpsFixAccuracyThreshold}m threshold)");
+            }
         }
 
         var shouldUseHighAccuracy = GetNormalModePriority() == Priority.PriorityHighAccuracy;
 
-        // Case 1: Currently using HighAccuracy, got a fix, time to switch to Balanced
+        // Case 1: Currently using HighAccuracy, got a good fix, time to switch to Balanced
         if (_currentlyUsingHighAccuracy && !shouldUseHighAccuracy)
         {
             System.Diagnostics.Debug.WriteLine(
-                "[LocationTrackingService] Got location fix, switching to Balanced priority");
+                "[LocationTrackingService] Got good GPS fix, switching to Balanced priority");
             RestartLocationUpdates();
         }
         // Case 2: Currently using Balanced, approaching threshold → switch to HighAccuracy
