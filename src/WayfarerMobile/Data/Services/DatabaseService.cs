@@ -14,7 +14,7 @@ public class DatabaseService : IAsyncDisposable
 
     private const string DatabaseFilename = "wayfarer.db3";
     private const int MaxSyncAttempts = 5;
-    private const int MaxQueuedLocations = 10000;
+    private const int MaxQueuedLocations = 25000;
 
     private static readonly SQLiteOpenFlags DbFlags =
         SQLiteOpenFlags.ReadWrite |
