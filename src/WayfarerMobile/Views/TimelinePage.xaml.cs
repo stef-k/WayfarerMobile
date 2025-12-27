@@ -26,15 +26,11 @@ public partial class TimelinePage : ContentPage
         BindingContext = viewModel;
 
         Loaded += OnPageLoaded;
-
-        // Subscribe to coordinate picking mode changes to manage bottom sheet state
-        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
     }
 
     private void OnPageLoaded(object? sender, EventArgs e)
     {
-        MapControl.Info += OnMapInfo;
-
+        // Initialize map only once when page is first loaded
         if (MapControl.Map == null)
         {
             MapControl.Map = _viewModel.Map;
@@ -169,6 +165,11 @@ public partial class TimelinePage : ContentPage
     protected override async void OnAppearing()
     {
         base.OnAppearing();
+
+        // Re-subscribe event handlers (unsubscribed in OnDisappearing)
+        MapControl.Info += OnMapInfo;
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+
         await _viewModel.OnAppearingAsync();
     }
 
