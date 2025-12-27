@@ -11,23 +11,37 @@
 
     <!-- Flyout Header with App Name -->
     <Shell.FlyoutHeader>
-        <Grid BackgroundColor="{StaticResource Primary}" Padding="20,50,20,20">
-            <VerticalStackLayout Spacing="5" VerticalOptions="Center">
-                <!-- App icon -->
-                <Image Source="appicon96.png"
-                       WidthRequest="48"
-                       HeightRequest="48"
-                       HorizontalOptions="Start" />
+        <Grid Padding="20,50,20,20">
+            <!-- Gradient background (Coral to Dark Teal) -->
+            <Grid.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#e45243" Offset="0.0" />
+                    <GradientStop Color="#0f5563" Offset="1.0" />
+                </LinearGradientBrush>
+            </Grid.Background>
+
+            <!-- Centered content: icon, title, subtitle -->
+            <VerticalStackLayout
+                Spacing="8"
+                HorizontalOptions="Center"
+                VerticalOptions="Center">
+                <!-- App logo -->
+                <Image Source="logo.png"
+                       WidthRequest="92"
+                       HeightRequest="92"
+                       HorizontalOptions="Center" />
+                <!-- App name -->
                 <Label Text="Wayfarer"
-                       TextColor="{StaticResource Secondary}"
-                       FontSize="24"
-                       FontAttributes="Bold" />
-                <Label Text="Your personal location timeline and trip companion"
                        TextColor="White"
-                       FontSize="12"
-                       Opacity="0.9"
-                       LineBreakMode="WordWrap"
-                       MaxLines="2" />
+                       FontSize="26"
+                       FontAttributes="Bold"
+                       HorizontalOptions="Center" />
+                <!-- Subtitle -->
+                <Label Text="Your personal location timeline&#10;and trip companion"
+                       TextColor="White"
+                       FontSize="14"
+                       HorizontalOptions="Center"
+                       HorizontalTextAlignment="Center" />
             </VerticalStackLayout>
         </Grid>
     </Shell.FlyoutHeader>
