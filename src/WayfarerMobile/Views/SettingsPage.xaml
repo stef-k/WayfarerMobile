@@ -516,6 +516,53 @@
                 </sfExpander:SfExpander.Content>
             </sfExpander:SfExpander>
 
+            <!-- Timeline Data Section -->
+            <sfExpander:SfExpander IsExpanded="False">
+                <sfExpander:SfExpander.Header>
+                    <Grid HeightRequest="48" Padding="10,0">
+                        <Label Text="Timeline Data"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               VerticalOptions="Center" />
+                    </Grid>
+                </sfExpander:SfExpander.Header>
+                <sfExpander:SfExpander.Content>
+                    <VerticalStackLayout Padding="15" Spacing="10">
+                        <Label Text="{Binding LocalTimelineCount, StringFormat='Local entries: {0}'}"
+                               FontSize="14"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+
+                        <Label Text="Export your timeline for backup or use in other applications."
+                               FontSize="12"
+                               Margin="0,5,0,0"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                            <Button Grid.Column="0"
+                                    Text="Export CSV"
+                                    Command="{Binding ExportCsvCommand}"
+                                    Style="{StaticResource DarkButton}"
+                                    HeightRequest="44" />
+                            <Button Grid.Column="1"
+                                    Text="Export GeoJSON"
+                                    Command="{Binding ExportGeoJsonCommand}"
+                                    Style="{StaticResource DarkButton}"
+                                    HeightRequest="44" />
+                        </Grid>
+
+                        <Label Text="Import timeline data from CSV or GeoJSON files."
+                               FontSize="12"
+                               Margin="0,10,0,0"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+
+                        <Button Text="Import Timeline"
+                                Command="{Binding ImportTimelineCommand}"
+                                Style="{StaticResource DarkButton}"
+                                HeightRequest="44" />
+                    </VerticalStackLayout>
+                </sfExpander:SfExpander.Content>
+            </sfExpander:SfExpander>
+
             <!-- Diagnostics Section -->
             <sfExpander:SfExpander IsExpanded="False">
                 <sfExpander:SfExpander.Header>

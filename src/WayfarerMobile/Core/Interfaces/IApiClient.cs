@@ -270,6 +270,12 @@ public class ApiResult
     public int? StatusCode { get; set; }
 
     /// <summary>
+    /// Gets or sets the server-assigned location ID.
+    /// Populated when server stores the location (not set when skipped).
+    /// </summary>
+    public int? LocationId { get; set; }
+
+    /// <summary>
     /// Creates a successful result.
     /// </summary>
     public static ApiResult Ok(string? message = null) =>

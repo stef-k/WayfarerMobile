@@ -386,10 +386,27 @@ public class LocationSyncService : IDisposable
                     // These won't appear on server timeline
                     await _database.MarkLocationServerRejectedAsync(location.Id, "Skipped: distance/time threshold not met");
                     _logger.LogDebug("Location {Id} skipped by server (thresholds) - not marking as synced", location.Id);
+
+                    // Notify listeners that location was skipped (for local timeline cleanup)
+                    LocationSyncCallbacks.NotifyLocationSkipped(
+                        location.Id,
+                        location.Timestamp,
+                        "Threshold not met");
+
                     return (false, true); // Not success (won't be marked synced), continue with next
                 }
 
                 _logger.LogDebug("Location {Id} synced successfully", location.Id);
+
+                // Notify listeners that location was synced (for local timeline ServerId update)
+                if (result.LocationId.HasValue)
+                {
+                    LocationSyncCallbacks.NotifyLocationSynced(
+                        location.Id,
+                        result.LocationId.Value,
+                        location.Timestamp);
+                }
+
                 return (true, true);
             }
 

@@ -196,6 +196,11 @@ public partial class App : Application
             syncService?.Start();
             System.Diagnostics.Debug.WriteLine("[App] Background sync service started");
 
+            // Initialize local timeline storage service (subscribes to location events)
+            var timelineStorageService = _serviceProvider.GetService<LocalTimelineStorageService>();
+            _ = timelineStorageService?.InitializeAsync();
+            System.Diagnostics.Debug.WriteLine("[App] Local timeline storage service initialization started");
+
             // Note: Settings sync is handled by SettingsSyncService, triggered opportunistically
             // in AppLifecycleService.OnResumingAsync() with a 6-hour minimum interval
 

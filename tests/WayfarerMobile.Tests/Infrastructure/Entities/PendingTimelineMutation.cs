@@ -7,8 +7,15 @@ namespace WayfarerMobile.Data.Entities;
 /// Used for offline support - changes are saved locally first, then synced when online.
 /// </summary>
 /// <remarks>
+/// <para>
 /// This is a copy of the entity from WayfarerMobile for testing purposes,
 /// as the main project targets MAUI-specific frameworks.
+/// </para>
+/// <para>
+/// This entity also stores original values for rollback support. If the server
+/// rejects the mutation (4xx error), the local entry can be reverted to its
+/// original state even after app restart.
+/// </para>
 /// </remarks>
 [Table("PendingTimelineMutations")]
 public class PendingTimelineMutation
@@ -25,10 +32,17 @@ public class PendingTimelineMutation
     public string OperationType { get; set; } = "Update";
 
     /// <summary>
-    /// Gets or sets the location ID being mutated.
+    /// Gets or sets the server location ID being mutated.
     /// </summary>
     [Indexed]
     public int LocationId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the local timeline entry ID (for rollback).
+    /// </summary>
+    public int? LocalEntryId { get; set; }
+
+    #region New Values (what we're changing to)
 
     /// <summary>
     /// Gets or sets the new latitude (null if not changed).
@@ -54,6 +68,44 @@ public class PendingTimelineMutation
     /// Gets or sets whether notes field is included in update (allows setting notes to null).
     /// </summary>
     public bool IncludeNotes { get; set; }
+
+    #endregion
+
+    #region Original Values (for rollback on server rejection)
+
+    /// <summary>
+    /// Gets or sets the original latitude before mutation.
+    /// Used to rollback if server rejects the change.
+    /// </summary>
+    public double? OriginalLatitude { get; set; }
+
+    /// <summary>
+    /// Gets or sets the original longitude before mutation.
+    /// Used to rollback if server rejects the change.
+    /// </summary>
+    public double? OriginalLongitude { get; set; }
+
+    /// <summary>
+    /// Gets or sets the original timestamp before mutation.
+    /// Used to rollback if server rejects the change.
+    /// </summary>
+    public DateTime? OriginalTimestamp { get; set; }
+
+    /// <summary>
+    /// Gets or sets the original notes before mutation.
+    /// Used to rollback if server rejects the change.
+    /// </summary>
+    public string? OriginalNotes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the full deleted entry as JSON.
+    /// Used to restore the entry if a delete is rejected by server.
+    /// </summary>
+    public string? DeletedEntryJson { get; set; }
+
+    #endregion
+
+    #region Sync State
 
     /// <summary>
     /// Gets or sets when this mutation was created.
@@ -81,6 +133,8 @@ public class PendingTimelineMutation
     /// </summary>
     public bool IsServerRejected { get; set; }
 
+    #endregion
+
     /// <summary>
     /// Maximum sync attempts before giving up.
     /// </summary>
@@ -91,4 +145,14 @@ public class PendingTimelineMutation
     /// </summary>
     [Ignore]
     public bool CanSync => !IsServerRejected && SyncAttempts < MaxSyncAttempts;
+
+    /// <summary>
+    /// Gets whether this mutation has rollback data available.
+    /// </summary>
+    [Ignore]
+    public bool HasRollbackData =>
+        OperationType == "Delete"
+            ? !string.IsNullOrEmpty(DeletedEntryJson)
+            : OriginalLatitude.HasValue || OriginalLongitude.HasValue ||
+              OriginalTimestamp.HasValue || OriginalNotes != null;
 }
