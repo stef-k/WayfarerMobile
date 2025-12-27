@@ -2,6 +2,8 @@
 using Android.Content;
 using Android.Content.PM;
 using Android.OS;
+using Android.Views;
+using AndroidX.Core.View;
 
 namespace WayfarerMobile;
 
@@ -33,6 +35,29 @@ public class MainActivity : MauiAppCompatActivity
         }
 
         base.OnCreate(savedInstanceState);
+
+        ConfigureStatusBar();
+    }
+
+    /// <summary>
+    /// Configures the status bar appearance - black with white icons.
+    /// </summary>
+    private void ConfigureStatusBar()
+    {
+        if (Window == null) return;
+
+        // Set status bar to black
+#pragma warning disable CA1422 // SetStatusBarColor is obsolete on Android 35+ but works on older versions
+        Window.SetStatusBarColor(Android.Graphics.Color.Black);
+#pragma warning restore CA1422
+
+        // Use WindowInsetsControllerCompat for icon appearance
+        var insetsController = WindowCompat.GetInsetsController(Window, Window.DecorView);
+        if (insetsController != null)
+        {
+            // false = light/white icons (for dark backgrounds)
+            insetsController.AppearanceLightStatusBars = false;
+        }
     }
 
     /// <summary>
