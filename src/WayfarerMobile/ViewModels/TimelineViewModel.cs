@@ -56,6 +56,7 @@ public partial class TimelineViewModel : BaseViewModel
     private readonly ISettingsService _settingsService;
     private readonly IMapBuilder _mapBuilder;
     private readonly ITimelineLayerService _timelineLayerService;
+    private readonly TimelineDataService _timelineDataService;
     private Map? _map;
     private WritableLayer? _timelineLayer;
     private WritableLayer? _tempMarkerLayer;
@@ -232,6 +233,7 @@ public partial class TimelineViewModel : BaseViewModel
     /// <param name="settingsService">The settings service.</param>
     /// <param name="mapBuilder">The map builder for creating isolated map instances.</param>
     /// <param name="timelineLayerService">The timeline layer service for rendering markers.</param>
+    /// <param name="timelineDataService">The timeline data service for local storage access.</param>
     public TimelineViewModel(
         IApiClient apiClient,
         DatabaseService database,
@@ -239,7 +241,8 @@ public partial class TimelineViewModel : BaseViewModel
         IToastService toastService,
         ISettingsService settingsService,
         IMapBuilder mapBuilder,
-        ITimelineLayerService timelineLayerService)
+        ITimelineLayerService timelineLayerService,
+        TimelineDataService timelineDataService)
     {
         _apiClient = apiClient;
         _database = database;
@@ -248,6 +251,7 @@ public partial class TimelineViewModel : BaseViewModel
         _settingsService = settingsService;
         _mapBuilder = mapBuilder;
         _timelineLayerService = timelineLayerService;
+        _timelineDataService = timelineDataService;
         Title = "Timeline";
 
         // Subscribe to sync events
@@ -339,7 +343,7 @@ public partial class TimelineViewModel : BaseViewModel
     #region Commands
 
     /// <summary>
-    /// Loads timeline data from the server API.
+    /// Loads timeline data from server (when online) or local storage (when offline).
     /// </summary>
     [RelayCommand]
     private async Task LoadDataAsync()
@@ -352,12 +356,22 @@ public partial class TimelineViewModel : BaseViewModel
             IsBusy = true;
             IsRefreshing = true;
 
-            // Fetch from server API (always day view)
+            // Offline fallback: load from local storage
+            if (!IsOnline)
+            {
+                await LoadFromLocalAsync();
+                return;
+            }
+
+            // Online: fetch from server and also enrich local storage
             var response = await _apiClient.GetTimelineLocationsAsync(
                 dateType: "day",
                 year: SelectedDate.Year,
                 month: SelectedDate.Month,
                 day: SelectedDate.Day);
+
+            // Enrich local storage in background (don't await - fire and forget)
+            _ = _timelineDataService.EnrichFromServerAsync(SelectedDate);
 
             if (response?.Data == null || !response.Data.Any())
             {
@@ -391,16 +405,66 @@ public partial class TimelineViewModel : BaseViewModel
             // Update map
             UpdateMapLocations();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            await _toastService.ShowErrorAsync($"Failed to load timeline: {ex.Message}");
-            IsEmpty = true;
-            StatsText = "Error loading data";
+            // On server error, try loading from local storage as fallback
+            await LoadFromLocalAsync();
+            await _toastService.ShowWarningAsync("Server unavailable. Showing local data.");
         }
         finally
         {
             IsBusy = false;
             IsRefreshing = false;
+        }
+    }
+
+    /// <summary>
+    /// Loads timeline data from local storage (offline mode).
+    /// </summary>
+    private async Task LoadFromLocalAsync()
+    {
+        try
+        {
+            var localEntries = await _timelineDataService.GetEntriesForDateAsync(SelectedDate);
+
+            if (!localEntries.Any())
+            {
+                _allLocations.Clear();
+                TimelineGroups = new ObservableCollection<TimelineGroup>();
+                TotalCount = 0;
+                IsEmpty = true;
+                StatsText = "No local data";
+                UpdateMapLocations();
+                return;
+            }
+
+            // Convert local entries to TimelineLocation for display
+            _allLocations = TimelineDataService.ToTimelineLocations(localEntries);
+
+            // Group by hour for better organization
+            var groups = _allLocations
+                .GroupBy(l => l.LocalTimestamp.Hour)
+                .OrderByDescending(g => g.Key)
+                .Select(g => new TimelineGroup(
+                    $"{g.Key:00}:00 - {g.Key:00}:59",
+                    g.OrderByDescending(l => l.LocalTimestamp).ToList()))
+                .ToList();
+
+            TimelineGroups = new ObservableCollection<TimelineGroup>(groups);
+            TotalCount = _allLocations.Count;
+            IsEmpty = !groups.Any();
+
+            // Update stats (indicate local data)
+            StatsText = $"{TotalCount} location{(TotalCount == 1 ? "" : "s")} (offline)";
+
+            // Update map
+            UpdateMapLocations();
+        }
+        catch (Exception ex)
+        {
+            await _toastService.ShowErrorAsync($"Failed to load local data: {ex.Message}");
+            IsEmpty = true;
+            StatsText = "Error loading data";
         }
     }
 
@@ -923,21 +987,38 @@ public partial class TimelineViewModel : BaseViewModel
 
     /// <summary>
     /// Handles sync rejected event (server error).
+    /// Reloads timeline to show reverted values after LocalTimelineEntry rollback.
     /// </summary>
     private async void OnSyncRejected(object? sender, SyncFailureEventArgs e)
     {
         await MainThread.InvokeOnMainThreadAsync(async () =>
         {
             await _toastService.ShowErrorAsync($"Save failed: {e.ErrorMessage}");
+            // Reload timeline to reflect reverted LocalTimelineEntry values
+            await LoadDataAsync();
         });
     }
 
     /// <summary>
     /// Handles connectivity change events.
+    /// Processes pending timeline mutations when connectivity is restored.
     /// </summary>
-    private void OnConnectivityChanged(object? sender, ConnectivityChangedEventArgs e)
+    private async void OnConnectivityChanged(object? sender, ConnectivityChangedEventArgs e)
     {
-        MainThread.BeginInvokeOnMainThread(UpdateConnectivityState);
+        var wasOnline = IsOnline;
+        var access = e.NetworkAccess;
+        var isNowOnline = access == NetworkAccess.Internet || access == NetworkAccess.ConstrainedInternet;
+
+        await MainThread.InvokeOnMainThreadAsync(() =>
+        {
+            IsOnline = isNowOnline;
+        });
+
+        // Process pending mutations when connectivity is restored
+        if (!wasOnline && isNowOnline)
+        {
+            await _timelineSyncService.ProcessPendingMutationsAsync();
+        }
     }
 
     /// <summary>

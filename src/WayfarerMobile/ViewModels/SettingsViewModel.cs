@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Data.Services;
+using WayfarerMobile.Services;
 
 namespace WayfarerMobile.ViewModels;
 
@@ -32,6 +33,10 @@ public partial class SettingsViewModel : BaseViewModel
     private readonly ISettingsService _settingsService;
     private readonly IAppLockService _appLockService;
     private readonly DatabaseService _databaseService;
+    private readonly TimelineExportService _exportService;
+    private readonly TimelineImportService _importService;
+    private readonly TimelineDataService _timelineDataService;
+    private readonly IToastService _toastService;
 
     #endregion
 
@@ -251,6 +256,12 @@ public partial class SettingsViewModel : BaseViewModel
     private int _pendingQueueCount;
 
     /// <summary>
+    /// Gets or sets the local timeline entry count.
+    /// </summary>
+    [ObservableProperty]
+    private int _localTimelineCount;
+
+    /// <summary>
     /// Gets or sets whether the queue is being cleared.
     /// </summary>
     [ObservableProperty]
@@ -266,11 +277,26 @@ public partial class SettingsViewModel : BaseViewModel
     /// <param name="settingsService">The settings service.</param>
     /// <param name="appLockService">The app lock service.</param>
     /// <param name="databaseService">The database service.</param>
-    public SettingsViewModel(ISettingsService settingsService, IAppLockService appLockService, DatabaseService databaseService)
+    /// <param name="exportService">The timeline export service.</param>
+    /// <param name="importService">The timeline import service.</param>
+    /// <param name="timelineDataService">The timeline data service.</param>
+    /// <param name="toastService">The toast service.</param>
+    public SettingsViewModel(
+        ISettingsService settingsService,
+        IAppLockService appLockService,
+        DatabaseService databaseService,
+        TimelineExportService exportService,
+        TimelineImportService importService,
+        TimelineDataService timelineDataService,
+        IToastService toastService)
     {
         _settingsService = settingsService;
         _appLockService = appLockService;
         _databaseService = databaseService;
+        _exportService = exportService;
+        _importService = importService;
+        _timelineDataService = timelineDataService;
+        _toastService = toastService;
         PinSecurity = new PinSecurityViewModel(appLockService);
         Title = "Settings";
         LoadSettings();
@@ -713,6 +739,114 @@ public partial class SettingsViewModel : BaseViewModel
         PendingQueueCount = await _databaseService.GetPendingCountAsync();
     }
 
+    /// <summary>
+    /// Refreshes the local timeline count.
+    /// </summary>
+    [RelayCommand]
+    private async Task RefreshTimelineCountAsync()
+    {
+        LocalTimelineCount = await _timelineDataService.GetEntryCountAsync();
+    }
+
+    /// <summary>
+    /// Exports timeline data to CSV format.
+    /// </summary>
+    [RelayCommand]
+    private async Task ExportCsvAsync()
+    {
+        try
+        {
+            var result = await _exportService.ShareExportAsync("csv");
+            if (result != null)
+            {
+                await _toastService.ShowSuccessAsync("Timeline exported successfully");
+            }
+        }
+        catch (Exception ex)
+        {
+            await _toastService.ShowErrorAsync($"Export failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Exports timeline data to GeoJSON format.
+    /// </summary>
+    [RelayCommand]
+    private async Task ExportGeoJsonAsync()
+    {
+        try
+        {
+            var result = await _exportService.ShareExportAsync("geojson");
+            if (result != null)
+            {
+                await _toastService.ShowSuccessAsync("Timeline exported successfully");
+            }
+        }
+        catch (Exception ex)
+        {
+            await _toastService.ShowErrorAsync($"Export failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Imports timeline data from a file.
+    /// </summary>
+    [RelayCommand]
+    private async Task ImportTimelineAsync()
+    {
+        try
+        {
+            var fileTypes = new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
+            {
+                { DevicePlatform.Android, new[] { "text/csv", "application/json", "application/geo+json", "*/*" } },
+                { DevicePlatform.iOS, new[] { "public.comma-separated-values-text", "public.json" } }
+            });
+
+            var result = await FilePicker.Default.PickAsync(new PickOptions
+            {
+                PickerTitle = "Select timeline file to import",
+                FileTypes = fileTypes
+            });
+
+            if (result == null)
+                return;
+
+            using var stream = await result.OpenReadAsync();
+
+            ImportResult importResult;
+            if (result.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+            {
+                importResult = await _importService.ImportFromCsvAsync(stream);
+            }
+            else if (result.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ||
+                     result.FileName.EndsWith(".geojson", StringComparison.OrdinalIgnoreCase))
+            {
+                importResult = await _importService.ImportFromGeoJsonAsync(stream);
+            }
+            else
+            {
+                await _toastService.ShowWarningAsync("Unsupported file format. Use CSV or GeoJSON.");
+                return;
+            }
+
+            // Show result
+            var message = $"Imported: {importResult.Imported}, Updated: {importResult.Updated}, Skipped: {importResult.Skipped}";
+            if (importResult.Errors.Any())
+            {
+                message += $"\nErrors: {importResult.Errors.Count}";
+            }
+
+            await Shell.Current.DisplayAlertAsync("Import Complete", message, "OK");
+
+            // Refresh count
+            await RefreshTimelineCountAsync();
+        }
+        catch (Exception ex)
+        {
+            await _toastService.ShowErrorAsync($"Import failed: {ex.Message}");
+        }
+    }
+
     #endregion
 
     #region Lifecycle
@@ -725,6 +859,7 @@ public partial class SettingsViewModel : BaseViewModel
         LoadSettings();
         await PinSecurity.LoadSettingsAsync();
         await RefreshQueueCountAsync();
+        await RefreshTimelineCountAsync();
         await base.OnAppearingAsync();
     }
 

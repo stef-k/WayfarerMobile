@@ -968,4 +968,290 @@ public class TimelineSyncServiceTests : IAsyncLifetime
     }
 
     #endregion
+
+    #region Rollback Data Persistence Tests
+
+    /// <summary>
+    /// Verifies that original values can be stored for update rollback.
+    /// </summary>
+    [Fact]
+    public async Task RollbackData_StoresOriginalValuesForUpdate()
+    {
+        // Arrange
+        var originalTimestamp = DateTime.UtcNow.AddHours(-1);
+        var mutation = new PendingTimelineMutation
+        {
+            OperationType = "Update",
+            LocationId = 100,
+            LocalEntryId = 50,
+            // New values
+            Latitude = 52.0,
+            Longitude = -1.0,
+            LocalTimestamp = DateTime.UtcNow,
+            Notes = "Updated notes",
+            IncludeNotes = true,
+            // Original values for rollback
+            OriginalLatitude = 51.5074,
+            OriginalLongitude = -0.1278,
+            OriginalTimestamp = originalTimestamp,
+            OriginalNotes = "Original notes"
+        };
+
+        // Act
+        await InsertMutationAsync(mutation);
+
+        // Assert
+        var retrieved = await _database.Table<PendingTimelineMutation>()
+            .FirstOrDefaultAsync(m => m.LocationId == 100);
+
+        retrieved.Should().NotBeNull();
+        retrieved!.LocalEntryId.Should().Be(50);
+        retrieved.OriginalLatitude.Should().Be(51.5074);
+        retrieved.OriginalLongitude.Should().Be(-0.1278);
+        retrieved.OriginalTimestamp.Should().Be(originalTimestamp);
+        retrieved.OriginalNotes.Should().Be("Original notes");
+    }
+
+    /// <summary>
+    /// Verifies that deleted entry JSON can be stored for delete rollback.
+    /// </summary>
+    [Fact]
+    public async Task RollbackData_StoresDeletedEntryJson()
+    {
+        // Arrange
+        var deletedEntryJson = """{"Id":50,"ServerId":100,"Latitude":51.5074,"Longitude":-0.1278}""";
+        var mutation = new PendingTimelineMutation
+        {
+            OperationType = "Delete",
+            LocationId = 100,
+            DeletedEntryJson = deletedEntryJson
+        };
+
+        // Act
+        await InsertMutationAsync(mutation);
+
+        // Assert
+        var retrieved = await _database.Table<PendingTimelineMutation>()
+            .FirstOrDefaultAsync(m => m.LocationId == 100);
+
+        retrieved.Should().NotBeNull();
+        retrieved!.OperationType.Should().Be("Delete");
+        retrieved.DeletedEntryJson.Should().Be(deletedEntryJson);
+    }
+
+    /// <summary>
+    /// Verifies HasRollbackData returns true when original latitude is set.
+    /// </summary>
+    [Fact]
+    public void HasRollbackData_ReturnsTrueWhenOriginalLatitudeSet()
+    {
+        var mutation = new PendingTimelineMutation
+        {
+            OperationType = "Update",
+            LocationId = 100,
+            OriginalLatitude = 51.5074
+        };
+
+        mutation.HasRollbackData.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies HasRollbackData returns true when original longitude is set.
+    /// </summary>
+    [Fact]
+    public void HasRollbackData_ReturnsTrueWhenOriginalLongitudeSet()
+    {
+        var mutation = new PendingTimelineMutation
+        {
+            OperationType = "Update",
+            LocationId = 100,
+            OriginalLongitude = -0.1278
+        };
+
+        mutation.HasRollbackData.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies HasRollbackData returns true when original timestamp is set.
+    /// </summary>
+    [Fact]
+    public void HasRollbackData_ReturnsTrueWhenOriginalTimestampSet()
+    {
+        var mutation = new PendingTimelineMutation
+        {
+            OperationType = "Update",
+            LocationId = 100,
+            OriginalTimestamp = DateTime.UtcNow
+        };
+
+        mutation.HasRollbackData.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies HasRollbackData returns true when original notes is set (even to empty string).
+    /// </summary>
+    [Fact]
+    public void HasRollbackData_ReturnsTrueWhenOriginalNotesSet()
+    {
+        var mutation = new PendingTimelineMutation
+        {
+            OperationType = "Update",
+            LocationId = 100,
+            OriginalNotes = "" // Empty string is still "set"
+        };
+
+        mutation.HasRollbackData.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies HasRollbackData returns false when no original values are set.
+    /// </summary>
+    [Fact]
+    public void HasRollbackData_ReturnsFalseWhenNoOriginalValuesSet()
+    {
+        var mutation = new PendingTimelineMutation
+        {
+            OperationType = "Update",
+            LocationId = 100,
+            Latitude = 52.0,
+            Longitude = -1.0
+            // No original values set
+        };
+
+        mutation.HasRollbackData.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies HasRollbackData returns true for delete with JSON.
+    /// </summary>
+    [Fact]
+    public void HasRollbackData_ReturnsTrueForDeleteWithJson()
+    {
+        var mutation = new PendingTimelineMutation
+        {
+            OperationType = "Delete",
+            LocationId = 100,
+            DeletedEntryJson = """{"Id":50}"""
+        };
+
+        mutation.HasRollbackData.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies HasRollbackData returns false for delete without JSON.
+    /// </summary>
+    [Fact]
+    public void HasRollbackData_ReturnsFalseForDeleteWithoutJson()
+    {
+        var mutation = new PendingTimelineMutation
+        {
+            OperationType = "Delete",
+            LocationId = 100
+            // No DeletedEntryJson
+        };
+
+        mutation.HasRollbackData.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies that merging mutations preserves the original rollback data.
+    /// When a mutation is updated with new values, the original rollback data should be kept.
+    /// </summary>
+    [Fact]
+    public async Task MergeMutation_PreservesOriginalRollbackData()
+    {
+        // Arrange - First mutation with original values
+        var originalTimestamp = DateTime.UtcNow.AddHours(-2);
+        var firstMutation = new PendingTimelineMutation
+        {
+            OperationType = "Update",
+            LocationId = 100,
+            LocalEntryId = 50,
+            Latitude = 52.0,
+            OriginalLatitude = 51.5074,
+            OriginalLongitude = -0.1278,
+            OriginalTimestamp = originalTimestamp,
+            OriginalNotes = "Original notes",
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+        await InsertMutationAsync(firstMutation);
+
+        // Act - Merge with second update (simulate EnqueueMutationWithRollbackAsync merge)
+        var existing = await _database.Table<PendingTimelineMutation>()
+            .Where(m => m.LocationId == 100 && !m.IsServerRejected)
+            .FirstOrDefaultAsync();
+
+        // Only update new values, keep original rollback data
+        existing!.Latitude = 53.0; // New value
+        existing.Longitude = -2.0; // New value
+        existing.CreatedAt = DateTime.UtcNow;
+        // Note: We do NOT update OriginalLatitude, OriginalLongitude, etc.
+        await _database.UpdateAsync(existing);
+
+        // Assert - Original rollback data should be preserved
+        var retrieved = await _database.Table<PendingTimelineMutation>()
+            .FirstOrDefaultAsync(m => m.LocationId == 100);
+
+        retrieved.Should().NotBeNull();
+        retrieved!.Latitude.Should().Be(53.0, "new value should be updated");
+        retrieved.Longitude.Should().Be(-2.0, "new value should be updated");
+        retrieved.OriginalLatitude.Should().Be(51.5074, "original rollback value should be preserved");
+        retrieved.OriginalLongitude.Should().Be(-0.1278, "original rollback value should be preserved");
+        retrieved.OriginalTimestamp.Should().Be(originalTimestamp, "original rollback value should be preserved");
+        retrieved.OriginalNotes.Should().Be("Original notes", "original rollback value should be preserved");
+    }
+
+    /// <summary>
+    /// Verifies rollback data survives database round-trip (simulating app restart).
+    /// </summary>
+    [Fact]
+    public async Task RollbackData_SurvivesDatabaseRoundTrip()
+    {
+        // Arrange
+        var originalTimestamp = new DateTime(2024, 6, 15, 10, 30, 0, DateTimeKind.Utc);
+        var mutation = new PendingTimelineMutation
+        {
+            OperationType = "Update",
+            LocationId = 100,
+            LocalEntryId = 50,
+            Latitude = 52.0,
+            Longitude = -1.0,
+            LocalTimestamp = DateTime.UtcNow,
+            Notes = "Updated",
+            IncludeNotes = true,
+            OriginalLatitude = 51.5074,
+            OriginalLongitude = -0.1278,
+            OriginalTimestamp = originalTimestamp,
+            OriginalNotes = "Original",
+            CreatedAt = DateTime.UtcNow,
+            SyncAttempts = 2,
+            LastSyncAttempt = DateTime.UtcNow.AddMinutes(-5),
+            LastError = "Network timeout"
+        };
+
+        // Act - Insert and retrieve (simulating app restart)
+        await InsertMutationAsync(mutation);
+        var retrieved = await _database.Table<PendingTimelineMutation>()
+            .FirstOrDefaultAsync(m => m.LocationId == 100);
+
+        // Assert - All fields including rollback data should be preserved
+        retrieved.Should().NotBeNull();
+        retrieved!.OperationType.Should().Be("Update");
+        retrieved.LocationId.Should().Be(100);
+        retrieved.LocalEntryId.Should().Be(50);
+        retrieved.Latitude.Should().Be(52.0);
+        retrieved.Longitude.Should().Be(-1.0);
+        retrieved.Notes.Should().Be("Updated");
+        retrieved.IncludeNotes.Should().BeTrue();
+        retrieved.OriginalLatitude.Should().Be(51.5074);
+        retrieved.OriginalLongitude.Should().Be(-0.1278);
+        retrieved.OriginalTimestamp.Should().Be(originalTimestamp);
+        retrieved.OriginalNotes.Should().Be("Original");
+        retrieved.SyncAttempts.Should().Be(2);
+        retrieved.LastError.Should().Be("Network timeout");
+        retrieved.HasRollbackData.Should().BeTrue();
+        retrieved.CanSync.Should().BeTrue();
+    }
+
+    #endregion
 }

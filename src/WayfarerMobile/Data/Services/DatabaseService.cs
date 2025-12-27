@@ -80,6 +80,7 @@ public class DatabaseService : IAsyncDisposable
             await _database.CreateTableAsync<OfflinePolygonEntity>();
             await _database.CreateTableAsync<LiveTileEntity>();
             await _database.CreateTableAsync<ActivityType>();
+            await _database.CreateTableAsync<LocalTimelineEntry>();
 
             _initialized = true;
             System.Diagnostics.Debug.WriteLine($"[DatabaseService] Initialized: {DatabasePath}");
@@ -1030,6 +1031,236 @@ public class DatabaseService : IAsyncDisposable
         await EnsureInitializedAsync();
         return await _database!.ExecuteScalarAsync<long>(
             "SELECT COALESCE(SUM(FileSizeBytes), 0) FROM TripTiles");
+    }
+
+    #endregion
+
+    #region Local Timeline
+
+    /// <summary>
+    /// Inserts a new local timeline entry.
+    /// </summary>
+    /// <param name="entry">The entry to insert.</param>
+    /// <returns>The inserted entry's ID.</returns>
+    public async Task<int> InsertLocalTimelineEntryAsync(LocalTimelineEntry entry)
+    {
+        await EnsureInitializedAsync();
+        await _database!.InsertAsync(entry);
+        return entry.Id;
+    }
+
+    /// <summary>
+    /// Updates an existing local timeline entry.
+    /// </summary>
+    /// <param name="entry">The entry to update.</param>
+    public async Task UpdateLocalTimelineEntryAsync(LocalTimelineEntry entry)
+    {
+        await EnsureInitializedAsync();
+        await _database!.UpdateAsync(entry);
+    }
+
+    /// <summary>
+    /// Gets a local timeline entry by ID.
+    /// </summary>
+    /// <param name="id">The local ID.</param>
+    /// <returns>The entry or null if not found.</returns>
+    public async Task<LocalTimelineEntry?> GetLocalTimelineEntryAsync(int id)
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<LocalTimelineEntry>()
+            .FirstOrDefaultAsync(e => e.Id == id);
+    }
+
+    /// <summary>
+    /// Gets a local timeline entry by server ID.
+    /// </summary>
+    /// <param name="serverId">The server ID.</param>
+    /// <returns>The entry or null if not found.</returns>
+    public async Task<LocalTimelineEntry?> GetLocalTimelineEntryByServerIdAsync(int serverId)
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<LocalTimelineEntry>()
+            .FirstOrDefaultAsync(e => e.ServerId == serverId);
+    }
+
+    /// <summary>
+    /// Gets a local timeline entry by timestamp (for matching during sync).
+    /// Uses a tolerance window to handle minor timestamp differences.
+    /// </summary>
+    /// <param name="timestamp">The timestamp to match (UTC).</param>
+    /// <param name="toleranceSeconds">Tolerance window in seconds (default 2).</param>
+    /// <returns>The entry or null if not found.</returns>
+    public async Task<LocalTimelineEntry?> GetLocalTimelineEntryByTimestampAsync(
+        DateTime timestamp,
+        int toleranceSeconds = 2)
+    {
+        await EnsureInitializedAsync();
+
+        var minTime = timestamp.AddSeconds(-toleranceSeconds);
+        var maxTime = timestamp.AddSeconds(toleranceSeconds);
+
+        return await _database!.Table<LocalTimelineEntry>()
+            .Where(e => e.Timestamp >= minTime && e.Timestamp <= maxTime)
+            .FirstOrDefaultAsync();
+    }
+
+    /// <summary>
+    /// Gets all local timeline entries for a specific date.
+    /// </summary>
+    /// <param name="date">The date to retrieve entries for.</param>
+    /// <returns>List of entries for that date, ordered by timestamp descending.</returns>
+    public async Task<List<LocalTimelineEntry>> GetLocalTimelineEntriesForDateAsync(DateTime date)
+    {
+        await EnsureInitializedAsync();
+
+        var startOfDay = date.Date.ToUniversalTime();
+        var endOfDay = date.Date.AddDays(1).ToUniversalTime();
+
+        return await _database!.Table<LocalTimelineEntry>()
+            .Where(e => e.Timestamp >= startOfDay && e.Timestamp < endOfDay)
+            .OrderByDescending(e => e.Timestamp)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Gets all local timeline entries within a date range.
+    /// </summary>
+    /// <param name="fromDate">Start date (inclusive).</param>
+    /// <param name="toDate">End date (inclusive).</param>
+    /// <returns>List of entries in the range, ordered by timestamp descending.</returns>
+    public async Task<List<LocalTimelineEntry>> GetLocalTimelineEntriesInRangeAsync(
+        DateTime fromDate,
+        DateTime toDate)
+    {
+        await EnsureInitializedAsync();
+
+        var startTime = fromDate.Date.ToUniversalTime();
+        var endTime = toDate.Date.AddDays(1).ToUniversalTime();
+
+        return await _database!.Table<LocalTimelineEntry>()
+            .Where(e => e.Timestamp >= startTime && e.Timestamp < endTime)
+            .OrderByDescending(e => e.Timestamp)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Gets all local timeline entries for export.
+    /// </summary>
+    /// <returns>All entries ordered by timestamp descending.</returns>
+    public async Task<List<LocalTimelineEntry>> GetAllLocalTimelineEntriesAsync()
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<LocalTimelineEntry>()
+            .OrderByDescending(e => e.Timestamp)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Deletes a local timeline entry by ID.
+    /// </summary>
+    /// <param name="id">The local ID.</param>
+    public async Task DeleteLocalTimelineEntryAsync(int id)
+    {
+        await EnsureInitializedAsync();
+        await _database!.ExecuteAsync(
+            "DELETE FROM LocalTimelineEntries WHERE Id = ?", id);
+    }
+
+    /// <summary>
+    /// Deletes a local timeline entry by timestamp (for removing skipped entries).
+    /// Uses a tolerance window to handle minor timestamp differences.
+    /// </summary>
+    /// <param name="timestamp">The timestamp to match (UTC).</param>
+    /// <param name="toleranceSeconds">Tolerance window in seconds (default 2).</param>
+    /// <returns>Number of entries deleted.</returns>
+    public async Task<int> DeleteLocalTimelineEntryByTimestampAsync(
+        DateTime timestamp,
+        int toleranceSeconds = 2)
+    {
+        await EnsureInitializedAsync();
+
+        var minTime = timestamp.AddSeconds(-toleranceSeconds);
+        var maxTime = timestamp.AddSeconds(toleranceSeconds);
+
+        return await _database!.ExecuteAsync(
+            "DELETE FROM LocalTimelineEntries WHERE Timestamp >= ? AND Timestamp <= ?",
+            minTime, maxTime);
+    }
+
+    /// <summary>
+    /// Gets the total count of local timeline entries.
+    /// </summary>
+    /// <returns>The count of entries.</returns>
+    public async Task<int> GetLocalTimelineEntryCountAsync()
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<LocalTimelineEntry>().CountAsync();
+    }
+
+    /// <summary>
+    /// Gets the most recent local timeline entry.
+    /// Used by LocalTimelineFilter to initialize last stored location.
+    /// </summary>
+    /// <returns>The most recent entry or null if none exist.</returns>
+    public async Task<LocalTimelineEntry?> GetMostRecentLocalTimelineEntryAsync()
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<LocalTimelineEntry>()
+            .OrderByDescending(e => e.Timestamp)
+            .FirstOrDefaultAsync();
+    }
+
+    /// <summary>
+    /// Updates the ServerId for a local timeline entry matched by timestamp.
+    /// Used when sync confirms a location was stored on server.
+    /// </summary>
+    /// <param name="timestamp">The timestamp to match (UTC).</param>
+    /// <param name="serverId">The server-assigned ID.</param>
+    /// <param name="toleranceSeconds">Tolerance window in seconds (default 2).</param>
+    /// <returns>True if an entry was updated.</returns>
+    public async Task<bool> UpdateLocalTimelineServerIdAsync(
+        DateTime timestamp,
+        int serverId,
+        int toleranceSeconds = 2)
+    {
+        await EnsureInitializedAsync();
+
+        var minTime = timestamp.AddSeconds(-toleranceSeconds);
+        var maxTime = timestamp.AddSeconds(toleranceSeconds);
+
+        var affected = await _database!.ExecuteAsync(
+            "UPDATE LocalTimelineEntries SET ServerId = ? WHERE Timestamp >= ? AND Timestamp <= ? AND ServerId IS NULL",
+            serverId, minTime, maxTime);
+
+        return affected > 0;
+    }
+
+    /// <summary>
+    /// Clears all local timeline entries.
+    /// Use with caution - this deletes all local timeline history.
+    /// </summary>
+    /// <returns>Number of entries deleted.</returns>
+    public async Task<int> ClearAllLocalTimelineEntriesAsync()
+    {
+        await EnsureInitializedAsync();
+        return await _database!.ExecuteAsync("DELETE FROM LocalTimelineEntries");
+    }
+
+    /// <summary>
+    /// Bulk inserts local timeline entries.
+    /// Used for import operations.
+    /// </summary>
+    /// <param name="entries">The entries to insert.</param>
+    /// <returns>Number of entries inserted.</returns>
+    public async Task<int> BulkInsertLocalTimelineEntriesAsync(IEnumerable<LocalTimelineEntry> entries)
+    {
+        await EnsureInitializedAsync();
+        var entryList = entries.ToList();
+        if (entryList.Count == 0)
+            return 0;
+
+        await _database!.InsertAllAsync(entryList);
+        return entryList.Count;
     }
 
     #endregion

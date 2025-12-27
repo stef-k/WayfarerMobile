@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
 using Syncfusion.Maui.Toolkit.Hosting;
+using WayfarerMobile.Core.Algorithms;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Data.Services;
 using WayfarerMobile.Handlers;
@@ -169,6 +170,13 @@ public static class MauiProgram
         services.AddSingleton<IGroupsService, GroupsService>();
         services.AddSingleton<NavigationService>();
         services.AddSingleton<TripDownloadService>();
+
+        // Local Timeline Services (offline-first timeline storage)
+        services.AddSingleton<LocalTimelineFilter>();
+        services.AddSingleton<LocalTimelineStorageService>();
+        services.AddSingleton<TimelineDataService>();
+        services.AddTransient<TimelineExportService>();
+        services.AddTransient<TimelineImportService>();
 
         // Tile Cache Services (depends on TripDownloadService, ILocationBridge)
         services.AddSingleton<LiveTileCacheService>();

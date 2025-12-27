@@ -964,13 +964,21 @@ public class ApiClient : IApiClient
                 ? msgProp.GetString()
                 : "Success";
 
+            // Extract locationId if present (returned by server when location is stored)
+            int? locationId = root.TryGetProperty("locationId", out var idProp)
+                && idProp.ValueKind == JsonValueKind.Number
+                    ? idProp.GetInt32()
+                    : null;
+
             // Check if location was skipped due to thresholds
             if (message?.Contains("skipped", StringComparison.OrdinalIgnoreCase) == true)
             {
                 return ApiResult.SkippedResult(message);
             }
 
-            return ApiResult.Ok(message);
+            var result = ApiResult.Ok(message);
+            result.LocationId = locationId;
+            return result;
         }
         catch (JsonException)
         {
