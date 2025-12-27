@@ -72,6 +72,11 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     // WiFi/Cell typically gives 50-100m, GPS gives < 20m
     private const float GpsFixAccuracyThreshold = 50f;
 
+    // Maximum time to stay in HighAccuracy mode waiting for GPS fix (seconds)
+    // After this timeout, accept best available location and switch to Balanced
+    // Prevents infinite HighAccuracy mode when GPS is unavailable (e.g., indoors)
+    private const int HighAccuracyTimeoutSeconds = 120;
+
     #endregion
 
     #region Fields
@@ -97,6 +102,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     // Hybrid GPS priority for Normal mode: tracks when we last used high accuracy
     // to ensure we get precise GPS fixes before sync while saving battery most of the time
     private DateTime _lastHighAccuracyTime = DateTime.MinValue;
+    private DateTime _highAccuracyStartTime = DateTime.MinValue;
     private bool _currentlyUsingHighAccuracy;
 
     #endregion
@@ -518,7 +524,17 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
 
         var interval = GetCurrentInterval();
         var priority = GetCurrentPriority();
+        var wasUsingHighAccuracy = _currentlyUsingHighAccuracy;
         _currentlyUsingHighAccuracy = priority == Priority.PriorityHighAccuracy;
+
+        // Track when we TRANSITION to HighAccuracy (for timeout purposes)
+        // Don't reset if we're restarting while already in HighAccuracy
+        if (_currentlyUsingHighAccuracy && !wasUsingHighAccuracy)
+        {
+            _highAccuracyStartTime = DateTime.UtcNow;
+            System.Diagnostics.Debug.WriteLine(
+                "[LocationTrackingService] Entered HighAccuracy mode, starting timeout timer");
+        }
 
         var request = new global::Android.Gms.Location.LocationRequest.Builder(priority, interval)
             .SetMinUpdateIntervalMillis(interval / 2)
@@ -768,32 +784,44 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         if (_performanceMode != PerformanceMode.Normal)
             return;
 
-        // When using HighAccuracy, only record the time if we got an ACTUAL good fix.
-        // FusedLocationProvider returns cached WiFi/Cell locations first (50-100m accuracy)
-        // before GPS kicks in (< 20m accuracy). We need to wait for the real GPS fix.
+        // When using HighAccuracy, check for good fix OR timeout
         if (_currentlyUsingHighAccuracy)
         {
             var accuracy = location.Accuracy ?? float.MaxValue;
+            var timeInHighAccuracy = DateTime.UtcNow - _highAccuracyStartTime;
+
             if (accuracy < GpsFixAccuracyThreshold)
             {
+                // Good GPS fix acquired
                 _lastHighAccuracyTime = DateTime.UtcNow;
                 System.Diagnostics.Debug.WriteLine(
                     $"[LocationTrackingService] Good GPS fix acquired ({accuracy:F0}m < {GpsFixAccuracyThreshold}m threshold)");
             }
+            else if (timeInHighAccuracy.TotalSeconds >= HighAccuracyTimeoutSeconds)
+            {
+                // Timeout - accept what we have and move on
+                // This prevents staying in HighAccuracy forever when GPS is unavailable (e.g., indoors)
+                _lastHighAccuracyTime = DateTime.UtcNow;
+                System.Diagnostics.Debug.WriteLine(
+                    $"[LocationTrackingService] HighAccuracy timeout ({timeInHighAccuracy.TotalSeconds:F0}s >= {HighAccuracyTimeoutSeconds}s), " +
+                    $"accepting {accuracy:F0}m location");
+            }
             else
             {
+                // Still waiting for GPS fix
                 System.Diagnostics.Debug.WriteLine(
-                    $"[LocationTrackingService] Waiting for GPS fix ({accuracy:F0}m >= {GpsFixAccuracyThreshold}m threshold)");
+                    $"[LocationTrackingService] Waiting for GPS fix ({accuracy:F0}m >= {GpsFixAccuracyThreshold}m, " +
+                    $"time in HighAccuracy: {timeInHighAccuracy.TotalSeconds:F0}s/{HighAccuracyTimeoutSeconds}s)");
             }
         }
 
         var shouldUseHighAccuracy = GetNormalModePriority() == Priority.PriorityHighAccuracy;
 
-        // Case 1: Currently using HighAccuracy, got a good fix, time to switch to Balanced
+        // Case 1: Currently using HighAccuracy, got fix or timed out → switch to Balanced
         if (_currentlyUsingHighAccuracy && !shouldUseHighAccuracy)
         {
             System.Diagnostics.Debug.WriteLine(
-                "[LocationTrackingService] Got good GPS fix, switching to Balanced priority");
+                "[LocationTrackingService] Switching to Balanced priority");
             RestartLocationUpdates();
         }
         // Case 2: Currently using Balanced, approaching threshold → switch to HighAccuracy
