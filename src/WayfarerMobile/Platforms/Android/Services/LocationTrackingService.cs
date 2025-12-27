@@ -780,8 +780,9 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     /// <param name="location">The location that was just received.</param>
     private void CheckAndAdjustPriority(LocationData location)
     {
-        // Only applies to Normal mode
-        if (_performanceMode != PerformanceMode.Normal)
+        // Only applies to Normal mode with FusedLocationProvider
+        // Fallback LocationManager doesn't support dynamic priority switching
+        if (_performanceMode != PerformanceMode.Normal || !_hasPlayServices)
             return;
 
         // When using HighAccuracy, check for good fix OR timeout
