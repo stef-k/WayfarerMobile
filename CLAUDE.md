@@ -8,8 +8,8 @@ Fresh implementation of the Wayfarer Mobile app with a clean architecture, incor
 
 ## Reference Codebase
 
-The previous implementation is at: `C:\Users\stef\source\repos\Wayfarer.Mobile`
-Backend server code is at: `C:\Users\stef\source\repos\Wayfarer`
+The previous implementation is at: `~\source\repos\Wayfarer.Mobile`
+Backend server code is at: `~\source\repos\Wayfarer`
 
 **Do not modify the old codebase or the backend.** Use them for reference only.
 
