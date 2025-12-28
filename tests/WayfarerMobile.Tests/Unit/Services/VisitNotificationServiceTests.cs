@@ -893,13 +893,21 @@ public class VisitNotificationServiceTests : IDisposable
         await service.StartAsync();
 
         int eventCount = 0;
-        service.NotificationDisplayed += (_, _) => eventCount++;
+        var tcs = new TaskCompletionSource<bool>();
+        service.NotificationDisplayed += (_, _) =>
+        {
+            eventCount++;
+            if (eventCount >= 2)
+                tcs.TrySetResult(true);
+        };
 
         // Simulate location synced
         _mockSyncEventBridge.Raise(b => b.LocationSynced += null,
             new LocationSyncedBridgeEventArgs { ServerId = 123, Timestamp = DateTime.UtcNow });
 
-        await Task.Delay(200);
+        // Wait for both events or timeout after 2 seconds
+        var completed = await Task.WhenAny(tcs.Task, Task.Delay(2000));
+        completed.Should().Be(tcs.Task, "both notifications should be displayed within timeout");
 
         eventCount.Should().Be(2);
     }
