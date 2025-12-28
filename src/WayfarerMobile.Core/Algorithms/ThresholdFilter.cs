@@ -118,4 +118,27 @@ public class ThresholdFilter
         TimeThresholdMinutes = timeMinutes;
         DistanceThresholdMeters = distanceMeters;
     }
+
+    /// <summary>
+    /// Gets the number of seconds until the next time-based log is due.
+    /// Returns 0 or negative if a log is already due.
+    /// Returns null if no location has been logged yet.
+    /// </summary>
+    /// <remarks>
+    /// This is the single source of truth for wake/sleep timing in the location service.
+    /// The service should wake up (buffer) seconds before this value reaches 0.
+    /// </remarks>
+    public double? GetSecondsUntilNextLog()
+    {
+        lock (_lock)
+        {
+            if (_lastLoggedLocation == null)
+                return null;
+
+            var secondsSinceLastLog = (DateTime.UtcNow - _lastLoggedLocation.Timestamp).TotalSeconds;
+            var thresholdSeconds = TimeThresholdMinutes * 60.0;
+
+            return thresholdSeconds - secondsSinceLastLog;
+        }
+    }
 }
