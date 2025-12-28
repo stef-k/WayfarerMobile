@@ -145,11 +145,16 @@ The service uses ThresholdFilter as the **single source of truth** for timing:
 
 | Phase | Seconds Until Log | Priority | Interval |
 |-------|-------------------|----------|----------|
-| Deep Sleep | >120s | Balanced | threshold - 120s |
-| Approach | 60-120s | Balanced | 30s |
-| Wake | ≤60s | HighAccuracy | 30s |
+| Deep Sleep | >180s | Balanced | threshold - 180s |
+| Approach | 90-180s | Balanced | 1s |
+| Wake | ≤90s | HighAccuracy | 1s |
 
-**Bad GPS Handling**: If no good fix (<50m) within 120s of wake start, logs best available location.
+**Two-Tier Accuracy Thresholds**:
+- **Excellent (≤20m)**: Early GPS shutoff, stored sample used at threshold time
+- **Moderate (20-100m)**: Proceeds to log at threshold time with best available
+- **Timeout (180s)**: Safety net if GPS stays poor
+
+**Early GPS Shutoff**: When excellent GPS (≤20m) is acquired, immediately switches to Balanced mode. The stored sample is logged at threshold time, saving ~80+ seconds of GPS usage per cycle.
 
 ---
 
