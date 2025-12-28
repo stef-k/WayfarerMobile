@@ -221,10 +221,12 @@ When excellent GPS accuracy (≤20m) is acquired during wake phase:
 #### Bad GPS Handling
 
 If GPS accuracy doesn't reach ≤20m within the wake phase:
-- **Moderate accuracy (20-100m)**: Proceeds to log at threshold time with best available
-- **Timeout**: 180 seconds from wake start (safety net)
-- **Fallback**: Uses best location seen during wake phase
-- **Result**: Logs best available accuracy, then sleeps
+- **At threshold time**: Logs best available sample regardless of accuracy
+- **No delay**: Logging always occurs at threshold time, never later
+- **Fallback priority**: Best stored sample > current reading
+- **Result**: Logs whatever accuracy is available, then sleeps
+
+> **Note**: Even with poor GPS (>100m), the app logs at threshold time rather than skipping. A coarse location is better than no location for timeline continuity.
 
 ### Power Saver Mode
 

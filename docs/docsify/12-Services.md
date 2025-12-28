@@ -151,10 +151,11 @@ The service uses ThresholdFilter as the **single source of truth** for timing:
 
 **Two-Tier Accuracy Thresholds**:
 - **Excellent (≤20m)**: Early GPS shutoff, stored sample used at threshold time
-- **Moderate (20-100m)**: Proceeds to log at threshold time with best available
-- **Timeout (180s)**: Safety net if GPS stays poor
+- **Moderate/Poor (>20m)**: Proceeds to log at threshold time with best available
 
 **Early GPS Shutoff**: When excellent GPS (≤20m) is acquired, immediately switches to Balanced mode. The stored sample is logged at threshold time, saving ~80+ seconds of GPS usage per cycle.
+
+**Always On-Time**: Logging always occurs at threshold time regardless of GPS accuracy. A coarse location is better than no location for timeline continuity.
 
 ---
 
