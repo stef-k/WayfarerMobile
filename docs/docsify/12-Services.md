@@ -145,9 +145,9 @@ The service uses ThresholdFilter as the **single source of truth** for timing:
 
 | Phase | Seconds Until Log | Priority | Interval |
 |-------|-------------------|----------|----------|
-| Deep Sleep | >180s | Balanced | threshold - 180s |
-| Approach | 90-180s | Balanced | 1s |
-| Wake | ≤90s | HighAccuracy | 1s |
+| Deep Sleep | >200s | Balanced | threshold - 200s |
+| Approach | 100-200s | Balanced | 1s |
+| Wake | ≤100s | HighAccuracy | 1s |
 
 **Two-Tier Accuracy Thresholds**:
 - **Excellent (≤20m)**: Early GPS shutoff, stored sample used at threshold time
