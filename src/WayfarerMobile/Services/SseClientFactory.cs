@@ -4,19 +4,6 @@ using WayfarerMobile.Core.Interfaces;
 namespace WayfarerMobile.Services;
 
 /// <summary>
-/// Factory for creating SSE client instances.
-/// Each subscription requires its own client since SSE connections are long-lived.
-/// </summary>
-public interface ISseClientFactory
-{
-    /// <summary>
-    /// Creates a new SSE client instance.
-    /// </summary>
-    /// <returns>A new <see cref="ISseClient"/> instance.</returns>
-    ISseClient Create();
-}
-
-/// <summary>
 /// Factory implementation for creating SSE client instances.
 /// </summary>
 public class SseClientFactory : ISseClientFactory

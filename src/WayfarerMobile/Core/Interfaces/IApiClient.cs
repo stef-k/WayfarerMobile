@@ -217,6 +217,20 @@ public interface IApiClient
 
     #endregion
 
+    #region Visit Operations
+
+    /// <summary>
+    /// Gets recent visits from the server (for background polling when SSE is unavailable).
+    /// </summary>
+    /// <param name="sinceSeconds">Number of seconds to look back for visits (default 30).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>List of recent visit events, or empty list on failure.</returns>
+    Task<List<SseVisitStartedEvent>> GetRecentVisitsAsync(
+        int sinceSeconds = 30,
+        CancellationToken cancellationToken = default);
+
+    #endregion
+
     #region Timeline Operations
 
     /// <summary>

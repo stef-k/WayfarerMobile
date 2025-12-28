@@ -40,6 +40,12 @@ public interface ISseClient : IDisposable
     event EventHandler<SseInviteCreatedEventArgs>? InviteCreated;
 
     /// <summary>
+    /// Fired when a visit to a trip place is detected.
+    /// Received from channel: user-visits-{userId}
+    /// </summary>
+    event EventHandler<SseVisitStartedEventArgs>? VisitStarted;
+
+    /// <summary>
     /// Fired when a heartbeat comment is received (connection alive).
     /// </summary>
     event EventHandler? HeartbeatReceived;
@@ -74,6 +80,15 @@ public interface ISseClient : IDisposable
     /// <param name="cancellationToken">Token to cancel the subscription.</param>
     /// <returns>Task that completes when subscription ends.</returns>
     Task SubscribeToGroupAsync(string groupId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Subscribe to visit notifications SSE channel.
+    /// Receives visit_started events when the user arrives at a trip place.
+    /// Channel: user-visits-{userId}
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the subscription.</param>
+    /// <returns>Task that completes when subscription ends.</returns>
+    Task SubscribeToVisitsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Stop the current SSE subscription.

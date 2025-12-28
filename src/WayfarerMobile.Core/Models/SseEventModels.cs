@@ -133,3 +133,55 @@ public class SseReconnectEventArgs : EventArgs
         DelayMs = delayMs;
     }
 }
+
+/// <summary>
+/// SSE event for visit notifications.
+/// Received from channel: user-visits-{userId}
+/// </summary>
+public class SseVisitStartedEvent
+{
+    /// <summary>Unique identifier of the visit event.</summary>
+    public Guid VisitId { get; set; }
+
+    /// <summary>Trip ID containing the visited place.</summary>
+    public Guid TripId { get; set; }
+
+    /// <summary>Trip name (snapshot at visit time).</summary>
+    public string TripName { get; set; } = string.Empty;
+
+    /// <summary>Place ID that was visited (null if place deleted).</summary>
+    public Guid? PlaceId { get; set; }
+
+    /// <summary>Place name (snapshot at visit time).</summary>
+    public string PlaceName { get; set; } = string.Empty;
+
+    /// <summary>Region name containing the place.</summary>
+    public string RegionName { get; set; } = string.Empty;
+
+    /// <summary>UTC timestamp when visit was confirmed.</summary>
+    public DateTime ArrivedAtUtc { get; set; }
+
+    /// <summary>Latitude of the visited place.</summary>
+    public double? Latitude { get; set; }
+
+    /// <summary>Longitude of the visited place.</summary>
+    public double? Longitude { get; set; }
+
+    /// <summary>Icon name for the place marker.</summary>
+    public string? IconName { get; set; }
+
+    /// <summary>Marker color for the place.</summary>
+    public string? MarkerColor { get; set; }
+}
+
+/// <summary>
+/// Event arguments for visit started SSE events.
+/// </summary>
+public class SseVisitStartedEventArgs : EventArgs
+{
+    /// <summary>The visit started event data.</summary>
+    public SseVisitStartedEvent Visit { get; }
+
+    /// <summary>Creates a new instance.</summary>
+    public SseVisitStartedEventArgs(SseVisitStartedEvent visit) => Visit = visit;
+}

@@ -180,6 +180,53 @@ public partial class SettingsViewModel : BaseViewModel
     /// </summary>
     public bool IsMiles => DistanceUnits == "miles";
 
+    #region Visit Notification Properties
+
+    /// <summary>
+    /// Gets or sets whether visit notifications are enabled.
+    /// </summary>
+    [ObservableProperty]
+    private bool _visitNotificationsEnabled;
+
+    /// <summary>
+    /// Gets or sets the visit notification style (notification, voice, both).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVisitStyleNotification))]
+    [NotifyPropertyChangedFor(nameof(IsVisitStyleVoice))]
+    [NotifyPropertyChangedFor(nameof(IsVisitStyleBoth))]
+    [NotifyPropertyChangedFor(nameof(ShowVisitVoiceOption))]
+    private string _visitNotificationStyle = "notification";
+
+    /// <summary>
+    /// Gets or sets whether voice announcements are enabled for visit notifications.
+    /// </summary>
+    [ObservableProperty]
+    private bool _visitVoiceAnnouncementEnabled;
+
+    /// <summary>
+    /// Gets whether notification style is selected.
+    /// </summary>
+    public bool IsVisitStyleNotification => VisitNotificationStyle == "notification";
+
+    /// <summary>
+    /// Gets whether voice style is selected.
+    /// </summary>
+    public bool IsVisitStyleVoice => VisitNotificationStyle == "voice";
+
+    /// <summary>
+    /// Gets whether both style is selected.
+    /// </summary>
+    public bool IsVisitStyleBoth => VisitNotificationStyle == "both";
+
+    /// <summary>
+    /// Gets whether to show voice announcement option (when style includes voice).
+    /// </summary>
+    public bool ShowVisitVoiceOption => VisitNotificationsEnabled &&
+        (VisitNotificationStyle == "voice" || VisitNotificationStyle == "both");
+
+    #endregion
+
     /// <summary>
     /// Gets or sets whether to show battery warnings during tracking.
     /// </summary>
@@ -337,6 +384,11 @@ public partial class SettingsViewModel : BaseViewModel
         ShowBatteryWarnings = _settingsService.ShowBatteryWarnings;
         AutoPauseTrackingOnCriticalBattery = _settingsService.AutoPauseTrackingOnCriticalBattery;
 
+        // Visit notification settings
+        VisitNotificationsEnabled = _settingsService.VisitNotificationsEnabled;
+        VisitNotificationStyle = _settingsService.VisitNotificationStyle;
+        VisitVoiceAnnouncementEnabled = _settingsService.VisitVoiceAnnouncementEnabled;
+
         // Cache settings
         LiveCachePrefetchRadius = _settingsService.LiveCachePrefetchRadius;
         MaxLiveCacheSizeMB = _settingsService.MaxLiveCacheSizeMB;
@@ -489,6 +541,31 @@ public partial class SettingsViewModel : BaseViewModel
     }
 
     /// <summary>
+    /// Saves visit notifications enabled setting and updates ShowVisitVoiceOption.
+    /// </summary>
+    partial void OnVisitNotificationsEnabledChanged(bool value)
+    {
+        _settingsService.VisitNotificationsEnabled = value;
+        OnPropertyChanged(nameof(ShowVisitVoiceOption));
+    }
+
+    /// <summary>
+    /// Saves visit notification style setting.
+    /// </summary>
+    partial void OnVisitNotificationStyleChanged(string value)
+    {
+        _settingsService.VisitNotificationStyle = value;
+    }
+
+    /// <summary>
+    /// Saves visit voice announcement setting.
+    /// </summary>
+    partial void OnVisitVoiceAnnouncementEnabledChanged(bool value)
+    {
+        _settingsService.VisitVoiceAnnouncementEnabled = value;
+    }
+
+    /// <summary>
     /// Applies the theme change based on preference.
     /// </summary>
     /// <param name="themePreference">The theme preference: "System", "Light", or "Dark".</param>
@@ -581,6 +658,15 @@ public partial class SettingsViewModel : BaseViewModel
     private void SetDistanceUnits(string units)
     {
         DistanceUnits = units;
+    }
+
+    /// <summary>
+    /// Sets the visit notification style.
+    /// </summary>
+    [RelayCommand]
+    private void SetVisitNotificationStyle(string style)
+    {
+        VisitNotificationStyle = style;
     }
 
     /// <summary>

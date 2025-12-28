@@ -191,6 +191,32 @@ public interface ISettingsService
 
     #endregion
 
+    #region Visit Notification Settings
+
+    /// <summary>
+    /// Gets or sets whether visit notifications are enabled.
+    /// When enabled, the app will subscribe to SSE visit events and notify
+    /// when the user arrives at a trip place.
+    /// Default: false (opt-in feature).
+    /// </summary>
+    bool VisitNotificationsEnabled { get; set; }
+
+    /// <summary>
+    /// Gets or sets the visit notification style.
+    /// Values: "notification", "voice", "both"
+    /// Default: "notification"
+    /// </summary>
+    string VisitNotificationStyle { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether voice announcements are enabled for visit notifications.
+    /// Uses the same language and volume settings as navigation audio.
+    /// Default: false
+    /// </summary>
+    bool VisitVoiceAnnouncementEnabled { get; set; }
+
+    #endregion
+
     #region User Info
 
     /// <summary>
