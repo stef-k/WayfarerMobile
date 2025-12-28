@@ -499,7 +499,7 @@ public class SseClientTests
     #endregion
 }
 
-public sealed class TestSseClient : ISseClient
+public sealed class TestSseClient : WayfarerMobile.Core.Interfaces.ISseClient
 {
     private readonly ISettingsService _settings;
     private readonly ILogger<TestSseClient> _logger;
@@ -516,6 +516,9 @@ public sealed class TestSseClient : ISseClient
     public event EventHandler<SseLocationDeletedEventArgs>? LocationDeleted;
     public event EventHandler<SseMembershipEventArgs>? MembershipReceived;
     public event EventHandler<SseInviteCreatedEventArgs>? InviteCreated;
+#pragma warning disable CS0067 // Event is never used - required by ISseClient interface
+    public event EventHandler<SseVisitStartedEventArgs>? VisitStarted;
+#pragma warning restore CS0067
     public event EventHandler? HeartbeatReceived;
     public event EventHandler? Connected;
 #pragma warning disable CS0067 // Event is never used - required by ISseClient interface
@@ -548,6 +551,14 @@ public sealed class TestSseClient : ISseClient
         // Consolidated endpoint for location + membership events
         var url = serverUrl.TrimEnd((char)47) + "/api/mobile/sse/group/" + Uri.EscapeDataString(groupId);
         return SubscribeAsync(url, "group:" + groupId, cancellationToken);
+    }
+
+    public Task SubscribeToVisitsAsync(CancellationToken cancellationToken = default)
+    {
+        var serverUrl = _settings.ServerUrl;
+        if (string.IsNullOrWhiteSpace(serverUrl)) { _logger.LogError("Server URL not configured"); return Task.CompletedTask; }
+        var url = serverUrl.TrimEnd((char)47) + "/api/mobile/sse/visits";
+        return SubscribeAsync(url, "visits", cancellationToken);
     }
 
     public void Stop()
@@ -699,23 +710,5 @@ public sealed class TestSseClient : ISseClient
         lock (_connectionLock) { _cancellationTokenSource?.Dispose(); _cancellationTokenSource = null; }
         _disposed = true;
     }
-}
-
-/// <summary>
-/// Interface for SSE client - copy for testing purposes.
-/// </summary>
-public interface ISseClient : IDisposable
-{
-    bool IsConnected { get; }
-    event EventHandler<SseLocationEventArgs>? LocationReceived;
-    event EventHandler<SseLocationDeletedEventArgs>? LocationDeleted;
-    event EventHandler<SseMembershipEventArgs>? MembershipReceived;
-    event EventHandler<SseInviteCreatedEventArgs>? InviteCreated;
-    event EventHandler? HeartbeatReceived;
-    event EventHandler? Connected;
-    event EventHandler<SseReconnectEventArgs>? Reconnecting;
-    Task SubscribeToUserAsync(string userName, CancellationToken cancellationToken = default);
-    Task SubscribeToGroupAsync(string groupId, CancellationToken cancellationToken = default);
-    void Stop();
 }
 

@@ -51,6 +51,7 @@ public partial class MainViewModel : BaseViewModel
     private readonly ISettingsService _settingsService;
     private readonly ITripSyncService _tripSyncService;
     private readonly DatabaseService _databaseService;
+    private readonly IVisitNotificationService _visitNotificationService;
     private readonly ILogger<MainViewModel> _logger;
 
     // Map and layers (owned by this ViewModel)
@@ -63,6 +64,9 @@ public partial class MainViewModel : BaseViewModel
     private WritableLayer? _tripAreasLayer;
     private WritableLayer? _tripSegmentsLayer;
     private WritableLayer? _placeSelectionLayer;
+
+    // Navigation state for visit notification conflict detection
+    private Guid? _currentNavigationPlaceId;
 
     #endregion
 
@@ -904,6 +908,7 @@ public partial class MainViewModel : BaseViewModel
     /// <param name="settingsService">The settings service.</param>
     /// <param name="tripSyncService">The trip sync service.</param>
     /// <param name="databaseService">The database service for refreshing edited entities.</param>
+    /// <param name="visitNotificationService">The visit notification service for SSE visit events.</param>
     /// <param name="logger">The logger instance.</param>
     public MainViewModel(
         ILocationBridge locationBridge,
@@ -924,6 +929,7 @@ public partial class MainViewModel : BaseViewModel
         ISettingsService settingsService,
         ITripSyncService tripSyncService,
         DatabaseService databaseService,
+        IVisitNotificationService visitNotificationService,
         ILogger<MainViewModel> logger)
     {
         _locationBridge = locationBridge;
@@ -944,6 +950,7 @@ public partial class MainViewModel : BaseViewModel
         _settingsService = settingsService;
         _tripSyncService = tripSyncService;
         _databaseService = databaseService;
+        _visitNotificationService = visitNotificationService;
         _logger = logger;
         Title = "WayfarerMobile";
 
@@ -3011,6 +3018,10 @@ public partial class MainViewModel : BaseViewModel
 
         if (route != null)
         {
+            // Track navigation destination for visit notification conflict detection
+            _currentNavigationPlaceId = Guid.TryParse(placeId, out var guid) ? guid : null;
+            _visitNotificationService.UpdateNavigationState(true, _currentNavigationPlaceId);
+
             IsNavigating = true;
             ShowNavigationRoute(route);
             ZoomToNavigationRoute();
@@ -3034,6 +3045,12 @@ public partial class MainViewModel : BaseViewModel
 
         if (route != null)
         {
+            // Track navigation destination for visit notification conflict detection
+            // Note: For "next place" we don't have the place ID readily available
+            // The navigation graph knows the destination but it's not exposed here
+            _currentNavigationPlaceId = null;
+            _visitNotificationService.UpdateNavigationState(true, null);
+
             IsNavigating = true;
             ShowNavigationRoute(route);
             ZoomToNavigationRoute();
@@ -3049,6 +3066,10 @@ public partial class MainViewModel : BaseViewModel
     [RelayCommand]
     private void StopNavigation()
     {
+        // Notify visit notification service that navigation ended
+        _currentNavigationPlaceId = null;
+        _visitNotificationService.UpdateNavigationState(false, null);
+
         IsNavigating = false;
         ClearNavigationRoute();
         _navigationHudViewModel.StopNavigationDisplay();

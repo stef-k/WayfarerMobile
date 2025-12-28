@@ -7,3 +7,4 @@ global using WayfarerMobile.Core.Helpers;
 global using WayfarerMobile.Core.Interfaces;
 global using WayfarerMobile.Core.Models;
 global using WayfarerMobile.Core.Navigation;
+global using WayfarerMobile.Core.Services;

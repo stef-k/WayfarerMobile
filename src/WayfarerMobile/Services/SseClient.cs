@@ -57,6 +57,9 @@ public class SseClient : ISseClient
     public event EventHandler<SseInviteCreatedEventArgs>? InviteCreated;
 
     /// <inheritdoc />
+    public event EventHandler<SseVisitStartedEventArgs>? VisitStarted;
+
+    /// <inheritdoc />
     public event EventHandler? HeartbeatReceived;
 
     /// <inheritdoc />
@@ -135,6 +138,21 @@ public class SseClient : ISseClient
         // Consolidated endpoint: location + membership events in single stream
         string url = $"{serverUrl.TrimEnd('/')}/api/mobile/sse/group/{Uri.EscapeDataString(groupId)}";
         await SubscribeAsync(url, $"group:{groupId}", cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task SubscribeToVisitsAsync(CancellationToken cancellationToken = default)
+    {
+        string? serverUrl = _settings.ServerUrl;
+        if (string.IsNullOrWhiteSpace(serverUrl))
+        {
+            _logger.LogError("Server URL not configured for SSE visit subscription");
+            return;
+        }
+
+        // Visit notifications endpoint: user-visits-{userId} channel
+        string url = $"{serverUrl.TrimEnd('/')}/api/mobile/sse/visits";
+        await SubscribeAsync(url, "visits", cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -524,6 +542,36 @@ public class SseClient : ISseClient
                 };
                 _logger.LogInformation("SSE invite created: {InvitationId}", inviteEvent.InvitationId);
                 InviteCreated?.Invoke(this, new SseInviteCreatedEventArgs(inviteEvent));
+                break;
+
+            case "visit_started":
+                var visitEvent = new SseVisitStartedEvent
+                {
+                    VisitId = root.TryGetProperty("visitId", out var vid) && vid.TryGetGuid(out var visitGuid)
+                        ? visitGuid
+                        : Guid.Empty,
+                    TripId = root.TryGetProperty("tripId", out var tid) && tid.TryGetGuid(out var tripGuid)
+                        ? tripGuid
+                        : Guid.Empty,
+                    TripName = root.TryGetProperty("tripName", out var tn) ? tn.GetString() ?? string.Empty : string.Empty,
+                    PlaceId = root.TryGetProperty("placeId", out var pid) && pid.TryGetGuid(out var placeGuid)
+                        ? placeGuid
+                        : null,
+                    PlaceName = root.TryGetProperty("placeName", out var pn) ? pn.GetString() ?? string.Empty : string.Empty,
+                    RegionName = root.TryGetProperty("regionName", out var rn) ? rn.GetString() ?? string.Empty : string.Empty,
+                    ArrivedAtUtc = root.TryGetProperty("arrivedAtUtc", out var arr) ? arr.GetDateTime() : DateTime.UtcNow,
+                    Latitude = root.TryGetProperty("latitude", out var lat) && lat.ValueKind != JsonValueKind.Null
+                        ? lat.GetDouble()
+                        : null,
+                    Longitude = root.TryGetProperty("longitude", out var lon) && lon.ValueKind != JsonValueKind.Null
+                        ? lon.GetDouble()
+                        : null,
+                    IconName = root.TryGetProperty("iconName", out var icon) ? icon.GetString() : null,
+                    MarkerColor = root.TryGetProperty("markerColor", out var color) ? color.GetString() : null
+                };
+                _logger.LogInformation("SSE visit started: {PlaceName} in {TripName} (VisitId: {VisitId})",
+                    visitEvent.PlaceName, visitEvent.TripName, visitEvent.VisitId);
+                VisitStarted?.Invoke(this, new SseVisitStartedEventArgs(visitEvent));
                 break;
 
             default:

@@ -5,6 +5,7 @@ using Serilog.Events;
 using Syncfusion.Maui.Toolkit.Hosting;
 using WayfarerMobile.Core.Algorithms;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Services;
 using WayfarerMobile.Data.Services;
 using WayfarerMobile.Handlers;
 using WayfarerMobile.Services;
@@ -151,9 +152,11 @@ public static class MauiProgram
 #if ANDROID
         services.AddSingleton<ILocationBridge, WayfarerMobile.Platforms.Android.Services.LocationBridge>();
         services.AddSingleton<IWakeLockService, WayfarerMobile.Platforms.Android.Services.WakeLockService>();
+        services.AddSingleton<ILocalNotificationService, WayfarerMobile.Platforms.Android.Services.LocalNotificationService>();
 #elif IOS
         services.AddSingleton<ILocationBridge, WayfarerMobile.Platforms.iOS.Services.LocationBridge>();
         services.AddSingleton<IWakeLockService, WayfarerMobile.Platforms.iOS.Services.WakeLockService>();
+        services.AddSingleton<ILocalNotificationService, WayfarerMobile.Platforms.iOS.Services.LocalNotificationService>();
 #endif
 
         // Infrastructure Services
@@ -161,7 +164,9 @@ public static class MauiProgram
         services.AddSingleton<ISettingsService, SettingsService>();
 
         // API and Sync Services (some needed by tile cache)
-        services.AddSingleton<IApiClient, ApiClient>();
+        services.AddSingleton<ApiClient>();
+        services.AddSingleton<IApiClient>(sp => sp.GetRequiredService<ApiClient>());
+        services.AddSingleton<IVisitApiClient>(sp => sp.GetRequiredService<ApiClient>());
         services.AddSingleton<LocationSyncService>();
         services.AddSingleton<ITripSyncService, TripSyncService>();
         services.AddSingleton<ITimelineSyncService, TimelineSyncService>();
@@ -239,6 +244,12 @@ public static class MauiProgram
 
         // SSE Client Factory (for real-time updates)
         services.AddSingleton<ISseClientFactory, SseClientFactory>();
+
+        // Location Sync Event Bridge (bridges static callbacks to Core interface)
+        services.AddSingleton<ILocationSyncEventBridge, LocationSyncEventBridge>();
+
+        // Visit Notification Service (depends on SSE, TTS, LocalNotification, LocationSyncEventBridge)
+        services.AddSingleton<IVisitNotificationService, VisitNotificationService>();
 
         // ViewModels
         services.AddSingleton<MainViewModel>();

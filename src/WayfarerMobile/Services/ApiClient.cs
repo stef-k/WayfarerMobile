@@ -16,7 +16,7 @@ namespace WayfarerMobile.Services;
 /// <summary>
 /// HTTP client for communicating with the Wayfarer backend API.
 /// </summary>
-public class ApiClient : IApiClient
+public class ApiClient : IApiClient, IVisitApiClient
 {
     private readonly ISettingsService _settings;
     private readonly ILogger<ApiClient> _logger;
@@ -356,6 +356,59 @@ public class ApiClient : IApiClient
             _logger.LogError(ex, "Error deleting place {PlaceId}", placeId);
             return false;
         }
+    }
+
+    #endregion
+
+    #region Visit Operations
+
+    /// <summary>
+    /// Gets recent visits from the server (for background polling when SSE is unavailable).
+    /// </summary>
+    /// <param name="sinceSeconds">Number of seconds to look back for visits.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>List of recent visit events, or empty list on failure.</returns>
+    public async Task<List<SseVisitStartedEvent>> GetRecentVisitsAsync(
+        int sinceSeconds = 30,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsConfigured)
+        {
+            _logger.LogDebug("Cannot get recent visits - API is not configured");
+            return new List<SseVisitStartedEvent>();
+        }
+
+        try
+        {
+            var endpoint = $"/api/mobile/visits/recent?since={sinceSeconds}";
+            var response = await ExecuteWithRetryAsync(
+                () => CreateRequest(HttpMethod.Get, endpoint),
+                cancellationToken);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<RecentVisitsResponse>(JsonOptions, cancellationToken);
+                _logger.LogDebug("Fetched {Count} recent visits", result?.Visits?.Count ?? 0);
+                return result?.Visits ?? new List<SseVisitStartedEvent>();
+            }
+
+            _logger.LogDebug("Failed to get recent visits: {StatusCode}", response.StatusCode);
+            return new List<SseVisitStartedEvent>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Error fetching recent visits");
+            return new List<SseVisitStartedEvent>();
+        }
+    }
+
+    /// <summary>
+    /// Response model for recent visits API.
+    /// </summary>
+    private class RecentVisitsResponse
+    {
+        public bool Success { get; set; }
+        public List<SseVisitStartedEvent>? Visits { get; set; }
     }
 
     #endregion

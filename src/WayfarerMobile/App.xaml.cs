@@ -208,6 +208,11 @@ public partial class App : Application
             var activitySyncService = _serviceProvider.GetService<IActivitySyncService>();
             _ = activitySyncService?.AutoSyncIfNeededAsync();
 
+            // Start visit notification service if enabled (subscribes to SSE visit events)
+            var visitNotificationService = _serviceProvider.GetService<IVisitNotificationService>();
+            _ = visitNotificationService?.StartAsync();
+            System.Diagnostics.Debug.WriteLine("[App] Visit notification service initialization started");
+
             // Note: Location tracking service start is handled by OnWindowActivatedForServiceStart
             // to ensure deterministic timing after UI is fully initialized.
         }

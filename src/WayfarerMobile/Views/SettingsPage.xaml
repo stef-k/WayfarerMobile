@@ -240,6 +240,89 @@
                 </sfExpander:SfExpander.Content>
             </sfExpander:SfExpander>
 
+            <!-- Visit Notifications Section -->
+            <sfExpander:SfExpander IsExpanded="False">
+                <sfExpander:SfExpander.Header>
+                    <Grid HeightRequest="48" Padding="10,0">
+                        <Label Text="Visit Notifications"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               VerticalOptions="Center" />
+                    </Grid>
+                </sfExpander:SfExpander.Header>
+                <sfExpander:SfExpander.Content>
+                    <VerticalStackLayout Padding="15" Spacing="15">
+                        <!-- Enable Visit Notifications Toggle -->
+                        <Grid ColumnDefinitions="*,Auto">
+                            <VerticalStackLayout Grid.Column="0">
+                                <Label Text="Enable Visit Notifications"
+                                       FontSize="14" />
+                                <Label Text="Get notified when you arrive at trip places"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            </VerticalStackLayout>
+                            <Switch Grid.Column="1"
+                                    IsToggled="{Binding VisitNotificationsEnabled}"
+                                    OnColor="{StaticResource Primary}" />
+                        </Grid>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                 IsVisible="{Binding VisitNotificationsEnabled}" />
+
+                        <!-- Notification Style (only visible when enabled) -->
+                        <VerticalStackLayout Spacing="8" IsVisible="{Binding VisitNotificationsEnabled}">
+                            <Label Text="Notification Style"
+                                   FontSize="14" />
+                            <Label Text="How to notify you about visits"
+                                   FontSize="12"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                                <Button Grid.Column="0"
+                                        Text="Banner"
+                                        Command="{Binding SetVisitNotificationStyleCommand}"
+                                        CommandParameter="notification"
+                                        Style="{StaticResource DarkButton}"
+                                        Opacity="{Binding IsVisitStyleNotification, Converter={StaticResource BoolToOpacityConverter}}"
+                                        HeightRequest="36" />
+                                <Button Grid.Column="1"
+                                        Text="Voice"
+                                        Command="{Binding SetVisitNotificationStyleCommand}"
+                                        CommandParameter="voice"
+                                        Style="{StaticResource DarkButton}"
+                                        Opacity="{Binding IsVisitStyleVoice, Converter={StaticResource BoolToOpacityConverter}}"
+                                        HeightRequest="36" />
+                                <Button Grid.Column="2"
+                                        Text="Both"
+                                        Command="{Binding SetVisitNotificationStyleCommand}"
+                                        CommandParameter="both"
+                                        Style="{StaticResource DarkButton}"
+                                        Opacity="{Binding IsVisitStyleBoth, Converter={StaticResource BoolToOpacityConverter}}"
+                                        HeightRequest="36" />
+                            </Grid>
+                        </VerticalStackLayout>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                 IsVisible="{Binding ShowVisitVoiceOption}" />
+
+                        <!-- Voice Announcement Toggle (only when style includes voice) -->
+                        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding ShowVisitVoiceOption}">
+                            <VerticalStackLayout Grid.Column="0">
+                                <Label Text="Voice Announcement"
+                                       FontSize="14" />
+                                <Label Text="Speak place name when arriving"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            </VerticalStackLayout>
+                            <Switch Grid.Column="1"
+                                    IsToggled="{Binding VisitVoiceAnnouncementEnabled}"
+                                    OnColor="{StaticResource Primary}" />
+                        </Grid>
+                    </VerticalStackLayout>
+                </sfExpander:SfExpander.Content>
+            </sfExpander:SfExpander>
+
             <!-- Offline Map Cache Section -->
             <sfExpander:SfExpander IsExpanded="False">
                 <sfExpander:SfExpander.Header>

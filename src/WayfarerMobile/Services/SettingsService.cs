@@ -45,6 +45,11 @@ public class SettingsService : ISettingsService
     private const string KeyLastSelectedGroupName = "last_selected_group_name";
     private const string KeyGroupsLegendExpanded = "groups_legend_expanded";
 
+    // Visit notification settings
+    private const string KeyVisitNotificationsEnabled = "visit_notifications_enabled";
+    private const string KeyVisitNotificationStyle = "visit_notification_style";
+    private const string KeyVisitVoiceAnnouncementEnabled = "visit_voice_announcement_enabled";
+
     #endregion
 
     #region ISettingsService Implementation
@@ -523,6 +528,54 @@ public class SettingsService : ISettingsService
     {
         get => Preferences.Get(KeyShowBatteryWarnings, true);
         set => Preferences.Set(KeyShowBatteryWarnings, value);
+    }
+
+    #endregion
+
+    #region Visit Notification Settings
+
+    /// <summary>
+    /// Gets or sets whether visit notifications are enabled.
+    /// When enabled, the app subscribes to SSE visit events and notifies
+    /// when the user arrives at a trip place.
+    /// Default: false (opt-in feature).
+    /// </summary>
+    public bool VisitNotificationsEnabled
+    {
+        get => Preferences.Get(KeyVisitNotificationsEnabled, false);
+        set => Preferences.Set(KeyVisitNotificationsEnabled, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the visit notification style.
+    /// Values: "notification", "voice", "both"
+    /// Default: "notification"
+    /// </summary>
+    public string VisitNotificationStyle
+    {
+        get => Preferences.Get(KeyVisitNotificationStyle, "notification");
+        set
+        {
+            // Validate to only accept known values
+            var validValue = value switch
+            {
+                "voice" => "voice",
+                "both" => "both",
+                _ => "notification"
+            };
+            Preferences.Set(KeyVisitNotificationStyle, validValue);
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets whether voice announcements are enabled for visit notifications.
+    /// Uses the same language and volume settings as navigation audio.
+    /// Default: false
+    /// </summary>
+    public bool VisitVoiceAnnouncementEnabled
+    {
+        get => Preferences.Get(KeyVisitVoiceAnnouncementEnabled, false);
+        set => Preferences.Set(KeyVisitVoiceAnnouncementEnabled, value);
     }
 
     #endregion
