@@ -4,17 +4,44 @@ This document provides detailed documentation for the key services in WayfarerMo
 
 ## Service Overview
 
+### Core Services
+
 | Service | Purpose | Lifetime |
 |---------|---------|----------|
 | `LocationTrackingService` | GPS acquisition, foreground notification | Platform singleton |
 | `LocationBridge` | Platform-to-MAUI location bridge | Singleton |
-| `LocationSyncService` | Server synchronization with retry | Singleton |
 | `MapService` | Mapsui integration, layers, markers | Singleton |
-| `TripNavigationService` | Route calculation, OSRM integration | Singleton |
-| `GroupsService` | SSE live location sharing | Singleton |
 | `DatabaseService` | SQLite operations | Singleton |
 | `SettingsService` | App configuration | Singleton |
 | `ApiClient` | Backend HTTP communication | Singleton |
+
+### Sync Services
+
+| Service | Purpose | Sync Interval |
+|---------|---------|---------------|
+| `LocationSyncService` | Queue → server sync with retry | Min 65s / Max 55/hour |
+| `TimelineSyncService` | Optimistic UI mutations with rollback | On-demand |
+| `TimelineDataService` | Server → local cache with enrichment | On-demand |
+| `ActivitySyncService` | Activity types from server | Every 6 hours |
+| `SettingsSyncService` | Threshold/config sync from server | On login |
+
+### Navigation Services
+
+| Service | Purpose | Rate Limit |
+|---------|---------|------------|
+| `TripNavigationService` | Route calculation, turn-by-turn | N/A |
+| `OsrmRoutingService` | OSRM API client | 1 req/second |
+| `RouteCacheService` | Single-route session cache | N/A |
+| `NavigationAudioService` | Voice announcements | N/A |
+
+### Data Services
+
+| Service | Purpose | Notes |
+|---------|---------|-------|
+| `TimelineExportService` | CSV/GeoJSON export | Date range filter |
+| `TimelineImportService` | CSV/GeoJSON import | Duplicate detection |
+| `GroupsService` | SSE live location sharing | Real-time updates |
+| `TileDownloadService` | Trip tile prefetch | Zoom 8-17 |
 
 ---
 
@@ -37,11 +64,13 @@ public class LocationTrackingService : Service, ILocationListener
 ### Responsibilities
 
 - **GPS Acquisition**: Uses FusedLocationProviderClient (Google Play Services) or standard LocationManager as fallback
+- **Sleep/Wake Optimization**: Three-phase approach for battery efficiency in Normal mode
 - **Quality Filtering**: Rejects locations with accuracy > 100m
-- **Threshold Filtering**: Applies server-configured time/distance thresholds
-- **Queue Writing**: Writes filtered locations to SQLite queue
-- **Notification Management**: Shows foreground notification with pause/stop actions
-- **Performance Modes**: Supports High (1s), Normal (60s), PowerSaver (300s) intervals
+- **Threshold Filtering**: Applies server-configured time/distance thresholds via ThresholdFilter
+- **Queue Writing**: Writes filtered locations to SQLite queue (max 25,000)
+- **Notification Management**: Shows foreground notification with pause/stop actions and current accuracy
+- **Performance Modes**: Supports High (1s), Normal (sleep/wake), PowerSaver (300s) intervals
+- **Best Location Tracking**: During wake phase, tracks best GPS fix for logging
 
 ### Actions
 
@@ -77,12 +106,20 @@ GPS Update Received
         |
         v
 +-------------------+
-| Threshold Filter  |  Check time/distance from last
+| Update Best       |  Track best accuracy during wake phase
+| Wake Location     |  (only in Normal mode wake phase)
++-------------------+
+        |
+        v
++-------------------+
+| Threshold Filter  |  Check seconds until next log
+| (Single Source    |  GetSecondsUntilNextLog()
+| of Truth)         |
 +-------------------+
         |
         v (passes filter)
 +-------------------+
-| Queue to SQLite   |  Write to QueuedLocations
+| Queue to SQLite   |  Write to QueuedLocations (max 25,000)
 +-------------------+
         |
         v
@@ -92,9 +129,27 @@ GPS Update Received
         |
         v
 +-------------------+
-| Update Notification|  Show "Last: HH:mm:ss (N pts)"
+| Adjust Priority   |  Sleep/wake phase transition
+| (Normal Mode)     |  HighAccuracy ↔ Balanced
++-------------------+
+        |
+        v
++-------------------+
+| Update Notification|  Show "Last: HH:mm:ss (Xm accuracy)"
 +-------------------+
 ```
+
+### Sleep/Wake Optimization (Normal Mode)
+
+The service uses ThresholdFilter as the **single source of truth** for timing:
+
+| Phase | Seconds Until Log | Priority | Interval |
+|-------|-------------------|----------|----------|
+| Deep Sleep | >120s | Balanced | threshold - 120s |
+| Approach | 60-120s | Balanced | 30s |
+| Wake | ≤60s | HighAccuracy | 30s |
+
+**Bad GPS Handling**: If no good fix (<50m) within 120s of wake start, logs best available location.
 
 ---
 
@@ -643,6 +698,241 @@ _retryPipeline = new ResiliencePipelineBuilder<HttpResponseMessage>()
 ### API Methods
 
 See [API Integration](13-API.md) for complete endpoint documentation.
+
+---
+
+## TimelineSyncService
+
+**Source**: `src/WayfarerMobile/Services/TimelineSyncService.cs`
+
+Manages optimistic UI updates for timeline mutations with offline queue and rollback support.
+
+### Sync Strategy
+
+1. Apply optimistic UI update immediately
+2. Save to local database (both `PendingTimelineMutation` and `LocalTimelineEntry`)
+3. Attempt server sync in background
+4. On 4xx error: Server rejected → revert changes, notify caller
+5. On 5xx/network error: Queue for retry (local keeps optimistic values)
+
+### Rollback Data
+
+Rollback data is persisted in `PendingTimelineMutation` to survive app restarts:
+
+```csharp
+public class PendingTimelineMutation
+{
+    public int LocationId { get; set; }
+    public string OperationType { get; set; }  // "Update" or "Delete"
+
+    // New values
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
+    public DateTime? LocalTimestamp { get; set; }
+    public string? Notes { get; set; }
+
+    // Original values for rollback
+    public double? OriginalLatitude { get; set; }
+    public double? OriginalLongitude { get; set; }
+    public DateTime? OriginalTimestamp { get; set; }
+    public string? OriginalNotes { get; set; }
+
+    // For delete rollback
+    public string? DeletedEntryJson { get; set; }
+}
+```
+
+### Events
+
+| Event | When Raised |
+|-------|-------------|
+| `SyncCompleted` | Server accepted the mutation |
+| `SyncQueued` | Mutation queued for offline retry |
+| `SyncRejected` | Server rejected (4xx) - UI should revert |
+
+---
+
+## TimelineExportService
+
+**Source**: `src/WayfarerMobile/Services/TimelineExportService.cs`
+
+Exports local timeline data to CSV and GeoJSON formats.
+
+### Export Formats
+
+**CSV**: Spreadsheet-compatible with all fields
+```csv
+id,server_id,timestamp,latitude,longitude,accuracy,altitude,speed,bearing,
+provider,address,full_address,place,region,country,postcode,activity_type,timezone,notes
+```
+
+**GeoJSON**: FeatureCollection with Point geometries
+```json
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [lon, lat] },
+      "properties": { "timestamp": "...", "accuracy": ..., ... }
+    }
+  ]
+}
+```
+
+### Usage
+
+```csharp
+// Export to CSV
+var csv = await _exportService.ExportToCsvAsync(fromDate, toDate);
+
+// Export to GeoJSON
+var geojson = await _exportService.ExportToGeoJsonAsync(fromDate, toDate);
+
+// Export and share via system dialog
+await _exportService.ShareExportAsync("csv", fromDate, toDate);
+```
+
+---
+
+## TimelineImportService
+
+**Source**: `src/WayfarerMobile/Services/TimelineImportService.cs`
+
+Imports CSV and GeoJSON files into local timeline with duplicate detection.
+
+### Duplicate Detection
+
+Entries are considered duplicates if:
+- Timestamp within **2 seconds** of an existing entry
+- Location within **10 meters** of the existing entry
+
+### Import Behavior
+
+| Condition | Action |
+|-----------|--------|
+| New entry | Insert to local database |
+| Duplicate with less data | Skip |
+| Duplicate with more data | Update existing (merge enrichment) |
+| Malformed row | Log error, continue |
+
+### ImportResult
+
+```csharp
+public record ImportResult(
+    int Imported,   // New entries added
+    int Updated,    // Existing entries enriched
+    int Skipped,    // Duplicates skipped
+    List<string> Errors  // Parse errors
+);
+```
+
+---
+
+## ActivitySyncService
+
+**Source**: `src/WayfarerMobile/Services/ActivitySyncService.cs`
+
+Manages activity types with server sync and local caching.
+
+### Default Activities
+
+20 built-in activities with negative IDs (never conflict with server):
+
+| ID | Name | Icon | ID | Name | Icon |
+|----|------|------|----|------|------|
+| -1 | Walking | walk | -11 | ATM | atm |
+| -2 | Running | run | -12 | Fitness | fitness |
+| -3 | Cycling | bike | -13 | Doctor | hospital |
+| -4 | Travel | car | -14 | Hotel | hotel |
+| -5 | Eating | eat | -15 | Airport | flight |
+| -6 | Drinking | drink | -16 | Gas Station | gas |
+| -7 | At Work | marker | -17 | Park | park |
+| -8 | Meeting | flag | -18 | Museum | museum |
+| -9 | Shopping | shopping | -19 | Photography | camera |
+| -10 | Pharmacy | pharmacy | -20 | General | marker |
+
+### Sync Behavior
+
+- **Sync interval**: Every 6 hours
+- **Priority**: Server activities (positive IDs) > default activities (negative IDs)
+- **Icon mapping**: Automatically suggests icons based on activity name
+
+---
+
+## OsrmRoutingService
+
+**Source**: `src/WayfarerMobile/Services/OsrmRoutingService.cs`
+
+OSRM (Open Source Routing Machine) API client for route calculation.
+
+### Configuration
+
+| Setting | Value |
+|---------|-------|
+| Base URL | `https://router.project-osrm.org` |
+| Rate limit | 1 request/second |
+| Timeout | 10 seconds |
+| Profiles | foot, car, bike |
+
+### Rate Limiting
+
+```csharp
+private static readonly TimeSpan MinRequestInterval = TimeSpan.FromSeconds(1.1);
+
+private static async Task EnforceRateLimitAsync()
+{
+    var timeSinceLastRequest = DateTime.UtcNow - _lastRequestTime;
+    if (timeSinceLastRequest < MinRequestInterval)
+    {
+        await Task.Delay(MinRequestInterval - timeSinceLastRequest);
+    }
+    _lastRequestTime = DateTime.UtcNow;
+}
+```
+
+### Response
+
+```csharp
+public class OsrmRouteResult
+{
+    public string Geometry { get; set; }        // Encoded polyline
+    public double DistanceMeters { get; set; }
+    public double DurationSeconds { get; set; }
+    public List<OsrmStepResult> Steps { get; set; }  // Turn instructions
+}
+```
+
+---
+
+## RouteCacheService
+
+**Source**: `src/WayfarerMobile/Services/RouteCacheService.cs`
+
+Single-route session cache stored in Preferences. Survives app restart.
+
+### Cache Validity
+
+A cached route is valid if:
+- Same destination place ID
+- Origin within **50 meters** of cached origin
+- Less than **5 minutes** old
+
+### Storage
+
+```csharp
+public class CachedRoute
+{
+    public string DestinationPlaceId { get; set; }
+    public string DestinationName { get; set; }
+    public double OriginLatitude { get; set; }
+    public double OriginLongitude { get; set; }
+    public string Geometry { get; set; }  // Encoded polyline
+    public double DistanceMeters { get; set; }
+    public double DurationSeconds { get; set; }
+    public DateTime FetchedAtUtc { get; set; }
+}
+```
 
 ---
 

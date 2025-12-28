@@ -39,10 +39,11 @@ Timeline tracking automatically records your location history to your server.
 
 ### How It Works
 
-1. Your device acquires GPS coordinates periodically
-2. Locations are filtered by time and distance thresholds
-3. Filtered locations are queued locally
+1. Your device acquires GPS coordinates using sleep/wake optimization
+2. Locations are filtered by accuracy (<100m) and time/distance thresholds
+3. Filtered locations are queued locally (up to 25,000 entries)
 4. Queue syncs to your server when online
+5. Timeline entries are cached locally for offline viewing
 
 ### Viewing Your Timeline
 
@@ -72,6 +73,49 @@ Tap any entry to see:
 
 > **Note**: Coordinates cannot be edited as they are GPS data.
 
+### Exporting Timeline Data
+
+Export your location history for backup or analysis:
+
+1. Go to **Settings** > **Data** > **Export Timeline**
+2. Choose format:
+   - **CSV**: Spreadsheet-compatible, includes all fields
+   - **GeoJSON**: Geographic format for mapping tools
+3. Select date range (optional)
+4. Tap **Export**
+5. Share or save the exported file
+
+**CSV Fields**:
+| Field | Description |
+|-------|-------------|
+| `id` | Local entry ID |
+| `server_id` | Server ID (if synced) |
+| `timestamp` | ISO 8601 UTC timestamp |
+| `latitude`, `longitude` | Coordinates |
+| `accuracy` | GPS accuracy in meters |
+| `altitude`, `speed`, `bearing` | Motion data |
+| `address`, `place`, `region`, `country` | Enrichment from server |
+| `activity_type` | Activity classification |
+| `notes` | User notes |
+
+### Importing Timeline Data
+
+Import previously exported data or data from other sources:
+
+1. Go to **Settings** > **Data** > **Import Timeline**
+2. Select a CSV or GeoJSON file
+3. Review import summary:
+   - **Imported**: New entries added
+   - **Updated**: Existing entries enriched with new data
+   - **Skipped**: Duplicates detected
+
+**Duplicate Detection**:
+- Entries within **2 seconds** of an existing timestamp
+- And within **10 meters** of the same location
+- Are considered duplicates and skipped or merged
+
+> **Note**: Imported entries are local-only and not synced to server.
+
 ---
 
 ## Trip Management
@@ -88,13 +132,39 @@ Trips are planned routes with places and segments that can be downloaded for off
 
 1. Find the trip in the list
 2. Tap **Download**
-3. Wait for tile download to complete
-4. Progress shows percentage and tile count
+3. Wait for download to complete
+4. Progress shows percentage and status
 
-What gets downloaded:
-- Trip metadata (name, places, segments)
-- Map tiles for all zoom levels within trip area
-- Route geometry for navigation
+**Download Process**:
+
+| Phase | Progress | Description |
+|-------|----------|-------------|
+| 1. Fetch Details | 10-25% | Download trip metadata from server |
+| 2. Save Regions | 25-30% | Store regions and areas locally |
+| 3. Save Places | 30-40% | Store places with coordinates |
+| 4. Save Segments | 40-50% | Store route segments with geometry |
+| 5. Download Tiles | 55-95% | Fetch map tiles for offline use |
+| 6. Complete | 100% | Finalize and verify |
+
+**What gets downloaded**:
+- Trip metadata (name, notes, cover image)
+- Regions and areas with polygon zones
+- Places with coordinates, icons, and notes
+- Segments with polyline geometry
+- Map tiles for zoom levels 8-17
+
+**Tile Download Features**:
+- **Atomic writes**: Temp file then move (prevents corruption)
+- **Rate limiting**: Respects tile server policies
+- **Resume support**: Skips already-downloaded tiles
+- **Adaptive zoom**: Smaller areas get higher detail (up to z17)
+
+**Estimated Storage**:
+| Area Size | Tiles | Storage |
+|-----------|-------|---------|
+| City neighborhood | ~500 | ~20 MB |
+| City area | ~2,000 | ~80 MB |
+| State/province | ~10,000 | ~400 MB |
 
 ### Viewing Trip Details
 
@@ -150,10 +220,28 @@ The overlay shows:
 
 ### Route Sources (Priority Order)
 
-1. **User Segments**: Routes you defined in the trip (always preferred)
-2. **Cached OSRM**: Previously fetched route if still valid
-3. **OSRM Fetch**: Online route calculation (requires internet)
-4. **Direct Route**: Straight-line bearing and distance (offline fallback)
+The app uses a multi-tier fallback system for routing:
+
+| Priority | Source | When Used |
+|----------|--------|-----------|
+| 1 | **User Segments** | Trip has pre-defined route geometry |
+| 2 | **Cached OSRM** | Valid cache exists (same dest, <50m origin, <5 min old) |
+| 3 | **OSRM Fetch** | Online and no cache available |
+| 4 | **Direct Route** | Offline fallback (straight-line with bearing) |
+
+**User Segments**: Routes you defined when planning the trip. These include the exact polyline geometry and are always preferred over calculated routes.
+
+**Cached OSRM**: Previously fetched routes are cached and reused if:
+- Same destination
+- Origin within 50 meters of cached origin
+- Less than 5 minutes old
+
+**OSRM Fetch**: Online route calculation from OSRM (Open Source Routing Machine). Supports walking, driving, and cycling profiles. Rate limited to 1 request per second.
+
+**Direct Route**: When offline and no cached route exists, shows straight-line navigation with:
+- Cardinal direction (N, NE, E, etc.)
+- Distance to destination
+- Bearing-based heading
 
 ### Audio Announcements
 
@@ -231,16 +319,26 @@ Create location entries manually at memorable places.
 
 ### Activity Types
 
-Common activity types include:
-- Home
-- Work
-- Restaurant
-- Shopping
-- Exercise
-- Travel
-- Entertainment
-- Healthcare
-- Education
+Activity types categorize your check-ins. The app includes 20 built-in defaults with icons:
+
+| Activity | Icon | Activity | Icon |
+|----------|------|----------|------|
+| Walking | walk | Running | run |
+| Cycling | bike | Travel | car |
+| Eating | eat | Drinking | drink |
+| At Work | marker | Meeting | flag |
+| Shopping | shopping | Pharmacy | pharmacy |
+| ATM | atm | Fitness | fitness |
+| Doctor | hospital | Hotel | hotel |
+| Airport | flight | Gas Station | gas |
+| Park | park | Museum | museum |
+| Photography | camera | General | marker |
+
+**Server Sync**:
+- Custom activity types sync from your server every 6 hours
+- Server activities (positive IDs) take precedence over defaults
+- Defaults (negative IDs) are always available as fallback
+- Icons are automatically suggested based on activity name
 
 ### When to Use Check-In
 
