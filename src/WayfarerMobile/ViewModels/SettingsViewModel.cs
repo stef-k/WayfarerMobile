@@ -37,6 +37,7 @@ public partial class SettingsViewModel : BaseViewModel
     private readonly TimelineImportService _importService;
     private readonly TimelineDataService _timelineDataService;
     private readonly IToastService _toastService;
+    private readonly IVisitNotificationService _visitNotificationService;
 
     #endregion
 
@@ -335,7 +336,8 @@ public partial class SettingsViewModel : BaseViewModel
         TimelineExportService exportService,
         TimelineImportService importService,
         TimelineDataService timelineDataService,
-        IToastService toastService)
+        IToastService toastService,
+        IVisitNotificationService visitNotificationService)
     {
         _settingsService = settingsService;
         _appLockService = appLockService;
@@ -344,6 +346,7 @@ public partial class SettingsViewModel : BaseViewModel
         _importService = importService;
         _timelineDataService = timelineDataService;
         _toastService = toastService;
+        _visitNotificationService = visitNotificationService;
         PinSecurity = new PinSecurityViewModel(appLockService);
         Title = "Settings";
         LoadSettings();
@@ -541,12 +544,22 @@ public partial class SettingsViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Saves visit notifications enabled setting and updates ShowVisitVoiceOption.
+    /// Saves visit notifications enabled setting, updates UI, and starts/stops the service.
     /// </summary>
     partial void OnVisitNotificationsEnabledChanged(bool value)
     {
         _settingsService.VisitNotificationsEnabled = value;
         OnPropertyChanged(nameof(ShowVisitVoiceOption));
+
+        // Start or stop the visit notification service immediately
+        if (value)
+        {
+            _ = _visitNotificationService.StartAsync();
+        }
+        else
+        {
+            _visitNotificationService.Stop();
+        }
     }
 
     /// <summary>

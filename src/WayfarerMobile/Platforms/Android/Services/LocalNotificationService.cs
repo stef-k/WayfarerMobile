@@ -15,9 +15,15 @@ public class LocalNotificationService : ILocalNotificationService
     #region Constants
 
     /// <summary>
-    /// Notification channel ID for visit notifications.
+    /// Notification channel ID for normal visit notifications (with sound/vibration).
     /// </summary>
     private const string VisitChannelId = "wayfarer_visit_notifications";
+
+    /// <summary>
+    /// Notification channel ID for silent visit notifications (no sound/vibration).
+    /// On Android 8+, channel importance controls alert behavior, not per-notification settings.
+    /// </summary>
+    private const string SilentVisitChannelId = "wayfarer_visit_silent";
 
     /// <summary>
     /// Notification channel name displayed in Android settings.
@@ -25,9 +31,19 @@ public class LocalNotificationService : ILocalNotificationService
     private const string VisitChannelName = "Visit Notifications";
 
     /// <summary>
+    /// Silent notification channel name displayed in Android settings.
+    /// </summary>
+    private const string SilentVisitChannelName = "Visit Notifications (Silent)";
+
+    /// <summary>
     /// Notification channel description.
     /// </summary>
     private const string VisitChannelDescription = "Notifications when you arrive at trip places";
+
+    /// <summary>
+    /// Silent notification channel description.
+    /// </summary>
+    private const string SilentVisitChannelDescription = "Silent notifications during navigation";
 
     /// <summary>
     /// Base ID for visit notifications.
@@ -40,7 +56,7 @@ public class LocalNotificationService : ILocalNotificationService
 
     private readonly NotificationManager? _notificationManager;
     private int _notificationIdCounter = BaseNotificationId;
-    private bool _channelCreated;
+    private bool _channelsCreated;
 
     #endregion
 
@@ -63,7 +79,7 @@ public class LocalNotificationService : ILocalNotificationService
     {
         try
         {
-            EnsureChannelCreated();
+            EnsureChannelsCreated();
 
             var context = Application.Context;
             if (context == null)
@@ -95,8 +111,12 @@ public class LocalNotificationService : ILocalNotificationService
                 intent,
                 PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
 
+            // Use appropriate channel based on silent flag
+            // On Android 8+, channel importance controls sound/vibration, not per-notification settings
+            var channelId = silent ? SilentVisitChannelId : VisitChannelId;
+
             // Build notification
-            var builder = new NotificationCompat.Builder(context, VisitChannelId);
+            var builder = new NotificationCompat.Builder(context, channelId);
             builder.SetContentTitle(title);
             builder.SetContentText(message);
             builder.SetSmallIcon(Resource.Drawable.ic_notification);
@@ -104,23 +124,25 @@ public class LocalNotificationService : ILocalNotificationService
             builder.SetContentIntent(pendingIntent);
             builder.SetPriority(silent ? NotificationCompat.PriorityLow : NotificationCompat.PriorityDefault);
 
-            if (silent)
+            // On Android 7.x (API 24-25), channels are ignored - configure per-notification
+            if (!OperatingSystem.IsAndroidVersionAtLeast(26))
             {
-                // Silent: no sound, no vibration, no heads-up
-                builder.SetDefaults(0);
-                builder.SetVibrate(null);
-                builder.SetSound(null);
-            }
-            else
-            {
-                // Normal: use default sound and vibration
-                builder.SetDefaults((int)NotificationDefaults.All);
+                if (silent)
+                {
+                    builder.SetDefaults(0);
+                    builder.SetVibrate(null);
+                    builder.SetSound(null);
+                }
+                else
+                {
+                    builder.SetDefaults((int)NotificationDefaults.All);
+                }
             }
 
             _notificationManager?.Notify(notificationId, builder.Build());
 
             System.Diagnostics.Debug.WriteLine(
-                $"[Android LocalNotificationService] Showed notification {notificationId}: {title} (silent: {silent})");
+                $"[Android LocalNotificationService] Showed notification {notificationId}: {title} (silent: {silent}, channel: {channelId})");
 
             return Task.FromResult(notificationId);
         }
@@ -186,11 +208,12 @@ public class LocalNotificationService : ILocalNotificationService
     #region Private Methods
 
     /// <summary>
-    /// Creates the notification channel if not already created.
+    /// Creates both notification channels if not already created.
+    /// On Android 8+, channel importance controls sound/vibration behavior.
     /// </summary>
-    private void EnsureChannelCreated()
+    private void EnsureChannelsCreated()
     {
-        if (_channelCreated)
+        if (_channelsCreated)
         {
             return;
         }
@@ -198,33 +221,45 @@ public class LocalNotificationService : ILocalNotificationService
         // Notification channels are only supported on Android 8.0 (API 26) and later
         if (!OperatingSystem.IsAndroidVersionAtLeast(26))
         {
-            _channelCreated = true; // No channel needed
+            _channelsCreated = true; // No channel needed
             return;
         }
 
         try
         {
-            var channel = new NotificationChannel(
+            // Normal channel - default importance with sound and vibration
+            var normalChannel = new NotificationChannel(
                 VisitChannelId,
                 VisitChannelName,
                 NotificationImportance.Default)
             {
                 Description = VisitChannelDescription
             };
+            normalChannel.EnableLights(true);
+            normalChannel.EnableVibration(true);
+            _notificationManager?.CreateNotificationChannel(normalChannel);
 
-            // Enable lights and vibration
-            channel.EnableLights(true);
-            channel.EnableVibration(true);
+            // Silent channel - low importance, no sound, no vibration
+            var silentChannel = new NotificationChannel(
+                SilentVisitChannelId,
+                SilentVisitChannelName,
+                NotificationImportance.Low)
+            {
+                Description = SilentVisitChannelDescription
+            };
+            silentChannel.EnableLights(false);
+            silentChannel.EnableVibration(false);
+            silentChannel.SetSound(null, null);
+            _notificationManager?.CreateNotificationChannel(silentChannel);
 
-            _notificationManager?.CreateNotificationChannel(channel);
-            _channelCreated = true;
+            _channelsCreated = true;
 
-            System.Diagnostics.Debug.WriteLine("[Android LocalNotificationService] Created visit notification channel");
+            System.Diagnostics.Debug.WriteLine("[Android LocalNotificationService] Created visit notification channels (normal + silent)");
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine(
-                $"[Android LocalNotificationService] Failed to create notification channel: {ex.Message}");
+                $"[Android LocalNotificationService] Failed to create notification channels: {ex.Message}");
         }
     }
 
