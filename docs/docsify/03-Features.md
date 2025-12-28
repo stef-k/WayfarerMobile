@@ -201,14 +201,31 @@ Tap a place to:
 
 ## Turn-by-Turn Navigation
 
-Navigate to trip places with routing support.
+Navigate to destinations with intelligent routing that adapts to context.
 
-### Starting Navigation
+### Navigation Contexts
+
+The app supports navigation in different contexts:
+
+| Context | Started From | Features |
+|---------|--------------|----------|
+| **Trip Navigation** | Trip sidebar → place | Uses trip segments, full route priority |
+| **Group Navigation** | Groups → member | OSRM routing to member location |
+| **Map Navigation** | Long-press on map | OSRM routing to any point |
+
+### Starting Trip Navigation
 
 1. Open a downloaded trip
 2. Tap a place in the sidebar
 3. Tap **Navigate**
-4. Navigation overlay appears
+4. Select transport mode (Walk/Drive/Bike)
+5. Navigation overlay appears
+
+### Starting Ad-Hoc Navigation
+
+1. From **Groups**: Tap member → **Navigate**
+2. From **Map**: Long-press location → **Navigate**
+3. Select transport mode or **External Maps**
 
 ### Navigation Display
 
@@ -220,14 +237,23 @@ The overlay shows:
 
 ### Route Sources (Priority Order)
 
-The app uses a multi-tier fallback system for routing:
+Route calculation differs based on navigation context:
 
+**Trip Navigation** (has trip context):
 | Priority | Source | When Used |
 |----------|--------|-----------|
 | 1 | **User Segments** | Trip has pre-defined route geometry |
 | 2 | **Cached OSRM** | Valid cache exists (same dest, <50m origin, <5 min old) |
 | 3 | **OSRM Fetch** | Online and no cache available |
 | 4 | **Direct Route** | Offline fallback (straight-line with bearing) |
+
+**Ad-Hoc Navigation** (groups, map locations):
+| Priority | Source | When Used |
+|----------|--------|-----------|
+| 1 | **OSRM Fetch** | Online route calculation |
+| 2 | **Direct Route** | Offline fallback (straight-line with bearing) |
+
+> **Note**: Ad-hoc navigation doesn't have user segments or route caching since there's no trip context.
 
 **User Segments**: Routes you defined when planning the trip. These include the exact polyline geometry and are always preferred over calculated routes.
 
@@ -242,6 +268,13 @@ The app uses a multi-tier fallback system for routing:
 - Cardinal direction (N, NE, E, etc.)
 - Distance to destination
 - Bearing-based heading
+
+### External Maps Integration
+
+For any navigation, you can choose **External Maps** to hand off to:
+- Google Maps (Android)
+- Apple Maps (iOS)
+- Other installed navigation apps
 
 ### Audio Announcements
 

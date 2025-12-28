@@ -368,14 +368,35 @@ Segments are styled based on transport mode:
 
 **Source**: `src/WayfarerMobile/Services/TripNavigationService.cs`
 
-Provides trip-based navigation with route calculation and progress tracking.
+Provides navigation with route calculation and progress tracking. Supports two modes:
 
-### Route Priority
+### Navigation Modes
 
-1. **User Segments**: Trip-defined routes (always preferred)
-2. **Cached OSRM**: Valid cached route (same destination, <5 min old, within 50m)
-3. **OSRM Fetch**: Online route fetch
-4. **Direct Route**: Straight line fallback
+**Trip Navigation** (`CalculateRouteToPlaceAsync`):
+- Used when navigating to a trip place
+- Has access to user-defined segments and trip context
+- Route priority:
+  1. User Segments (trip-defined routes)
+  2. Cached OSRM (valid cache)
+  3. OSRM Fetch (online)
+  4. Direct Route (offline fallback)
+
+**Ad-Hoc Navigation** (`CalculateRouteToCoordinatesAsync`):
+- Used for groups, map locations, any coordinates
+- No trip context available
+- Route priority:
+  1. OSRM Fetch (online)
+  2. Direct Route (offline fallback)
+
+```csharp
+// Trip navigation - uses full route priority chain
+var route = await _tripNavigationService.CalculateRouteToPlaceAsync(
+    currentLat, currentLon, destinationPlaceId);
+
+// Ad-hoc navigation - OSRM or direct only
+var route = await _tripNavigationService.CalculateRouteToCoordinatesAsync(
+    currentLat, currentLon, destLat, destLon, destName, profile: "foot");
+```
 
 ### Navigation Graph
 
