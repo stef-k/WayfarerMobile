@@ -71,7 +71,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     private const long WakePhaseIntervalMs = 1000;   // 1s - match HighPerformance, gather all samples
     private const long MinSleepIntervalMs = 60000;   // 60s - minimum sleep interval
     private const long StoredSampleIntervalMs = 30000; // 30s - poll for TryLog when sample stored (no GPS)
-    private const int WakeBufferSeconds = 90;        // Wake up 90s before threshold
+    private const int WakeBufferSeconds = 100;       // Wake up 100s before threshold (enough for cold start GPS)
     private const int StaleSampleBufferSeconds = 5;  // Extra buffer before clearing stale sample
 
     // Two-tier accuracy thresholds for wake phase:
