@@ -879,56 +879,51 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
             }
         }
 
-        // Two-tier accuracy filtering for wake phase:
+        // Accuracy filtering for wake phase:
         // 1. Excellent GPS (≤20m): Store it, switch to Balanced (GPS off), wait for TryLog
-        // 2. Threshold passed with moderate accuracy (≤100m): Proceed to TryLog
+        // 2. Threshold passed: Proceed to TryLog with best available (any accuracy)
         // 3. Otherwise: Keep collecting samples until threshold or timeout
         var shouldSwitchToBalanced = false;
         if (_currentlyUsingHighAccuracy && _performanceMode == PerformanceMode.Normal && !timeoutExpired)
         {
+            var secondsUntilLog = _thresholdFilter?.GetSecondsUntilNextLog() ?? 0;
+
             if (accuracy <= ExcellentGpsThreshold)
             {
                 // Excellent GPS found - trigger early GPS shutoff
                 Log.Info(LogTag, $"Excellent GPS: {accuracy:F0}m, switching to Balanced (early stop)");
                 shouldSwitchToBalanced = true;
             }
-            else if (accuracy <= MinAccuracyMeters)
+            else if (secondsUntilLog <= 0)
             {
-                // Moderate accuracy (20-100m) - check if threshold time passed
-                var secondsUntilLog = _thresholdFilter?.GetSecondsUntilNextLog() ?? 0;
-                if (secondsUntilLog > 0)
-                {
-                    // Threshold not reached - keep collecting for better GPS
-                    Log.Debug(LogTag, $"Wake phase: {accuracy:F0}m, waiting for better ({secondsUntilLog:F0}s to threshold)");
-                    return;
-                }
-                // Threshold passed - proceed to TryLog with moderate accuracy
-                Log.Info(LogTag, $"Threshold passed with moderate GPS: {accuracy:F0}m, proceeding to log");
+                // Threshold passed - proceed to TryLog with whatever accuracy we have
+                Log.Info(LogTag, $"Threshold passed with {accuracy:F0}m GPS, proceeding to log");
             }
             else
             {
-                // Poor accuracy (>100m) - keep waiting
-                Log.Debug(LogTag, $"Wake phase: {accuracy:F0}m > {MinAccuracyMeters}m, waiting for better or timeout");
+                // Threshold not reached - keep collecting for better GPS
+                Log.Debug(LogTag, $"Wake phase: {accuracy:F0}m, waiting for better ({secondsUntilLog:F0}s to threshold)");
                 return;
             }
         }
         else if (!_currentlyUsingHighAccuracy && _performanceMode == PerformanceMode.Normal)
         {
-            // In Balanced mode (after early stop or during sleep) - just filter by MinAccuracy
+            // In Balanced mode (after early stop or during sleep)
+            // Proceed to TryLog which will use stored best sample if available
             if (accuracy > MinAccuracyMeters)
             {
-                Log.Debug(LogTag, $"Balanced mode: {accuracy:F0}m > {MinAccuracyMeters}m, using stored sample if available");
+                Log.Debug(LogTag, $"Balanced mode: {accuracy:F0}m, will use stored sample if available");
             }
-            // Don't return - proceed to TryLog which will use stored best sample
         }
         else
         {
-            // Timeout expired or other modes - use fallback filter
+            // Timeout expired or other modes - proceed to TryLog
+            // At timeout, we must log whatever we have (any accuracy)
             if (accuracy > MinAccuracyMeters)
             {
-                Log.Debug(LogTag, $"Location rejected: {accuracy:F0}m > {MinAccuracyMeters}m");
-                return;
+                Log.Info(LogTag, $"Timeout/fallback: proceeding with {accuracy:F0}m accuracy");
             }
+            // Don't return - always proceed to TryLog
         }
 
         var locationData = ConvertToLocationData(location);
