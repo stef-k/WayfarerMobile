@@ -177,45 +177,56 @@ Normal mode uses a **three-phase sleep/wake optimization** to save battery while
 │                    5-Minute Threshold Example                     │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                   │
-│  0:00          2:00          3:00          4:00          5:00    │
-│    │            │             │             │             │       │
-│    ▼            ▼             ▼             ▼             ▼       │
-│  LOG ═══════════╪═════════════╪═════════════╪═════════════╪ LOG  │
-│    │            │             │             │             │       │
-│    │◄──────────►│◄───────────►│◄───────────►│◄───────────►│       │
-│    │ Deep Sleep │  Approach   │    Wake     │             │       │
-│    │  (135s)    │   (30s)     │   (30s)     │             │       │
-│    │ Balanced   │  Balanced   │HighAccuracy │             │       │
-│    │  ~100m     │   ~100m     │  ~10-20m    │             │       │
+│  0:00       1:30       2:30       3:30       4:30    5:00        │
+│    │         │          │          │          │        │          │
+│    ▼         ▼          ▼          ▼          ▼        ▼          │
+│  LOG ════════╪══════════╪══════════╪══════════╪════════╪ LOG     │
+│    │         │          │          │          │        │          │
+│    │◄───────►│◄────────►│◄────────►│◄────────►│        │          │
+│    │  Deep   │  Deep    │ Approach │   Wake   │(early  │          │
+│    │  Sleep  │  Sleep   │  (90s)   │  (90s)   │ stop)  │          │
+│    │ Balanced│ Balanced │ Balanced │HighAccur │Balanced│          │
+│    │  ~100m  │  ~100m   │  ~100m   │  ≤20m    │ stored │          │
 │                                                                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-#### Phase 1: Deep Sleep (>120s before threshold)
+#### Phase 1: Deep Sleep (>180s before threshold)
 - **Priority**: Balanced (cell/WiFi positioning)
-- **Interval**: Long (~135s for 5-min threshold)
+- **Interval**: Long (~120s for 5-min threshold)
 - **Accuracy**: ~100m (acceptable, not logged)
 - **Battery**: Minimal usage
 
-#### Phase 2: Approach (60-120s before threshold)
+#### Phase 2: Approach (90-180s before threshold)
 - **Priority**: Balanced
-- **Interval**: 30 seconds (shorter polling)
-- **Purpose**: Catch the wake window reliably
+- **Interval**: 1 second (prepare for wake)
+- **Purpose**: Shorter polling to catch the wake window reliably
 - **Battery**: Low usage
 
-#### Phase 3: Wake (≤60s before threshold)
+#### Phase 3: Wake (≤90s before threshold)
 - **Priority**: HighAccuracy (GPS)
-- **Interval**: 30 seconds
-- **Accuracy**: Typically 10-20m
+- **Interval**: 1 second (collect many samples)
+- **Accuracy**: Target ≤20m (excellent GPS)
 - **Purpose**: Acquire high-accuracy fix for logging
 - **Best location tracking**: Keeps the best GPS fix seen during wake
 
+#### Early GPS Shutoff
+
+When excellent GPS accuracy (≤20m) is acquired during wake phase:
+- **Action**: Immediately switch to Balanced mode (GPS off)
+- **Stored sample**: Best GPS fix is stored for use at threshold time
+- **Battery savings**: Typically saves 80+ seconds of GPS usage per cycle
+- **Result**: At threshold time, stored sample is logged with accurate timestamp
+
 #### Bad GPS Handling
 
-If GPS accuracy doesn't reach <50m within the wake phase:
-- **Timeout**: 120 seconds from wake start
-- **Fallback**: Uses best location seen during wake phase
-- **Result**: Logs best available accuracy, then sleeps
+If GPS accuracy doesn't reach ≤20m within the wake phase:
+- **At threshold time**: Logs best available sample regardless of accuracy
+- **No delay**: Logging always occurs at threshold time, never later
+- **Fallback priority**: Best stored sample > current reading
+- **Result**: Logs whatever accuracy is available, then sleeps
+
+> **Note**: Even with poor GPS (>100m), the app logs at threshold time rather than skipping. A coarse location is better than no location for timeline continuity.
 
 ### Power Saver Mode
 
