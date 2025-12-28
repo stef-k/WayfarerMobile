@@ -18,7 +18,7 @@
 		<ApplicationTitle>WayfarerMobile</ApplicationTitle>
 
 		<!-- App Identifier -->
-		<ApplicationId>com.wayfarer.mobile</ApplicationId>
+		<ApplicationId>me.stefk.wayfarermobile</ApplicationId>
 
 		<!-- Versions -->
 		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
@@ -28,6 +28,11 @@
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
 	</PropertyGroup>
+
+<!-- Android Release: APK for ad-hoc distribution -->
+<PropertyGroup Condition="$(TargetFramework.Contains('-android')) and '$(Configuration)' == 'Release'">
+	<AndroidPackageFormat>apk</AndroidPackageFormat>
+</PropertyGroup>
 
 	<ItemGroup>
 		<!-- App Icon -->
