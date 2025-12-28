@@ -16,16 +16,27 @@ Wayfarer Mobile is a cross-platform .NET MAUI app for Android and iOS that serve
 
 ## Features
 
+### Core Features
+
 | Feature | Description |
 |---------|-------------|
-| **Timeline Tracking** | Automatic background location logging with privacy controls |
-| **Trip Management** | Browse trips, places, and route segments from your server |
-| **Offline Maps** | Download map tiles per trip for offline navigation |
-| **Turn-by-Turn Navigation** | Voice-guided navigation with OSRM routing integration |
-| **Group Sharing** | Real-time location sharing with family and friends |
-| **Manual Check-ins** | Quick location logging with custom notes |
+| **Timeline Tracking** | Automatic background location logging with sleep/wake battery optimization |
+| **Timeline Export/Import** | Export to CSV or GeoJSON, import with duplicate detection |
+| **Trip Management** | Browse trips, places, segments, and polygon zones from your server |
+| **Offline Maps** | Download map tiles (zoom 8-17) per trip for offline use |
+| **Turn-by-Turn Navigation** | Voice-guided navigation with multi-tier route fallback |
+| **Group Sharing** | Real-time location sharing via SSE with colored member markers |
+| **Activity Types** | 20 built-in activities with icons, server sync every 6 hours |
+| **Manual Check-ins** | Quick location logging with activity type and notes |
 | **QR Setup** | Scan a QR code to instantly configure server connection |
 | **PIN Lock** | Protect your location data with app-level security |
+
+### Key Highlights
+
+- **Offline-First Architecture**: Local SQLite storage with background sync, works without internet
+- **Smart Battery Usage**: Three-phase sleep/wake optimization for background tracking (~1-3% per hour)
+- **Dual Navigation Modes**: Trip navigation (user segments → cached → OSRM → direct) and ad-hoc navigation (OSRM → direct)
+- **Queue Resilience**: Up to 25,000 locations queued locally, syncs when online with retry
 
 ## Quick Start
 
@@ -65,19 +76,32 @@ dotnet build -t:Run -f net10.0-android
 ```
 WayfarerMobile/
 ├── src/
-│   ├── WayfarerMobile/          # Main MAUI application
-│   │   ├── Core/                # Models, interfaces, algorithms
-│   │   ├── Data/                # Database entities and services
-│   │   ├── Services/            # Business logic services
-│   │   ├── ViewModels/          # MVVM view models
-│   │   ├── Views/               # XAML pages and controls
-│   │   └── Platforms/           # Platform-specific code
-│   └── WayfarerMobile.Core/     # Shared core library
+│   ├── WayfarerMobile/              # Main MAUI application
+│   │   ├── Data/                    # Database entities and services
+│   │   ├── Services/                # Business logic services
+│   │   │   └── TileCache/           # Tile caching services
+│   │   ├── ViewModels/              # MVVM view models
+│   │   ├── Views/                   # XAML pages and controls
+│   │   │   └── Controls/            # Reusable UI controls
+│   │   ├── Shared/                  # Converters, behaviors
+│   │   ├── Platforms/               # Platform-specific code
+│   │   │   ├── Android/Services/    # Foreground location service
+│   │   │   └── iOS/Services/        # CLLocationManager integration
+│   │   └── Resources/               # Images, fonts, raw assets
+│   │
+│   └── WayfarerMobile.Core/         # Platform-agnostic library
+│       ├── Algorithms/              # Geo calculations, pathfinding
+│       ├── Enums/                   # Shared enumerations
+│       ├── Helpers/                 # Utility classes
+│       ├── Interfaces/              # Service contracts
+│       ├── Models/                  # Domain models, DTOs
+│       └── Navigation/              # Navigation graph and routing
+│
 ├── tests/
-│   └── WayfarerMobile.Tests/    # Unit tests (xUnit)
+│   └── WayfarerMobile.Tests/        # Unit tests (xUnit)
+│
 └── docs/
-    ├── docsify/                 # User and developer documentation
-    └── requirements/            # Design specs and architecture docs
+    └── docsify/                     # User and developer documentation
 ```
 
 ## Technology Stack
@@ -86,12 +110,14 @@ WayfarerMobile/
 |----------|------------|
 | Framework | .NET 10 MAUI |
 | Maps | Mapsui 5.0 with OpenStreetMap tiles |
+| Routing | OSRM (Open Source Routing Machine) |
 | UI Components | Syncfusion MAUI Toolkit (MIT) |
 | MVVM | CommunityToolkit.Mvvm |
 | Database | SQLite-net-pcl |
 | HTTP Resilience | Polly |
 | Logging | Serilog |
 | QR Scanning | ZXing.Net.MAUI |
+| Real-time | Server-Sent Events (SSE) |
 
 ## Documentation
 

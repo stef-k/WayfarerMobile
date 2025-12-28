@@ -212,7 +212,9 @@ The Android `LocationTrackingService` is a foreground service that uses Google P
 - Declared with `ForegroundServiceType = TypeLocation`
 - Uses `StartForeground()` within 5 seconds of start (Android requirement)
 - Returns `StartCommandResult.Sticky` for automatic restart
-- Supports performance modes: High (1s), Normal (60s), PowerSaver (300s)
+- Supports performance modes: High (1s), Normal (sleep/wake optimization), PowerSaver (300s)
+- Sleep/wake optimization uses ThresholdFilter as single source of truth for timing
+- Best location tracking during wake phase with 120s timeout for bad GPS
 
 **Source**: `src/WayfarerMobile/Platforms/Android/Services/LocationTrackingService.cs`
 
@@ -289,7 +291,8 @@ The `DatabaseService` manages all SQLite operations using sqlite-net-pcl:
 **Tables:**
 | Table | Purpose |
 |-------|---------|
-| `QueuedLocations` | Location queue for server sync |
+| `QueuedLocations` | Location queue for server sync (max 25,000) |
+| `LocalTimelineEntries` | Cached timeline for offline viewing |
 | `AppSettings` | Key-value app settings |
 | `DownloadedTrips` | Trip metadata and status |
 | `TripTiles` | Cached map tiles for trips |
@@ -299,6 +302,54 @@ The `DatabaseService` manages all SQLite operations using sqlite-net-pcl:
 | `OfflineAreas` | Trip regions for offline display |
 
 **Source**: `src/WayfarerMobile/Data/Services/DatabaseService.cs`
+
+### Local Timeline Lifecycle
+
+The timeline uses an **offline-first** pattern with server enrichment:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        Location Lifecycle                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  GPS Fix → ThresholdFilter → QueuedLocations → LocationSyncService       │
+│                                    │                    │                │
+│                                    │              (Server Sync)          │
+│                                    ▼                    ▼                │
+│                           LocalTimelineEntry ← ─ ─ Enrichment            │
+│                                    │           (Address, Place,          │
+│                                    │            Activity, etc.)          │
+│                                    ▼                                     │
+│                            TimelineDataService → UI Display              │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Data Flow**:
+
+1. **GPS Acquisition**: LocationTrackingService acquires GPS fix
+2. **Queue Entry**: Location is queued to `QueuedLocations` table
+3. **Server Sync**: `LocationSyncService` sends to server when online
+4. **Local Cache**: Entry is copied to `LocalTimelineEntries` for offline viewing
+5. **Enrichment**: `TimelineDataService.EnrichFromServerAsync()` fetches:
+   - Reverse-geocoded address
+   - Place/region/country
+   - Activity type
+   - Timezone
+6. **Merge Strategy**: Server enrichment merges into local entry, preserving local edits
+
+**Enrichment Fields**:
+| Field | Source | Notes |
+|-------|--------|-------|
+| `Address` | Server | Short address |
+| `FullAddress` | Server | Complete address |
+| `Place` | Server | Business/landmark name |
+| `Region` | Server | State/province |
+| `Country` | Server | Country name |
+| `PostCode` | Server | Postal code |
+| `ActivityType` | Server/User | Can be edited locally |
+| `Timezone` | Server | IANA timezone ID |
+| `Notes` | User | Local notes preserved over server |
 
 ### Settings Service
 

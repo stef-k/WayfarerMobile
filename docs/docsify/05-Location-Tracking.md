@@ -13,12 +13,13 @@ Wayfarer Mobile uses a background service to continuously track your location.
 ```
 ┌──────────────────────────────────────────────────────┐
 │ LocationTrackingService (Foreground Service)          │
-│ ├── Owns GPS directly                                │
-│ ├── Filters locations by accuracy                    │
+│ ├── Owns GPS via FusedLocationProviderClient         │
+│ ├── Sleep/wake optimization (saves battery)          │
+│ ├── Filters locations by accuracy (<100m)            │
 │ ├── Applies time/distance thresholds                 │
-│ ├── Writes to local SQLite queue                     │
+│ ├── Writes to local SQLite queue (max 25,000)        │
 │ ├── Syncs queue to server when online                │
-│ └── Shows notification with status                   │
+│ └── Shows notification with status and accuracy      │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -165,14 +166,56 @@ When: App is open on main map or during navigation
 - **Battery**: Higher usage
 - **Purpose**: Real-time map updates
 
-### Normal Mode
+### Normal Mode (Sleep/Wake Optimization)
 
 When: App is in background or on other pages
 
-- **Update interval**: Based on server settings (e.g., 60 seconds)
-- **Accuracy**: Balanced
-- **Battery**: Moderate usage
-- **Purpose**: Timeline logging
+Normal mode uses a **three-phase sleep/wake optimization** to save battery while ensuring high-accuracy GPS fixes for server logging:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    5-Minute Threshold Example                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  0:00          2:00          3:00          4:00          5:00    │
+│    │            │             │             │             │       │
+│    ▼            ▼             ▼             ▼             ▼       │
+│  LOG ═══════════╪═════════════╪═════════════╪═════════════╪ LOG  │
+│    │            │             │             │             │       │
+│    │◄──────────►│◄───────────►│◄───────────►│◄───────────►│       │
+│    │ Deep Sleep │  Approach   │    Wake     │             │       │
+│    │  (135s)    │   (30s)     │   (30s)     │             │       │
+│    │ Balanced   │  Balanced   │HighAccuracy │             │       │
+│    │  ~100m     │   ~100m     │  ~10-20m    │             │       │
+│                                                                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Phase 1: Deep Sleep (>120s before threshold)
+- **Priority**: Balanced (cell/WiFi positioning)
+- **Interval**: Long (~135s for 5-min threshold)
+- **Accuracy**: ~100m (acceptable, not logged)
+- **Battery**: Minimal usage
+
+#### Phase 2: Approach (60-120s before threshold)
+- **Priority**: Balanced
+- **Interval**: 30 seconds (shorter polling)
+- **Purpose**: Catch the wake window reliably
+- **Battery**: Low usage
+
+#### Phase 3: Wake (≤60s before threshold)
+- **Priority**: HighAccuracy (GPS)
+- **Interval**: 30 seconds
+- **Accuracy**: Typically 10-20m
+- **Purpose**: Acquire high-accuracy fix for logging
+- **Best location tracking**: Keeps the best GPS fix seen during wake
+
+#### Bad GPS Handling
+
+If GPS accuracy doesn't reach <50m within the wake phase:
+- **Timeout**: 120 seconds from wake start
+- **Fallback**: Uses best location seen during wake phase
+- **Result**: Logs best available accuracy, then sleeps
 
 ### Power Saver Mode
 
@@ -222,10 +265,16 @@ Locations are queued locally before syncing to the server.
 ### Queue Behavior
 
 1. GPS provides location
-2. Passes accuracy filter
-3. Passes threshold filter
+2. Passes accuracy filter (<100m)
+3. Passes threshold filter (time AND distance)
 4. Added to local SQLite queue
 5. Queue syncs when online
+
+### Queue Limits
+
+- **Maximum queue size**: 25,000 locations
+- **Automatic cleanup**: When limit exceeded, oldest synced locations are purged
+- **Retention**: Unsynced locations are never deleted automatically
 
 ### Sync Schedule
 
