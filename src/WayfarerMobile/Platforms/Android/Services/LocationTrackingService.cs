@@ -881,8 +881,8 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
 
         // Two-tier accuracy filtering for wake phase:
         // 1. Excellent GPS (≤20m): Store it, switch to Balanced (GPS off), wait for TryLog
-        // 2. Timeout fallback (≤100m): Accept best available at cutoff
-        // 3. Otherwise: Keep collecting samples
+        // 2. Threshold passed with moderate accuracy (≤100m): Proceed to TryLog
+        // 3. Otherwise: Keep collecting samples until threshold or timeout
         var shouldSwitchToBalanced = false;
         if (_currentlyUsingHighAccuracy && _performanceMode == PerformanceMode.Normal && !timeoutExpired)
         {
@@ -892,10 +892,23 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
                 Log.Info(LogTag, $"Excellent GPS: {accuracy:F0}m, switching to Balanced (early stop)");
                 shouldSwitchToBalanced = true;
             }
+            else if (accuracy <= MinAccuracyMeters)
+            {
+                // Moderate accuracy (20-100m) - check if threshold time passed
+                var secondsUntilLog = _thresholdFilter?.GetSecondsUntilNextLog() ?? 0;
+                if (secondsUntilLog > 0)
+                {
+                    // Threshold not reached - keep collecting for better GPS
+                    Log.Debug(LogTag, $"Wake phase: {accuracy:F0}m, waiting for better ({secondsUntilLog:F0}s to threshold)");
+                    return;
+                }
+                // Threshold passed - proceed to TryLog with moderate accuracy
+                Log.Info(LogTag, $"Threshold passed with moderate GPS: {accuracy:F0}m, proceeding to log");
+            }
             else
             {
-                // Not excellent - keep collecting, don't proceed yet
-                Log.Debug(LogTag, $"Wake phase: {accuracy:F0}m > {ExcellentGpsThreshold}m, waiting for better or timeout");
+                // Poor accuracy (>100m) - keep waiting
+                Log.Debug(LogTag, $"Wake phase: {accuracy:F0}m > {MinAccuracyMeters}m, waiting for better or timeout");
                 return;
             }
         }
