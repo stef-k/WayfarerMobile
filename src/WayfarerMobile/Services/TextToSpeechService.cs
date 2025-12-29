@@ -70,7 +70,7 @@ public class TextToSpeechService : ITextToSpeechService
             var options = new SpeechOptions
             {
                 Pitch = 1.0f,
-                Volume = 1.0f,
+                Volume = _settingsService.NavigationVolume,
                 Locale = locale
             };
 

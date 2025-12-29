@@ -164,6 +164,18 @@ public partial class SettingsViewModel : BaseViewModel
     private bool _autoRerouteEnabled;
 
     /// <summary>
+    /// Gets or sets the navigation voice volume (0.0-1.0).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NavigationVolumePercent))]
+    private float _navigationVolume = 1.0f;
+
+    /// <summary>
+    /// Gets the navigation volume as a percentage for display.
+    /// </summary>
+    public int NavigationVolumePercent => (int)(NavigationVolume * 100);
+
+    /// <summary>
     /// Gets or sets the distance units (kilometers or miles).
     /// </summary>
     [ObservableProperty]
@@ -298,6 +310,36 @@ public partial class SettingsViewModel : BaseViewModel
     private int _maxTripCacheSizeMB;
 
     /// <summary>
+    /// Gets or sets the maximum concurrent tile downloads (1-4).
+    /// </summary>
+    [ObservableProperty]
+    private int _maxConcurrentTileDownloads;
+
+    /// <summary>
+    /// Gets or sets the minimum delay between tile requests in ms (50-5000).
+    /// </summary>
+    [ObservableProperty]
+    private int _minTileRequestDelayMs;
+
+    /// <summary>
+    /// Gets or sets the prefetch distance threshold in meters.
+    /// </summary>
+    [ObservableProperty]
+    private int _prefetchDistanceThresholdMeters;
+
+    /// <summary>
+    /// Gets or sets the custom tile server URL.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDefaultTileServer))]
+    private string _tileServerUrl = string.Empty;
+
+    /// <summary>
+    /// Gets whether the current tile server URL is the default OSM server.
+    /// </summary>
+    public bool IsDefaultTileServer => TileServerUrl == SettingsService.DefaultTileServerUrl;
+
+    /// <summary>
     /// Gets or sets the pending queue count.
     /// </summary>
     [ObservableProperty]
@@ -380,6 +422,7 @@ public partial class SettingsViewModel : BaseViewModel
         // Navigation settings
         NavigationAudioEnabled = _settingsService.NavigationAudioEnabled;
         NavigationVibrationEnabled = _settingsService.NavigationVibrationEnabled;
+        NavigationVolume = _settingsService.NavigationVolume;
         AutoRerouteEnabled = _settingsService.AutoRerouteEnabled;
         DistanceUnits = _settingsService.DistanceUnits;
 
@@ -396,6 +439,10 @@ public partial class SettingsViewModel : BaseViewModel
         LiveCachePrefetchRadius = _settingsService.LiveCachePrefetchRadius;
         MaxLiveCacheSizeMB = _settingsService.MaxLiveCacheSizeMB;
         MaxTripCacheSizeMB = _settingsService.MaxTripCacheSizeMB;
+        MaxConcurrentTileDownloads = _settingsService.MaxConcurrentTileDownloads;
+        MinTileRequestDelayMs = _settingsService.MinTileRequestDelayMs;
+        PrefetchDistanceThresholdMeters = _settingsService.PrefetchDistanceThresholdMeters;
+        TileServerUrl = _settingsService.TileServerUrl;
 
         UserEmail = _settingsService.UserEmail ?? string.Empty;
         IsLoggedIn = _settingsService.IsConfigured;
@@ -544,6 +591,46 @@ public partial class SettingsViewModel : BaseViewModel
     }
 
     /// <summary>
+    /// Saves max concurrent tile downloads setting.
+    /// </summary>
+    partial void OnMaxConcurrentTileDownloadsChanged(int value)
+    {
+        _settingsService.MaxConcurrentTileDownloads = value;
+    }
+
+    /// <summary>
+    /// Saves min tile request delay setting.
+    /// </summary>
+    partial void OnMinTileRequestDelayMsChanged(int value)
+    {
+        _settingsService.MinTileRequestDelayMs = value;
+    }
+
+    /// <summary>
+    /// Saves prefetch distance threshold setting.
+    /// </summary>
+    partial void OnPrefetchDistanceThresholdMetersChanged(int value)
+    {
+        _settingsService.PrefetchDistanceThresholdMeters = value;
+    }
+
+    /// <summary>
+    /// Saves tile server URL setting.
+    /// </summary>
+    partial void OnTileServerUrlChanged(string value)
+    {
+        _settingsService.TileServerUrl = value;
+    }
+
+    /// <summary>
+    /// Saves navigation volume setting.
+    /// </summary>
+    partial void OnNavigationVolumeChanged(float value)
+    {
+        _settingsService.NavigationVolume = value;
+    }
+
+    /// <summary>
     /// Saves visit notifications enabled setting, updates UI, and starts/stops the service.
     /// </summary>
     partial void OnVisitNotificationsEnabledChanged(bool value)
@@ -680,6 +767,15 @@ public partial class SettingsViewModel : BaseViewModel
     private void SetVisitNotificationStyle(string style)
     {
         VisitNotificationStyle = style;
+    }
+
+    /// <summary>
+    /// Resets the tile server URL to the default OSM server.
+    /// </summary>
+    [RelayCommand]
+    private void ResetTileServerUrl()
+    {
+        TileServerUrl = SettingsService.DefaultTileServerUrl;
     }
 
     /// <summary>
