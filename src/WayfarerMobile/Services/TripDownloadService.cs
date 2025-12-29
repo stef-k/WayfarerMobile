@@ -1857,7 +1857,7 @@ public class TripDownloadService : ITripDownloadService
                             var succeededSnapshot = succeededIndices.Keys.ToHashSet();
                             var remaining = tiles.Where((_, idx) => !succeededSnapshot.Contains(idx)).ToList();
                             await SaveDownloadStateAsync(trip, remaining, initialCompleted + succeededSnapshot.Count, totalTiles,
-                                Interlocked.Read(ref totalBytes), DownloadPauseReason.PeriodicSave);
+                                Interlocked.Read(ref totalBytes), DownloadPauseReason.PeriodicSave, DownloadStateStatus.InProgress);
                         }
                     }
                 });
