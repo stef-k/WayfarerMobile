@@ -796,6 +796,68 @@ public class TripDownloadServiceTests : IAsyncLifetime
         tilesRemain.Should().BeGreaterThan(0);
     }
 
+    [Fact]
+    public async Task CancelDownloadAsync_SetsCancelledStatus_NotPaused()
+    {
+        // Arrange - This tests the "distinguish cancel from pause" fix
+        var trip = await InsertDownloadingTrip("Cancel Status Test");
+        await InsertDownloadState(trip.Id, trip.ServerId, "Cancel Status Test", DownloadStateStatus.InProgress);
+
+        // Act
+        var result = await CancelDownloadAsync(trip.Id, cleanup: false);
+
+        // Assert - Status should be Cancelled, not Paused
+        result.Should().BeTrue();
+        var state = await _database.Table<TripDownloadStateEntity>()
+            .FirstOrDefaultAsync(s => s.TripId == trip.Id);
+        state.Should().NotBeNull();
+        state!.Status.Should().Be(DownloadStateStatus.Cancelled);
+    }
+
+    [Fact]
+    public async Task CancelledDownload_NotReturnedByGetPausedDownloads()
+    {
+        // Arrange - Cancelled downloads should not appear in paused list
+        var trip = await InsertDownloadingTrip("Cancelled Not Paused");
+        await InsertDownloadState(trip.Id, trip.ServerId, "Cancelled Not Paused", DownloadStateStatus.Cancelled);
+
+        // Act
+        var pausedDownloads = await GetPausedDownloadsAsync();
+
+        // Assert
+        pausedDownloads.Should().NotContain(s => s.TripId == trip.Id);
+    }
+
+    [Fact]
+    public async Task InProgressState_NotReturnedByGetPausedDownloads()
+    {
+        // Arrange - This tests the "periodic checkpoints as in-progress" fix
+        // InProgress states (from periodic saves) should not appear as paused
+        var trip = await InsertDownloadingTrip("In Progress Trip");
+        await InsertDownloadState(trip.Id, trip.ServerId, "In Progress Trip", DownloadStateStatus.InProgress,
+            interruptionReason: DownloadPauseReason.PeriodicSave);
+
+        // Act
+        var pausedDownloads = await GetPausedDownloadsAsync();
+
+        // Assert
+        pausedDownloads.Should().NotContain(s => s.TripId == trip.Id);
+    }
+
+    [Fact]
+    public async Task LimitReachedState_ReturnedByGetPausedDownloads()
+    {
+        // Arrange - LimitReached should be resumable like Paused
+        var trip = await InsertDownloadingTrip("Limit Reached Trip");
+        await InsertDownloadState(trip.Id, trip.ServerId, "Limit Reached Trip", DownloadStateStatus.LimitReached);
+
+        // Act
+        var pausedDownloads = await GetPausedDownloadsAsync();
+
+        // Assert
+        pausedDownloads.Should().Contain(s => s.TripId == trip.Id);
+    }
+
     #endregion
 
     #region Helper Methods
@@ -918,8 +980,10 @@ public class TripDownloadServiceTests : IAsyncLifetime
 
     private async Task<List<TripDownloadStateEntity>> GetPausedDownloadsAsync()
     {
+        // Match production behavior: both Paused and LimitReached are resumable
         return await _database.Table<TripDownloadStateEntity>()
-            .Where(s => s.Status == DownloadStateStatus.Paused)
+            .Where(s => s.Status == DownloadStateStatus.Paused ||
+                       s.Status == DownloadStateStatus.LimitReached)
             .ToListAsync();
     }
 
@@ -1034,7 +1098,8 @@ public class TripDownloadServiceTests : IAsyncLifetime
         return trip;
     }
 
-    private async Task InsertDownloadState(int tripId, Guid serverId, string tripName, string status)
+    private async Task InsertDownloadState(int tripId, Guid serverId, string tripName, string status,
+        string interruptionReason = DownloadPauseReason.UserPause)
     {
         var state = new TripDownloadStateEntity
         {
@@ -1042,6 +1107,7 @@ public class TripDownloadServiceTests : IAsyncLifetime
             TripServerId = serverId,
             TripName = tripName,
             Status = status,
+            InterruptionReason = interruptionReason,
             RemainingTilesJson = "[]",
             CompletedTileCount = 0,
             TotalTileCount = 100,
