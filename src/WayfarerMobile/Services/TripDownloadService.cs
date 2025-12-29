@@ -58,9 +58,10 @@ public class TripDownloadService : ITripDownloadService
     // Atomic cache: wrapper record allows volatile read/write as single reference
     private volatile CachedLimitCheckState? _cachedLimitCheck;
 
-    // Pause/resume state - tracks which downloads should be paused
+    // Pause/cancel state - tracks which downloads should be stopped and why
     // Keyed by local trip ID (int) - available after trip entity is saved
-    private readonly ConcurrentDictionary<int, bool> _downloadPauseStates = new();
+    // Value indicates the reason (UserPause = resumable, UserCancel = not resumable)
+    private readonly ConcurrentDictionary<int, string> _downloadStopRequests = new();
 
     // Active download guard - prevents concurrent downloads of the same trip
     // Keyed by server trip ID (Guid) - available at start of download before local ID exists
@@ -812,7 +813,7 @@ public class TripDownloadService : ITripDownloadService
             return false;
         }
 
-        _downloadPauseStates[tripId] = true;
+        _downloadStopRequests[tripId] = DownloadPauseReason.UserPause;
         _logger.LogInformation("Pause requested for trip {TripId}", tripId);
         return true;
     }
@@ -852,8 +853,8 @@ public class TripDownloadService : ITripDownloadService
 
         try
         {
-            // Clear pause flag and reset per-trip warning state for resumed download
-            _downloadPauseStates.TryRemove(tripId, out _);
+            // Clear stop request and reset per-trip warning state for resumed download
+            _downloadStopRequests.TryRemove(tripId, out _);
             _tripWarningStates[tripId] = new TripWarningState();
 
             // Update state to in progress
@@ -981,16 +982,16 @@ public class TripDownloadService : ITripDownloadService
     {
         ThrowIfDisposed();
 
-        // Set pause flag to stop download loop - keep it set to ensure the loop exits
+        // Set cancel flag to stop download loop - distinct from pause to prevent state saving
         // The flag will be cleaned up when starting a new download for this trip
-        _downloadPauseStates[tripId] = true;
+        _downloadStopRequests[tripId] = DownloadPauseReason.UserCancel;
 
         var trip = await _databaseService.GetDownloadedTripAsync(tripId);
         if (trip == null)
         {
             _logger.LogWarning("Cannot cancel - trip {TripId} not found", tripId);
-            // Still clean up the pause flag if trip doesn't exist
-            _downloadPauseStates.TryRemove(tripId, out _);
+            // Still clean up the stop request if trip doesn't exist
+            _downloadStopRequests.TryRemove(tripId, out _);
             return false;
         }
 
@@ -1003,8 +1004,8 @@ public class TripDownloadService : ITripDownloadService
             await _databaseService.DeleteDownloadedTripAsync(tripId);
             _logger.LogInformation("Cancelled and cleaned up trip {TripId}", tripId);
 
-            // Clean up pause flag and warning state since trip is deleted
-            _downloadPauseStates.TryRemove(tripId, out _);
+            // Clean up stop request and warning state since trip is deleted
+            _downloadStopRequests.TryRemove(tripId, out _);
             _tripWarningStates.TryRemove(tripId, out _);
         }
         else
@@ -1015,7 +1016,7 @@ public class TripDownloadService : ITripDownloadService
             await _databaseService.SaveDownloadedTripAsync(trip);
             _logger.LogInformation("Cancelled trip {TripId}, keeping partial data", tripId);
 
-            // Clean up warning state but keep pause flag until download loop exits
+            // Clean up warning state but keep stop request until download loop exits
             _tripWarningStates.TryRemove(tripId, out _);
         }
 
@@ -1040,7 +1041,9 @@ public class TripDownloadService : ITripDownloadService
     public async Task<bool> IsDownloadPausedAsync(int tripId)
     {
         // Check in-memory flag first (faster, catches recent pause requests)
-        if (_downloadPauseStates.GetValueOrDefault(tripId, false))
+        // Only UserPause is considered "paused" - UserCancel is not resumable
+        if (_downloadStopRequests.TryGetValue(tripId, out var reason) &&
+            reason == DownloadPauseReason.UserPause)
         {
             return true;
         }
@@ -1689,10 +1692,10 @@ public class TripDownloadService : ITripDownloadService
                     if (stopReason.ShouldStop)
                         return;
 
-                    // Check pause flag
-                    if (_downloadPauseStates.GetValueOrDefault(trip.Id, false))
+                    // Check stop request (pause or cancel)
+                    if (_downloadStopRequests.TryGetValue(trip.Id, out var requestedStopReason))
                     {
-                        stopReason.SetPaused(DownloadPauseReason.UserPause);
+                        stopReason.SetPaused(requestedStopReason);
                         return;
                     }
 
@@ -1842,15 +1845,22 @@ public class TripDownloadService : ITripDownloadService
 
                 await SaveDownloadStateAsync(trip, remainingTiles, actualCompleted, totalTiles, finalBytes,
                     DownloadPauseReason.CacheLimitReached, DownloadStateStatus.LimitReached);
+
+                trip.Status = TripDownloadStatus.Downloading;
+                await _databaseService.SaveDownloadedTripAsync(trip);
             }
-            else
+            else if (stopReason.PauseReason != DownloadPauseReason.UserCancel)
             {
+                // Save state for pause (resumable) - but NOT for cancel
+                // CancelDownloadAsync already deleted state and set trip.Status = Cancelled
                 await SaveDownloadStateAsync(trip, remainingTiles, actualCompleted, totalTiles, finalBytes,
                     stopReason.PauseReason);
-            }
 
-            trip.Status = TripDownloadStatus.Downloading;
-            await _databaseService.SaveDownloadedTripAsync(trip);
+                trip.Status = TripDownloadStatus.Downloading;
+                await _databaseService.SaveDownloadedTripAsync(trip);
+            }
+            // For UserCancel: don't save state or update trip status
+            // CancelDownloadAsync already handled cleanup
 
             _logger.LogInformation("Download stopped for trip {TripId}: {Completed}/{Total} tiles (processed {Processed}), Reason: {Reason}",
                 trip.Id, actualCompleted, totalTiles, finalProcessed, stopReason.PauseReason);
@@ -2399,10 +2409,10 @@ public class TripDownloadService : ITripDownloadService
 
         if (disposing)
         {
-            // Signal any active downloads to stop by setting pause flags
-            foreach (var tripId in _downloadPauseStates.Keys)
+            // Signal any active downloads to stop gracefully (pause, not cancel)
+            foreach (var tripId in _downloadStopRequests.Keys)
             {
-                _downloadPauseStates[tripId] = true;
+                _downloadStopRequests[tripId] = DownloadPauseReason.UserPause;
             }
 
             // Clear active downloads tracking (graceful shutdown)
