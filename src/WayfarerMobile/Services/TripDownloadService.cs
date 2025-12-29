@@ -33,6 +33,12 @@ public class TripDownloadService
     // Pause/resume state - tracks which downloads should be paused
     private readonly ConcurrentDictionary<int, bool> _downloadPauseStates = new();
 
+    // Active download guard - prevents concurrent downloads of the same trip (keyed by ServerId)
+    private readonly ConcurrentDictionary<Guid, bool> _activeDownloads = new();
+
+    // Per-trip warning flags - tracks if warning/critical events have been raised
+    private readonly ConcurrentDictionary<int, TripWarningState> _tripWarningStates = new();
+
     // Configurable settings (read from ISettingsService)
     private int MaxConcurrentDownloads => _settingsService.MaxConcurrentTileDownloads;
     private int MinRequestDelayMs => _settingsService.MinTileRequestDelayMs;
@@ -56,11 +62,6 @@ public class TripDownloadService
     /// Event raised when cache limit is reached (100%).
     /// </summary>
     public event EventHandler<CacheLimitEventArgs>? CacheLimitReached;
-
-    // Track if warning/critical events have been raised for current download
-    // Using volatile for thread safety in case of future parallel access
-    private volatile bool _warningRaised;
-    private volatile bool _criticalRaised;
 
     /// <summary>
     /// Creates a new instance of TripDownloadService.
@@ -89,9 +90,13 @@ public class TripDownloadService
         TripSummary tripSummary,
         CancellationToken cancellationToken = default)
     {
-        // Reset cache warning flags for new download
-        _warningRaised = false;
-        _criticalRaised = false;
+        // Guard against concurrent downloads of the same trip
+        if (!_activeDownloads.TryAdd(tripSummary.Id, true))
+        {
+            _logger.LogWarning("Download already in progress for trip {TripName} ({TripId})",
+                tripSummary.Name, tripSummary.Id);
+            return null;
+        }
 
         try
         {
@@ -331,6 +336,11 @@ public class TripDownloadService
             }
 
             return null;
+        }
+        finally
+        {
+            // Always release the active download guard
+            _activeDownloads.TryRemove(tripSummary.Id, out _);
         }
     }
 
@@ -631,39 +641,46 @@ public class TripDownloadService
             return false;
         }
 
-        // Clear pause flag and reset warning flags for resumed download
-        _downloadPauseStates.TryRemove(tripId, out _);
-        _warningRaised = false;
-        _criticalRaised = false;
-
-        // Update state to in progress
-        state.Status = DownloadStateStatus.InProgress;
-        state.InterruptionReason = string.Empty;
-        await _databaseService.SaveDownloadStateAsync(state);
-
-        // Update trip status
-        trip.Status = TripDownloadStatus.Downloading;
-        await _databaseService.SaveDownloadedTripAsync(trip);
-
-        _logger.LogInformation("Resuming download for trip {TripId}: {Completed}/{Total} tiles",
-            tripId, state.CompletedTileCount, state.TotalTileCount);
-
-        // Parse remaining tiles
-        var remainingTiles = JsonSerializer.Deserialize<List<TileCoordinate>>(state.RemainingTilesJson)
-            ?? new List<TileCoordinate>();
-
-        if (remainingTiles.Count == 0)
+        // Guard against concurrent downloads of the same trip
+        if (!_activeDownloads.TryAdd(trip.ServerId, true))
         {
-            // All tiles already downloaded
-            trip.Status = TripDownloadStatus.Complete;
-            await _databaseService.SaveDownloadedTripAsync(trip);
-            await _databaseService.DeleteDownloadStateAsync(tripId);
-            return true;
+            _logger.LogWarning("Download already in progress for trip {TripName} ({TripId})",
+                trip.Name, trip.ServerId);
+            return false;
         }
 
-        // Resume tile download
         try
         {
+            // Clear pause flag and reset per-trip warning state for resumed download
+            _downloadPauseStates.TryRemove(tripId, out _);
+            _tripWarningStates[tripId] = new TripWarningState();
+
+            // Update state to in progress
+            state.Status = DownloadStateStatus.InProgress;
+            state.InterruptionReason = string.Empty;
+            await _databaseService.SaveDownloadStateAsync(state);
+
+            // Update trip status
+            trip.Status = TripDownloadStatus.Downloading;
+            await _databaseService.SaveDownloadedTripAsync(trip);
+
+            _logger.LogInformation("Resuming download for trip {TripId}: {Completed}/{Total} tiles",
+                tripId, state.CompletedTileCount, state.TotalTileCount);
+
+            // Parse remaining tiles
+            var remainingTiles = JsonSerializer.Deserialize<List<TileCoordinate>>(state.RemainingTilesJson)
+                ?? new List<TileCoordinate>();
+
+            if (remainingTiles.Count == 0)
+            {
+                // All tiles already downloaded
+                trip.Status = TripDownloadStatus.Complete;
+                await _databaseService.SaveDownloadedTripAsync(trip);
+                await _databaseService.DeleteDownloadStateAsync(tripId);
+                return true;
+            }
+
+            // Resume tile download
             var downloadedBytes = await DownloadTilesWithStateAsync(
                 trip,
                 remainingTiles,
@@ -702,6 +719,13 @@ public class TripDownloadService
             trip.LastError = ex.Message;
             await _databaseService.SaveDownloadedTripAsync(trip);
             return false;
+        }
+        finally
+        {
+            // Always release the active download guard
+            _activeDownloads.TryRemove(trip.ServerId, out _);
+            // Clean up per-trip warning state
+            _tripWarningStates.TryRemove(tripId, out _);
         }
     }
 
@@ -1343,7 +1367,10 @@ public class TripDownloadService
             {
                 var limitResult = await CheckTripCacheLimitAsync();
 
-                // Raise warning events (only once per download)
+                // Get or create per-trip warning state
+                var warningState = _tripWarningStates.GetOrAdd(trip.Id, _ => new TripWarningState());
+
+                // Raise warning events (only once per download per trip)
                 var eventArgs = new CacheLimitEventArgs
                 {
                     TripId = trip.Id,
@@ -1353,15 +1380,15 @@ public class TripDownloadService
                     UsagePercent = limitResult.UsagePercent
                 };
 
-                if (limitResult.UsagePercent >= 80 && limitResult.UsagePercent < 90 && !_warningRaised)
+                if (limitResult.UsagePercent >= 80 && limitResult.UsagePercent < 90 && !warningState.WarningRaised)
                 {
-                    _warningRaised = true;
+                    warningState.WarningRaised = true;
                     eventArgs = eventArgs with { Level = CacheLimitLevel.Warning };
                     CacheWarning?.Invoke(this, eventArgs);
                 }
-                else if (limitResult.UsagePercent >= 90 && limitResult.UsagePercent < 100 && !_criticalRaised)
+                else if (limitResult.UsagePercent >= 90 && limitResult.UsagePercent < 100 && !warningState.CriticalRaised)
                 {
-                    _criticalRaised = true;
+                    warningState.CriticalRaised = true;
                     eventArgs = eventArgs with { Level = CacheLimitLevel.Critical };
                     CacheCritical?.Invoke(this, eventArgs);
                 }
@@ -1898,4 +1925,21 @@ public enum CacheLimitLevel
 
     /// <summary>Limit reached (100%).</summary>
     LimitReached
+}
+
+/// <summary>
+/// Per-trip warning state to track if warning/critical events have been raised.
+/// Prevents duplicate warnings when multiple trips download concurrently.
+/// </summary>
+internal class TripWarningState
+{
+    /// <summary>
+    /// Whether the warning event (80%) has been raised for this trip.
+    /// </summary>
+    public volatile bool WarningRaised;
+
+    /// <summary>
+    /// Whether the critical event (90%) has been raised for this trip.
+    /// </summary>
+    public volatile bool CriticalRaised;
 }
