@@ -1860,7 +1860,17 @@ public class TripDownloadService : ITripDownloadService
         }
         catch (OperationCanceledException)
         {
-            stopReason.SetPaused(DownloadPauseReason.UserCancel);
+            // Check if this was a pause request (which also cancels CTS) or actual cancel
+            // This handles the race where CTS cancellation fires before workers see _downloadStopRequests
+            if (_downloadStopRequests.TryGetValue(trip.Id, out var requestedReason) &&
+                requestedReason == DownloadPauseReason.UserPause)
+            {
+                stopReason.SetPaused(DownloadPauseReason.UserPause);
+            }
+            else
+            {
+                stopReason.SetPaused(DownloadPauseReason.UserCancel);
+            }
         }
 
         // Handle stop reason if download was interrupted
