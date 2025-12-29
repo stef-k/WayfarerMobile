@@ -754,6 +754,52 @@ public class TripDownloadService : ITripDownloadService
         }
     }
 
+    /// <summary>
+    /// Deletes only the cached map tiles for a trip, keeping trip data intact.
+    /// Trip status is updated to reflect no offline maps available.
+    /// </summary>
+    /// <param name="tripServerId">The server-side trip ID.</param>
+    /// <returns>Number of tiles deleted.</returns>
+    public async Task<int> DeleteTripTilesAsync(Guid tripServerId)
+    {
+        var trip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
+        if (trip == null)
+        {
+            _logger.LogWarning("Cannot delete tiles - trip {TripId} not found", tripServerId);
+            return 0;
+        }
+
+        // Get file paths and delete from database
+        var filePaths = await _databaseService.DeleteTripTilesAsync(trip.Id);
+
+        // Delete actual tile files
+        var deletedCount = 0;
+        foreach (var filePath in filePaths)
+        {
+            try
+            {
+                if (File.Exists(filePath))
+                {
+                    File.Delete(filePath);
+                    deletedCount++;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to delete tile file: {FilePath}", filePath);
+            }
+        }
+
+        // Update trip to reflect no tiles - set status to metadata only
+        trip.TileCount = 0;
+        trip.TotalSizeBytes = 0;
+        trip.Status = TripDownloadStatus.MetadataOnly;
+        await _databaseService.SaveDownloadedTripAsync(trip);
+
+        _logger.LogInformation("Deleted {Count} tiles for trip {TripId}", deletedCount, tripServerId);
+        return deletedCount;
+    }
+
     #region Trip Editing
 
     /// <summary>

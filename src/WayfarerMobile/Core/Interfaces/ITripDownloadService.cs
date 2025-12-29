@@ -73,6 +73,13 @@ public interface ITripDownloadService : IDisposable
     Task DeleteTripAsync(Guid tripServerId);
 
     /// <summary>
+    /// Deletes only the cached map tiles for a trip, keeping trip data intact.
+    /// </summary>
+    /// <param name="tripServerId">The server-side trip ID.</param>
+    /// <returns>Number of tiles deleted.</returns>
+    Task<int> DeleteTripTilesAsync(Guid tripServerId);
+
+    /// <summary>
     /// Pauses an active download.
     /// </summary>
     /// <param name="tripId">The local trip ID.</param>

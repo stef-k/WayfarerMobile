@@ -701,16 +701,65 @@ public partial class TripsViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Cancel ongoing download.
+    /// Delete only offline map tiles, keeping trip data.
+    /// </summary>
+    [RelayCommand]
+    private async Task DeleteTilesOnlyAsync(TripListItem? item)
+    {
+        if (item == null)
+            return;
+
+        var confirm = await Shell.Current.DisplayAlertAsync(
+            "Remove Offline Maps",
+            $"Remove offline maps for '{item.Name}'? Trip data will be kept.",
+            "Remove Maps",
+            "Cancel");
+
+        if (!confirm)
+            return;
+
+        try
+        {
+            var deletedCount = await _downloadService.DeleteTripTilesAsync(item.ServerId);
+
+            // Update item state - now has metadata only (no tiles)
+            item.DownloadState = TripDownloadState.MetadataOnly;
+            if (item.DownloadedEntity != null)
+            {
+                item.DownloadedEntity.TileCount = 0;
+                item.DownloadedEntity.TotalSizeBytes = 0;
+            }
+
+            await _toastService.ShowSuccessAsync($"Removed {deletedCount} map tiles");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete offline maps");
+            await _toastService.ShowErrorAsync($"Failed to delete maps: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Cancel ongoing download with confirmation.
+    /// Deletes all downloaded tiles for this trip.
     /// </summary>
     [RelayCommand]
     private async Task CancelDownloadAsync()
     {
-        if (DownloadingTripId.HasValue)
-        {
-            _logger.LogInformation("Cancelling download for trip {TripId}", DownloadingTripId.Value);
-            await _downloadService.CancelDownloadAsync(DownloadingTripId.Value, cleanup: false);
-        }
+        if (!DownloadingTripId.HasValue)
+            return;
+
+        var confirm = await Shell.Current.DisplayAlertAsync(
+            "Cancel Download",
+            $"Cancel download for '{DownloadingTripName}'? All downloaded tiles will be deleted.",
+            "Cancel Download",
+            "Continue");
+
+        if (!confirm)
+            return;
+
+        _logger.LogInformation("Cancelling download for trip {TripId} with cleanup", DownloadingTripId.Value);
+        await _downloadService.CancelDownloadAsync(DownloadingTripId.Value, cleanup: true);
 
         _downloadCts?.Cancel();
         _downloadCts?.Dispose();
@@ -720,6 +769,8 @@ public partial class TripsViewModel : BaseViewModel
         DownloadingTripName = null;
         DownloadingTripId = null;
         _downloadingTripServerId = null;
+
+        await _toastService.ShowAsync("Download cancelled");
     }
 
     /// <summary>
@@ -1625,6 +1676,7 @@ public partial class TripListItem : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsMetadataOnly))]
     [NotifyPropertyChangedFor(nameof(IsServerOnly))]
     [NotifyPropertyChangedFor(nameof(CanDelete))]
+    [NotifyPropertyChangedFor(nameof(CanDeleteTilesOnly))]
     [NotifyPropertyChangedFor(nameof(GroupName))]
     [NotifyPropertyChangedFor(nameof(StatusText))]
     [NotifyPropertyChangedFor(nameof(StatusColor))]
@@ -1716,6 +1768,13 @@ public partial class TripListItem : ObservableObject
     /// Gets whether Full Download is available.
     /// </summary>
     public bool CanFullDownload => DownloadState == TripDownloadState.ServerOnly || DownloadState == TripDownloadState.MetadataOnly;
+
+    /// <summary>
+    /// Gets whether Delete Tiles Only is available.
+    /// Only available for trips with offline maps (Complete state with tiles).
+    /// </summary>
+    public bool CanDeleteTilesOnly => DownloadState == TripDownloadState.Complete &&
+                                       (DownloadedEntity?.TileCount ?? 0) > 0;
 
     /// <summary>
     /// Gets whether editing is available.

@@ -195,8 +195,20 @@
                                                 Padding="10,0"
                                                 CornerRadius="16" />
 
-                                        <!-- Delete Downloaded/Partial - removes local data only -->
-                                        <Button Text="Remove"
+                                        <!-- Remove Offline Maps Only - keeps trip data -->
+                                        <Button Text="Remove Maps"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=DeleteTilesOnlyCommand}"
+                                                CommandParameter="{Binding .}"
+                                                IsVisible="{Binding CanDeleteTilesOnly}"
+                                                BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                                TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
+                                                FontSize="12"
+                                                HeightRequest="32"
+                                                Padding="10,0"
+                                                CornerRadius="16" />
+
+                                        <!-- Delete All - removes trip and all local data -->
+                                        <Button Text="Remove All"
                                                 Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=DeleteDownloadCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanDelete}"

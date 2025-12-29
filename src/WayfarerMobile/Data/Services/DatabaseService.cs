@@ -523,6 +523,29 @@ public class DatabaseService : IAsyncDisposable
     }
 
     /// <summary>
+    /// Deletes only the cached map tiles for a trip, keeping trip data intact.
+    /// </summary>
+    /// <param name="tripId">The local trip ID.</param>
+    /// <returns>List of file paths that were deleted from database.</returns>
+    public async Task<List<string>> DeleteTripTilesAsync(int tripId)
+    {
+        await EnsureInitializedAsync();
+
+        // Get tile file paths before deleting
+        var tiles = await _database!.Table<TripTileEntity>()
+            .Where(t => t.TripId == tripId)
+            .ToListAsync();
+
+        var filePaths = tiles.Select(t => t.FilePath).ToList();
+
+        // Delete tiles from database
+        await _database!.ExecuteAsync(
+            "DELETE FROM TripTiles WHERE TripId = ?", tripId);
+
+        return filePaths;
+    }
+
+    /// <summary>
     /// Gets the total size of all downloaded trips.
     /// </summary>
     public async Task<long> GetTotalTripCacheSizeAsync()
