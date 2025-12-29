@@ -999,23 +999,25 @@ public class TripBoundaryResponse
 
 /// <summary>
 /// Tile coordinate for download.
+/// Implements IEquatable for proper collection operations (e.g., List.Remove).
+/// This class is immutable after construction (init-only properties).
 /// </summary>
-public class TileCoordinate
+public class TileCoordinate : IEquatable<TileCoordinate>
 {
     /// <summary>
-    /// Gets or sets the zoom level.
+    /// Gets the zoom level.
     /// </summary>
-    public int Zoom { get; set; }
+    public int Zoom { get; init; }
 
     /// <summary>
-    /// Gets or sets the X coordinate.
+    /// Gets the X coordinate.
     /// </summary>
-    public int X { get; set; }
+    public int X { get; init; }
 
     /// <summary>
-    /// Gets or sets the Y coordinate.
+    /// Gets the Y coordinate.
     /// </summary>
-    public int Y { get; set; }
+    public int Y { get; init; }
 
     /// <summary>
     /// Gets the tile URL from a server template.
@@ -1031,6 +1033,32 @@ public class TileCoordinate
     /// Gets a unique identifier for this tile.
     /// </summary>
     public string Id => $"{Zoom}-{X}-{Y}";
+
+    /// <inheritdoc />
+    public bool Equals(TileCoordinate? other)
+    {
+        if (other is null) return false;
+        if (ReferenceEquals(this, other)) return true;
+        return Zoom == other.Zoom && X == other.X && Y == other.Y;
+    }
+
+    /// <inheritdoc />
+    public override bool Equals(object? obj) => Equals(obj as TileCoordinate);
+
+    /// <inheritdoc />
+    public override int GetHashCode() => HashCode.Combine(Zoom, X, Y);
+
+    /// <summary>
+    /// Equality operator.
+    /// </summary>
+    public static bool operator ==(TileCoordinate? left, TileCoordinate? right) =>
+        left?.Equals(right) ?? right is null;
+
+    /// <summary>
+    /// Inequality operator.
+    /// </summary>
+    public static bool operator !=(TileCoordinate? left, TileCoordinate? right) =>
+        !(left == right);
 }
 
 /// <summary>

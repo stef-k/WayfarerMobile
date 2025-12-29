@@ -81,6 +81,7 @@ public class DatabaseService : IAsyncDisposable
             await _database.CreateTableAsync<LiveTileEntity>();
             await _database.CreateTableAsync<ActivityType>();
             await _database.CreateTableAsync<LocalTimelineEntry>();
+            await _database.CreateTableAsync<TripDownloadStateEntity>();
 
             _initialized = true;
             System.Diagnostics.Debug.WriteLine($"[DatabaseService] Initialized: {DatabasePath}");
@@ -522,6 +523,29 @@ public class DatabaseService : IAsyncDisposable
     }
 
     /// <summary>
+    /// Deletes only the cached map tiles for a trip, keeping trip data intact.
+    /// </summary>
+    /// <param name="tripId">The local trip ID.</param>
+    /// <returns>List of file paths that were deleted from database.</returns>
+    public async Task<List<string>> DeleteTripTilesAsync(int tripId)
+    {
+        await EnsureInitializedAsync();
+
+        // Get tile file paths before deleting
+        var tiles = await _database!.Table<TripTileEntity>()
+            .Where(t => t.TripId == tripId)
+            .ToListAsync();
+
+        var filePaths = tiles.Select(t => t.FilePath).ToList();
+
+        // Delete tiles from database
+        await _database!.ExecuteAsync(
+            "DELETE FROM TripTiles WHERE TripId = ?", tripId);
+
+        return filePaths;
+    }
+
+    /// <summary>
     /// Gets the total size of all downloaded trips.
     /// </summary>
     public async Task<long> GetTotalTripCacheSizeAsync()
@@ -847,6 +871,84 @@ public class DatabaseService : IAsyncDisposable
         return await _database!.Table<TripTileEntity>()
             .Where(t => t.TripId == tripId)
             .CountAsync();
+    }
+
+    #endregion
+
+    #region Trip Download State (Pause/Resume)
+
+    /// <summary>
+    /// Gets a download state for a trip.
+    /// </summary>
+    /// <param name="tripId">The local trip ID.</param>
+    /// <returns>The download state or null if not found.</returns>
+    public async Task<TripDownloadStateEntity?> GetDownloadStateAsync(int tripId)
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<TripDownloadStateEntity>()
+            .FirstOrDefaultAsync(s => s.TripId == tripId);
+    }
+
+    /// <summary>
+    /// Gets a download state by server trip ID.
+    /// </summary>
+    /// <param name="tripServerId">The server-side trip ID.</param>
+    /// <returns>The download state or null if not found.</returns>
+    public async Task<TripDownloadStateEntity?> GetDownloadStateByServerIdAsync(Guid tripServerId)
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<TripDownloadStateEntity>()
+            .FirstOrDefaultAsync(s => s.TripServerId == tripServerId);
+    }
+
+    /// <summary>
+    /// Saves a download state (insert or replace).
+    /// </summary>
+    /// <param name="state">The download state to save.</param>
+    public async Task SaveDownloadStateAsync(TripDownloadStateEntity state)
+    {
+        await EnsureInitializedAsync();
+        state.LastSaveTime = DateTime.UtcNow;
+        await _database!.InsertOrReplaceAsync(state);
+    }
+
+    /// <summary>
+    /// Deletes a download state for a trip.
+    /// Called when download completes or is cancelled with cleanup.
+    /// </summary>
+    /// <param name="tripId">The local trip ID.</param>
+    public async Task DeleteDownloadStateAsync(int tripId)
+    {
+        await EnsureInitializedAsync();
+        await _database!.ExecuteAsync(
+            "DELETE FROM TripDownloadStates WHERE TripId = ?", tripId);
+    }
+
+    /// <summary>
+    /// Gets all paused download states.
+    /// Used to show resumable downloads in UI.
+    /// </summary>
+    /// <returns>List of paused download states.</returns>
+    public async Task<List<TripDownloadStateEntity>> GetPausedDownloadsAsync()
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<TripDownloadStateEntity>()
+            .Where(s => s.Status == DownloadStateStatus.Paused ||
+                       s.Status == DownloadStateStatus.LimitReached)
+            .OrderByDescending(s => s.PausedAt)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Gets all active download states (in progress or paused).
+    /// </summary>
+    /// <returns>List of active download states.</returns>
+    public async Task<List<TripDownloadStateEntity>> GetActiveDownloadStatesAsync()
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<TripDownloadStateEntity>()
+            .Where(s => s.Status != DownloadStateStatus.Cancelled)
+            .ToListAsync();
     }
 
     #endregion

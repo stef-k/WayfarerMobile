@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
@@ -9,8 +11,9 @@ namespace WayfarerMobile.Services;
 
 /// <summary>
 /// Service for downloading and managing offline trips.
+/// Implements IDisposable to properly clean up HttpClient resources.
 /// </summary>
-public class TripDownloadService
+public class TripDownloadService : ITripDownloadService
 {
     private readonly IApiClient _apiClient;
     private readonly DatabaseService _databaseService;
@@ -18,24 +21,154 @@ public class TripDownloadService
     private readonly ITripSyncService _tripSyncService;
     private readonly ILogger<TripDownloadService> _logger;
 
+    #region Constants
+
     // Tile download configuration - use centralized constants for consistency
     private static int[] DownloadZoomLevels => TileCacheConstants.AllZoomLevels;
     private const int TileTimeoutMs = TileCacheConstants.TileTimeoutMs;
     private const long EstimatedTileSizeBytes = TileCacheConstants.EstimatedTileSizeBytes;
     private const long MinRequiredSpaceMB = 50; // Minimum free space required
 
+    // Download state save intervals
+    private const int StateSaveIntervalTiles = 25; // Save state every N tiles
+    private const int CacheLimitCheckIntervalTiles = 100; // Check limit every N tiles
+    private const int StorageCheckIntervalTiles = 200; // Check storage every N tiles
+    private const int TempFileMaxAgeHours = 1; // Max age for orphaned temp files
+
+    // Tile download retry configuration
+    private const int MaxTileRetries = 2;
+    private const int RetryDelayMs = 1000;
+
+    // PNG file signature (first 8 bytes)
+    private static readonly byte[] PngSignature = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+
+    // Absolute maximum tile count to prevent memory exhaustion (regardless of cache size)
+    private const int AbsoluteMaxTileCount = 150000;
+
+    #endregion
+
+    #region Fields
+
     // Rate limiting state
     private readonly object _rateLimitLock = new();
     private DateTime _lastRequestTime = DateTime.MinValue;
+
+    // Cache limit check synchronization (prevents parallel threads from checking simultaneously)
+    private readonly SemaphoreSlim _cacheLimitCheckLock = new(1, 1);
+    // Atomic cache: wrapper record allows volatile read/write as single reference
+    private volatile CachedLimitCheckState? _cachedLimitCheck;
+
+    // Pause/cancel state - tracks which downloads should be stopped and why
+    // Keyed by local trip ID (int) - available after trip entity is saved
+    // Value indicates the reason (UserPause = resumable, UserCancel = not resumable)
+    private readonly ConcurrentDictionary<int, string> _downloadStopRequests = new();
+
+    // Active download guard - prevents concurrent downloads of the same trip
+    // Keyed by server trip ID (Guid) - available at start of download before local ID exists
+    private readonly ConcurrentDictionary<Guid, bool> _activeDownloads = new();
+
+    // Per-trip warning flags - tracks if warning/critical events have been raised
+    // Keyed by local trip ID (int) - available after trip entity is saved
+    private readonly ConcurrentDictionary<int, TripWarningState> _tripWarningStates = new();
+
+    // Shared HttpClient for tile downloads (avoids socket exhaustion)
+    private readonly HttpClient _tileHttpClient;
+
+    // Disposal tracking
+    private bool _disposed;
+
+    #endregion
 
     // Configurable settings (read from ISettingsService)
     private int MaxConcurrentDownloads => _settingsService.MaxConcurrentTileDownloads;
     private int MinRequestDelayMs => _settingsService.MinTileRequestDelayMs;
 
     /// <summary>
+    /// Maximum tile count derived from MaxTripCacheSizeMB setting.
+    /// Capped at AbsoluteMaxTileCount to prevent memory exhaustion.
+    /// </summary>
+    private int MaxTileCount
+    {
+        get
+        {
+            // Calculate max tiles based on cache size setting
+            var maxCacheBytes = (long)_settingsService.MaxTripCacheSizeMB * 1024 * 1024;
+            var calculatedMax = (int)(maxCacheBytes / EstimatedTileSizeBytes);
+
+            // Cap at absolute maximum to prevent memory issues
+            return Math.Min(calculatedMax, AbsoluteMaxTileCount);
+        }
+    }
+
+    /// <summary>
     /// Event raised when download progress changes.
     /// </summary>
+    /// <remarks>
+    /// <para>Thread Safety: This event may be raised from background threads. Subscribers
+    /// must marshal UI updates to the main thread using <c>MainThread.BeginInvokeOnMainThread</c>.</para>
+    /// <para>Memory: Subscribers should unsubscribe when no longer needed to prevent memory leaks.</para>
+    /// </remarks>
     public event EventHandler<DownloadProgressEventArgs>? ProgressChanged;
+
+    /// <summary>
+    /// Event raised when cache usage reaches warning level (80%).
+    /// </summary>
+    /// <remarks>
+    /// <para>Thread Safety: This event may be raised from background threads during tile downloads.
+    /// Subscribers must marshal UI updates to the main thread.</para>
+    /// <para>Deduplication: This event is raised only once per trip download, not per-check.</para>
+    /// </remarks>
+    public event EventHandler<CacheLimitEventArgs>? CacheWarning;
+
+    /// <summary>
+    /// Event raised when cache usage reaches critical level (90%).
+    /// </summary>
+    /// <remarks>
+    /// <para>Thread Safety: This event may be raised from background threads during tile downloads.
+    /// Subscribers must marshal UI updates to the main thread.</para>
+    /// <para>Deduplication: This event is raised only once per trip download, not per-check.</para>
+    /// </remarks>
+    public event EventHandler<CacheLimitEventArgs>? CacheCritical;
+
+    /// <summary>
+    /// Event raised when cache limit is reached (100%).
+    /// The download will be paused automatically with state saved for resumption.
+    /// </summary>
+    /// <remarks>
+    /// <para>Thread Safety: This event may be raised from background threads during tile downloads.
+    /// Subscribers must marshal UI updates to the main thread.</para>
+    /// <para>Download State: When this event fires, the download state is automatically saved
+    /// and the download status remains "Downloading" (paused). Users can resume by increasing
+    /// cache limit or freeing space, then calling ResumeDownloadAsync.</para>
+    /// </remarks>
+    public event EventHandler<CacheLimitEventArgs>? CacheLimitReached;
+
+    /// <summary>
+    /// Event raised when a download completes successfully.
+    /// </summary>
+    /// <remarks>
+    /// <para>Thread Safety: This event may be raised from background threads.
+    /// Subscribers must marshal UI updates to the main thread.</para>
+    /// </remarks>
+    public event EventHandler<DownloadTerminalEventArgs>? DownloadCompleted;
+
+    /// <summary>
+    /// Event raised when a download fails.
+    /// </summary>
+    /// <remarks>
+    /// <para>Thread Safety: This event may be raised from background threads.
+    /// Subscribers must marshal UI updates to the main thread.</para>
+    /// </remarks>
+    public event EventHandler<DownloadTerminalEventArgs>? DownloadFailed;
+
+    /// <summary>
+    /// Event raised when a download is paused (user request, network loss, storage low, or cache limit).
+    /// </summary>
+    /// <remarks>
+    /// <para>Thread Safety: This event may be raised from background threads.
+    /// Subscribers must marshal UI updates to the main thread.</para>
+    /// </remarks>
+    public event EventHandler<DownloadPausedEventArgs>? DownloadPaused;
 
     /// <summary>
     /// Creates a new instance of TripDownloadService.
@@ -52,6 +185,10 @@ public class TripDownloadService
         _settingsService = settingsService;
         _tripSyncService = tripSyncService;
         _logger = logger;
+
+        // Initialize shared HttpClient with appropriate timeout
+        _tileHttpClient = new HttpClient { Timeout = TimeSpan.FromMilliseconds(TileTimeoutMs) };
+        _tileHttpClient.DefaultRequestHeaders.UserAgent.ParseAdd("WayfarerMobile/1.0");
     }
 
     /// <summary>
@@ -64,6 +201,26 @@ public class TripDownloadService
         TripSummary tripSummary,
         CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
+
+        // Validate trip ID
+        if (tripSummary.Id == Guid.Empty)
+        {
+            _logger.LogWarning("Cannot download trip with empty ID");
+            return null;
+        }
+
+        // Guard against concurrent downloads of the same trip
+        if (!_activeDownloads.TryAdd(tripSummary.Id, true))
+        {
+            _logger.LogWarning("Download already in progress for trip {TripName} ({TripId})",
+                tripSummary.Name, tripSummary.Id);
+            return null;
+        }
+
+        // Track local trip ID for cleanup in finally block (set after trip is saved)
+        int? localTripId = null;
+
         try
         {
             _logger.LogInformation("Starting download for trip: {TripName}", tripSummary.Name);
@@ -76,7 +233,7 @@ public class TripDownloadService
             }
 
             // Check storage space
-            if (!await HasSufficientStorageAsync())
+            if (!HasSufficientStorage())
             {
                 _logger.LogWarning("Cannot download trip - insufficient storage space");
                 return null;
@@ -111,6 +268,7 @@ public class TripDownloadService
             }
 
             await _databaseService.SaveDownloadedTripAsync(tripEntity);
+            localTripId = tripEntity.Id; // Capture for cleanup
             RaiseProgress(tripEntity.Id, 10, "Fetching trip details...");
 
             // Fetch full trip details
@@ -251,13 +409,29 @@ public class TripDownloadService
 
                 if (tileCoords.Count > 0)
                 {
-                    var downloadedBytes = await DownloadTilesAsync(
-                        tripEntity.Id,
+                    // Initialize per-trip warning state
+                    _tripWarningStates[tripEntity.Id] = new TripWarningState();
+
+                    // Use unified download method that supports pause/resume and cache limits
+                    var downloadResult = await DownloadTilesWithStateAsync(
+                        tripEntity,
                         tileCoords,
+                        initialCompleted: 0,
+                        totalTiles: tileCoords.Count,
+                        initialBytes: 0,
                         cancellationToken);
 
-                    tripEntity.TileCount = tileCoords.Count;
-                    tripEntity.TotalSizeBytes = downloadedBytes;
+                    // Track actual tiles downloaded vs requested for accurate reporting
+                    tripEntity.TileCount = downloadResult.TilesDownloaded;
+                    tripEntity.TotalSizeBytes = downloadResult.TotalBytes;
+
+                    // Check if download was paused or hit cache limit
+                    if (downloadResult.WasPaused || downloadResult.WasLimitReached)
+                    {
+                        _logger.LogInformation("Download stopped for trip {TripName}: Paused={Paused}, LimitReached={LimitReached}",
+                            tripSummary.Name, downloadResult.WasPaused, downloadResult.WasLimitReached);
+                        return tripEntity; // State already saved by DownloadTilesWithStateAsync
+                    }
                 }
 
                 tripEntity.Status = TripDownloadStatus.Complete;
@@ -281,11 +455,53 @@ public class TripDownloadService
             _logger.LogInformation("Trip downloaded: {TripName} ({PlaceCount} places, {TileCount} tiles, v{Version})",
                 tripSummary.Name, places.Count, tripEntity.TileCount, tripEntity.Version);
 
+            // Raise download completed event
+            DownloadCompleted?.Invoke(this, new DownloadTerminalEventArgs
+            {
+                TripId = tripEntity.Id,
+                TripServerId = tripSummary.Id,
+                TripName = tripSummary.Name,
+                TilesDownloaded = tripEntity.TileCount,
+                TotalBytes = tripEntity.TotalSizeBytes
+            });
+
             return tripEntity;
         }
         catch (OperationCanceledException)
         {
             _logger.LogWarning("Trip download cancelled: {TripName}", tripSummary.Name);
+
+            // Save state for potential resume if we have a trip entity
+            var tripEntityForCancel = await _databaseService.GetDownloadedTripByServerIdAsync(tripSummary.Id);
+            if (tripEntityForCancel != null)
+            {
+                // Get remaining tiles from download state if available
+                var existingState = await _databaseService.GetDownloadStateAsync(tripEntityForCancel.Id);
+                if (existingState != null)
+                {
+                    // State already saved by DownloadTilesWithStateAsync (periodic checkpoint)
+                    existingState.Status = DownloadStateStatus.Paused;
+                    existingState.InterruptionReason = DownloadPauseReason.UserCancel;
+                    await _databaseService.SaveDownloadStateAsync(existingState);
+                }
+
+                tripEntityForCancel.Status = TripDownloadStatus.Failed;
+                tripEntityForCancel.LastError = "Download cancelled by user";
+                await _databaseService.SaveDownloadedTripAsync(tripEntityForCancel);
+
+                // Raise download paused event
+                DownloadPaused?.Invoke(this, new DownloadPausedEventArgs
+                {
+                    TripId = tripEntityForCancel.Id,
+                    TripServerId = tripSummary.Id,
+                    TripName = tripSummary.Name,
+                    Reason = DownloadPauseReasonType.UserCancel,
+                    TilesCompleted = existingState?.CompletedTileCount ?? 0,
+                    TotalTiles = existingState?.TotalTileCount ?? 0,
+                    CanResume = false
+                });
+            }
+
             throw;
         }
         catch (Exception ex)
@@ -299,9 +515,31 @@ public class TripDownloadService
                 tripEntity.Status = TripDownloadStatus.Failed;
                 tripEntity.LastError = ex.Message;
                 await _databaseService.SaveDownloadedTripAsync(tripEntity);
+
+                // Raise download failed event
+                DownloadFailed?.Invoke(this, new DownloadTerminalEventArgs
+                {
+                    TripId = tripEntity.Id,
+                    TripServerId = tripSummary.Id,
+                    TripName = tripSummary.Name,
+                    TilesDownloaded = tripEntity.TileCount,
+                    TotalBytes = tripEntity.TotalSizeBytes,
+                    ErrorMessage = ex.Message
+                });
             }
 
             return null;
+        }
+        finally
+        {
+            // Always release the active download guard
+            _activeDownloads.TryRemove(tripSummary.Id, out _);
+
+            // Clean up per-trip warning state using captured ID (avoids database round-trip)
+            if (localTripId.HasValue)
+            {
+                _tripWarningStates.TryRemove(localTripId.Value, out _);
+            }
         }
     }
 
@@ -343,6 +581,7 @@ public class TripDownloadService
             Notes = e.Notes,
             Icon = e.IconName,
             MarkerColor = e.MarkerColor,
+            Address = e.Address,
             SortOrder = e.SortOrder
         }).ToList();
     }
@@ -515,6 +754,52 @@ public class TripDownloadService
         }
     }
 
+    /// <summary>
+    /// Deletes only the cached map tiles for a trip, keeping trip data intact.
+    /// Trip status is updated to reflect no offline maps available.
+    /// </summary>
+    /// <param name="tripServerId">The server-side trip ID.</param>
+    /// <returns>Number of tiles deleted.</returns>
+    public async Task<int> DeleteTripTilesAsync(Guid tripServerId)
+    {
+        var trip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
+        if (trip == null)
+        {
+            _logger.LogWarning("Cannot delete tiles - trip {TripId} not found", tripServerId);
+            return 0;
+        }
+
+        // Get file paths and delete from database
+        var filePaths = await _databaseService.DeleteTripTilesAsync(trip.Id);
+
+        // Delete actual tile files
+        var deletedCount = 0;
+        foreach (var filePath in filePaths)
+        {
+            try
+            {
+                if (File.Exists(filePath))
+                {
+                    File.Delete(filePath);
+                    deletedCount++;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to delete tile file: {FilePath}", filePath);
+            }
+        }
+
+        // Update trip to reflect no tiles - set status to metadata only
+        trip.TileCount = 0;
+        trip.TotalSizeBytes = 0;
+        trip.Status = TripDownloadStatus.MetadataOnly;
+        await _databaseService.SaveDownloadedTripAsync(trip);
+
+        _logger.LogInformation("Deleted {Count} tiles for trip {TripId}", deletedCount, tripServerId);
+        return deletedCount;
+    }
+
     #region Trip Editing
 
     /// <summary>
@@ -553,6 +838,304 @@ public class TripDownloadService
         trip.Notes = newNotes;
         await _databaseService.SaveDownloadedTripAsync(trip);
         _logger.LogInformation("Updated trip notes for trip {TripId}", tripServerId);
+    }
+
+    #endregion
+
+    #region Pause/Resume/Cancel
+
+    /// <summary>
+    /// Pauses a download in progress.
+    /// Sets a flag that the download loop checks to gracefully pause.
+    /// </summary>
+    /// <param name="tripId">The local trip ID.</param>
+    /// <returns>True if pause was initiated, false if download not found.</returns>
+    public async Task<bool> PauseDownloadAsync(int tripId)
+    {
+        var trip = await _databaseService.GetDownloadedTripAsync(tripId);
+        if (trip == null || trip.Status != TripDownloadStatus.Downloading)
+        {
+            _logger.LogWarning("Cannot pause - trip {TripId} not downloading", tripId);
+            return false;
+        }
+
+        _downloadStopRequests[tripId] = DownloadPauseReason.UserPause;
+        _logger.LogInformation("Pause requested for trip {TripId}", tripId);
+        return true;
+    }
+
+    /// <summary>
+    /// Resumes a paused download.
+    /// Loads the saved state and continues downloading remaining tiles.
+    /// </summary>
+    /// <param name="tripId">The local trip ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>True if resumed successfully, false if no saved state found.</returns>
+    public async Task<bool> ResumeDownloadAsync(int tripId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+
+        var state = await _databaseService.GetDownloadStateAsync(tripId);
+        if (state == null)
+        {
+            _logger.LogWarning("Cannot resume - no saved state for trip {TripId}", tripId);
+            return false;
+        }
+
+        var trip = await _databaseService.GetDownloadedTripAsync(tripId);
+        if (trip == null)
+        {
+            _logger.LogWarning("Cannot resume - trip {TripId} not found", tripId);
+            return false;
+        }
+
+        // Guard against concurrent downloads of the same trip
+        if (!_activeDownloads.TryAdd(trip.ServerId, true))
+        {
+            _logger.LogWarning("Download already in progress for trip {TripName} ({TripId})",
+                trip.Name, trip.ServerId);
+            return false;
+        }
+
+        try
+        {
+            // Clear stop request and reset per-trip warning state for resumed download
+            _downloadStopRequests.TryRemove(tripId, out _);
+            _tripWarningStates[tripId] = new TripWarningState();
+
+            // Update state to in progress
+            state.Status = DownloadStateStatus.InProgress;
+            state.InterruptionReason = string.Empty;
+            await _databaseService.SaveDownloadStateAsync(state);
+
+            // Update trip status
+            trip.Status = TripDownloadStatus.Downloading;
+            await _databaseService.SaveDownloadedTripAsync(trip);
+
+            _logger.LogInformation("Resuming download for trip {TripId}: {Completed}/{Total} tiles",
+                tripId, state.CompletedTileCount, state.TotalTileCount);
+
+            // Parse remaining tiles with graceful error handling
+            List<TileCoordinate> remainingTiles;
+            try
+            {
+                remainingTiles = JsonSerializer.Deserialize<List<TileCoordinate>>(state.RemainingTilesJson)
+                    ?? new List<TileCoordinate>();
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogError(ex, "Failed to deserialize remaining tiles for trip {TripId}, clearing corrupt state", tripId);
+                await _databaseService.DeleteDownloadStateAsync(tripId);
+                trip.Status = TripDownloadStatus.Failed;
+                trip.LastError = "Corrupt download state - please restart download";
+                await _databaseService.SaveDownloadedTripAsync(trip);
+                return false;
+            }
+
+            if (remainingTiles.Count == 0)
+            {
+                // All tiles already downloaded
+                trip.Status = TripDownloadStatus.Complete;
+                await _databaseService.SaveDownloadedTripAsync(trip);
+                await _databaseService.DeleteDownloadStateAsync(tripId);
+                return true;
+            }
+
+            // Resume tile download
+            var downloadResult = await DownloadTilesWithStateAsync(
+                trip,
+                remainingTiles,
+                state.CompletedTileCount,
+                state.TotalTileCount,
+                state.DownloadedBytes,
+                cancellationToken);
+
+            // Check if paused or hit limit during resume
+            if (downloadResult.WasPaused || downloadResult.WasLimitReached)
+            {
+                _logger.LogInformation("Download stopped during resume for trip {TripId}: Paused={Paused}, LimitReached={LimitReached}",
+                    tripId, downloadResult.WasPaused, downloadResult.WasLimitReached);
+                return true; // State already saved
+            }
+
+            // Complete - update tile count to reflect actual downloads
+            trip.Status = TripDownloadStatus.Complete;
+            trip.TileCount = state.CompletedTileCount + downloadResult.TilesDownloaded;
+            trip.TotalSizeBytes = downloadResult.TotalBytes;
+            trip.ProgressPercent = 100;
+            await _databaseService.SaveDownloadedTripAsync(trip);
+            // Note: DownloadTilesWithStateAsync already deletes state on successful completion
+
+            RaiseProgress(tripId, 100, "Download complete");
+            _logger.LogInformation("Resumed download complete for trip {TripId}", tripId);
+
+            // Raise download completed event
+            DownloadCompleted?.Invoke(this, new DownloadTerminalEventArgs
+            {
+                TripId = trip.Id,
+                TripServerId = trip.ServerId,
+                TripName = trip.Name,
+                TilesDownloaded = trip.TileCount,
+                TotalBytes = trip.TotalSizeBytes
+            });
+
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("Resumed download cancelled for trip {TripId}", tripId);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resuming download for trip {TripId}", tripId);
+            trip.Status = TripDownloadStatus.Failed;
+            trip.LastError = ex.Message;
+            await _databaseService.SaveDownloadedTripAsync(trip);
+
+            // Delete orphaned download state to avoid stale resume attempts
+            await _databaseService.DeleteDownloadStateAsync(tripId);
+
+            // Raise download failed event
+            DownloadFailed?.Invoke(this, new DownloadTerminalEventArgs
+            {
+                TripId = trip.Id,
+                TripServerId = trip.ServerId,
+                TripName = trip.Name,
+                TilesDownloaded = trip.TileCount,
+                TotalBytes = trip.TotalSizeBytes,
+                ErrorMessage = ex.Message
+            });
+
+            return false;
+        }
+        finally
+        {
+            // Always release the active download guard
+            _activeDownloads.TryRemove(trip.ServerId, out _);
+            // Clean up per-trip warning state
+            _tripWarningStates.TryRemove(tripId, out _);
+        }
+    }
+
+    /// <summary>
+    /// Cancels a download and optionally cleans up partial data.
+    /// </summary>
+    /// <param name="tripId">The local trip ID.</param>
+    /// <param name="cleanup">If true, delete all downloaded tiles and trip data.</param>
+    /// <returns>True if cancelled successfully.</returns>
+    public async Task<bool> CancelDownloadAsync(int tripId, bool cleanup = false)
+    {
+        ThrowIfDisposed();
+
+        // Set cancel flag to stop download loop - distinct from pause to prevent state saving
+        // The flag will be cleaned up when starting a new download for this trip
+        _downloadStopRequests[tripId] = DownloadPauseReason.UserCancel;
+
+        var trip = await _databaseService.GetDownloadedTripAsync(tripId);
+        if (trip == null)
+        {
+            _logger.LogWarning("Cannot cancel - trip {TripId} not found", tripId);
+            // Still clean up the stop request if trip doesn't exist
+            _downloadStopRequests.TryRemove(tripId, out _);
+            return false;
+        }
+
+        // Delete the download state - cancelled downloads are not resumable
+        await _databaseService.DeleteDownloadStateAsync(tripId);
+
+        if (cleanup)
+        {
+            // Delete trip and all associated data
+            await _databaseService.DeleteDownloadedTripAsync(tripId);
+            _logger.LogInformation("Cancelled and cleaned up trip {TripId}", tripId);
+
+            // Clean up stop request and warning state since trip is deleted
+            _downloadStopRequests.TryRemove(tripId, out _);
+            _tripWarningStates.TryRemove(tripId, out _);
+        }
+        else
+        {
+            // Keep partial download but mark as cancelled (distinct from failed)
+            trip.Status = TripDownloadStatus.Cancelled;
+            trip.LastError = "Download cancelled by user";
+            await _databaseService.SaveDownloadedTripAsync(trip);
+            _logger.LogInformation("Cancelled trip {TripId}, keeping partial data", tripId);
+
+            // Clean up warning state but keep stop request until download loop exits
+            _tripWarningStates.TryRemove(tripId, out _);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Gets all paused/resumable downloads.
+    /// </summary>
+    /// <returns>List of download states that can be resumed.</returns>
+    public async Task<List<TripDownloadStateEntity>> GetPausedDownloadsAsync()
+    {
+        return await _databaseService.GetPausedDownloadsAsync();
+    }
+
+    /// <summary>
+    /// Checks if a download is paused for a specific trip.
+    /// Checks both in-memory pause flag and persisted database state.
+    /// </summary>
+    /// <param name="tripId">The local trip ID.</param>
+    /// <returns>True if download is paused.</returns>
+    public async Task<bool> IsDownloadPausedAsync(int tripId)
+    {
+        // Check in-memory flag first (faster, catches recent pause requests)
+        // Only UserPause is considered "paused" - UserCancel is not resumable
+        if (_downloadStopRequests.TryGetValue(tripId, out var reason) &&
+            reason == DownloadPauseReason.UserPause)
+        {
+            return true;
+        }
+
+        // Check persisted state (for pauses from previous sessions)
+        var state = await _databaseService.GetDownloadStateAsync(tripId);
+        return state?.Status == DownloadStateStatus.Paused ||
+               state?.Status == DownloadStateStatus.LimitReached;
+    }
+
+    /// <summary>
+    /// Saves the current download state for later resumption.
+    /// </summary>
+    /// <param name="trip">The trip entity.</param>
+    /// <param name="remainingTiles">Tiles remaining to download.</param>
+    /// <param name="completedCount">Number of tiles completed.</param>
+    /// <param name="totalCount">Total tiles in download.</param>
+    /// <param name="downloadedBytes">Bytes downloaded so far.</param>
+    /// <param name="interruptionReason">Reason for interruption.</param>
+    /// <param name="status">Download state status (defaults to Paused).</param>
+    private async Task SaveDownloadStateAsync(
+        DownloadedTripEntity trip,
+        List<TileCoordinate> remainingTiles,
+        int completedCount,
+        int totalCount,
+        long downloadedBytes,
+        string interruptionReason,
+        string status = DownloadStateStatus.Paused)
+    {
+        var state = new TripDownloadStateEntity
+        {
+            TripId = trip.Id,
+            TripServerId = trip.ServerId,
+            TripName = trip.Name,
+            RemainingTilesJson = JsonSerializer.Serialize(remainingTiles),
+            CompletedTileCount = completedCount,
+            TotalTileCount = totalCount,
+            DownloadedBytes = downloadedBytes,
+            Status = status,
+            InterruptionReason = interruptionReason,
+            PausedAt = DateTime.UtcNow
+        };
+
+        await _databaseService.SaveDownloadStateAsync(state);
+        _logger.LogInformation("Saved download state for trip {TripId}: {Completed}/{Total} tiles, status: {Status}, reason: {Reason}",
+            trip.Id, completedCount, totalCount, status, interruptionReason);
     }
 
     #endregion
@@ -753,22 +1336,60 @@ public class TripDownloadService
 
             if (boundingBoxChanged)
             {
-                _logger.LogInformation("Bounding box changed for trip {TripName}, re-downloading tiles", localTrip.Name);
-                RaiseProgress(localTrip.Id, 80, "Downloading new map tiles...");
-
-                // Update bounding box
+                // Always update bounding box metadata from server (independent of tile download)
                 localTrip.BoundingBoxNorth = serverTrip.BoundingBox!.North;
                 localTrip.BoundingBoxSouth = serverTrip.BoundingBox.South;
                 localTrip.BoundingBoxEast = serverTrip.BoundingBox.East;
                 localTrip.BoundingBoxWest = serverTrip.BoundingBox.West;
 
-                // Re-download tiles for new bounding box
-                var tileCoords = CalculateTilesForBoundingBox(serverTrip.BoundingBox);
-                if (tileCoords.Count > 0)
+                // Guard against concurrent tile downloads for the same trip
+                if (!_activeDownloads.TryAdd(tripServerId, true))
                 {
-                    var downloadedBytes = await DownloadTilesAsync(localTrip.Id, tileCoords, cancellationToken);
-                    localTrip.TileCount = tileCoords.Count;
-                    localTrip.TotalSizeBytes = downloadedBytes;
+                    // Another download in progress - metadata is synced but tiles are not
+                    // Return null to signal sync didn't fully complete; caller can retry later
+                    _logger.LogWarning("Tile download already in progress for trip {TripId}, sync incomplete", tripServerId);
+                    return null;
+                }
+
+                try
+                {
+                    _logger.LogInformation("Bounding box changed for trip {TripName}, re-downloading tiles", localTrip.Name);
+                    RaiseProgress(localTrip.Id, 80, "Downloading new map tiles...");
+
+                    // Re-download tiles for new bounding box using unified download path
+                    // This respects cache limits and supports pause/resume during sync
+                    var tileCoords = CalculateTilesForBoundingBox(serverTrip.BoundingBox);
+                    if (tileCoords.Count > 0)
+                    {
+                        // Initialize per-trip warning state for sync download
+                        _tripWarningStates[localTrip.Id] = new TripWarningState();
+
+                        var downloadResult = await DownloadTilesWithStateAsync(
+                            localTrip,
+                            tileCoords,
+                            initialCompleted: 0,
+                            totalTiles: tileCoords.Count,
+                            initialBytes: 0,
+                            cancellationToken);
+
+                        localTrip.TileCount = downloadResult.TilesDownloaded;
+                        localTrip.TotalSizeBytes = downloadResult.TotalBytes;
+
+                        // Clean up warning state
+                        _tripWarningStates.TryRemove(localTrip.Id, out _);
+
+                        // If paused or limit reached, don't mark as complete
+                        if (downloadResult.WasPaused || downloadResult.WasLimitReached)
+                        {
+                            _logger.LogWarning("Sync tile download stopped for trip {TripName}: Paused={Paused}, LimitReached={LimitReached}",
+                                localTrip.Name, downloadResult.WasPaused, downloadResult.WasLimitReached);
+                            // Trip remains in current state, tiles partially downloaded
+                        }
+                    }
+                }
+                finally
+                {
+                    _activeDownloads.TryRemove(tripServerId, out _);
                 }
             }
 
@@ -912,7 +1533,30 @@ public class TripDownloadService
     /// </summary>
     private void RaiseProgress(int tripId, int percent, string message)
     {
-        ProgressChanged?.Invoke(this, new DownloadProgressEventArgs(tripId, percent, message));
+        RaiseEventSafe(ProgressChanged, new DownloadProgressEventArgs
+        {
+            TripId = tripId,
+            ProgressPercent = percent,
+            StatusMessage = message
+        });
+    }
+
+    /// <summary>
+    /// Safely raises an event, catching and logging any subscriber exceptions.
+    /// </summary>
+    private void RaiseEventSafe<T>(EventHandler<T>? eventHandler, T args) where T : class
+    {
+        if (eventHandler == null)
+            return;
+
+        try
+        {
+            eventHandler.Invoke(this, args);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Event handler threw exception for {EventType}", typeof(T).Name);
+        }
     }
 
     #region Tile Download
@@ -920,9 +1564,10 @@ public class TripDownloadService
     /// <summary>
     /// Calculates all tile coordinates needed for a bounding box.
     /// Uses intelligent zoom level selection based on area size.
+    /// Enforces maximum tile count to prevent memory exhaustion.
     /// </summary>
     /// <param name="bbox">The bounding box.</param>
-    /// <returns>List of tile coordinates.</returns>
+    /// <returns>List of tile coordinates (capped at MaxTileCount).</returns>
     private List<TileCoordinate> CalculateTilesForBoundingBox(BoundingBox bbox)
     {
         var tiles = new List<TileCoordinate>();
@@ -947,6 +1592,14 @@ public class TripDownloadService
                 for (int y = minY; y <= maxY; y++)
                 {
                     tiles.Add(new TileCoordinate { Zoom = zoom, X = x, Y = y });
+
+                    // Enforce maximum tile count to prevent memory exhaustion
+                    if (tiles.Count >= MaxTileCount)
+                    {
+                        _logger.LogWarning("Tile count limit reached ({MaxTiles}), truncating at zoom {Zoom}",
+                            MaxTileCount, zoom);
+                        return tiles;
+                    }
                 }
             }
         }
@@ -989,54 +1642,495 @@ public class TripDownloadService
     }
 
     /// <summary>
-    /// Downloads tiles for a trip.
+    /// Downloads tiles with state saving, pause/limit checking, retry logic, and network monitoring.
+    /// Used for both initial downloads and resume operations.
     /// </summary>
-    /// <param name="tripId">The local trip ID.</param>
-    /// <param name="tiles">The tile coordinates to download.</param>
+    /// <param name="trip">The trip entity.</param>
+    /// <param name="tiles">Remaining tiles to download.</param>
+    /// <param name="initialCompleted">Number of tiles already completed.</param>
+    /// <param name="totalTiles">Total tiles in the download.</param>
+    /// <param name="initialBytes">Bytes already downloaded.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Total bytes downloaded.</returns>
-    private async Task<long> DownloadTilesAsync(
-        int tripId,
+    /// <returns>Result containing total bytes downloaded and actual tiles completed.</returns>
+    private async Task<TileDownloadResult> DownloadTilesWithStateAsync(
+        DownloadedTripEntity trip,
         List<TileCoordinate> tiles,
+        int initialCompleted,
+        int totalTiles,
+        long initialBytes,
         CancellationToken cancellationToken)
     {
-        var totalBytes = 0L;
-        var completed = 0;
-        var total = tiles.Count;
-        var tileCacheDir = GetTileCacheDirectory(tripId);
+        // Early return for empty tile list
+        if (tiles.Count == 0)
+        {
+            return new TileDownloadResult(
+                TotalBytes: initialBytes,
+                TilesDownloaded: 0,
+                WasPaused: false,
+                WasLimitReached: false);
+        }
+
+        // Clear any stale stop request from previous cancel/pause
+        // This allows re-downloading a trip that was previously cancelled
+        _downloadStopRequests.TryRemove(trip.Id, out _);
+
+        // Thread-safe counters for parallel downloads
+        long totalBytes = initialBytes;
+        int processed = 0; // Tiles processed this session (success or fail)
+        int tilesDownloadedThisSession = 0;
+        int lastStateSaveProcessed = 0;
+        var tileCacheDir = GetTileCacheDirectory(trip.Id);
+        var failedTiles = new ConcurrentBag<TileCoordinate>();
+        var succeededIndices = new ConcurrentDictionary<int, bool>(); // Track which tile indices succeeded
 
         // Ensure cache directory exists
         Directory.CreateDirectory(tileCacheDir);
 
-        // Use semaphore to limit concurrent downloads
-        using var semaphore = new SemaphoreSlim(MaxConcurrentDownloads);
-        using var httpClient = new HttpClient { Timeout = TimeSpan.FromMilliseconds(TileTimeoutMs) };
-
-        // Add user agent to comply with OSM tile usage policy
-        httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("WayfarerMobile/1.0");
-
-        var tasks = tiles.Select(async tile =>
+        // Check cache limit at start (before downloading any tiles)
+        var initialLimitCheck = await CheckTripCacheLimitAsync();
+        if (initialLimitCheck.IsLimitReached)
         {
-            await semaphore.WaitAsync(cancellationToken);
-            try
+            var eventArgs = new CacheLimitEventArgs
             {
-                var bytes = await DownloadTileAsync(httpClient, tripId, tile, tileCacheDir, cancellationToken);
-                Interlocked.Add(ref totalBytes, bytes);
-                var count = Interlocked.Increment(ref completed);
+                TripId = trip.Id,
+                TripName = trip.Name,
+                CurrentUsageMB = initialLimitCheck.CurrentSizeMB,
+                MaxSizeMB = initialLimitCheck.MaxSizeMB,
+                UsagePercent = initialLimitCheck.UsagePercent,
+                Level = CacheLimitLevel.LimitReached
+            };
+            CacheLimitReached?.Invoke(this, eventArgs);
 
-                // Update progress (55-95% range for tiles)
-                var percent = 55 + (int)(count * 40.0 / total);
-                RaiseProgress(tripId, percent, $"Downloading tiles: {count}/{total}");
-            }
-            finally
+            await SaveDownloadStateAsync(trip, tiles, initialCompleted, totalTiles, totalBytes,
+                DownloadPauseReason.CacheLimitReached, DownloadStateStatus.LimitReached);
+            trip.Status = TripDownloadStatus.Downloading;
+            await _databaseService.SaveDownloadedTripAsync(trip);
+            _logger.LogWarning("Cache limit already reached before download for trip {TripId}", trip.Id);
+
+            return new TileDownloadResult(
+                TotalBytes: totalBytes,
+                TilesDownloaded: 0,
+                WasPaused: false,
+                WasLimitReached: true);
+        }
+
+        // Track stop reason for parallel download
+        var stopReason = new ParallelDownloadStopReason();
+        var progressLock = new object();
+        var lastProgressReport = 0;
+
+        // Get concurrency setting
+        var maxConcurrency = MaxConcurrentDownloads;
+        _logger.LogInformation("Starting parallel tile download for trip {TripId}: {TileCount} tiles, concurrency {Concurrency}",
+            trip.Id, tiles.Count, maxConcurrency);
+
+        // Use Parallel.ForEachAsync for parallel downloads with controlled concurrency
+        var parallelOptions = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = maxConcurrency,
+            CancellationToken = cancellationToken
+        };
+
+        try
+        {
+            await Parallel.ForEachAsync(
+                tiles.Select((tile, index) => (tile, index)),
+                parallelOptions,
+                async (item, ct) =>
+                {
+                    // Check if we should stop (pause, cancel, limit reached)
+                    if (stopReason.ShouldStop)
+                        return;
+
+                    // Check stop request (pause or cancel)
+                    if (_downloadStopRequests.TryGetValue(trip.Id, out var requestedStopReason))
+                    {
+                        stopReason.SetPaused(requestedStopReason);
+                        return;
+                    }
+
+                    // Check network (only first tile in batch to avoid thrashing)
+                    if (item.index % maxConcurrency == 0 && !IsNetworkAvailable())
+                    {
+                        stopReason.SetPaused(DownloadPauseReason.NetworkLost);
+                        _logger.LogWarning("Network lost during download for trip {TripId}", trip.Id);
+                        return;
+                    }
+
+                    // Download the tile
+                    var bytes = await DownloadTileWithRetryAsync(trip.Id, item.tile, tileCacheDir, ct);
+
+                    if (bytes > 0)
+                    {
+                        Interlocked.Add(ref totalBytes, bytes);
+                        Interlocked.Increment(ref tilesDownloadedThisSession);
+                        succeededIndices[item.index] = true; // Track successful tile index
+                    }
+                    else
+                    {
+                        failedTiles.Add(item.tile);
+                    }
+
+                    var currentProcessed = Interlocked.Increment(ref processed);
+                    var currentCompleted = initialCompleted + currentProcessed;
+
+                    // Thread-safe progress reporting (throttled to avoid UI overload)
+                    lock (progressLock)
+                    {
+                        if (currentCompleted - lastProgressReport >= maxConcurrency || currentCompleted == totalTiles)
+                        {
+                            lastProgressReport = currentCompleted;
+                            var tilesToDownload = totalTiles - initialCompleted;
+                            // Convert to double first to avoid integer overflow for large tile counts
+                            int percent = tilesToDownload > 0
+                                ? Math.Min(95, 55 + (int)(((double)currentCompleted - initialCompleted) * 40.0 / tilesToDownload))
+                                : 95;
+                            RaiseProgress(trip.Id, percent, $"Downloading tiles: {currentCompleted}/{totalTiles}");
+                        }
+                    }
+
+                    // Periodic cache limit check (synchronized across parallel threads)
+                    if (currentCompleted % CacheLimitCheckIntervalTiles == 0)
+                    {
+                        var limitResult = await GetCachedLimitCheckAsync();
+
+                        // Raise warning/critical events using per-trip state
+                        if (_tripWarningStates.TryGetValue(trip.Id, out var warningState))
+                        {
+                            if (limitResult.UsagePercent >= 90 && limitResult.UsagePercent < 100)
+                            {
+                                if (warningState.TrySetCriticalRaised())
+                                {
+                                    RaiseEventSafe(CacheCritical, new CacheLimitEventArgs
+                                    {
+                                        TripId = trip.Id,
+                                        TripName = trip.Name,
+                                        CurrentUsageMB = limitResult.CurrentSizeMB,
+                                        MaxSizeMB = limitResult.MaxSizeMB,
+                                        UsagePercent = limitResult.UsagePercent,
+                                        Level = CacheLimitLevel.Critical
+                                    });
+                                }
+                            }
+                            else if (limitResult.UsagePercent >= 80 && limitResult.UsagePercent < 90)
+                            {
+                                if (warningState.TrySetWarningRaised())
+                                {
+                                    RaiseEventSafe(CacheWarning, new CacheLimitEventArgs
+                                    {
+                                        TripId = trip.Id,
+                                        TripName = trip.Name,
+                                        CurrentUsageMB = limitResult.CurrentSizeMB,
+                                        MaxSizeMB = limitResult.MaxSizeMB,
+                                        UsagePercent = limitResult.UsagePercent,
+                                        Level = CacheLimitLevel.Warning
+                                    });
+                                }
+                            }
+                        }
+
+                        if (limitResult.IsLimitReached)
+                        {
+                            stopReason.SetLimitReached();
+                        }
+                    }
+
+                    // Periodic storage check
+                    if (currentCompleted % StorageCheckIntervalTiles == 0)
+                    {
+                        if (!HasSufficientStorage())
+                        {
+                            stopReason.SetPaused(DownloadPauseReason.StorageLow);
+                            _logger.LogWarning("Storage low during download for trip {TripId}", trip.Id);
+                        }
+                    }
+
+                    // Periodic state save
+                    var lastSave = Volatile.Read(ref lastStateSaveProcessed);
+                    if (currentProcessed - lastSave >= StateSaveIntervalTiles)
+                    {
+                        // Only one thread saves state at a time
+                        if (Interlocked.CompareExchange(ref lastStateSaveProcessed, currentProcessed, lastSave) == lastSave)
+                        {
+                            // Take atomic snapshot of succeeded indices for consistent remaining calculation
+                            // Remaining = all tiles not in the succeeded set (includes unprocessed + failed)
+                            var succeededSnapshot = succeededIndices.Keys.ToHashSet();
+                            var remaining = tiles.Where((_, idx) => !succeededSnapshot.Contains(idx)).ToList();
+                            await SaveDownloadStateAsync(trip, remaining, initialCompleted + succeededSnapshot.Count, totalTiles,
+                                Interlocked.Read(ref totalBytes), DownloadPauseReason.PeriodicSave, DownloadStateStatus.InProgress);
+                        }
+                    }
+                });
+        }
+        catch (OperationCanceledException)
+        {
+            // Check if this was a pause request (which also cancels CTS) or actual cancel
+            // This handles the race where CTS cancellation fires before workers see _downloadStopRequests
+            if (_downloadStopRequests.TryGetValue(trip.Id, out var requestedReason) &&
+                requestedReason == DownloadPauseReason.UserPause)
             {
-                semaphore.Release();
+                stopReason.SetPaused(DownloadPauseReason.UserPause);
             }
-        });
+            else
+            {
+                stopReason.SetPaused(DownloadPauseReason.UserCancel);
+            }
+        }
 
-        await Task.WhenAll(tasks);
+        // Handle stop reason if download was interrupted
+        var finalProcessed = Volatile.Read(ref processed);
+        var finalSucceeded = succeededIndices.Count;
+        var finalBytes = Interlocked.Read(ref totalBytes);
 
-        return totalBytes;
+        if (stopReason.ShouldStop)
+        {
+            // Remaining = tiles not yet processed + failed tiles (not succeeded)
+            var remainingTiles = tiles.Where((_, idx) => !succeededIndices.ContainsKey(idx)).ToList();
+
+            var actualCompleted = initialCompleted + finalSucceeded;
+
+            if (stopReason.WasLimitReached)
+            {
+                var limitResult = await CheckTripCacheLimitAsync();
+                var eventArgs = new CacheLimitEventArgs
+                {
+                    TripId = trip.Id,
+                    TripName = trip.Name,
+                    CurrentUsageMB = limitResult.CurrentSizeMB,
+                    MaxSizeMB = limitResult.MaxSizeMB,
+                    UsagePercent = limitResult.UsagePercent,
+                    Level = CacheLimitLevel.LimitReached
+                };
+                CacheLimitReached?.Invoke(this, eventArgs);
+
+                await SaveDownloadStateAsync(trip, remainingTiles, actualCompleted, totalTiles, finalBytes,
+                    DownloadPauseReason.CacheLimitReached, DownloadStateStatus.LimitReached);
+
+                trip.Status = TripDownloadStatus.Downloading;
+                await _databaseService.SaveDownloadedTripAsync(trip);
+            }
+            else if (stopReason.PauseReason != DownloadPauseReason.UserCancel)
+            {
+                // Save state for pause (resumable) - but NOT for cancel
+                // CancelDownloadAsync already deleted state and set trip.Status = Cancelled
+                await SaveDownloadStateAsync(trip, remainingTiles, actualCompleted, totalTiles, finalBytes,
+                    stopReason.PauseReason);
+
+                trip.Status = TripDownloadStatus.Downloading;
+                await _databaseService.SaveDownloadedTripAsync(trip);
+            }
+            // For UserCancel: don't save state or update trip status
+            // CancelDownloadAsync already handled cleanup
+
+            _logger.LogInformation("Download stopped for trip {TripId}: {Completed}/{Total} tiles (processed {Processed}), Reason: {Reason}",
+                trip.Id, actualCompleted, totalTiles, finalProcessed, stopReason.PauseReason);
+
+            // Raise download paused event
+            var pauseReasonType = stopReason.PauseReason switch
+            {
+                DownloadPauseReason.UserPause => DownloadPauseReasonType.UserRequest,
+                DownloadPauseReason.UserCancel => DownloadPauseReasonType.UserCancel,
+                DownloadPauseReason.NetworkLost => DownloadPauseReasonType.NetworkLost,
+                DownloadPauseReason.StorageLow => DownloadPauseReasonType.StorageLow,
+                DownloadPauseReason.CacheLimitReached => DownloadPauseReasonType.CacheLimitReached,
+                _ => DownloadPauseReasonType.UserRequest
+            };
+
+            DownloadPaused?.Invoke(this, new DownloadPausedEventArgs
+            {
+                TripId = trip.Id,
+                TripServerId = trip.ServerId,
+                TripName = trip.Name,
+                Reason = pauseReasonType,
+                TilesCompleted = actualCompleted,
+                TotalTiles = totalTiles,
+                CanResume = stopReason.PauseReason != DownloadPauseReason.UserCancel
+            });
+
+            return new TileDownloadResult(
+                TotalBytes: finalBytes,
+                TilesDownloaded: Volatile.Read(ref tilesDownloadedThisSession),
+                WasPaused: stopReason.WasPaused,
+                WasLimitReached: stopReason.WasLimitReached);
+        }
+
+        // Retry failed tiles once at the end (sequentially to avoid overwhelming server)
+        var failedTilesList = failedTiles.ToList();
+        if (failedTilesList.Count > 0)
+        {
+            _logger.LogInformation("Retrying {Count} failed tiles for trip {TripId}", failedTilesList.Count, trip.Id);
+            foreach (var tile in failedTilesList)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    break;
+
+                var bytes = await DownloadTileWithRetryAsync(trip.Id, tile, tileCacheDir, cancellationToken);
+                if (bytes > 0)
+                {
+                    Interlocked.Add(ref totalBytes, bytes);
+                    Interlocked.Increment(ref tilesDownloadedThisSession);
+                }
+            }
+        }
+
+        // Clean up download state on successful completion
+        await _databaseService.DeleteDownloadStateAsync(trip.Id);
+
+        return new TileDownloadResult(
+            TotalBytes: Interlocked.Read(ref totalBytes),
+            TilesDownloaded: Volatile.Read(ref tilesDownloadedThisSession),
+            WasPaused: false,
+            WasLimitReached: false);
+    }
+
+    /// <summary>
+    /// Downloads a tile with retry logic.
+    /// </summary>
+    private async Task<long> DownloadTileWithRetryAsync(
+        int tripId,
+        TileCoordinate tile,
+        string cacheDir,
+        CancellationToken cancellationToken)
+    {
+        for (int attempt = 0; attempt <= MaxTileRetries; attempt++)
+        {
+            var bytes = await DownloadTileAsync(_tileHttpClient, tripId, tile, cacheDir, cancellationToken);
+            if (bytes > 0)
+                return bytes;
+
+            if (attempt < MaxTileRetries)
+            {
+                _logger.LogDebug("Retry {Attempt}/{Max} for tile {TileId}", attempt + 1, MaxTileRetries, tile.Id);
+                await Task.Delay(RetryDelayMs * (attempt + 1), cancellationToken); // Exponential backoff
+            }
+        }
+
+        _logger.LogWarning("All retries failed for tile {TileId}", tile.Id);
+        return 0;
+    }
+
+    /// <summary>
+    /// Checks if the trip cache limit has been reached.
+    /// </summary>
+    /// <returns>Result indicating current usage and whether limit is reached.</returns>
+    public async Task<CacheLimitCheckResult> CheckTripCacheLimitAsync()
+    {
+        var currentSize = await _databaseService.GetTripCacheSizeAsync();
+        var maxSizeMB = _settingsService.MaxTripCacheSizeMB;
+        var maxSizeBytes = (long)maxSizeMB * 1024 * 1024;
+        var currentSizeMB = currentSize / (1024.0 * 1024.0);
+        var usagePercent = maxSizeBytes > 0 ? (currentSize * 100.0 / maxSizeBytes) : 0;
+
+        return new CacheLimitCheckResult
+        {
+            CurrentSizeBytes = currentSize,
+            CurrentSizeMB = currentSizeMB,
+            MaxSizeMB = maxSizeMB,
+            UsagePercent = usagePercent,
+            IsLimitReached = currentSize >= maxSizeBytes,
+            IsWarningLevel = usagePercent >= 80 && usagePercent < 100
+        };
+    }
+
+    /// <summary>
+    /// Gets cache limit check result with caching to avoid parallel database hits.
+    /// Returns cached result if checked within last 2 seconds.
+    /// </summary>
+    private async Task<CacheLimitCheckResult> GetCachedLimitCheckAsync()
+    {
+        const double CacheWindowSeconds = 2.0; // Reduced from 5s to minimize overshoot
+
+        // Fast path: single volatile read for atomic access to both values
+        var cachedState = _cachedLimitCheck;
+        if (cachedState != null && (DateTime.UtcNow - cachedState.CheckTime).TotalSeconds < CacheWindowSeconds)
+        {
+            return cachedState.Result;
+        }
+
+        // Slow path: acquire lock and check
+        await _cacheLimitCheckLock.WaitAsync();
+        try
+        {
+            // Double-check after acquiring lock (single volatile read)
+            cachedState = _cachedLimitCheck;
+            if (cachedState != null && (DateTime.UtcNow - cachedState.CheckTime).TotalSeconds < CacheWindowSeconds)
+            {
+                return cachedState.Result;
+            }
+
+            // Actually perform the check
+            var result = await CheckTripCacheLimitAsync();
+            // Atomic write of both values together via single reference assignment
+            _cachedLimitCheck = new CachedLimitCheckState(result, DateTime.UtcNow);
+            return result;
+        }
+        finally
+        {
+            _cacheLimitCheckLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Estimates the download size for a trip.
+    /// </summary>
+    /// <param name="tileCount">Number of tiles to download.</param>
+    /// <returns>Estimated size in bytes.</returns>
+    public long EstimateDownloadSize(int tileCount)
+    {
+        return tileCount * EstimatedTileSizeBytes;
+    }
+
+    /// <summary>
+    /// Estimates the tile count for a trip based on its bounding box.
+    /// </summary>
+    /// <param name="boundingBox">The trip's bounding box.</param>
+    /// <returns>Estimated number of tiles.</returns>
+    public int EstimateTileCount(BoundingBox? boundingBox)
+    {
+        if (boundingBox == null)
+            return 0;
+
+        return CalculateTilesForBoundingBox(boundingBox).Count;
+    }
+
+    /// <summary>
+    /// Checks if there's enough cache quota for a trip download.
+    /// </summary>
+    /// <param name="boundingBox">The trip's bounding box.</param>
+    /// <returns>Result with quota details and tile count.</returns>
+    public async Task<CacheQuotaCheckResult> CheckCacheQuotaForTripAsync(BoundingBox? boundingBox)
+    {
+        var tileCount = EstimateTileCount(boundingBox);
+        var estimatedBytes = EstimateDownloadSize(tileCount);
+        var result = await CheckCacheQuotaAsync(estimatedBytes);
+        // Create new result with TileCount set (init-only property)
+        return result with { TileCount = tileCount };
+    }
+
+    /// <summary>
+    /// Checks if there's enough cache quota for a download.
+    /// </summary>
+    /// <param name="estimatedBytes">Estimated download size in bytes.</param>
+    /// <returns>Result with quota details.</returns>
+    public async Task<CacheQuotaCheckResult> CheckCacheQuotaAsync(long estimatedBytes)
+    {
+        var limitResult = await CheckTripCacheLimitAsync();
+        var maxSizeBytes = (long)limitResult.MaxSizeMB * 1024 * 1024;
+        var availableBytes = maxSizeBytes - limitResult.CurrentSizeBytes;
+        var estimatedMB = estimatedBytes / (1024.0 * 1024.0);
+        var availableMB = availableBytes / (1024.0 * 1024.0);
+
+        return new CacheQuotaCheckResult
+        {
+            EstimatedSizeBytes = estimatedBytes,
+            EstimatedSizeMB = estimatedMB,
+            AvailableBytes = availableBytes,
+            AvailableMB = availableMB,
+            CurrentUsageMB = limitResult.CurrentSizeMB,
+            MaxSizeMB = limitResult.MaxSizeMB,
+            HasSufficientQuota = availableBytes >= estimatedBytes,
+            WouldExceedBy = estimatedBytes > availableBytes ? (estimatedBytes - availableBytes) / (1024.0 * 1024.0) : 0
+        };
     }
 
     /// <summary>
@@ -1112,6 +2206,13 @@ public class TripDownloadService
                 return 0;
             }
 
+            // Verify PNG integrity - check file signature
+            if (!IsValidPng(bytes))
+            {
+                _logger.LogWarning("Invalid PNG data for tile {TileId} (signature mismatch)", tile.Id);
+                return 0;
+            }
+
             // Atomic write: temp file then move with overwrite (fixes race condition)
             await File.WriteAllBytesAsync(tempPath, bytes, cancellationToken);
             File.Move(tempPath, filePath, overwrite: true);
@@ -1173,6 +2274,8 @@ public class TripDownloadService
     /// <returns>File path if exists, null otherwise.</returns>
     public string? GetCachedTilePath(int tripId, int zoom, int x, int y)
     {
+        ThrowIfDisposed();
+
         var filePath = Path.Combine(GetTileCacheDirectory(tripId), $"{zoom}", $"{x}", $"{y}.png");
         return File.Exists(filePath) ? filePath : null;
     }
@@ -1217,7 +2320,8 @@ public class TripDownloadService
             using var timeoutCts = new CancellationTokenSource(timeout);
             using var combined = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
-            combined.Token.Register(() => tcs.TrySetResult(false));
+            // Dispose the registration to prevent memory leak
+            using var registration = combined.Token.Register(() => tcs.TrySetResult(false));
 
             return await tcs.Task;
         }
@@ -1230,12 +2334,19 @@ public class TripDownloadService
     /// <summary>
     /// Checks if sufficient storage space is available.
     /// </summary>
-    private async Task<bool> HasSufficientStorageAsync()
+    private bool HasSufficientStorage()
     {
         try
         {
             var cacheDir = FileSystem.CacheDirectory;
-            var driveInfo = new DriveInfo(Path.GetPathRoot(cacheDir)!);
+            var pathRoot = Path.GetPathRoot(cacheDir);
+            if (string.IsNullOrEmpty(pathRoot))
+            {
+                _logger.LogWarning("Could not determine path root for cache directory, assuming sufficient storage");
+                return true;
+            }
+
+            var driveInfo = new DriveInfo(pathRoot);
             var freeSpaceMB = driveInfo.AvailableFreeSpace / (1024 * 1024);
 
             _logger.LogDebug("Available storage: {FreeSpace} MB", freeSpaceMB);
@@ -1250,25 +2361,30 @@ public class TripDownloadService
 
     /// <summary>
     /// Enforces minimum delay between requests to respect tile server.
+    /// Uses lock to ensure thread-safe slot reservation for concurrent requests.
     /// </summary>
     private async Task EnforceRateLimitAsync(CancellationToken cancellationToken)
     {
         TimeSpan waitTime;
         lock (_rateLimitLock)
         {
-            var timeSinceLastRequest = DateTime.UtcNow - _lastRequestTime;
+            var now = DateTime.UtcNow;
             var minimumDelay = TimeSpan.FromMilliseconds(MinRequestDelayMs);
 
-            if (timeSinceLastRequest < minimumDelay)
+            // Calculate when we can make the next request
+            var earliestNextRequest = _lastRequestTime.Add(minimumDelay);
+
+            if (now < earliestNextRequest)
             {
-                waitTime = minimumDelay - timeSinceLastRequest;
+                waitTime = earliestNextRequest - now;
             }
             else
             {
                 waitTime = TimeSpan.Zero;
             }
 
-            _lastRequestTime = DateTime.UtcNow + waitTime;
+            // Reserve our slot: the next request must wait until after our request
+            _lastRequestTime = now.Add(waitTime);
         }
 
         if (waitTime > TimeSpan.Zero)
@@ -1277,36 +2393,244 @@ public class TripDownloadService
         }
     }
 
+    /// <summary>
+    /// Cleans up orphaned temporary files from interrupted downloads.
+    /// Should be called periodically (e.g., on app startup or after download completion).
+    /// </summary>
+    /// <returns>Number of temp files cleaned up.</returns>
+    public int CleanupOrphanedTempFiles()
+    {
+        ThrowIfDisposed();
+
+        var cleanedCount = 0;
+        try
+        {
+            var tilesRootDir = Path.Combine(FileSystem.CacheDirectory, "tiles");
+            if (!Directory.Exists(tilesRootDir))
+                return 0;
+
+            // Find all .tmp files in the tiles directory tree
+            var tempFiles = Directory.GetFiles(tilesRootDir, "*.tmp", SearchOption.AllDirectories);
+            var maxAge = DateTime.UtcNow.AddHours(-TempFileMaxAgeHours);
+
+            foreach (var tempFile in tempFiles)
+            {
+                try
+                {
+                    var fileInfo = new FileInfo(tempFile);
+
+                    // Only delete temp files older than configured age (to avoid deleting active downloads)
+                    if (fileInfo.LastWriteTimeUtc < maxAge)
+                    {
+                        File.Delete(tempFile);
+                        cleanedCount++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Could not delete temp file: {FilePath}", tempFile);
+                }
+            }
+
+            if (cleanedCount > 0)
+            {
+                _logger.LogInformation("Cleaned up {Count} orphaned temp files", cleanedCount);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error during temp file cleanup");
+        }
+
+        return cleanedCount;
+    }
+
+    #endregion
+
+    #region IDisposable
+
+    /// <summary>
+    /// Disposes the service and releases resources.
+    /// </summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Disposes managed and unmanaged resources.
+    /// </summary>
+    /// <param name="disposing">True if called from Dispose(), false if from finalizer.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+
+        if (disposing)
+        {
+            // Signal any active downloads to stop gracefully (pause, not cancel)
+            foreach (var tripId in _downloadStopRequests.Keys)
+            {
+                _downloadStopRequests[tripId] = DownloadPauseReason.UserPause;
+            }
+
+            // Clear active downloads tracking (graceful shutdown)
+            _activeDownloads.Clear();
+            _tripWarningStates.Clear();
+
+            // Dispose managed resources
+            _tileHttpClient?.Dispose();
+            _cacheLimitCheckLock?.Dispose();
+        }
+
+        _disposed = true;
+    }
+
+    /// <summary>
+    /// Throws ObjectDisposedException if the service has been disposed.
+    /// </summary>
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(nameof(TripDownloadService));
+        }
+    }
+
+    /// <summary>
+    /// Verifies that the byte array contains a valid PNG file by checking the file signature.
+    /// </summary>
+    /// <param name="bytes">The byte array to verify.</param>
+    /// <returns>True if the data starts with a valid PNG signature, false otherwise.</returns>
+    private static bool IsValidPng(byte[] bytes)
+    {
+        if (bytes.Length < PngSignature.Length)
+            return false;
+
+        for (int i = 0; i < PngSignature.Length; i++)
+        {
+            if (bytes[i] != PngSignature[i])
+                return false;
+        }
+
+        return true;
+    }
+
     #endregion
 }
 
 /// <summary>
-/// Event args for download progress updates.
+/// Per-trip warning state to track if warning/critical events have been raised.
+/// Prevents duplicate warnings when multiple trips download concurrently.
 /// </summary>
-public class DownloadProgressEventArgs : EventArgs
+/// <remarks>
+/// <para>Thread Safety: This class uses Interlocked for atomic compare-and-swap operations,
+/// ensuring only one thread can transition each flag from false to true.</para>
+/// <para>Lifecycle: Created when a download starts, cleaned up when download completes
+/// (success, failure, or cancellation).</para>
+/// </remarks>
+internal class TripWarningState
 {
-    /// <summary>
-    /// Gets the trip ID being downloaded.
-    /// </summary>
-    public int TripId { get; }
+    private int _warningRaised;
+    private int _criticalRaised;
 
     /// <summary>
-    /// Gets the progress percentage (0-100).
+    /// Whether the warning event (80%) has been raised for this trip.
     /// </summary>
-    public int ProgressPercent { get; }
+    public bool WarningRaised => _warningRaised == 1;
 
     /// <summary>
-    /// Gets the status message.
+    /// Whether the critical event (90%) has been raised for this trip.
     /// </summary>
-    public string Message { get; }
+    public bool CriticalRaised => _criticalRaised == 1;
 
     /// <summary>
-    /// Creates a new instance of DownloadProgressEventArgs.
+    /// Atomically sets the warning flag if not already set.
     /// </summary>
-    public DownloadProgressEventArgs(int tripId, int progressPercent, string message)
+    /// <returns>True if this call set the flag, false if already set.</returns>
+    public bool TrySetWarningRaised() =>
+        Interlocked.CompareExchange(ref _warningRaised, 1, 0) == 0;
+
+    /// <summary>
+    /// Atomically sets the critical flag if not already set.
+    /// </summary>
+    /// <returns>True if this call set the flag, false if already set.</returns>
+    public bool TrySetCriticalRaised() =>
+        Interlocked.CompareExchange(ref _criticalRaised, 1, 0) == 0;
+}
+
+/// <summary>
+/// Result of a tile download operation.
+/// </summary>
+/// <param name="TotalBytes">Total bytes downloaded (including any previously downloaded).</param>
+/// <param name="TilesDownloaded">Number of tiles successfully downloaded in this session.</param>
+/// <param name="WasPaused">Whether the download was paused (user, network, storage).</param>
+/// <param name="WasLimitReached">Whether the download was stopped due to cache limit.</param>
+internal record TileDownloadResult(
+    long TotalBytes,
+    int TilesDownloaded,
+    bool WasPaused,
+    bool WasLimitReached);
+
+/// <summary>
+/// Immutable wrapper for cache limit check state, enabling atomic read/write via volatile reference.
+/// </summary>
+internal sealed record CachedLimitCheckState(CacheLimitCheckResult Result, DateTime CheckTime);
+
+/// <summary>
+/// Thread-safe helper for tracking stop reasons during parallel tile downloads.
+/// </summary>
+internal class ParallelDownloadStopReason
+{
+    private int _shouldStop;
+    private int _wasPaused;
+    private int _wasLimitReached;
+    private object? _pauseReason;
+
+    /// <summary>
+    /// Whether the download should stop.
+    /// </summary>
+    public bool ShouldStop => Volatile.Read(ref _shouldStop) == 1;
+
+    /// <summary>
+    /// Whether stopped due to pause (user, network, storage).
+    /// </summary>
+    public bool WasPaused => Volatile.Read(ref _wasPaused) == 1;
+
+    /// <summary>
+    /// Whether stopped due to cache limit reached.
+    /// </summary>
+    public bool WasLimitReached => Volatile.Read(ref _wasLimitReached) == 1;
+
+    /// <summary>
+    /// Gets the pause reason if paused. Thread-safe read.
+    /// </summary>
+    public string PauseReason => Volatile.Read(ref _pauseReason) as string ?? string.Empty;
+
+    /// <summary>
+    /// Sets the stop reason to paused with the given reason.
+    /// Only the first call takes effect. Thread-safe.
+    /// </summary>
+    public void SetPaused(string reason)
     {
-        TripId = tripId;
-        ProgressPercent = progressPercent;
-        Message = message;
+        if (Interlocked.CompareExchange(ref _shouldStop, 1, 0) == 0)
+        {
+            Interlocked.Exchange(ref _pauseReason, reason);
+            Interlocked.Exchange(ref _wasPaused, 1);
+        }
+    }
+
+    /// <summary>
+    /// Sets the stop reason to cache limit reached.
+    /// Only the first call takes effect. Thread-safe.
+    /// </summary>
+    public void SetLimitReached()
+    {
+        if (Interlocked.CompareExchange(ref _shouldStop, 1, 0) == 0)
+        {
+            Interlocked.Exchange(ref _pauseReason, DownloadPauseReason.CacheLimitReached);
+            Interlocked.Exchange(ref _wasLimitReached, 1);
+        }
     }
 }

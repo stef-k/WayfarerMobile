@@ -144,7 +144,7 @@ public class AppDiagnosticService
     {
         try
         {
-            var zoomLevels = new[] { 12, 13, 14, 15, 16, 17 };
+            var zoomLevels = TileCacheConstants.AllZoomLevels;
             var coverageByZoom = new Dictionary<int, ZoomLevelCoverage>();
 
             foreach (var zoom in zoomLevels)
