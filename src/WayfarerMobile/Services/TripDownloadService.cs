@@ -43,6 +43,25 @@ public class TripDownloadService
     public event EventHandler<DownloadProgressEventArgs>? ProgressChanged;
 
     /// <summary>
+    /// Event raised when cache usage reaches warning level (80%).
+    /// </summary>
+    public event EventHandler<CacheLimitEventArgs>? CacheWarning;
+
+    /// <summary>
+    /// Event raised when cache usage reaches critical level (90%).
+    /// </summary>
+    public event EventHandler<CacheLimitEventArgs>? CacheCritical;
+
+    /// <summary>
+    /// Event raised when cache limit is reached (100%).
+    /// </summary>
+    public event EventHandler<CacheLimitEventArgs>? CacheLimitReached;
+
+    // Track if warning/critical events have been raised for current download
+    private bool _warningRaised;
+    private bool _criticalRaised;
+
+    /// <summary>
     /// Creates a new instance of TripDownloadService.
     /// </summary>
     public TripDownloadService(
@@ -69,6 +88,10 @@ public class TripDownloadService
         TripSummary tripSummary,
         CancellationToken cancellationToken = default)
     {
+        // Reset cache warning flags for new download
+        _warningRaised = false;
+        _criticalRaised = false;
+
         try
         {
             _logger.LogInformation("Starting download for trip: {TripName}", tripSummary.Name);
@@ -1316,8 +1339,35 @@ public class TripDownloadService
             if (completed > 0 && (completed - initialCompleted) % limitCheckInterval == 0)
             {
                 var limitResult = await CheckTripCacheLimitAsync();
+
+                // Raise warning events (only once per download)
+                var eventArgs = new CacheLimitEventArgs
+                {
+                    TripId = trip.Id,
+                    TripName = trip.Name,
+                    CurrentUsageMB = limitResult.CurrentSizeMB,
+                    MaxSizeMB = limitResult.MaxSizeMB,
+                    UsagePercent = limitResult.UsagePercent
+                };
+
+                if (limitResult.UsagePercent >= 80 && limitResult.UsagePercent < 90 && !_warningRaised)
+                {
+                    _warningRaised = true;
+                    eventArgs = eventArgs with { Level = CacheLimitLevel.Warning };
+                    CacheWarning?.Invoke(this, eventArgs);
+                }
+                else if (limitResult.UsagePercent >= 90 && limitResult.UsagePercent < 100 && !_criticalRaised)
+                {
+                    _criticalRaised = true;
+                    eventArgs = eventArgs with { Level = CacheLimitLevel.Critical };
+                    CacheCritical?.Invoke(this, eventArgs);
+                }
+
                 if (limitResult.IsLimitReached)
                 {
+                    eventArgs = eventArgs with { Level = CacheLimitLevel.LimitReached };
+                    CacheLimitReached?.Invoke(this, eventArgs);
+
                     await SaveDownloadStateAsync(trip, remaining, completed, totalTiles, totalBytes,
                         DownloadPauseReason.CacheLimitReached);
                     trip.Status = TripDownloadStatus.Downloading;
@@ -1381,6 +1431,33 @@ public class TripDownloadService
     public long EstimateDownloadSize(int tileCount)
     {
         return tileCount * EstimatedTileSizeBytes;
+    }
+
+    /// <summary>
+    /// Estimates the tile count for a trip based on its bounding box.
+    /// </summary>
+    /// <param name="boundingBox">The trip's bounding box.</param>
+    /// <returns>Estimated number of tiles.</returns>
+    public int EstimateTileCount(BoundingBox? boundingBox)
+    {
+        if (boundingBox == null)
+            return 0;
+
+        return CalculateTilesForBoundingBox(boundingBox).Count;
+    }
+
+    /// <summary>
+    /// Checks if there's enough cache quota for a trip download.
+    /// </summary>
+    /// <param name="boundingBox">The trip's bounding box.</param>
+    /// <returns>Result with quota details and tile count.</returns>
+    public async Task<CacheQuotaCheckResult> CheckCacheQuotaForTripAsync(BoundingBox? boundingBox)
+    {
+        var tileCount = EstimateTileCount(boundingBox);
+        var estimatedBytes = EstimateDownloadSize(tileCount);
+        var result = await CheckCacheQuotaAsync(estimatedBytes);
+        result.TileCount = tileCount;
+        return result;
     }
 
     /// <summary>
@@ -1723,6 +1800,11 @@ public class CacheLimitCheckResult
 public class CacheQuotaCheckResult
 {
     /// <summary>
+    /// Number of tiles to download.
+    /// </summary>
+    public int TileCount { get; set; }
+
+    /// <summary>
     /// Estimated download size in bytes.
     /// </summary>
     public long EstimatedSizeBytes { get; init; }
@@ -1762,4 +1844,55 @@ public class CacheQuotaCheckResult
     /// Zero if within quota.
     /// </summary>
     public double WouldExceedBy { get; init; }
+}
+
+/// <summary>
+/// Event args for cache limit events (warning, critical, limit reached).
+/// </summary>
+public record CacheLimitEventArgs
+{
+    /// <summary>
+    /// Gets the trip ID being downloaded.
+    /// </summary>
+    public int TripId { get; init; }
+
+    /// <summary>
+    /// Gets the trip name for display.
+    /// </summary>
+    public string TripName { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Gets the current cache usage in MB.
+    /// </summary>
+    public double CurrentUsageMB { get; init; }
+
+    /// <summary>
+    /// Gets the maximum cache size in MB.
+    /// </summary>
+    public int MaxSizeMB { get; init; }
+
+    /// <summary>
+    /// Gets the usage percentage (0-100+).
+    /// </summary>
+    public double UsagePercent { get; init; }
+
+    /// <summary>
+    /// Gets the level of the warning.
+    /// </summary>
+    public CacheLimitLevel Level { get; init; }
+}
+
+/// <summary>
+/// Cache limit warning levels.
+/// </summary>
+public enum CacheLimitLevel
+{
+    /// <summary>Warning level (80%).</summary>
+    Warning,
+
+    /// <summary>Critical level (90%).</summary>
+    Critical,
+
+    /// <summary>Limit reached (100%).</summary>
+    LimitReached
 }

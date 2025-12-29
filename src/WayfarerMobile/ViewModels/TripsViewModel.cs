@@ -188,6 +188,30 @@ public partial class TripsViewModel : BaseViewModel
     private string? _downloadingTripName;
 
     /// <summary>
+    /// Gets or sets the local ID of the trip being downloaded.
+    /// </summary>
+    [ObservableProperty]
+    private int? _downloadingTripId;
+
+    /// <summary>
+    /// Gets or sets whether the current download is paused.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanPauseDownload))]
+    [NotifyPropertyChangedFor(nameof(CanResumeDownload))]
+    private bool _isDownloadPaused;
+
+    /// <summary>
+    /// Gets whether the download can be paused.
+    /// </summary>
+    public bool CanPauseDownload => IsDownloading && !IsDownloadPaused;
+
+    /// <summary>
+    /// Gets whether the download can be resumed.
+    /// </summary>
+    public bool CanResumeDownload => IsDownloadPaused;
+
+    /// <summary>
     /// Gets or sets the error message.
     /// </summary>
     [ObservableProperty]
@@ -227,8 +251,11 @@ public partial class TripsViewModel : BaseViewModel
         _logger = logger;
         Title = "Trips";
 
-        // Subscribe to download progress
+        // Subscribe to download progress and cache events
         _downloadService.ProgressChanged += OnDownloadProgressChanged;
+        _downloadService.CacheWarning += OnCacheWarning;
+        _downloadService.CacheCritical += OnCacheCritical;
+        _downloadService.CacheLimitReached += OnCacheLimitReached;
     }
 
     #endregion
@@ -545,12 +572,46 @@ public partial class TripsViewModel : BaseViewModel
 
     /// <summary>
     /// Full download - metadata with tiles.
+    /// Checks cache quota before starting and shows warning if insufficient.
     /// </summary>
     [RelayCommand]
     private async Task FullDownloadAsync(TripListItem? item)
     {
         if (item == null || IsDownloading)
             return;
+
+        // Check cache quota before downloading
+        var quotaCheck = await _downloadService.CheckCacheQuotaForTripAsync(item.BoundingBox);
+
+        if (!quotaCheck.HasSufficientQuota)
+        {
+            var message = $"This trip needs ~{quotaCheck.EstimatedSizeMB:F0} MB ({quotaCheck.TileCount:N0} tiles).\n\n" +
+                         $"Available: {quotaCheck.AvailableMB:F0} MB\n" +
+                         $"Current usage: {quotaCheck.CurrentUsageMB:F0} / {quotaCheck.MaxSizeMB} MB\n\n" +
+                         $"Would exceed limit by {quotaCheck.WouldExceedBy:F0} MB.";
+
+            var action = await Shell.Current.DisplayAlertAsync(
+                "Insufficient Cache Space",
+                message,
+                "Download Anyway",
+                "Cancel");
+
+            if (!action)
+                return;
+        }
+        else if (quotaCheck.EstimatedSizeMB > 100)
+        {
+            // Show info for large downloads even if within quota
+            var proceed = await Shell.Current.DisplayAlertAsync(
+                "Large Download",
+                $"This trip will download ~{quotaCheck.EstimatedSizeMB:F0} MB ({quotaCheck.TileCount:N0} tiles).\n\n" +
+                $"Available quota: {quotaCheck.AvailableMB:F0} MB",
+                "Continue",
+                "Cancel");
+
+            if (!proceed)
+                return;
+        }
 
         await DownloadTripInternalAsync(item, includeTiles: true);
     }
@@ -614,11 +675,71 @@ public partial class TripsViewModel : BaseViewModel
     /// Cancel ongoing download.
     /// </summary>
     [RelayCommand]
-    private void CancelDownload()
+    private async Task CancelDownloadAsync()
     {
+        if (DownloadingTripId.HasValue)
+        {
+            await _downloadService.CancelDownloadAsync(DownloadingTripId.Value, cleanup: false);
+        }
+
         _downloadCts?.Cancel();
         IsDownloading = false;
+        IsDownloadPaused = false;
         DownloadingTripName = null;
+        DownloadingTripId = null;
+    }
+
+    /// <summary>
+    /// Pause ongoing download.
+    /// </summary>
+    [RelayCommand]
+    private async Task PauseDownloadAsync()
+    {
+        if (!DownloadingTripId.HasValue)
+            return;
+
+        var paused = await _downloadService.PauseDownloadAsync(DownloadingTripId.Value);
+        if (paused)
+        {
+            IsDownloadPaused = true;
+            DownloadStatusMessage = "Download paused";
+            await _toastService.ShowAsync("Download paused - can resume later");
+        }
+    }
+
+    /// <summary>
+    /// Resume paused download.
+    /// </summary>
+    [RelayCommand]
+    private async Task ResumeDownloadAsync()
+    {
+        if (!DownloadingTripId.HasValue)
+            return;
+
+        IsDownloadPaused = false;
+        DownloadStatusMessage = "Resuming download...";
+
+        try
+        {
+            var resumed = await _downloadService.ResumeDownloadAsync(DownloadingTripId.Value, _downloadCts?.Token ?? default);
+            if (resumed)
+            {
+                await _toastService.ShowSuccessAsync("Download complete");
+                IsDownloading = false;
+                DownloadingTripName = null;
+                DownloadingTripId = null;
+                await LoadTripsAsync();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("Resumed download cancelled");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resuming download");
+            await _toastService.ShowErrorAsync($"Resume failed: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -848,7 +969,9 @@ public partial class TripsViewModel : BaseViewModel
         try
         {
             IsDownloading = true;
+            IsDownloadPaused = false;
             DownloadingTripName = item.Name;
+            DownloadingTripId = null; // Will be set when we have the result
             DownloadProgress = 0;
             DownloadStatusMessage = "Starting download...";
             _downloadCts = new CancellationTokenSource();
@@ -864,6 +987,9 @@ public partial class TripsViewModel : BaseViewModel
 
             if (result != null)
             {
+                // Track the trip ID for pause/resume
+                DownloadingTripId = result.Id;
+
                 // Set entity FIRST so StatsText has access to counts when DownloadState triggers notification
                 item.DownloadedEntity = result;
                 item.DownloadState = includeTiles ? TripDownloadState.Complete : TripDownloadState.MetadataOnly;
@@ -890,7 +1016,9 @@ public partial class TripsViewModel : BaseViewModel
         finally
         {
             IsDownloading = false;
+            IsDownloadPaused = false;
             DownloadingTripName = null;
+            DownloadingTripId = null;
             _downloadCts?.Dispose();
             _downloadCts = null;
         }
@@ -965,6 +1093,66 @@ public partial class TripsViewModel : BaseViewModel
         });
     }
 
+    /// <summary>
+    /// Handles cache warning (80% full).
+    /// </summary>
+    private void OnCacheWarning(object? sender, CacheLimitEventArgs e)
+    {
+        MainThread.BeginInvokeOnMainThread(async () =>
+        {
+            await _toastService.ShowAsync(
+                $"Cache 80% full ({e.CurrentUsageMB:F0}/{e.MaxSizeMB} MB)");
+        });
+    }
+
+    /// <summary>
+    /// Handles cache critical (90% full).
+    /// </summary>
+    private void OnCacheCritical(object? sender, CacheLimitEventArgs e)
+    {
+        MainThread.BeginInvokeOnMainThread(async () =>
+        {
+            var pause = await Shell.Current.DisplayAlertAsync(
+                "Cache Almost Full",
+                $"Trip cache is 90% full ({e.CurrentUsageMB:F0}/{e.MaxSizeMB} MB).\n\n" +
+                "Consider pausing the download and freeing up space.",
+                "Pause Download",
+                "Continue");
+
+            if (pause && DownloadingTripId.HasValue)
+            {
+                await PauseDownloadAsync();
+            }
+        });
+    }
+
+    /// <summary>
+    /// Handles cache limit reached (100% full).
+    /// </summary>
+    private void OnCacheLimitReached(object? sender, CacheLimitEventArgs e)
+    {
+        MainThread.BeginInvokeOnMainThread(async () =>
+        {
+            IsDownloadPaused = true;
+            DownloadStatusMessage = "Cache limit reached - paused";
+
+            var action = await Shell.Current.DisplayAlertAsync(
+                "Cache Limit Reached",
+                $"Trip cache is full ({e.CurrentUsageMB:F0}/{e.MaxSizeMB} MB).\n\n" +
+                "The download has been paused. You can:\n" +
+                "- Increase the limit in Settings\n" +
+                "- Delete other offline trips to free space\n" +
+                "- Keep the partial download",
+                "Go to Settings",
+                "Keep Partial");
+
+            if (action)
+            {
+                await Shell.Current.GoToAsync("//settings");
+            }
+        });
+    }
+
     #endregion
 
     #region Lifecycle
@@ -1016,6 +1204,9 @@ public partial class TripsViewModel : BaseViewModel
     protected override void Cleanup()
     {
         _downloadService.ProgressChanged -= OnDownloadProgressChanged;
+        _downloadService.CacheWarning -= OnCacheWarning;
+        _downloadService.CacheCritical -= OnCacheCritical;
+        _downloadService.CacheLimitReached -= OnCacheLimitReached;
         _searchCts?.Cancel();
         _searchCts?.Dispose();
         _downloadCts?.Cancel();

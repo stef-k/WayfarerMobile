@@ -98,24 +98,42 @@
                 <Border.StrokeShape>
                     <RoundRectangle CornerRadius="12" />
                 </Border.StrokeShape>
-                <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto" RowSpacing="8">
+                <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto,Auto,Auto" RowSpacing="8">
                     <Label Grid.Row="0" Grid.Column="0"
                            Text="{Binding DownloadingTripName, StringFormat='Downloading: {0}'}"
                            FontSize="14"
                            FontAttributes="Bold"
                            LineBreakMode="TailTruncation" />
+                    <!-- Pause button (visible when not paused) -->
                     <Button Grid.Row="0" Grid.Column="1"
+                            Text="Pause"
+                            Command="{Binding PauseDownloadCommand}"
+                            IsVisible="{Binding CanPauseDownload}"
+                            BackgroundColor="Transparent"
+                            TextColor="{StaticResource Primary}"
+                            FontSize="12"
+                            Padding="8,0" />
+                    <!-- Resume button (visible when paused) -->
+                    <Button Grid.Row="0" Grid.Column="2"
+                            Text="Resume"
+                            Command="{Binding ResumeDownloadCommand}"
+                            IsVisible="{Binding CanResumeDownload}"
+                            BackgroundColor="Transparent"
+                            TextColor="{StaticResource Primary}"
+                            FontSize="12"
+                            Padding="8,0" />
+                    <Button Grid.Row="0" Grid.Column="3"
                             Text="Cancel"
                             Command="{Binding CancelDownloadCommand}"
                             BackgroundColor="Transparent"
                             TextColor="{StaticResource Error}"
                             FontSize="12"
                             Padding="8,0" />
-                    <ProgressBar Grid.Row="1" Grid.ColumnSpan="2"
+                    <ProgressBar Grid.Row="1" Grid.ColumnSpan="4"
                                  Progress="{Binding DownloadProgress}"
                                  ProgressColor="{StaticResource Primary}"
                                  HeightRequest="6" />
-                    <Label Grid.Row="2" Grid.ColumnSpan="2"
+                    <Label Grid.Row="2" Grid.ColumnSpan="4"
                            Text="{Binding DownloadStatusMessage}"
                            FontSize="12"
                            TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
