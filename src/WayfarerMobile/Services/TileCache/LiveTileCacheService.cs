@@ -11,8 +11,7 @@ public class LiveTileCacheService
 {
     #region Constants
 
-    private const int TileTimeoutMs = 10000;
-    private const int DefaultMaxCacheSizeMB = 500;
+    private const int TileTimeoutMs = TileCacheConstants.TileTimeoutMs;
 
     #endregion
 

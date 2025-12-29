@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
@@ -27,6 +29,9 @@ public class TripDownloadService
     // Rate limiting state
     private readonly object _rateLimitLock = new();
     private DateTime _lastRequestTime = DateTime.MinValue;
+
+    // Pause/resume state - tracks which downloads should be paused
+    private readonly ConcurrentDictionary<int, bool> _downloadPauseStates = new();
 
     // Configurable settings (read from ISettingsService)
     private int MaxConcurrentDownloads => _settingsService.MaxConcurrentTileDownloads;
@@ -557,6 +562,225 @@ public class TripDownloadService
 
     #endregion
 
+    #region Pause/Resume/Cancel
+
+    /// <summary>
+    /// Pauses a download in progress.
+    /// Sets a flag that the download loop checks to gracefully pause.
+    /// </summary>
+    /// <param name="tripId">The local trip ID.</param>
+    /// <returns>True if pause was initiated, false if download not found.</returns>
+    public async Task<bool> PauseDownloadAsync(int tripId)
+    {
+        var trip = await _databaseService.GetDownloadedTripAsync(tripId);
+        if (trip == null || trip.Status != TripDownloadStatus.Downloading)
+        {
+            _logger.LogWarning("Cannot pause - trip {TripId} not downloading", tripId);
+            return false;
+        }
+
+        _downloadPauseStates[tripId] = true;
+        _logger.LogInformation("Pause requested for trip {TripId}", tripId);
+        return true;
+    }
+
+    /// <summary>
+    /// Resumes a paused download.
+    /// Loads the saved state and continues downloading remaining tiles.
+    /// </summary>
+    /// <param name="tripId">The local trip ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>True if resumed successfully, false if no saved state found.</returns>
+    public async Task<bool> ResumeDownloadAsync(int tripId, CancellationToken cancellationToken = default)
+    {
+        var state = await _databaseService.GetDownloadStateAsync(tripId);
+        if (state == null)
+        {
+            _logger.LogWarning("Cannot resume - no saved state for trip {TripId}", tripId);
+            return false;
+        }
+
+        var trip = await _databaseService.GetDownloadedTripAsync(tripId);
+        if (trip == null)
+        {
+            _logger.LogWarning("Cannot resume - trip {TripId} not found", tripId);
+            return false;
+        }
+
+        // Clear pause flag
+        _downloadPauseStates.TryRemove(tripId, out _);
+
+        // Update state to in progress
+        state.Status = DownloadStateStatus.InProgress;
+        state.InterruptionReason = string.Empty;
+        await _databaseService.SaveDownloadStateAsync(state);
+
+        // Update trip status
+        trip.Status = TripDownloadStatus.Downloading;
+        await _databaseService.SaveDownloadedTripAsync(trip);
+
+        _logger.LogInformation("Resuming download for trip {TripId}: {Completed}/{Total} tiles",
+            tripId, state.CompletedTileCount, state.TotalTileCount);
+
+        // Parse remaining tiles
+        var remainingTiles = JsonSerializer.Deserialize<List<TileCoordinate>>(state.RemainingTilesJson)
+            ?? new List<TileCoordinate>();
+
+        if (remainingTiles.Count == 0)
+        {
+            // All tiles already downloaded
+            trip.Status = TripDownloadStatus.Complete;
+            await _databaseService.SaveDownloadedTripAsync(trip);
+            await _databaseService.DeleteDownloadStateAsync(tripId);
+            return true;
+        }
+
+        // Resume tile download
+        try
+        {
+            var downloadedBytes = await DownloadTilesWithStateAsync(
+                trip,
+                remainingTiles,
+                state.CompletedTileCount,
+                state.TotalTileCount,
+                state.DownloadedBytes,
+                cancellationToken);
+
+            // Check if paused during resume
+            if (_downloadPauseStates.GetValueOrDefault(tripId, false))
+            {
+                _logger.LogInformation("Download paused during resume for trip {TripId}", tripId);
+                return true; // State already saved
+            }
+
+            // Complete
+            trip.Status = TripDownloadStatus.Complete;
+            trip.TotalSizeBytes = downloadedBytes;
+            trip.ProgressPercent = 100;
+            await _databaseService.SaveDownloadedTripAsync(trip);
+            await _databaseService.DeleteDownloadStateAsync(tripId);
+
+            RaiseProgress(tripId, 100, "Download complete");
+            _logger.LogInformation("Resumed download complete for trip {TripId}", tripId);
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("Resumed download cancelled for trip {TripId}", tripId);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resuming download for trip {TripId}", tripId);
+            trip.Status = TripDownloadStatus.Failed;
+            trip.LastError = ex.Message;
+            await _databaseService.SaveDownloadedTripAsync(trip);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Cancels a download and optionally cleans up partial data.
+    /// </summary>
+    /// <param name="tripId">The local trip ID.</param>
+    /// <param name="cleanup">If true, delete all downloaded tiles and trip data.</param>
+    /// <returns>True if cancelled successfully.</returns>
+    public async Task<bool> CancelDownloadAsync(int tripId, bool cleanup = false)
+    {
+        // Set pause flag to stop download loop
+        _downloadPauseStates[tripId] = true;
+
+        var trip = await _databaseService.GetDownloadedTripAsync(tripId);
+        if (trip == null)
+        {
+            _logger.LogWarning("Cannot cancel - trip {TripId} not found", tripId);
+            return false;
+        }
+
+        // Update download state
+        var state = await _databaseService.GetDownloadStateAsync(tripId);
+        if (state != null)
+        {
+            state.Status = DownloadStateStatus.Cancelled;
+            state.InterruptionReason = DownloadPauseReason.UserCancel;
+            await _databaseService.SaveDownloadStateAsync(state);
+        }
+
+        if (cleanup)
+        {
+            // Delete trip and all associated data
+            await _databaseService.DeleteDownloadedTripAsync(tripId);
+            await _databaseService.DeleteDownloadStateAsync(tripId);
+            _logger.LogInformation("Cancelled and cleaned up trip {TripId}", tripId);
+        }
+        else
+        {
+            // Keep partial download
+            trip.Status = TripDownloadStatus.Failed;
+            trip.LastError = "Download cancelled by user";
+            await _databaseService.SaveDownloadedTripAsync(trip);
+            _logger.LogInformation("Cancelled trip {TripId}, keeping partial data", tripId);
+        }
+
+        // Remove pause flag
+        _downloadPauseStates.TryRemove(tripId, out _);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Gets all paused/resumable downloads.
+    /// </summary>
+    /// <returns>List of download states that can be resumed.</returns>
+    public async Task<List<TripDownloadStateEntity>> GetPausedDownloadsAsync()
+    {
+        return await _databaseService.GetPausedDownloadsAsync();
+    }
+
+    /// <summary>
+    /// Checks if a download is paused for a specific trip.
+    /// </summary>
+    /// <param name="tripId">The local trip ID.</param>
+    /// <returns>True if download is paused.</returns>
+    public async Task<bool> IsDownloadPausedAsync(int tripId)
+    {
+        var state = await _databaseService.GetDownloadStateAsync(tripId);
+        return state?.Status == DownloadStateStatus.Paused ||
+               state?.Status == DownloadStateStatus.LimitReached;
+    }
+
+    /// <summary>
+    /// Saves the current download state for later resumption.
+    /// </summary>
+    private async Task SaveDownloadStateAsync(
+        DownloadedTripEntity trip,
+        List<TileCoordinate> remainingTiles,
+        int completedCount,
+        int totalCount,
+        long downloadedBytes,
+        string interruptionReason)
+    {
+        var state = new TripDownloadStateEntity
+        {
+            TripId = trip.Id,
+            TripServerId = trip.ServerId,
+            TripName = trip.Name,
+            RemainingTilesJson = JsonSerializer.Serialize(remainingTiles),
+            CompletedTileCount = completedCount,
+            TotalTileCount = totalCount,
+            DownloadedBytes = downloadedBytes,
+            Status = DownloadStateStatus.Paused,
+            InterruptionReason = interruptionReason,
+            PausedAt = DateTime.UtcNow
+        };
+
+        await _databaseService.SaveDownloadStateAsync(state);
+        _logger.LogInformation("Saved download state for trip {TripId}: {Completed}/{Total} tiles, reason: {Reason}",
+            trip.Id, completedCount, totalCount, interruptionReason);
+    }
+
+    #endregion
+
     #region Trip Sync/Update
 
     /// <summary>
@@ -1040,6 +1264,152 @@ public class TripDownloadService
     }
 
     /// <summary>
+    /// Downloads tiles with state saving and pause/limit checking.
+    /// Used for resume operations and limit-aware downloads.
+    /// </summary>
+    /// <param name="trip">The trip entity.</param>
+    /// <param name="tiles">Remaining tiles to download.</param>
+    /// <param name="initialCompleted">Number of tiles already completed.</param>
+    /// <param name="totalTiles">Total tiles in the download.</param>
+    /// <param name="initialBytes">Bytes already downloaded.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Total bytes downloaded (including initial).</returns>
+    private async Task<long> DownloadTilesWithStateAsync(
+        DownloadedTripEntity trip,
+        List<TileCoordinate> tiles,
+        int initialCompleted,
+        int totalTiles,
+        long initialBytes,
+        CancellationToken cancellationToken)
+    {
+        var totalBytes = initialBytes;
+        var completed = initialCompleted;
+        var remaining = new List<TileCoordinate>(tiles);
+        var tileCacheDir = GetTileCacheDirectory(trip.Id);
+        var lastStateSave = 0;
+        const int stateSaveInterval = 25; // Save state every 25 tiles
+        const int limitCheckInterval = 100; // Check limit every 100 tiles
+
+        // Ensure cache directory exists
+        Directory.CreateDirectory(tileCacheDir);
+
+        using var httpClient = new HttpClient { Timeout = TimeSpan.FromMilliseconds(TileTimeoutMs) };
+        httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("WayfarerMobile/1.0");
+
+        foreach (var tile in tiles.ToList()) // ToList to allow modifying remaining during iteration
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // Check pause flag
+            if (_downloadPauseStates.GetValueOrDefault(trip.Id, false))
+            {
+                await SaveDownloadStateAsync(trip, remaining, completed, totalTiles, totalBytes,
+                    DownloadPauseReason.UserPause);
+                trip.Status = TripDownloadStatus.Downloading; // Keep as "downloading" but paused
+                await _databaseService.SaveDownloadedTripAsync(trip);
+                _logger.LogInformation("Download paused for trip {TripId}: {Completed}/{Total} tiles",
+                    trip.Id, completed, totalTiles);
+                return totalBytes;
+            }
+
+            // Check cache limit every N tiles
+            if (completed > 0 && (completed - initialCompleted) % limitCheckInterval == 0)
+            {
+                var limitResult = await CheckTripCacheLimitAsync();
+                if (limitResult.IsLimitReached)
+                {
+                    await SaveDownloadStateAsync(trip, remaining, completed, totalTiles, totalBytes,
+                        DownloadPauseReason.CacheLimitReached);
+                    trip.Status = TripDownloadStatus.Downloading;
+                    await _databaseService.SaveDownloadedTripAsync(trip);
+                    _logger.LogWarning("Trip cache limit reached for trip {TripId}: {Current}MB / {Max}MB",
+                        trip.Id, limitResult.CurrentSizeMB, limitResult.MaxSizeMB);
+                    return totalBytes;
+                }
+            }
+
+            // Download tile
+            var bytes = await DownloadTileAsync(httpClient, trip.Id, tile, tileCacheDir, cancellationToken);
+            totalBytes += bytes;
+            completed++;
+            remaining.Remove(tile);
+
+            // Update progress (55-95% range for tiles)
+            var percent = 55 + (int)((completed - initialCompleted) * 40.0 / (totalTiles - initialCompleted));
+            RaiseProgress(trip.Id, percent, $"Downloading tiles: {completed}/{totalTiles}");
+
+            // Periodic state save
+            if (completed - lastStateSave >= stateSaveInterval)
+            {
+                await SaveDownloadStateAsync(trip, remaining, completed, totalTiles, totalBytes,
+                    DownloadPauseReason.PeriodicSave);
+                lastStateSave = completed;
+            }
+        }
+
+        return totalBytes;
+    }
+
+    /// <summary>
+    /// Checks if the trip cache limit has been reached.
+    /// </summary>
+    /// <returns>Result indicating current usage and whether limit is reached.</returns>
+    public async Task<CacheLimitCheckResult> CheckTripCacheLimitAsync()
+    {
+        var currentSize = await _databaseService.GetTripCacheSizeAsync();
+        var maxSizeMB = _settingsService.MaxTripCacheSizeMB;
+        var maxSizeBytes = (long)maxSizeMB * 1024 * 1024;
+        var currentSizeMB = currentSize / (1024.0 * 1024.0);
+        var usagePercent = maxSizeBytes > 0 ? (currentSize * 100.0 / maxSizeBytes) : 0;
+
+        return new CacheLimitCheckResult
+        {
+            CurrentSizeBytes = currentSize,
+            CurrentSizeMB = currentSizeMB,
+            MaxSizeMB = maxSizeMB,
+            UsagePercent = usagePercent,
+            IsLimitReached = currentSize >= maxSizeBytes,
+            IsWarningLevel = usagePercent >= 80 && usagePercent < 100
+        };
+    }
+
+    /// <summary>
+    /// Estimates the download size for a trip.
+    /// </summary>
+    /// <param name="tileCount">Number of tiles to download.</param>
+    /// <returns>Estimated size in bytes.</returns>
+    public long EstimateDownloadSize(int tileCount)
+    {
+        return tileCount * EstimatedTileSizeBytes;
+    }
+
+    /// <summary>
+    /// Checks if there's enough cache quota for a download.
+    /// </summary>
+    /// <param name="estimatedBytes">Estimated download size in bytes.</param>
+    /// <returns>Result with quota details.</returns>
+    public async Task<CacheQuotaCheckResult> CheckCacheQuotaAsync(long estimatedBytes)
+    {
+        var limitResult = await CheckTripCacheLimitAsync();
+        var maxSizeBytes = (long)limitResult.MaxSizeMB * 1024 * 1024;
+        var availableBytes = maxSizeBytes - limitResult.CurrentSizeBytes;
+        var estimatedMB = estimatedBytes / (1024.0 * 1024.0);
+        var availableMB = availableBytes / (1024.0 * 1024.0);
+
+        return new CacheQuotaCheckResult
+        {
+            EstimatedSizeBytes = estimatedBytes,
+            EstimatedSizeMB = estimatedMB,
+            AvailableBytes = availableBytes,
+            AvailableMB = availableMB,
+            CurrentUsageMB = limitResult.CurrentSizeMB,
+            MaxSizeMB = limitResult.MaxSizeMB,
+            HasSufficientQuota = availableBytes >= estimatedBytes,
+            WouldExceedBy = estimatedBytes > availableBytes ? (estimatedBytes - availableBytes) / (1024.0 * 1024.0) : 0
+        };
+    }
+
+    /// <summary>
     /// Downloads a single tile with atomic file writes, rate limiting, and network monitoring.
     /// </summary>
     private async Task<long> DownloadTileAsync(
@@ -1309,4 +1679,87 @@ public class DownloadProgressEventArgs : EventArgs
         ProgressPercent = progressPercent;
         Message = message;
     }
+}
+
+/// <summary>
+/// Result of checking the trip cache limit.
+/// </summary>
+public class CacheLimitCheckResult
+{
+    /// <summary>
+    /// Current cache size in bytes.
+    /// </summary>
+    public long CurrentSizeBytes { get; init; }
+
+    /// <summary>
+    /// Current cache size in MB.
+    /// </summary>
+    public double CurrentSizeMB { get; init; }
+
+    /// <summary>
+    /// Maximum allowed cache size in MB.
+    /// </summary>
+    public int MaxSizeMB { get; init; }
+
+    /// <summary>
+    /// Usage percentage (0-100+).
+    /// </summary>
+    public double UsagePercent { get; init; }
+
+    /// <summary>
+    /// True if the cache limit has been reached or exceeded.
+    /// </summary>
+    public bool IsLimitReached { get; init; }
+
+    /// <summary>
+    /// True if usage is at warning level (80-99%).
+    /// </summary>
+    public bool IsWarningLevel { get; init; }
+}
+
+/// <summary>
+/// Result of checking cache quota for a new download.
+/// </summary>
+public class CacheQuotaCheckResult
+{
+    /// <summary>
+    /// Estimated download size in bytes.
+    /// </summary>
+    public long EstimatedSizeBytes { get; init; }
+
+    /// <summary>
+    /// Estimated download size in MB.
+    /// </summary>
+    public double EstimatedSizeMB { get; init; }
+
+    /// <summary>
+    /// Available cache quota in bytes.
+    /// </summary>
+    public long AvailableBytes { get; init; }
+
+    /// <summary>
+    /// Available cache quota in MB.
+    /// </summary>
+    public double AvailableMB { get; init; }
+
+    /// <summary>
+    /// Current cache usage in MB.
+    /// </summary>
+    public double CurrentUsageMB { get; init; }
+
+    /// <summary>
+    /// Maximum cache size in MB.
+    /// </summary>
+    public int MaxSizeMB { get; init; }
+
+    /// <summary>
+    /// True if there's enough quota for the download.
+    /// </summary>
+    public bool HasSufficientQuota { get; init; }
+
+    /// <summary>
+    /// Amount by which the download would exceed the limit (in MB).
+    /// Zero if within quota.
+    /// </summary>
+    public double WouldExceedBy { get; init; }
 }
