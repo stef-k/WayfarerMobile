@@ -1064,6 +1064,119 @@ public class TripDownloadServiceTests : IAsyncLifetime
         await _database.InsertAsync(place);
     }
 
+    private async Task<List<string>> DeleteTripTilesAsync(int tripId)
+    {
+        // Get tile file paths before deleting
+        var tiles = await _database.Table<TripTileEntity>()
+            .Where(t => t.TripId == tripId)
+            .ToListAsync();
+
+        var filePaths = tiles.Select(t => t.FilePath).ToList();
+
+        // Delete tiles from database
+        await _database.ExecuteAsync(
+            "DELETE FROM TripTiles WHERE TripId = ?", tripId);
+
+        return filePaths;
+    }
+
+    #endregion
+
+    #region DeleteTripTilesAsync Tests
+
+    [Fact]
+    public async Task DeleteTripTilesAsync_DeletesTilesOnly_KeepsTripData()
+    {
+        // Arrange - create trip with tiles and places
+        var trip = await InsertCompletedTrip("Test Trip");
+        await InsertTileForTrip(trip.Id, 15, 100, 200);
+        await InsertTileForTrip(trip.Id, 15, 101, 200);
+        await InsertTileForTrip(trip.Id, 15, 100, 201);
+        await InsertOfflinePlace(trip.Id, "Place 1");
+        await InsertOfflinePlace(trip.Id, "Place 2");
+
+        // Verify setup
+        var initialTileCount = await _database.Table<TripTileEntity>()
+            .Where(t => t.TripId == trip.Id).CountAsync();
+        var initialPlaceCount = await _database.Table<OfflinePlaceEntity>()
+            .Where(p => p.TripId == trip.Id).CountAsync();
+        initialTileCount.Should().Be(3);
+        initialPlaceCount.Should().Be(2);
+
+        // Act
+        var deletedPaths = await DeleteTripTilesAsync(trip.Id);
+
+        // Assert - tiles deleted, places preserved
+        var remainingTiles = await _database.Table<TripTileEntity>()
+            .Where(t => t.TripId == trip.Id).CountAsync();
+        var remainingPlaces = await _database.Table<OfflinePlaceEntity>()
+            .Where(p => p.TripId == trip.Id).CountAsync();
+        var tripStillExists = await _database.Table<DownloadedTripEntity>()
+            .FirstOrDefaultAsync(t => t.Id == trip.Id);
+
+        remainingTiles.Should().Be(0, "All tiles should be deleted");
+        remainingPlaces.Should().Be(2, "Places should be preserved");
+        tripStillExists.Should().NotBeNull("Trip entity should be preserved");
+        deletedPaths.Should().HaveCount(3, "Should return paths of deleted tiles");
+    }
+
+    [Fact]
+    public async Task DeleteTripTilesAsync_NoTiles_ReturnsEmptyList()
+    {
+        // Arrange - trip without tiles
+        var trip = await InsertCompletedTrip("Empty Trip");
+        await InsertOfflinePlace(trip.Id, "Place 1");
+
+        // Act
+        var deletedPaths = await DeleteTripTilesAsync(trip.Id);
+
+        // Assert
+        deletedPaths.Should().BeEmpty();
+        var placeCount = await _database.Table<OfflinePlaceEntity>()
+            .Where(p => p.TripId == trip.Id).CountAsync();
+        placeCount.Should().Be(1, "Places should be preserved");
+    }
+
+    [Fact]
+    public async Task DeleteTripTilesAsync_ReturnsFilePaths()
+    {
+        // Arrange
+        var trip = await InsertCompletedTrip("Test Trip");
+        await InsertTileForTrip(trip.Id, 15, 100, 200);
+        await InsertTileForTrip(trip.Id, 16, 200, 400);
+
+        // Act
+        var deletedPaths = await DeleteTripTilesAsync(trip.Id);
+
+        // Assert
+        deletedPaths.Should().HaveCount(2);
+        deletedPaths.Should().AllSatisfy(p => p.Should().Contain(".png"));
+    }
+
+    [Fact]
+    public async Task DeleteTripTilesAsync_OnlyDeletesSpecifiedTrip()
+    {
+        // Arrange - two trips with tiles
+        var trip1 = await InsertCompletedTrip("Trip 1");
+        var trip2 = await InsertCompletedTrip("Trip 2");
+        await InsertTileForTrip(trip1.Id, 15, 100, 200);
+        await InsertTileForTrip(trip1.Id, 15, 101, 200);
+        await InsertTileForTrip(trip2.Id, 15, 200, 300);
+        await InsertTileForTrip(trip2.Id, 15, 201, 300);
+
+        // Act - delete only trip1's tiles
+        await DeleteTripTilesAsync(trip1.Id);
+
+        // Assert
+        var trip1Tiles = await _database.Table<TripTileEntity>()
+            .Where(t => t.TripId == trip1.Id).CountAsync();
+        var trip2Tiles = await _database.Table<TripTileEntity>()
+            .Where(t => t.TripId == trip2.Id).CountAsync();
+
+        trip1Tiles.Should().Be(0, "Trip 1 tiles should be deleted");
+        trip2Tiles.Should().Be(2, "Trip 2 tiles should be preserved");
+    }
+
     #endregion
 }
 
