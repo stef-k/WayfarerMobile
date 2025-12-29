@@ -1670,6 +1670,10 @@ public class TripDownloadService : ITripDownloadService
                 WasLimitReached: false);
         }
 
+        // Clear any stale stop request from previous cancel/pause
+        // This allows re-downloading a trip that was previously cancelled
+        _downloadStopRequests.TryRemove(trip.Id, out _);
+
         // Thread-safe counters for parallel downloads
         long totalBytes = initialBytes;
         int processed = 0; // Tiles processed this session (success or fail)
