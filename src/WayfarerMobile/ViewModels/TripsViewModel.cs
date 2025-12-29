@@ -705,6 +705,10 @@ public partial class TripsViewModel : BaseViewModel
             DownloadStatusMessage = "Download paused";
             await _toastService.ShowAsync("Download paused - can resume later");
         }
+        else
+        {
+            await _toastService.ShowErrorAsync("Could not pause download");
+        }
     }
 
     /// <summary>

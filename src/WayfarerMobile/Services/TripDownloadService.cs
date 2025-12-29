@@ -58,8 +58,9 @@ public class TripDownloadService
     public event EventHandler<CacheLimitEventArgs>? CacheLimitReached;
 
     // Track if warning/critical events have been raised for current download
-    private bool _warningRaised;
-    private bool _criticalRaised;
+    // Using volatile for thread safety in case of future parallel access
+    private volatile bool _warningRaised;
+    private volatile bool _criticalRaised;
 
     /// <summary>
     /// Creates a new instance of TripDownloadService.
@@ -630,8 +631,10 @@ public class TripDownloadService
             return false;
         }
 
-        // Clear pause flag
+        // Clear pause flag and reset warning flags for resumed download
         _downloadPauseStates.TryRemove(tripId, out _);
+        _warningRaised = false;
+        _criticalRaised = false;
 
         // Update state to in progress
         state.Status = DownloadStateStatus.InProgress;
