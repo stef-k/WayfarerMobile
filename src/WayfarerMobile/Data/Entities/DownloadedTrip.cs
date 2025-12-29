@@ -139,6 +139,9 @@ public static class TripDownloadStatus
     /// <summary>Download failed.</summary>
     public const string Failed = "failed";
 
+    /// <summary>Download cancelled by user.</summary>
+    public const string Cancelled = "cancelled";
+
     /// <summary>Metadata only (places without tiles).</summary>
     public const string MetadataOnly = "metadata_only";
 }
