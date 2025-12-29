@@ -10,8 +10,9 @@ namespace WayfarerMobile.Services.TileCache;
 /// Smart tile source coordinator with intelligent priority system.
 /// Priority: Live cache → Trip tiles → Direct download with caching.
 /// Subscribes to LocationBridge to trigger prefetch on location changes.
+/// Includes background retry timer to complete incomplete cache even when app is backgrounded.
 /// </summary>
-public class UnifiedTileCacheService
+public class UnifiedTileCacheService : IDisposable
 {
     #region Fields
 
@@ -35,6 +36,11 @@ public class UnifiedTileCacheService
     private int _lastPrefetchTotal;
     private readonly object _prefetchLock = new();
     private static readonly TimeSpan RetryInterval = TimeSpan.FromSeconds(30);
+
+    // Background retry timer - ensures incomplete cache gets completed even when backgrounded
+    private Timer? _retryTimer;
+    private static readonly TimeSpan RetryTimerInterval = TimeSpan.FromSeconds(60);
+    private bool _disposed;
 
     // Tile statistics for logging
     private readonly object _statsLock = new();
@@ -70,7 +76,11 @@ public class UnifiedTileCacheService
         _liveTileService.PrefetchProgress += OnPrefetchProgress;
         _liveTileService.PrefetchCompleted += OnPrefetchCompleted;
 
-        System.Diagnostics.Debug.WriteLine("[UnifiedTileCacheService] Initialized and subscribed to LocationBridge for prefetch");
+        // Start background retry timer - runs even when app is backgrounded
+        // This ensures incomplete cache gets completed without requiring location events
+        _retryTimer = new Timer(OnRetryTimerTick, null, RetryTimerInterval, RetryTimerInterval);
+
+        System.Diagnostics.Debug.WriteLine("[UnifiedTileCacheService] Initialized with background retry timer");
     }
 
     /// <summary>
@@ -103,6 +113,73 @@ public class UnifiedTileCacheService
                 // Update final downloaded count
                 _lastPrefetchDownloaded = downloadedCount;
             }
+        }
+    }
+
+    /// <summary>
+    /// Background timer callback - retries incomplete cache even without location events.
+    /// This ensures the cache eventually completes when app is backgrounded.
+    /// Uses the most recent location from LocationBridge for accurate prefetch.
+    /// Designed to be non-intrusive and yield to mission-critical background services.
+    /// </summary>
+    private void OnRetryTimerTick(object? state)
+    {
+        try
+        {
+            LocationData? locationToRetry = null;
+
+            lock (_prefetchLock)
+            {
+                // Don't interfere if prefetch is already running
+                if (_isPrefetching)
+                    return;
+
+                // Only retry if cache is incomplete (has been attempted before)
+                if (_lastPrefetchTotal == 0 || _lastPrefetchDownloaded >= _lastPrefetchTotal)
+                    return;
+
+                // Respect retry cooldown
+                var timeSinceLastPrefetch = DateTime.UtcNow - _lastPrefetchTime;
+                if (timeSinceLastPrefetch < RetryInterval)
+                    return;
+
+                // Check network connectivity - don't compete for network when offline
+                if (Connectivity.Current.NetworkAccess != NetworkAccess.Internet)
+                    return;
+
+                // Skip on low battery to preserve power for critical services (location tracking)
+                // Only retry when charging or battery > 20%
+                try
+                {
+                    var batteryLevel = Battery.Default.ChargeLevel;
+                    var batteryState = Battery.Default.State;
+                    if (batteryLevel < 0.2 && batteryState == BatteryState.Discharging)
+                    {
+                        System.Diagnostics.Debug.WriteLine("[UnifiedTileCacheService] Retry skipped - low battery");
+                        return;
+                    }
+                }
+                catch
+                {
+                    // Battery API may not be available, continue anyway
+                }
+
+                // Get the most recent location from the bridge (more accurate than cached _lastPrefetchLocation)
+                locationToRetry = _locationBridge.LastLocation ?? _lastPrefetchLocation;
+
+                if (locationToRetry == null)
+                    return;
+
+                System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Background retry - cache incomplete ({_lastPrefetchDownloaded}/{_lastPrefetchTotal})");
+            }
+
+            // Trigger prefetch outside the lock on low-priority background thread
+            _ = Task.Run(() => PrefetchAroundLocationAsync(locationToRetry));
+        }
+        catch (Exception ex)
+        {
+            // Never let timer callback crash - tile caching is non-critical
+            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Retry timer error (ignored): {ex.Message}");
         }
     }
 
@@ -455,6 +532,44 @@ public class UnifiedTileCacheService
                 case "miss": _cacheMisses++; break;
             }
         }
+    }
+
+    #endregion
+
+    #region IDisposable
+
+    /// <summary>
+    /// Disposes resources including the background retry timer.
+    /// </summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Disposes managed resources.
+    /// </summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+
+        if (disposing)
+        {
+            // Stop and dispose the retry timer
+            _retryTimer?.Dispose();
+            _retryTimer = null;
+
+            // Unsubscribe from events
+            _locationBridge.LocationReceived -= OnLocationReceived;
+            _liveTileService.PrefetchProgress -= OnPrefetchProgress;
+            _liveTileService.PrefetchCompleted -= OnPrefetchCompleted;
+
+            System.Diagnostics.Debug.WriteLine("[UnifiedTileCacheService] Disposed");
+        }
+
+        _disposed = true;
     }
 
     #endregion

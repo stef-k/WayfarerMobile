@@ -31,13 +31,24 @@ public static class TileCacheConstants
 
     /// <summary>
     /// Estimated tile size in bytes for download calculations.
-    /// Uses a conservative estimate weighted toward dense urban areas:
-    /// - Dense urban: 50-80 KB
-    /// - Suburban: 20-35 KB
-    /// - Rural: 5-15 KB
-    /// Value of 40 KB provides realistic worst-case estimates for storage planning.
+    ///
+    /// For zoom 8-17, tile counts grow exponentially with zoom level:
+    /// - z17 alone is ~75% of all tiles in z8-z17 range
+    /// - z16+z17 together are ~94% of all tiles
+    ///
+    /// This means the "overall average" is dominated by z16-z17 tile sizes.
+    ///
+    /// Typical OSM-style PNG tile sizes (256×256):
+    /// - Dense urban z16-z17: 70-90 KB
+    /// - Suburban: 20-40 KB
+    /// - Rural/ocean: 5-15 KB
+    /// - Global average (OSM ops): ~18 KB (includes all empty ocean/rural)
+    ///
+    /// Since trip downloads are typically urban/suburban areas, and z16-z17
+    /// dominate the tile count, 80 KB provides a realistic estimate that
+    /// won't under-promise storage requirements to users.
     /// </summary>
-    public const long EstimatedTileSizeBytes = 40000; // ~40KB (conservative, weighted toward urban)
+    public const long EstimatedTileSizeBytes = 80000; // ~80KB (realistic urban average, z16-z17 weighted)
 
     /// <summary>
     /// Default tile request timeout in milliseconds.

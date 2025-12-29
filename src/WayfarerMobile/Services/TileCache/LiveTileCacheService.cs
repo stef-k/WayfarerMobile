@@ -213,7 +213,7 @@ public class LiveTileCacheService
     }
 
     /// <summary>
-    /// Downloads a tile for prefetch with semaphore throttling.
+    /// Downloads a tile for prefetch with semaphore throttling and rate limiting.
     /// Bypasses the class-level _downloadLock to avoid double blocking.
     /// </summary>
     /// <returns>True if tile was successfully downloaded, false otherwise.</returns>
@@ -226,6 +226,11 @@ public class LiveTileCacheService
             var filePath = GetTileFilePath(zoom, x, y);
             if (File.Exists(filePath))
                 return false; // Already cached, not a new download
+
+            // Rate limit to respect tile servers (uses same setting as trip downloads)
+            var delayMs = _settingsService.MinTileRequestDelayMs;
+            if (delayMs > 0)
+                await Task.Delay(delayMs);
 
             // Download directly without going through GetOrDownloadTileAsync
             // (which has its own _downloadLock causing double blocking)

@@ -178,6 +178,22 @@
                                         OnColor="{StaticResource Primary}" />
                         </Grid>
 
+                        <!-- Voice Volume Slider (only when audio enabled) -->
+                        <VerticalStackLayout Spacing="8" IsVisible="{Binding NavigationAudioEnabled}">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Label Text="Voice Volume"
+                                       FontSize="14"
+                                       Grid.Column="0" />
+                                <Label Text="{Binding NavigationVolumePercent, StringFormat='{0}%'}"
+                                       FontSize="14"
+                                       FontAttributes="Bold"
+                                       Grid.Column="1" />
+                            </Grid>
+                            <Slider Minimum="0"
+                                    Maximum="1"
+                                    Value="{Binding NavigationVolume}" />
+                        </VerticalStackLayout>
+
                         <BoxView HeightRequest="1"
                                  Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
 
@@ -432,6 +448,99 @@
                             <Label Text="Maximum storage for downloaded trip tiles. These are preserved longer for offline trip navigation."
                                    FontSize="11"
                                    TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        </VerticalStackLayout>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+
+                        <!-- Prefetch Distance -->
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="Prefetch Distance"
+                                   FontSize="14" />
+                            <Grid ColumnDefinitions="*,80">
+                                <Slider Minimum="100"
+                                        Maximum="2000"
+                                        Value="{Binding PrefetchDistanceThresholdMeters}"
+                                        Grid.Column="0" />
+                                <Label Text="{Binding PrefetchDistanceThresholdMeters, StringFormat='{0} m'}"
+                                       FontSize="14"
+                                       FontAttributes="Bold"
+                                       HorizontalOptions="End"
+                                       VerticalOptions="Center"
+                                       Grid.Column="1" />
+                            </Grid>
+                            <Label Text="How far you must move before fetching new tiles. Higher values reduce data usage but may result in gaps."
+                                   FontSize="11"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        </VerticalStackLayout>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+
+                        <!-- Parallel Downloads -->
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="Parallel Downloads"
+                                   FontSize="14" />
+                            <Grid ColumnDefinitions="*,40">
+                                <Slider Minimum="1"
+                                        Maximum="4"
+                                        Value="{Binding MaxConcurrentTileDownloads}"
+                                        Grid.Column="0" />
+                                <Label Text="{Binding MaxConcurrentTileDownloads}"
+                                       FontSize="14"
+                                       FontAttributes="Bold"
+                                       HorizontalOptions="End"
+                                       VerticalOptions="Center"
+                                       Grid.Column="1" />
+                            </Grid>
+                            <Label Text="Number of simultaneous tile downloads. Higher values are faster but may be rate-limited by tile servers."
+                                   FontSize="11"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        </VerticalStackLayout>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+
+                        <!-- Request Delay -->
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="Request Delay"
+                                   FontSize="14" />
+                            <Grid ColumnDefinitions="*,80">
+                                <Slider Minimum="50"
+                                        Maximum="1000"
+                                        Value="{Binding MinTileRequestDelayMs}"
+                                        Grid.Column="0" />
+                                <Label Text="{Binding MinTileRequestDelayMs, StringFormat='{0} ms'}"
+                                       FontSize="14"
+                                       FontAttributes="Bold"
+                                       HorizontalOptions="End"
+                                       VerticalOptions="Center"
+                                       Grid.Column="1" />
+                            </Grid>
+                            <Label Text="Minimum delay between tile requests. Higher values are more polite to tile servers but slower."
+                                   FontSize="11"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        </VerticalStackLayout>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+
+                        <!-- Tile Server URL -->
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="Tile Server URL"
+                                   FontSize="14" />
+                            <Entry Text="{Binding TileServerUrl}"
+                                   Placeholder="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                   Keyboard="Url"
+                                   FontSize="12" />
+                            <Label Text="Custom tile server URL. Must contain {z}, {x}, {y} placeholders. Leave default for OpenStreetMap."
+                                   FontSize="11"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            <Button Text="Reset to Default"
+                                    Command="{Binding ResetTileServerUrlCommand}"
+                                    IsVisible="{Binding IsDefaultTileServer, Converter={StaticResource InvertedBoolConverter}}"
+                                    Style="{StaticResource DarkButton}"
+                                    HeightRequest="36" />
                         </VerticalStackLayout>
                     </VerticalStackLayout>
                 </sfExpander:SfExpander.Content>
