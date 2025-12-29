@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Data.Entities;
 using WayfarerMobile.Services;
 using WayfarerMobile.Shared.Collections;
 
@@ -1172,13 +1173,30 @@ public partial class TripsViewModel : BaseViewModel
 
                 // Set entity FIRST so StatsText has access to counts when DownloadState triggers notification
                 item.DownloadedEntity = result;
-                item.DownloadState = includeTiles ? TripDownloadState.Complete : TripDownloadState.MetadataOnly;
-                downloadCompleted = true;
 
-                // Move item to the correct group based on new state
-                MoveItemToCorrectGroup(item);
+                // Check if download actually completed or was paused/interrupted
+                // result.Status will be "downloading" if paused, "complete" if finished
+                if (result.Status == TripDownloadStatus.Complete ||
+                    result.Status == TripDownloadStatus.MetadataOnly)
+                {
+                    item.DownloadState = result.Status == TripDownloadStatus.Complete
+                        ? TripDownloadState.Complete
+                        : TripDownloadState.MetadataOnly;
+                    downloadCompleted = true;
 
-                await _toastService.ShowSuccessAsync($"'{item.Name}' downloaded");
+                    // Move item to the correct group based on new state
+                    MoveItemToCorrectGroup(item);
+
+                    await _toastService.ShowSuccessAsync($"'{item.Name}' downloaded");
+                }
+                else
+                {
+                    // Download was paused/interrupted - keep downloading state
+                    // The OnDownloadPaused event handler will update UI appropriately
+                    item.DownloadState = TripDownloadState.Downloading;
+                    _logger.LogInformation("Download paused/interrupted for trip {TripId}, status: {Status}",
+                        result.Id, result.Status);
+                }
             }
             else if (!_downloadCts.IsCancellationRequested)
             {
