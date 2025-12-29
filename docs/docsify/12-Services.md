@@ -41,7 +41,7 @@ This document provides detailed documentation for the key services in WayfarerMo
 | `TimelineExportService` | CSV/GeoJSON export | Date range filter |
 | `TimelineImportService` | CSV/GeoJSON import | Duplicate detection |
 | `GroupsService` | SSE live location sharing | Real-time updates |
-| `TileDownloadService` | Trip tile prefetch | Zoom 8-17 |
+| `TripDownloadService` | Trip download with pause/resume | Zoom 8-17, cache limits |
 
 ---
 
@@ -552,6 +552,84 @@ public class GroupsViewModel : ObservableObject
     }
 }
 ```
+
+---
+
+## TripDownloadService
+
+**Source**: `src/WayfarerMobile/Services/TripDownloadService.cs`
+
+Manages trip downloads with pause/resume support and cache limit enforcement.
+
+### Features
+
+- **Two download modes**: Metadata-only or full offline maps
+- **Pause/Resume**: Downloads can be paused and resumed, even after app restart
+- **Cache limits**: Automatic pause when trip cache limit is reached
+- **Progress tracking**: Real-time progress with tile counts and bytes
+- **Concurrent downloads**: Parallel tile fetching with configurable concurrency
+
+### Download States
+
+| Status | Description |
+|--------|-------------|
+| `pending` | Queued for download |
+| `downloading` | Actively downloading |
+| `complete` | All tiles downloaded |
+| `metadata_only` | Trip data without tiles |
+| `failed` | Download failed |
+| `cancelled` | User cancelled |
+
+### Events
+
+| Event | When Raised |
+|-------|-------------|
+| `ProgressChanged` | Tile download progress update |
+| `CacheWarning` | Cache usage at 80% |
+| `CacheCritical` | Cache usage at 90% |
+| `CacheLimitReached` | Cache full, download paused |
+| `DownloadCompleted` | Download finished successfully |
+| `DownloadFailed` | Download failed with error |
+| `DownloadPaused` | Download paused (user or limit) |
+
+### Pause Reasons
+
+| Reason | Description | Can Resume |
+|--------|-------------|------------|
+| `UserRequest` | User tapped pause | Yes |
+| `UserCancel` | User cancelled | No |
+| `NetworkLost` | Connection lost | Yes |
+| `StorageLow` | Device storage low | Yes |
+| `CacheLimitReached` | Trip cache full | Yes (after freeing space) |
+
+### Key Methods
+
+```csharp
+// Download trip (metadata + optionally tiles)
+Task<DownloadedTripEntity?> DownloadTripAsync(TripSummary trip, CancellationToken ct);
+
+// Pause/Resume/Cancel
+Task<bool> PauseDownloadAsync(int tripId);
+Task<bool> ResumeDownloadAsync(int tripId, CancellationToken ct);
+Task<bool> CancelDownloadAsync(int tripId, bool cleanup);
+
+// Delete operations
+Task DeleteTripAsync(Guid tripServerId);           // Remove everything
+Task<int> DeleteTripTilesAsync(Guid tripServerId); // Remove tiles only
+
+// Cache management
+Task<CacheLimitCheckResult> CheckTripCacheLimitAsync();
+Task<CacheQuotaCheckResult> CheckCacheQuotaForTripAsync(BoundingBox? bbox);
+```
+
+### Tile Download Configuration
+
+| Setting | Value |
+|---------|-------|
+| Zoom levels | 8-17 |
+| Concurrent downloads | 4 tiles |
+| Checkpoint interval | Every 50 tiles |
+| Estimated tile size | 40 KB (urban areas) |
 
 ---
 

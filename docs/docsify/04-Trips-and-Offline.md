@@ -43,19 +43,42 @@ Each trip card shows:
 
 ## Downloading a Trip
 
-Downloading a trip makes it available offline, including:
-- All place markers and details
-- Route segments between places
-- Map tiles at multiple zoom levels
+Downloading a trip makes it available offline. You have two download options:
+
+### Download Options
+
+| Option | What's Included | Best For |
+|--------|-----------------|----------|
+| **Download** | Places, segments, trip metadata | Quick access, online use |
+| **+Offline Maps** | Everything above + map tiles (zoom 8-17) | Full offline use |
 
 ### Download Process
 
 1. Find the trip in your list
-2. Tap the **Download** button
+2. Choose your download option:
+   - **Download**: Quick download of trip data only
+   - **+Offline Maps**: Full download including map tiles
 3. Wait for the download to complete:
    - Progress bar shows completion percentage
-   - Current tile count displayed
+   - Current tile count displayed (for offline maps)
    - Download size shown
+
+### Pause and Resume
+
+Downloads can be paused and resumed:
+- **Pause**: Tap the progress area during download
+- **Resume**: Tap the paused trip to continue
+- **Cancel**: Long-press or use the cancel button
+
+Paused downloads preserve progress and can be resumed later, even after restarting the app.
+
+### Cache Limit Behavior
+
+When the trip cache limit is reached during download:
+- Download automatically pauses
+- You're notified of the limit
+- Free up space by removing other trips or their offline maps
+- Resume the download when space is available
 
 ### Download Considerations
 
@@ -75,14 +98,14 @@ Trip: Tokyo 2024
 ├── Metadata: 5 KB
 ├── Places: 12 places, 50 KB
 ├── Segments: 8 routes with geometry, 200 KB
-└── Map Tiles: 3,500 tiles across zoom levels 10-17
+└── Map Tiles: 3,500 tiles across zoom levels 8-17
     └── Total: ~450 MB
 ```
 
 ### Tile Coverage
 
 Map tiles are downloaded for:
-- **Zoom levels 10-17**: Overview to street level
+- **Zoom levels 8-17**: Regional overview to street level
 - **Bounding box**: Area covering all places + buffer
 - **High-detail areas**: Extra detail around each place
 
@@ -180,19 +203,18 @@ View storage in **Settings** > **Cache**:
 - Trip cache size: Total space used
 - Per-trip sizes in trip list
 
-### Deleting a Trip
+### Removing Trip Data
 
-1. Go to the trips list
-2. Tap the trip options menu
-3. Select **Delete**
-4. Confirm deletion
+You have two options for removing downloaded trip data:
 
-Deleting removes:
-- Cached map tiles
-- Trip metadata
-- Route geometry
+| Option | What's Removed | What's Kept |
+|--------|----------------|-------------|
+| **Remove Maps** | Cached map tiles only | Trip metadata, places, segments |
+| **Remove All** | Everything | Nothing (trip removed from device) |
 
-Your data on the server is not affected.
+**Remove Maps** is useful when you need to free up storage but want to keep the trip for online use or to re-download tiles later.
+
+**Remove All** completely removes the trip from your device. Your data on the server is not affected.
 
 ### Cache Limits
 
@@ -204,8 +226,10 @@ Configure limits in **Settings** > **Cache**:
 | Max live cache | 500 MB | 100-2000 MB |
 
 When limits are reached:
-- Live cache: Old tiles deleted (LRU)
-- Trip cache: Must manually delete trips
+- **Live cache**: Old tiles deleted automatically (LRU eviction)
+- **Trip cache**: Download pauses automatically, can resume after freeing space
+
+You'll receive warnings at 80% and 90% cache usage during downloads.
 
 ---
 
