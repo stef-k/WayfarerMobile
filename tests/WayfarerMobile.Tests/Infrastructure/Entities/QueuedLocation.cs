@@ -94,6 +94,17 @@ public class QueuedLocation
     public bool IsServerRejected { get; set; }
 
     /// <summary>
+    /// Gets or sets whether this location was filtered by client-side threshold check.
+    /// Used by queue drain service when location doesn't meet time AND distance thresholds.
+    /// </summary>
+    public bool IsFiltered { get; set; }
+
+    /// <summary>
+    /// Gets or sets the reason for filtering.
+    /// </summary>
+    public string? FilterReason { get; set; }
+
+    /// <summary>
     /// Gets or sets when this record was created.
     /// </summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

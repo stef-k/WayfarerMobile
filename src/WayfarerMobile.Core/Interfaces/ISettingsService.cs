@@ -226,6 +226,49 @@ public interface ISettingsService
 
     #endregion
 
+    #region Queue Sync Reference Point
+
+    /// <summary>
+    /// Gets or sets the latitude of the last successfully synced location.
+    /// Used as reference point for threshold calculations in queue drain.
+    /// </summary>
+    double? LastSyncedLatitude { get; set; }
+
+    /// <summary>
+    /// Gets or sets the longitude of the last successfully synced location.
+    /// Used as reference point for threshold calculations in queue drain.
+    /// </summary>
+    double? LastSyncedLongitude { get; set; }
+
+    /// <summary>
+    /// Gets or sets the timestamp of the last successfully synced location.
+    /// Used as reference point for threshold calculations in queue drain.
+    /// </summary>
+    DateTime? LastSyncedTimestamp { get; set; }
+
+    /// <summary>
+    /// Checks if a valid sync reference point exists.
+    /// Returns false on first sync (no previous reference).
+    /// </summary>
+    bool HasValidSyncReference();
+
+    /// <summary>
+    /// Updates the sync reference point after a successful sync.
+    /// Called only when server accepts a location.
+    /// </summary>
+    /// <param name="latitude">Latitude of synced location.</param>
+    /// <param name="longitude">Longitude of synced location.</param>
+    /// <param name="timestampUtc">Timestamp of synced location (must be DateTimeKind.Utc).</param>
+    void UpdateLastSyncedLocation(double latitude, double longitude, DateTime timestampUtc);
+
+    /// <summary>
+    /// Clears the sync reference point.
+    /// Called on logout or when reference is stale (>30 days).
+    /// </summary>
+    void ClearSyncReference();
+
+    #endregion
+
     /// <summary>
     /// Clears all settings (for logout/reset).
     /// </summary>

@@ -196,6 +196,11 @@ public partial class App : Application
             syncService?.Start();
             System.Diagnostics.Debug.WriteLine("[App] Background sync service started");
 
+            // Start queue drain service (offline queue sync via check-in endpoint)
+            var queueDrainService = _serviceProvider.GetService<QueueDrainService>();
+            _ = queueDrainService?.StartAsync();
+            System.Diagnostics.Debug.WriteLine("[App] Queue drain service started");
+
             // Initialize local timeline storage service (subscribes to location events)
             var timelineStorageService = _serviceProvider.GetService<LocalTimelineStorageService>();
             _ = timelineStorageService?.InitializeAsync();

@@ -126,7 +126,7 @@ public class DatabaseService : IAsyncDisposable
 
     /// <summary>
     /// Gets all pending locations for synchronization.
-    /// Excludes server rejected locations (they should not be retried).
+    /// Excludes server rejected and filtered locations (they should not be retried).
     /// </summary>
     /// <param name="limit">Maximum number of locations to retrieve.</param>
     /// <returns>List of pending locations.</returns>
@@ -137,7 +137,8 @@ public class DatabaseService : IAsyncDisposable
         return await _database!.Table<QueuedLocation>()
             .Where(l => l.SyncStatus == SyncStatus.Pending &&
                        l.SyncAttempts < MaxSyncAttempts &&
-                       !l.IsServerRejected)
+                       !l.IsServerRejected &&
+                       !l.IsFiltered)
             .OrderBy(l => l.Timestamp)
             .Take(limit)
             .ToListAsync();
@@ -226,6 +227,7 @@ public class DatabaseService : IAsyncDisposable
     /// <summary>
     /// Marks a location as server rejected (threshold validation, etc.).
     /// Server rejected locations should not be retried - different from technical failures.
+    /// Uses single UPDATE statement to avoid read-modify-write race conditions.
     /// Lesson learned: Use dedicated field instead of storing metadata in error messages.
     /// </summary>
     /// <param name="id">The location ID.</param>
@@ -234,21 +236,101 @@ public class DatabaseService : IAsyncDisposable
     {
         await EnsureInitializedAsync();
 
-        var location = await _database!.Table<QueuedLocation>()
-            .FirstOrDefaultAsync(l => l.Id == id);
+        await _database!.ExecuteAsync(
+            @"UPDATE QueuedLocations
+              SET IsServerRejected = 1,
+                  SyncStatus = ?,
+                  LastError = ?,
+                  LastSyncAttempt = ?
+              WHERE Id = ?",
+            (int)SyncStatus.Synced, reason, DateTime.UtcNow, id);
+    }
 
-        if (location != null)
-        {
-            location.IsServerRejected = true;
-            location.SyncStatus = SyncStatus.Synced; // Mark as "done" - don't retry
-            location.LastError = reason;
-            location.LastSyncAttempt = DateTime.UtcNow;
-            await _database.UpdateAsync(location);
-        }
+    /// <summary>
+    /// Marks a location as currently syncing.
+    /// Used to prevent duplicate processing when lock is released.
+    /// </summary>
+    /// <param name="id">The location ID.</param>
+    public async Task MarkLocationSyncingAsync(int id)
+    {
+        await EnsureInitializedAsync();
+
+        await _database!.ExecuteAsync(
+            "UPDATE QueuedLocations SET SyncStatus = ? WHERE Id = ?",
+            (int)SyncStatus.Syncing, id);
+    }
+
+    /// <summary>
+    /// Resets a location back to pending status.
+    /// Used when sync fails with transient error or on service shutdown.
+    /// Also increments retry count to track attempts.
+    /// </summary>
+    /// <param name="id">The location ID.</param>
+    public async Task ResetLocationToPendingAsync(int id)
+    {
+        await EnsureInitializedAsync();
+
+        await _database!.ExecuteAsync(
+            @"UPDATE QueuedLocations
+              SET SyncStatus = ?,
+                  SyncAttempts = SyncAttempts + 1,
+                  LastSyncAttempt = ?
+              WHERE Id = ?",
+            (int)SyncStatus.Pending, DateTime.UtcNow, id);
+    }
+
+    /// <summary>
+    /// Marks a location as filtered by client-side threshold check.
+    /// Filtered locations didn't meet time AND distance thresholds and won't be sent to server.
+    /// Used by queue drain service for offline queue processing.
+    /// </summary>
+    /// <param name="id">The location ID.</param>
+    /// <param name="reason">The filter reason (e.g., "Distance: 50m, threshold is 100m").</param>
+    public async Task MarkLocationFilteredAsync(int id, string reason)
+    {
+        await EnsureInitializedAsync();
+
+        await _database!.ExecuteAsync(
+            "UPDATE QueuedLocations SET IsFiltered = 1, FilterReason = ?, SyncStatus = ?, LastSyncAttempt = ? WHERE Id = ?",
+            reason, (int)SyncStatus.Synced, DateTime.UtcNow, id);
+    }
+
+    /// <summary>
+    /// Gets the oldest pending location for queue drain processing.
+    /// Excludes server rejected, filtered, and max-attempt locations.
+    /// Returns locations ordered by timestamp (oldest first) for chronological processing.
+    /// </summary>
+    /// <returns>The oldest pending location or null if queue is empty.</returns>
+    public async Task<QueuedLocation?> GetOldestPendingForDrainAsync()
+    {
+        await EnsureInitializedAsync();
+
+        return await _database!.Table<QueuedLocation>()
+            .Where(l => l.SyncStatus == SyncStatus.Pending &&
+                       l.SyncAttempts < MaxSyncAttempts &&
+                       !l.IsServerRejected &&
+                       !l.IsFiltered)
+            .OrderBy(l => l.Timestamp)
+            .FirstOrDefaultAsync();
+    }
+
+    /// <summary>
+    /// Resets locations stuck in "Syncing" status back to "Pending".
+    /// Called on app startup to recover from crashes during sync.
+    /// </summary>
+    /// <returns>Number of locations reset.</returns>
+    public async Task<int> ResetStuckLocationsAsync()
+    {
+        await EnsureInitializedAsync();
+
+        return await _database!.ExecuteAsync(
+            "UPDATE QueuedLocations SET SyncStatus = ? WHERE SyncStatus = ?",
+            (int)SyncStatus.Pending, (int)SyncStatus.Syncing);
     }
 
     /// <summary>
     /// Removes synced locations older than the specified days.
+    /// Also purges filtered, rejected, and failed locations with appropriate retention periods.
     /// </summary>
     /// <param name="daysOld">Number of days old.</param>
     public async Task<int> PurgeSyncedLocationsAsync(int daysOld = 7)
@@ -266,6 +348,12 @@ public class DatabaseService : IAsyncDisposable
             "DELETE FROM QueuedLocations WHERE IsServerRejected = 1 AND CreatedAt < ?",
             rejectedCutoff);
 
+        // Purge filtered locations older than 2 days (same as rejected - they're processed)
+        var filteredCutoff = DateTime.UtcNow.AddDays(-2);
+        var deletedFiltered = await _database.ExecuteAsync(
+            "DELETE FROM QueuedLocations WHERE IsFiltered = 1 AND CreatedAt < ?",
+            filteredCutoff);
+
         // Safety valve: purge very old pending locations (30+ days offline is unlikely to sync)
         var pendingCutoff = DateTime.UtcNow.AddDays(-30);
         var deletedOldPending = await _database.ExecuteAsync(
@@ -278,7 +366,7 @@ public class DatabaseService : IAsyncDisposable
             "DELETE FROM QueuedLocations WHERE SyncStatus = ? AND CreatedAt < ?",
             (int)SyncStatus.Failed, failedCutoff);
 
-        return deletedSynced + deletedRejected + deletedOldPending + deletedFailed;
+        return deletedSynced + deletedRejected + deletedFiltered + deletedOldPending + deletedFailed;
     }
 
     /// <summary>

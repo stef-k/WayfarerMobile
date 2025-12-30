@@ -163,11 +163,15 @@ public static class MauiProgram
         services.AddSingleton<DatabaseService>();
         services.AddSingleton<ISettingsService, SettingsService>();
 
+        // MAUI Essentials Services (for DI injection)
+        services.AddSingleton<IConnectivity>(Connectivity.Current);
+
         // API and Sync Services (some needed by tile cache)
         services.AddSingleton<ApiClient>();
         services.AddSingleton<IApiClient>(sp => sp.GetRequiredService<ApiClient>());
         services.AddSingleton<IVisitApiClient>(sp => sp.GetRequiredService<ApiClient>());
         services.AddSingleton<LocationSyncService>();
+        services.AddSingleton<QueueDrainService>(); // Drains offline queue via check-in endpoint
         services.AddSingleton<ITripSyncService, TripSyncService>();
         services.AddSingleton<ITimelineSyncService, TimelineSyncService>();
         services.AddSingleton<IActivitySyncService, ActivitySyncService>();
