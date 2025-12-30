@@ -217,12 +217,7 @@ public interface ISettingsService
 
     #endregion
 
-    #region User Info
-
-    /// <summary>
-    /// Gets or sets the user email.
-    /// </summary>
-    string? UserEmail { get; set; }
+    #region Sync
 
     /// <summary>
     /// Gets or sets the last sync time.

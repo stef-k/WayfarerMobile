@@ -253,12 +253,6 @@ public partial class SettingsViewModel : BaseViewModel
     private bool _autoPauseTrackingOnCriticalBattery;
 
     /// <summary>
-    /// Gets or sets the user email.
-    /// </summary>
-    [ObservableProperty]
-    private string _userEmail = string.Empty;
-
-    /// <summary>
     /// Gets whether the user is logged in.
     /// </summary>
     [ObservableProperty]
@@ -444,7 +438,6 @@ public partial class SettingsViewModel : BaseViewModel
         PrefetchDistanceThresholdMeters = _settingsService.PrefetchDistanceThresholdMeters;
         TileServerUrl = _settingsService.TileServerUrl;
 
-        UserEmail = _settingsService.UserEmail ?? string.Empty;
         IsLoggedIn = _settingsService.IsConfigured;
 
         var lastSync = _settingsService.LastSyncTime;
@@ -726,7 +719,6 @@ public partial class SettingsViewModel : BaseViewModel
         {
             _settingsService.ClearAuth();
             IsLoggedIn = false;
-            UserEmail = string.Empty;
             await Shell.Current.DisplayAlertAsync("Logged Out", "You have been logged out.", "OK");
         }
     }
