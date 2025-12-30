@@ -1630,6 +1630,7 @@ public partial class GroupsViewModel : BaseViewModel
             _groupSseClient.InviteCreated -= OnInviteCreated;
             _groupSseClient.Connected -= OnSseConnected;
             _groupSseClient.Reconnecting -= OnSseReconnecting;
+            _groupSseClient.PermanentError -= OnSsePermanentError;
         }
 
         // Trigger cancellation but don't wait for it (fire and forget)
@@ -1694,6 +1695,7 @@ public partial class GroupsViewModel : BaseViewModel
         _groupSseClient.InviteCreated += OnInviteCreated;
         _groupSseClient.Connected += OnSseConnected;
         _groupSseClient.Reconnecting += OnSseReconnecting;
+        _groupSseClient.PermanentError += OnSsePermanentError;
 
         _logger.LogInformation("Starting SSE subscription for group {GroupId}", groupId);
 
@@ -1743,6 +1745,7 @@ public partial class GroupsViewModel : BaseViewModel
             oldGroupClient.InviteCreated -= OnInviteCreated;
             oldGroupClient.Connected -= OnSseConnected;
             oldGroupClient.Reconnecting -= OnSseReconnecting;
+            oldGroupClient.PermanentError -= OnSsePermanentError;
         }
 
         // Dispose in background to avoid blocking main thread
@@ -2033,6 +2036,21 @@ public partial class GroupsViewModel : BaseViewModel
     private void OnSseReconnecting(object? sender, SseReconnectEventArgs e)
     {
         _logger.LogInformation("SSE reconnecting (attempt {Attempt}, delay {DelayMs}ms)", e.Attempt, e.DelayMs);
+    }
+
+    /// <summary>
+    /// Handles SSE permanent error event (401/403/404).
+    /// Stops retrying since these errors won't resolve by retrying.
+    /// </summary>
+    private void OnSsePermanentError(object? sender, SsePermanentErrorEventArgs e)
+    {
+        _logger.LogWarning(
+            "SSE permanent error (stopping): {StatusCode} - {Message}",
+            e.StatusCode, e.Message);
+
+        // Don't try to reconnect - the error is permanent
+        // User will need to re-authenticate or check server configuration
+        AbandonSseClients();
     }
 
     #endregion

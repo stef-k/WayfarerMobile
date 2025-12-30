@@ -60,6 +60,13 @@ public interface ISseClient : IDisposable
     /// </summary>
     event EventHandler<SseReconnectEventArgs>? Reconnecting;
 
+    /// <summary>
+    /// Fired when a permanent error occurs that should not trigger reconnection.
+    /// Examples: 401 Unauthorized, 403 Forbidden, 404 Not Found.
+    /// Subscribers should stop the subscription when this event fires.
+    /// </summary>
+    event EventHandler<SsePermanentErrorEventArgs>? PermanentError;
+
     #endregion
 
     #region Methods

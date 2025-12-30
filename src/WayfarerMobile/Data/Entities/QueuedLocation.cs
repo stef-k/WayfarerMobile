@@ -84,26 +84,17 @@ public class QueuedLocation
     public string? LastError { get; set; }
 
     /// <summary>
-    /// Gets or sets whether the server explicitly rejected this location.
-    /// When true, this location should not be retried (unlike technical failures).
-    /// Lesson learned: Use dedicated field instead of storing metadata in notes/errors.
+    /// Gets or sets whether this location was rejected (by client threshold check or server).
+    /// When true, this location should not be retried.
     /// </summary>
     [Indexed]
-    public bool IsServerRejected { get; set; }
+    public bool IsRejected { get; set; }
 
     /// <summary>
-    /// Gets or sets whether this location was filtered by client-side threshold check.
-    /// Used by queue drain service when location doesn't meet time AND distance thresholds.
-    /// Filtered locations are not sent to server but are kept for cleanup.
+    /// Gets or sets the reason for rejection.
+    /// Examples: "Client: Time 2.3min below 5min threshold", "Server: HTTP 400 Bad Request"
     /// </summary>
-    [Indexed]
-    public bool IsFiltered { get; set; }
-
-    /// <summary>
-    /// Gets or sets the reason for filtering (e.g., "Distance: 50m, threshold is 100m").
-    /// Populated when IsFiltered is true for debugging/diagnostics.
-    /// </summary>
-    public string? FilterReason { get; set; }
+    public string? RejectionReason { get; set; }
 
     /// <summary>
     /// Gets or sets when this record was created.
@@ -111,13 +102,9 @@ public class QueuedLocation
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// Gets whether this location can be synced (not rejected, not filtered, under max attempts).
+    /// Gets whether this location can be synced (pending and not rejected).
+    /// Valid locations retry until 300-day purge regardless of attempt count.
     /// </summary>
     [Ignore]
-    public bool CanSync => SyncStatus == SyncStatus.Pending && !IsServerRejected && !IsFiltered && SyncAttempts < MaxSyncAttempts;
-
-    /// <summary>
-    /// Maximum sync attempts before giving up.
-    /// </summary>
-    public const int MaxSyncAttempts = 5;
+    public bool CanSync => SyncStatus == SyncStatus.Pending && !IsRejected;
 }

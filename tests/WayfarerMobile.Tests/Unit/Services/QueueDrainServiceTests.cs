@@ -11,8 +11,11 @@ namespace WayfarerMobile.Tests.Unit.Services;
 /// </remarks>
 public class QueueDrainServiceTests
 {
-    #region Constants (mirroring QueueDrainService)
+    #region Constants
 
+    // Note: Production thresholds come from ISettingsService (defaults: 5min, 15m).
+    // Tests use 100m for easier distance calculations in test scenarios.
+    // The ThresholdFilter helper mirrors the QueueDrainService.ShouldSyncLocation logic.
     private const int TimeThresholdMinutes = 5;
     private const int DistanceThresholdMeters = 100;
     private const int MinSecondsBetweenDrains = 65;

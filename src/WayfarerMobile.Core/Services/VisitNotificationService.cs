@@ -134,6 +134,14 @@ public class VisitNotificationService : IVisitNotificationService
             return;
         }
 
+        // Check if app is configured (API token available)
+        // This prevents 401 errors when SSE starts before settings are loaded
+        if (!_settings.IsConfigured)
+        {
+            _logger.LogInformation("Visit SSE skipped: app not configured (no API token)");
+            return;
+        }
+
         // Subscribe to location sync events for background polling
         // This runs even if SSE fails - provides fallback when app is backgrounded
         SubscribeToSyncEvents();
@@ -152,6 +160,7 @@ public class VisitNotificationService : IVisitNotificationService
             _sseClient.VisitStarted += OnVisitStarted;
             _sseClient.Connected += OnConnected;
             _sseClient.Reconnecting += OnReconnecting;
+            _sseClient.PermanentError += OnPermanentError;
 
             // Create cancellation token for subscription
             _subscriptionCts = new CancellationTokenSource();
@@ -532,6 +541,7 @@ public class VisitNotificationService : IVisitNotificationService
             _sseClient.VisitStarted -= OnVisitStarted;
             _sseClient.Connected -= OnConnected;
             _sseClient.Reconnecting -= OnReconnecting;
+            _sseClient.PermanentError -= OnPermanentError;
             _sseClient.Stop();
             _sseClient.Dispose();
             _sseClient = null;
@@ -555,6 +565,17 @@ public class VisitNotificationService : IVisitNotificationService
         _logger.LogInformation(
             "Visit SSE reconnecting: attempt {Attempt}, delay {Delay}ms",
             e.Attempt, e.DelayMs);
+    }
+
+    private void OnPermanentError(object? sender, SsePermanentErrorEventArgs e)
+    {
+        _logger.LogWarning(
+            "Visit SSE permanent error (stopping): {StatusCode} - {Message}",
+            e.StatusCode, e.Message);
+
+        // Stop retrying - the error is permanent (401/403/404)
+        // Background polling will continue to work as fallback
+        CleanupClient();
     }
 
     #endregion

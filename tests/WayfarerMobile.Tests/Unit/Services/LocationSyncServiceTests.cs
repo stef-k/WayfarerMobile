@@ -574,9 +574,9 @@ public class LocationSyncServiceTests
         failureType.Should().Be(FailureType.ServerRejection);
 
         // Expected behavior in LocationSyncService:
-        // - Call MarkLocationServerRejectedAsync (not MarkLocationFailedAsync)
+        // - Call MarkLocationRejectedAsync (not MarkLocationFailedAsync)
         // - Return (false, true) - not successful, but continue with next location
-        // - Location will have IsServerRejected = true
+        // - Location will have IsRejected = true
         // - Location will not be retried
     }
 

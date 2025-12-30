@@ -382,9 +382,9 @@ public class LocationSyncService : IDisposable
             {
                 if (result.Skipped)
                 {
-                    // Server received but did NOT store - mark as skipped, not synced
+                    // Server received but did NOT store - mark as rejected, not synced
                     // These won't appear on server timeline
-                    await _database.MarkLocationServerRejectedAsync(location.Id, "Skipped: distance/time threshold not met");
+                    await _database.MarkLocationRejectedAsync(location.Id, "Server: distance/time threshold not met");
                     _logger.LogDebug("Location {Id} skipped by server (thresholds) - not marking as synced", location.Id);
 
                     // Notify listeners that location was skipped (for local timeline cleanup)
@@ -416,9 +416,9 @@ public class LocationSyncService : IDisposable
             switch (failureType)
             {
                 case FailureType.ServerRejection:
-                    // Server explicitly rejected - mark as server rejected, don't retry
+                    // Server explicitly rejected - mark as rejected, don't retry
                     // Lesson learned: Use dedicated field instead of MarkLocationFailedAsync
-                    await _database.MarkLocationServerRejectedAsync(location.Id, result.Message ?? "Server rejected");
+                    await _database.MarkLocationRejectedAsync(location.Id, $"Server: {result.Message ?? "rejected"}");
                     _logger.LogWarning(
                         "Server rejected location {Id}: {Message} (HTTP {StatusCode})",
                         location.Id, result.Message, result.StatusCode);

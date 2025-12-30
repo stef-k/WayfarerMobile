@@ -32,6 +32,7 @@ public class VisitNotificationServiceTests : IDisposable
         _mockSettings.Setup(s => s.VisitNotificationsEnabled).Returns(true);
         _mockSettings.Setup(s => s.VisitNotificationStyle).Returns("both");
         _mockSettings.Setup(s => s.VisitVoiceAnnouncementEnabled).Returns(true);
+        _mockSettings.Setup(s => s.IsConfigured).Returns(true);
 
         // Factory returns mock client
         _mockSseClientFactory.Setup(f => f.Create()).Returns(_mockSseClient.Object);

@@ -138,10 +138,17 @@ public class PendingTripMutation
     public string? LastError { get; set; }
 
     /// <summary>
-    /// Gets or sets whether the server rejected this mutation (4xx error).
+    /// Gets or sets whether this mutation was rejected (by server 4xx error).
     /// When true, this mutation should not be retried.
     /// </summary>
-    public bool IsServerRejected { get; set; }
+    [Indexed]
+    public bool IsRejected { get; set; }
+
+    /// <summary>
+    /// Gets or sets the reason for rejection.
+    /// Example: "Server: HTTP 400 Bad Request"
+    /// </summary>
+    public string? RejectionReason { get; set; }
 
     #region Original values for restoration
 
@@ -206,5 +213,5 @@ public class PendingTripMutation
     /// Gets whether this mutation can be synced.
     /// </summary>
     [Ignore]
-    public bool CanSync => !IsServerRejected && SyncAttempts < MaxSyncAttempts;
+    public bool CanSync => !IsRejected && SyncAttempts < MaxSyncAttempts;
 }

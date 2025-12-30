@@ -217,8 +217,9 @@ public class TimelineSyncService : ITimelineSyncService
 
         if (!IsConnected) return;
 
+        // Inline CanSync expression - SQLite-net can't translate computed properties
         var pending = await _database!.Table<PendingTimelineMutation>()
-            .Where(m => m.CanSync)
+            .Where(m => !m.IsRejected && m.SyncAttempts < PendingTimelineMutation.MaxSyncAttempts)
             .OrderBy(m => m.CreatedAt)
             .ToListAsync();
 
@@ -263,7 +264,8 @@ public class TimelineSyncService : ITimelineSyncService
             catch (HttpRequestException ex) when (IsClientError(ex))
             {
                 // Server rejected - mark as rejected and revert local changes using persisted rollback data
-                mutation.IsServerRejected = true;
+                mutation.IsRejected = true;
+                mutation.RejectionReason = $"Server: {ex.Message}";
                 mutation.LastError = ex.Message;
                 await _database.UpdateAsync(mutation);
 
@@ -291,8 +293,9 @@ public class TimelineSyncService : ITimelineSyncService
     public async Task<int> GetPendingCountAsync()
     {
         await EnsureInitializedAsync();
+        // Inline CanSync expression - SQLite-net can't translate computed properties
         return await _database!.Table<PendingTimelineMutation>()
-            .Where(m => m.CanSync)
+            .Where(m => !m.IsRejected && m.SyncAttempts < PendingTimelineMutation.MaxSyncAttempts)
             .CountAsync();
     }
 
@@ -303,7 +306,7 @@ public class TimelineSyncService : ITimelineSyncService
     {
         await EnsureInitializedAsync();
         await _database!.Table<PendingTimelineMutation>()
-            .Where(m => m.IsServerRejected)
+            .Where(m => m.IsRejected)
             .DeleteAsync();
     }
 
@@ -366,7 +369,7 @@ public class TimelineSyncService : ITimelineSyncService
     {
         // Check if there's already a pending mutation for this location
         var existing = await _database!.Table<PendingTimelineMutation>()
-            .Where(m => m.LocationId == locationId && !m.IsServerRejected)
+            .Where(m => m.LocationId == locationId && !m.IsRejected)
             .FirstOrDefaultAsync();
 
         if (existing != null)

@@ -650,6 +650,28 @@ public class SettingsService : ISettingsService
         }
     }
 
+    /// <inheritdoc/>
+    public bool TryGetSyncReference(out double latitude, out double longitude, out DateTime timestamp)
+    {
+        lock (_syncReferenceLock)
+        {
+            if (LastSyncedLatitude.HasValue &&
+                LastSyncedLongitude.HasValue &&
+                LastSyncedTimestamp.HasValue)
+            {
+                latitude = LastSyncedLatitude.Value;
+                longitude = LastSyncedLongitude.Value;
+                timestamp = LastSyncedTimestamp.Value;
+                return true;
+            }
+
+            latitude = 0;
+            longitude = 0;
+            timestamp = default;
+            return false;
+        }
+    }
+
     /// <summary>
     /// Updates the sync reference point after a successful sync.
     /// Called only when server accepts a location.

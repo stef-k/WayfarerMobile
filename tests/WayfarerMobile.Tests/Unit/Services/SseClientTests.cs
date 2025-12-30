@@ -523,6 +523,7 @@ public sealed class TestSseClient : WayfarerMobile.Core.Interfaces.ISseClient
     public event EventHandler? Connected;
 #pragma warning disable CS0067 // Event is never used - required by ISseClient interface
     public event EventHandler<SseReconnectEventArgs>? Reconnecting;
+    public event EventHandler<SsePermanentErrorEventArgs>? PermanentError;
 #pragma warning restore CS0067
 
     public bool IsConnected => _isConnected;

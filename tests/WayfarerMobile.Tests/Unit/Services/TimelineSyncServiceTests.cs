@@ -74,7 +74,7 @@ public class TimelineSyncServiceTests : IAsyncLifetime
     private async Task<List<PendingTimelineMutation>> GetSyncableMutationsAsync()
     {
         return await _database.Table<PendingTimelineMutation>()
-            .Where(m => !m.IsServerRejected && m.SyncAttempts < PendingTimelineMutation.MaxSyncAttempts)
+            .Where(m => !m.IsRejected && m.SyncAttempts < PendingTimelineMutation.MaxSyncAttempts)
             .OrderBy(m => m.CreatedAt)
             .ToListAsync();
     }
@@ -104,7 +104,7 @@ public class TimelineSyncServiceTests : IAsyncLifetime
     {
         // Check if there's already a pending mutation for this location
         var existing = await _database.Table<PendingTimelineMutation>()
-            .Where(m => m.LocationId == locationId && !m.IsServerRejected)
+            .Where(m => m.LocationId == locationId && !m.IsRejected)
             .FirstOrDefaultAsync();
 
         if (existing != null)
@@ -165,7 +165,7 @@ public class TimelineSyncServiceTests : IAsyncLifetime
     private async Task ClearRejectedMutationsAsync()
     {
         await _database.Table<PendingTimelineMutation>()
-            .Where(m => m.IsServerRejected)
+            .Where(m => m.IsRejected)
             .DeleteAsync();
     }
 
@@ -176,7 +176,7 @@ public class TimelineSyncServiceTests : IAsyncLifetime
     private async Task<int> GetPendingCountAsync()
     {
         return await _database.Table<PendingTimelineMutation>()
-            .Where(m => !m.IsServerRejected && m.SyncAttempts < PendingTimelineMutation.MaxSyncAttempts)
+            .Where(m => !m.IsRejected && m.SyncAttempts < PendingTimelineMutation.MaxSyncAttempts)
             .CountAsync();
     }
 
@@ -501,14 +501,14 @@ public class TimelineSyncServiceTests : IAsyncLifetime
         await InsertMutationAsync(new PendingTimelineMutation
         {
             LocationId = 1,
-            IsServerRejected = false,
+            IsRejected = false,
             SyncAttempts = 0
         });
 
         await InsertMutationAsync(new PendingTimelineMutation
         {
             LocationId = 2,
-            IsServerRejected = true, // Rejected
+            IsRejected = true, // Rejected
             SyncAttempts = 1
         });
 
@@ -589,11 +589,11 @@ public class TimelineSyncServiceTests : IAsyncLifetime
         {
             LocationId = 200,
             SyncAttempts = 0,
-            IsServerRejected = false
+            IsRejected = false
         });
 
         // Act - Simulate 4xx error handling
-        mutation.IsServerRejected = true;
+        mutation.IsRejected = true;
         mutation.LastError = "400 Bad Request";
         mutation.SyncAttempts++;
         mutation.LastSyncAttempt = DateTime.UtcNow;
@@ -604,7 +604,7 @@ public class TimelineSyncServiceTests : IAsyncLifetime
             .FirstOrDefaultAsync(m => m.LocationId == 200);
 
         updated.Should().NotBeNull();
-        updated!.IsServerRejected.Should().BeTrue("Should be marked as rejected");
+        updated!.IsRejected.Should().BeTrue("Should be marked as rejected");
         updated.CanSync.Should().BeFalse("Rejected mutations should not be syncable");
     }
 
@@ -619,7 +619,7 @@ public class TimelineSyncServiceTests : IAsyncLifetime
         {
             LocationId = 300,
             SyncAttempts = 0,
-            IsServerRejected = false
+            IsRejected = false
         });
 
         // Act - Simulate 5xx error handling
@@ -634,7 +634,7 @@ public class TimelineSyncServiceTests : IAsyncLifetime
 
         updated.Should().NotBeNull();
         updated!.SyncAttempts.Should().Be(1, "Retry count should be incremented");
-        updated.IsServerRejected.Should().BeFalse("Should NOT be rejected (server error is retryable)");
+        updated.IsRejected.Should().BeFalse("Should NOT be rejected (server error is retryable)");
         updated.CanSync.Should().BeTrue("Should still be syncable for retry");
     }
 
@@ -652,7 +652,7 @@ public class TimelineSyncServiceTests : IAsyncLifetime
         await InsertMutationAsync(new PendingTimelineMutation { LocationId = 1, SyncAttempts = 0 });
         await InsertMutationAsync(new PendingTimelineMutation { LocationId = 2, SyncAttempts = 2 });
         await InsertMutationAsync(new PendingTimelineMutation { LocationId = 3, SyncAttempts = 4 });
-        await InsertMutationAsync(new PendingTimelineMutation { LocationId = 4, IsServerRejected = true });
+        await InsertMutationAsync(new PendingTimelineMutation { LocationId = 4, IsRejected = true });
         await InsertMutationAsync(new PendingTimelineMutation { LocationId = 5, SyncAttempts = 5 });
 
         // Act
@@ -683,10 +683,10 @@ public class TimelineSyncServiceTests : IAsyncLifetime
     public async Task ClearRejectedMutationsAsync_RemovesRejectedOnly()
     {
         // Arrange
-        await InsertMutationAsync(new PendingTimelineMutation { LocationId = 1, IsServerRejected = false });
-        await InsertMutationAsync(new PendingTimelineMutation { LocationId = 2, IsServerRejected = false });
-        await InsertMutationAsync(new PendingTimelineMutation { LocationId = 3, IsServerRejected = true });
-        await InsertMutationAsync(new PendingTimelineMutation { LocationId = 4, IsServerRejected = true });
+        await InsertMutationAsync(new PendingTimelineMutation { LocationId = 1, IsRejected = false });
+        await InsertMutationAsync(new PendingTimelineMutation { LocationId = 2, IsRejected = false });
+        await InsertMutationAsync(new PendingTimelineMutation { LocationId = 3, IsRejected = true });
+        await InsertMutationAsync(new PendingTimelineMutation { LocationId = 4, IsRejected = true });
 
         // Act
         await ClearRejectedMutationsAsync();
@@ -694,7 +694,7 @@ public class TimelineSyncServiceTests : IAsyncLifetime
         // Assert
         var remaining = await GetAllMutationsAsync();
         remaining.Should().HaveCount(2, "Only non-rejected should remain");
-        remaining.Should().OnlyContain(m => !m.IsServerRejected);
+        remaining.Should().OnlyContain(m => !m.IsRejected);
         remaining.Select(m => m.LocationId).Should().BeEquivalentTo(new[] { 1, 2 });
     }
 
@@ -705,8 +705,8 @@ public class TimelineSyncServiceTests : IAsyncLifetime
     public async Task ClearRejectedMutationsAsync_NoOpWhenNoneRejected()
     {
         // Arrange
-        await InsertMutationAsync(new PendingTimelineMutation { LocationId = 1, IsServerRejected = false });
-        await InsertMutationAsync(new PendingTimelineMutation { LocationId = 2, IsServerRejected = false });
+        await InsertMutationAsync(new PendingTimelineMutation { LocationId = 1, IsRejected = false });
+        await InsertMutationAsync(new PendingTimelineMutation { LocationId = 2, IsRejected = false });
 
         var beforeCount = await _database.Table<PendingTimelineMutation>().CountAsync();
 
@@ -736,7 +736,7 @@ public class TimelineSyncServiceTests : IAsyncLifetime
     {
         var mutation = new PendingTimelineMutation
         {
-            IsServerRejected = isRejected,
+            IsRejected = isRejected,
             SyncAttempts = syncAttempts
         };
 
@@ -884,7 +884,7 @@ public class TimelineSyncServiceTests : IAsyncLifetime
         //       - Delete mutation from database
         //       - Raise SyncCompleted event
         //    f. If 4xx error (client error):
-        //       - Set IsServerRejected = true
+        //       - Set IsRejected = true
         //       - Save error to LastError
         //       - Raise SyncRejected event
         //    g. If 5xx/network error:
@@ -1178,7 +1178,7 @@ public class TimelineSyncServiceTests : IAsyncLifetime
 
         // Act - Merge with second update (simulate EnqueueMutationWithRollbackAsync merge)
         var existing = await _database.Table<PendingTimelineMutation>()
-            .Where(m => m.LocationId == 100 && !m.IsServerRejected)
+            .Where(m => m.LocationId == 100 && !m.IsRejected)
             .FirstOrDefaultAsync();
 
         // Only update new values, keep original rollback data
