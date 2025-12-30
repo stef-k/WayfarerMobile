@@ -256,8 +256,6 @@ Reference: `C:\Users\stef\source\repos\Wayfarer.Mobile\Services\Storage\Settings
 - [x] `ApiToken` - Authentication token
 - [x] `LocationTimeThresholdMinutes` - From server
 - [x] `LocationDistanceThresholdMeters` - From server
-- [x] `UserId` - Current user ID
-- [x] `UserEmail` - Current user email
 - [x] `DarkModeEnabled` - Theme preference (with immediate theme apply)
 - [x] `MapOfflineCacheEnabled` - Offline tiles
 - [x] `MaxLiveCacheSizeMB` - Live tile cache limit (100-2000, default 500)

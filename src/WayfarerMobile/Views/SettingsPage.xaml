@@ -23,13 +23,11 @@
                 <sfExpander:SfExpander.Content>
                     <VerticalStackLayout Padding="15" Spacing="10">
                         <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsLoggedIn}">
-                            <VerticalStackLayout Grid.Column="0">
-                                <Label Text="{Binding UserEmail}"
-                                       FontSize="14" />
-                                <Label Text="{Binding LastSyncText, StringFormat='Last sync: {0}'}"
-                                       FontSize="12"
-                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-                            </VerticalStackLayout>
+                            <Label Grid.Column="0"
+                                   Text="{Binding LastSyncText, StringFormat='Last sync: {0}'}"
+                                   FontSize="12"
+                                   VerticalOptions="Center"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                             <Button Grid.Column="1"
                                     Text="Logout"
                                     Command="{Binding LogoutCommand}"

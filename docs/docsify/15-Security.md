@@ -159,8 +159,6 @@ public void ClearAuth()
 {
     SecureStorage.Default.Remove(KeyApiToken);
     SecureStorage.Default.Remove(KeyServerUrl);
-    UserId = null;
-    UserEmail = null;
 }
 ```
 

@@ -17,8 +17,6 @@ public class SettingsService : ISettingsService
     private const string KeyLocationTimeThreshold = "location_time_threshold";
     private const string KeyLocationDistanceThreshold = "location_distance_threshold";
     private const string KeyLastSyncTime = "last_sync_time";
-    private const string KeyUserId = "user_id";
-    private const string KeyUserEmail = "user_email";
     private const string KeyThemePreference = "theme_preference";
     private const string KeyLanguagePreference = "language_preference";
     private const string KeyKeepScreenOn = "keep_screen_on";
@@ -249,24 +247,6 @@ public class SettingsService : ISettingsService
             return ticks > 0 ? new DateTime(ticks, DateTimeKind.Utc) : null;
         }
         set => Preferences.Set(KeyLastSyncTime, value?.Ticks ?? 0L);
-    }
-
-    /// <summary>
-    /// Gets or sets the user ID from the server.
-    /// </summary>
-    public string? UserId
-    {
-        get => Preferences.Get(KeyUserId, null as string);
-        set => Preferences.Set(KeyUserId, value ?? string.Empty);
-    }
-
-    /// <summary>
-    /// Gets or sets the user email.
-    /// </summary>
-    public string? UserEmail
-    {
-        get => Preferences.Get(KeyUserEmail, null as string);
-        set => Preferences.Set(KeyUserEmail, value ?? string.Empty);
     }
 
     /// <summary>
@@ -600,8 +580,6 @@ public class SettingsService : ISettingsService
     {
         SecureStorage.Default.Remove(KeyApiToken);
         SecureStorage.Default.Remove(KeyServerUrl);
-        UserId = null;
-        UserEmail = null;
     }
 
     /// <summary>

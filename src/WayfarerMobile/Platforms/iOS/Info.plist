@@ -28,5 +28,14 @@
 	</array>
 	<key>XSAppIconAssets</key>
 	<string>Assets.xcassets/appicon.appiconset</string>
+	<!-- Privacy usage descriptions -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Wayfarer needs your location to show your position on the map and track your travels.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Wayfarer needs background location access to continue tracking your travels when the app is not active.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Wayfarer needs background location access to continue tracking your travels when the app is not active.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Wayfarer needs camera access to scan QR codes for server configuration.</string>
 </dict>
 </plist>

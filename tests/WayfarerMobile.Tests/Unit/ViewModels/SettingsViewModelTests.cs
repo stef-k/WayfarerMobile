@@ -926,8 +926,6 @@ public class SettingsViewModelTests
             .Should().NotBeNull("ShowBatteryWarnings is required");
         interfaceType.GetProperty(nameof(ISettingsService.AutoPauseTrackingOnCriticalBattery))
             .Should().NotBeNull("AutoPauseTrackingOnCriticalBattery is required");
-        interfaceType.GetProperty(nameof(ISettingsService.UserEmail))
-            .Should().NotBeNull("UserEmail is required");
         interfaceType.GetProperty(nameof(ISettingsService.LastSyncTime))
             .Should().NotBeNull("LastSyncTime is required");
         interfaceType.GetProperty(nameof(ISettingsService.IsConfigured))
@@ -993,7 +991,6 @@ public class SettingsViewModelTests
         mockSettings.Setup(s => s.DistanceUnits).Returns("kilometers");
         mockSettings.Setup(s => s.ShowBatteryWarnings).Returns(true);
         mockSettings.Setup(s => s.AutoPauseTrackingOnCriticalBattery).Returns(false);
-        mockSettings.Setup(s => s.UserEmail).Returns("test@example.com");
         mockSettings.Setup(s => s.LastSyncTime).Returns(DateTime.UtcNow);
         mockSettings.Setup(s => s.IsConfigured).Returns(true);
 
