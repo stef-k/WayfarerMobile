@@ -227,6 +227,7 @@ public class DatabaseService : IAsyncDisposable
     /// <summary>
     /// Marks a location as server rejected (threshold validation, etc.).
     /// Server rejected locations should not be retried - different from technical failures.
+    /// Uses single UPDATE statement to avoid read-modify-write race conditions.
     /// Lesson learned: Use dedicated field instead of storing metadata in error messages.
     /// </summary>
     /// <param name="id">The location ID.</param>
@@ -235,17 +236,47 @@ public class DatabaseService : IAsyncDisposable
     {
         await EnsureInitializedAsync();
 
-        var location = await _database!.Table<QueuedLocation>()
-            .FirstOrDefaultAsync(l => l.Id == id);
+        await _database!.ExecuteAsync(
+            @"UPDATE QueuedLocations
+              SET IsServerRejected = 1,
+                  SyncStatus = ?,
+                  LastError = ?,
+                  LastSyncAttempt = ?
+              WHERE Id = ?",
+            (int)SyncStatus.Synced, reason, DateTime.UtcNow, id);
+    }
 
-        if (location != null)
-        {
-            location.IsServerRejected = true;
-            location.SyncStatus = SyncStatus.Synced; // Mark as "done" - don't retry
-            location.LastError = reason;
-            location.LastSyncAttempt = DateTime.UtcNow;
-            await _database.UpdateAsync(location);
-        }
+    /// <summary>
+    /// Marks a location as currently syncing.
+    /// Used to prevent duplicate processing when lock is released.
+    /// </summary>
+    /// <param name="id">The location ID.</param>
+    public async Task MarkLocationSyncingAsync(int id)
+    {
+        await EnsureInitializedAsync();
+
+        await _database!.ExecuteAsync(
+            "UPDATE QueuedLocations SET SyncStatus = ? WHERE Id = ?",
+            (int)SyncStatus.Syncing, id);
+    }
+
+    /// <summary>
+    /// Resets a location back to pending status.
+    /// Used when sync fails with transient error or on service shutdown.
+    /// Also increments retry count to track attempts.
+    /// </summary>
+    /// <param name="id">The location ID.</param>
+    public async Task ResetLocationToPendingAsync(int id)
+    {
+        await EnsureInitializedAsync();
+
+        await _database!.ExecuteAsync(
+            @"UPDATE QueuedLocations
+              SET SyncStatus = ?,
+                  SyncAttempts = SyncAttempts + 1,
+                  LastSyncAttempt = ?
+              WHERE Id = ?",
+            (int)SyncStatus.Pending, DateTime.UtcNow, id);
     }
 
     /// <summary>

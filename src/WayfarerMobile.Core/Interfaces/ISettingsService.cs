@@ -258,7 +258,8 @@ public interface ISettingsService
     /// </summary>
     /// <param name="latitude">Latitude of synced location.</param>
     /// <param name="longitude">Longitude of synced location.</param>
-    void UpdateLastSyncedLocation(double latitude, double longitude);
+    /// <param name="timestampUtc">Timestamp of synced location (must be DateTimeKind.Utc).</param>
+    void UpdateLastSyncedLocation(double latitude, double longitude, DateTime timestampUtc);
 
     /// <summary>
     /// Clears the sync reference point.

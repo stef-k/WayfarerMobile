@@ -88,6 +88,7 @@ public class QueuedLocation
     /// When true, this location should not be retried (unlike technical failures).
     /// Lesson learned: Use dedicated field instead of storing metadata in notes/errors.
     /// </summary>
+    [Indexed]
     public bool IsServerRejected { get; set; }
 
     /// <summary>
@@ -95,6 +96,7 @@ public class QueuedLocation
     /// Used by queue drain service when location doesn't meet time AND distance thresholds.
     /// Filtered locations are not sent to server but are kept for cleanup.
     /// </summary>
+    [Indexed]
     public bool IsFiltered { get; set; }
 
     /// <summary>

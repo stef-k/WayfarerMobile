@@ -70,11 +70,12 @@ public sealed class QueueDrainService : IDisposable
     private readonly Queue<DateTime> _drainHistory = new();
 
     private Timer? _drainTimer;
+    private CancellationTokenSource? _timerCts;
     private DateTime _lastDrainTime = DateTime.MinValue;
     private int _consecutiveFailures;
-    private bool _isOnline;
-    private bool _isDisposed;
-    private bool _isStarted;
+    private volatile bool _isOnline;
+    private volatile bool _isDisposed;
+    private volatile bool _isStarted;
 
     #endregion
 
@@ -131,6 +132,9 @@ public sealed class QueueDrainService : IDisposable
             // Subscribe to connectivity changes
             _connectivity.ConnectivityChanged += OnConnectivityChanged;
 
+            // Create cancellation token for timer callbacks
+            _timerCts = new CancellationTokenSource();
+
             // Start the drain timer
             _drainTimer = new Timer(
                 OnDrainTimerElapsed,
@@ -157,10 +161,16 @@ public sealed class QueueDrainService : IDisposable
 
         _logger.LogInformation("Stopping QueueDrainService");
 
+        // Cancel any pending timer callbacks first
+        _timerCts?.Cancel();
+
         _connectivity.ConnectivityChanged -= OnConnectivityChanged;
         _drainTimer?.Change(Timeout.Infinite, Timeout.Infinite);
         _drainTimer?.Dispose();
         _drainTimer = null;
+
+        _timerCts?.Dispose();
+        _timerCts = null;
 
         _isStarted = false;
         _logger.LogInformation("QueueDrainService stopped");
@@ -229,12 +239,21 @@ public sealed class QueueDrainService : IDisposable
     /// </summary>
     private async void OnDrainTimerElapsed(object? state)
     {
+        // Check both flags and cancellation token for robust shutdown
         if (_isDisposed || !_isStarted)
+            return;
+
+        var cts = _timerCts;
+        if (cts == null || cts.IsCancellationRequested)
             return;
 
         try
         {
-            await DrainOneAsync();
+            await DrainOneAsync(cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Normal shutdown, ignore
         }
         catch (Exception ex)
         {
@@ -281,7 +300,8 @@ public sealed class QueueDrainService : IDisposable
     /// <summary>
     /// Attempts to drain one location from the queue.
     /// </summary>
-    private async Task DrainOneAsync()
+    /// <param name="cancellationToken">Cancellation token for shutdown.</param>
+    private async Task DrainOneAsync(CancellationToken cancellationToken)
     {
         // Early exits
         if (!_isOnline)
@@ -311,7 +331,7 @@ public sealed class QueueDrainService : IDisposable
         }
 
         // Try to acquire lock with timeout (non-blocking if busy)
-        if (!await _drainLock.WaitAsync(100))
+        if (!await _drainLock.WaitAsync(100, cancellationToken))
         {
             _logger.LogDebug("Drain lock busy, skipping cycle");
             return;
@@ -332,6 +352,14 @@ public sealed class QueueDrainService : IDisposable
             _logger.LogDebug(
                 "Processing queued location {Id} from {Timestamp}",
                 location.Id, location.Timestamp);
+
+            // CRITICAL FIX: Mark location as Syncing BEFORE releasing lock
+            // This prevents duplicate processing if another drain cycle starts
+            await _database.MarkLocationSyncingAsync(location.Id);
+
+            // CRITICAL FIX: Record rate limit BEFORE making API call
+            // This prevents race conditions in rate limiting
+            RecordDrainAttempt();
         }
         catch (Exception ex)
         {
@@ -346,14 +374,16 @@ public sealed class QueueDrainService : IDisposable
         // Process location outside lock (network call)
         if (location != null)
         {
-            await ProcessLocationAsync(location);
+            await ProcessLocationAsync(location, cancellationToken);
         }
     }
 
     /// <summary>
     /// Processes a single location - filters and syncs if appropriate.
     /// </summary>
-    private async Task ProcessLocationAsync(QueuedLocation location)
+    /// <param name="location">The location to process.</param>
+    /// <param name="cancellationToken">Cancellation token for shutdown.</param>
+    private async Task ProcessLocationAsync(QueuedLocation location, CancellationToken cancellationToken)
     {
         try
         {
@@ -382,17 +412,23 @@ public sealed class QueueDrainService : IDisposable
                 Provider = location.Provider ?? "queue-drain"
             };
 
-            using var cts = new CancellationTokenSource(DrainTimeoutMs);
-            var result = await _apiClient.CheckInAsync(request, cts.Token);
+            // Use provided cancellation token combined with timeout
+            using var timeoutCts = new CancellationTokenSource(DrainTimeoutMs);
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, timeoutCts.Token);
 
-            // Record drain attempt for rate limiting
-            RecordDrainAttempt();
+            var result = await _apiClient.CheckInAsync(request, linkedCts.Token);
+
+            // Note: RecordDrainAttempt is now called BEFORE the API call in DrainOneAsync
 
             if (result.Success)
             {
-                // Mark synced and update reference point
+                // Mark synced and update reference point with location's actual timestamp
                 await _database.MarkLocationSyncedAsync(location.Id);
-                _settings.UpdateLastSyncedLocation(location.Latitude, location.Longitude);
+                _settings.UpdateLastSyncedLocation(
+                    location.Latitude,
+                    location.Longitude,
+                    location.Timestamp);
 
                 _consecutiveFailures = 0;
                 _logger.LogDebug(
@@ -423,24 +459,30 @@ public sealed class QueueDrainService : IDisposable
             }
             else
             {
-                // Technical failure (5xx, network) - increment retry
-                await _database.IncrementRetryCountAsync(location.Id);
+                // Technical failure (5xx, network) - reset to pending for retry
+                await _database.ResetLocationToPendingAsync(location.Id);
                 _consecutiveFailures++;
                 _logger.LogWarning(
                     "Location {Id} sync failed (attempt {Attempts}): {Message}",
                     location.Id, location.SyncAttempts + 1, result.Message);
             }
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Service shutdown - reset to pending so it can be retried
+            await _database.ResetLocationToPendingAsync(location.Id);
+            throw; // Re-throw to propagate cancellation
+        }
         catch (OperationCanceledException)
         {
-            // Timeout
-            await _database.IncrementRetryCountAsync(location.Id);
+            // Timeout - reset to pending for retry
+            await _database.ResetLocationToPendingAsync(location.Id);
             _consecutiveFailures++;
             _logger.LogWarning("Location {Id} sync timed out", location.Id);
         }
         catch (Exception ex)
         {
-            // Unexpected error
+            // Unexpected error - mark as failed
             await _database.MarkLocationFailedAsync(location.Id, ex.Message);
             _consecutiveFailures++;
             _logger.LogError(ex, "Error processing location {Id}", location.Id);
@@ -467,6 +509,17 @@ public sealed class QueueDrainService : IDisposable
         var refLon = _settings.LastSyncedLongitude!.Value;
         var refTime = _settings.LastSyncedTimestamp!.Value;
 
+        // MEDIUM FIX: Handle out-of-order locations
+        // If location is older than or equal to reference, skip it
+        // This can happen if queue processing was interrupted and resumed
+        if (location.Timestamp <= refTime)
+        {
+            _logger.LogDebug(
+                "Location {Id} is out-of-order (timestamp {LocationTime} <= reference {RefTime})",
+                location.Id, location.Timestamp, refTime);
+            return (false, $"Out-of-order: timestamp {location.Timestamp:u} <= reference {refTime:u}");
+        }
+
         // Calculate time since reference
         var timeSince = location.Timestamp - refTime;
         var timeThresholdMet = timeSince.TotalMinutes >= TimeThresholdMinutes;
@@ -484,9 +537,9 @@ public sealed class QueueDrainService : IDisposable
         // Build filter reason
         var reasons = new List<string>();
         if (!timeThresholdMet)
-            reasons.Add($"Time: {timeSince.TotalMinutes:F1}min < {TimeThresholdMinutes}min");
+            reasons.Add($"Time: {timeSince.TotalMinutes:F1}min, threshold {TimeThresholdMinutes}min");
         if (!distanceThresholdMet)
-            reasons.Add($"Distance: {distance:F0}m < {DistanceThresholdMeters}m");
+            reasons.Add($"Distance: {distance:F0}m, threshold {DistanceThresholdMeters}m");
 
         return (false, string.Join("; ", reasons));
     }

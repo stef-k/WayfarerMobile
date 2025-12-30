@@ -568,6 +568,11 @@ public class SettingsService : ISettingsService
     #region Queue Sync Reference Point
 
     /// <summary>
+    /// Lock object for thread-safe sync reference updates.
+    /// </summary>
+    private readonly object _syncReferenceLock = new();
+
+    /// <summary>
     /// Gets or sets the latitude of the last successfully synced location.
     /// Used as reference point for threshold calculations in queue drain.
     /// </summary>
@@ -637,9 +642,12 @@ public class SettingsService : ISettingsService
     /// </summary>
     public bool HasValidSyncReference()
     {
-        return LastSyncedLatitude.HasValue &&
-               LastSyncedLongitude.HasValue &&
-               LastSyncedTimestamp.HasValue;
+        lock (_syncReferenceLock)
+        {
+            return LastSyncedLatitude.HasValue &&
+                   LastSyncedLongitude.HasValue &&
+                   LastSyncedTimestamp.HasValue;
+        }
     }
 
     /// <summary>
@@ -648,11 +656,15 @@ public class SettingsService : ISettingsService
     /// </summary>
     /// <param name="latitude">Latitude of synced location.</param>
     /// <param name="longitude">Longitude of synced location.</param>
-    public void UpdateLastSyncedLocation(double latitude, double longitude)
+    /// <param name="timestampUtc">Timestamp of synced location (must be DateTimeKind.Utc).</param>
+    public void UpdateLastSyncedLocation(double latitude, double longitude, DateTime timestampUtc)
     {
-        LastSyncedLatitude = latitude;
-        LastSyncedLongitude = longitude;
-        LastSyncedTimestamp = DateTime.UtcNow;
+        lock (_syncReferenceLock)
+        {
+            LastSyncedLatitude = latitude;
+            LastSyncedLongitude = longitude;
+            LastSyncedTimestamp = timestampUtc;
+        }
     }
 
     /// <summary>
@@ -661,9 +673,12 @@ public class SettingsService : ISettingsService
     /// </summary>
     public void ClearSyncReference()
     {
-        LastSyncedLatitude = null;
-        LastSyncedLongitude = null;
-        LastSyncedTimestamp = null;
+        lock (_syncReferenceLock)
+        {
+            LastSyncedLatitude = null;
+            LastSyncedLongitude = null;
+            LastSyncedTimestamp = null;
+        }
     }
 
     #endregion

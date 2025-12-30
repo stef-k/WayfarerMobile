@@ -65,15 +65,16 @@ public class QueueDrainServiceTests
 
         var filter = new ThresholdFilter(refLat, refLon, refTime);
 
-        // New location: far away but too recent
+        // New location: far away but too recent (must be AFTER reference time)
         var newLat = 40.8000; // ~10km away
         var newLon = -74.0060;
-        var newTime = DateTime.UtcNow;
+        var newTime = DateTime.UtcNow; // This is after refTime by ~2 minutes
 
         var result = filter.ShouldSync(newLat, newLon, newTime);
 
         result.ShouldSync.Should().BeFalse();
         result.Reason.Should().Contain("Time:");
+        result.Reason.Should().Contain("threshold");
     }
 
     [Fact]
@@ -95,19 +96,21 @@ public class QueueDrainServiceTests
 
         result.ShouldSync.Should().BeFalse();
         result.Reason.Should().Contain("Distance:");
+        result.Reason.Should().Contain("threshold");
     }
 
     [Fact]
     public void ShouldSyncLocation_NeitherThresholdMet_FiltersWithBothReasons()
     {
-        // Reference: 2 minutes ago, same location
+        // Reference: 2 minutes ago
         var refLat = 40.7128;
         var refLon = -74.0060;
         var refTime = DateTime.UtcNow.AddMinutes(-2);
 
         var filter = new ThresholdFilter(refLat, refLon, refTime);
 
-        // Same location, too recent
+        // Same location (distance not met), too recent (time not met)
+        // Timestamp must be after reference time
         var result = filter.ShouldSync(refLat, refLon, DateTime.UtcNow);
 
         result.ShouldSync.Should().BeFalse();
@@ -133,6 +136,48 @@ public class QueueDrainServiceTests
         var result = filter.ShouldSync(newLat, newLon, newTime);
 
         result.ShouldSync.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ShouldSyncLocation_OutOfOrderLocation_Filters()
+    {
+        // Reference: current time
+        var refLat = 40.7128;
+        var refLon = -74.0060;
+        var refTime = DateTime.UtcNow;
+
+        var filter = new ThresholdFilter(refLat, refLon, refTime);
+
+        // New location: timestamp BEFORE reference (out-of-order)
+        // Even though thresholds would be met, location is older than reference
+        var newLat = 40.8000; // Far away
+        var newLon = -74.0060;
+        var newTime = DateTime.UtcNow.AddMinutes(-10); // Older than reference
+
+        var result = filter.ShouldSync(newLat, newLon, newTime);
+
+        result.ShouldSync.Should().BeFalse();
+        result.Reason.Should().Contain("Out-of-order");
+    }
+
+    [Fact]
+    public void ShouldSyncLocation_SameTimestampAsReference_Filters()
+    {
+        // Reference time
+        var refLat = 40.7128;
+        var refLon = -74.0060;
+        var refTime = DateTime.UtcNow;
+
+        var filter = new ThresholdFilter(refLat, refLon, refTime);
+
+        // Exact same timestamp as reference
+        var newLat = 40.8000;
+        var newLon = -74.0060;
+
+        var result = filter.ShouldSync(newLat, newLon, refTime);
+
+        result.ShouldSync.Should().BeFalse();
+        result.Reason.Should().Contain("Out-of-order");
     }
 
     #endregion
@@ -277,6 +322,12 @@ public class QueueDrainServiceTests
                 return (true, null);
             }
 
+            // Handle out-of-order locations - skip if older than or equal to reference
+            if (timestamp <= _refTime.Value)
+            {
+                return (false, $"Out-of-order: timestamp {timestamp:u} <= reference {_refTime.Value:u}");
+            }
+
             var timeSince = timestamp - _refTime.Value;
             var timeThresholdMet = timeSince.TotalMinutes >= TimeThresholdMinutes;
 
@@ -291,9 +342,9 @@ public class QueueDrainServiceTests
 
             var reasons = new List<string>();
             if (!timeThresholdMet)
-                reasons.Add($"Time: {timeSince.TotalMinutes:F1}min < {TimeThresholdMinutes}min");
+                reasons.Add($"Time: {timeSince.TotalMinutes:F1}min, threshold {TimeThresholdMinutes}min");
             if (!distanceThresholdMet)
-                reasons.Add($"Distance: {distance:F0}m < {DistanceThresholdMeters}m");
+                reasons.Add($"Distance: {distance:F0}m, threshold {DistanceThresholdMeters}m");
 
             return (false, string.Join("; ", reasons));
         }
