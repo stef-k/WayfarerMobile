@@ -135,6 +135,26 @@ public class SseReconnectEventArgs : EventArgs
 }
 
 /// <summary>
+/// Event arguments for permanent SSE errors that should not trigger reconnection.
+/// Examples: 401 Unauthorized, 403 Forbidden, 404 Not Found.
+/// </summary>
+public class SsePermanentErrorEventArgs : EventArgs
+{
+    /// <summary>HTTP status code that caused the error.</summary>
+    public int StatusCode { get; }
+
+    /// <summary>Error message from the server.</summary>
+    public string Message { get; }
+
+    /// <summary>Creates a new instance.</summary>
+    public SsePermanentErrorEventArgs(int statusCode, string message)
+    {
+        StatusCode = statusCode;
+        Message = message;
+    }
+}
+
+/// <summary>
 /// SSE event for visit notifications.
 /// Received from channel: user-visits-{userId}
 /// </summary>

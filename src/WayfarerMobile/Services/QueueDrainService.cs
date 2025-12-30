@@ -303,30 +303,33 @@ public sealed class QueueDrainService : IDisposable
     /// <param name="cancellationToken">Cancellation token for shutdown.</param>
     private async Task DrainOneAsync(CancellationToken cancellationToken)
     {
-        // Early exits
+        // Early exits - log at Info level for diagnostics
         if (!_isOnline)
         {
-            _logger.LogDebug("Offline, skipping drain cycle");
+            _logger.LogInformation("QueueDrain: Offline, skipping cycle");
             return;
         }
 
         if (!_apiClient.IsConfigured)
         {
-            _logger.LogDebug("API not configured, skipping drain cycle");
+            _logger.LogInformation("QueueDrain: API not configured, skipping cycle");
             return;
         }
 
         if (_consecutiveFailures >= MaxConsecutiveFailures)
         {
-            _logger.LogDebug(
-                "Too many consecutive failures ({Failures}), backing off",
+            _logger.LogInformation(
+                "QueueDrain: Too many consecutive failures ({Failures}), backing off",
                 _consecutiveFailures);
             return;
         }
 
         if (!CanMakeCheckInRequest())
         {
-            _logger.LogDebug("Rate limited, skipping drain cycle");
+            var timeSinceLast = DateTime.UtcNow - _lastDrainTime;
+            _logger.LogInformation(
+                "QueueDrain: Rate limited ({SecondsSinceLast:F0}s since last, need {Required}s)",
+                timeSinceLast.TotalSeconds, MinSecondsBetweenDrains);
             return;
         }
 
@@ -345,12 +348,12 @@ public sealed class QueueDrainService : IDisposable
             location = await _database.GetOldestPendingForDrainAsync();
             if (location == null)
             {
-                _logger.LogDebug("No pending locations in queue");
+                _logger.LogInformation("QueueDrain: No pending locations in queue");
                 return;
             }
 
-            _logger.LogDebug(
-                "Processing queued location {Id} from {Timestamp}",
+            _logger.LogInformation(
+                "QueueDrain: Processing location {Id} from {Timestamp}",
                 location.Id, location.Timestamp);
 
             // CRITICAL FIX: Mark location as Syncing BEFORE releasing lock
@@ -394,8 +397,8 @@ public sealed class QueueDrainService : IDisposable
             {
                 // Mark as filtered and continue to next
                 await _database.MarkLocationFilteredAsync(location.Id, filterResult.Reason!);
-                _logger.LogDebug(
-                    "Location {Id} filtered: {Reason}",
+                _logger.LogInformation(
+                    "QueueDrain: Location {Id} filtered: {Reason}",
                     location.Id, filterResult.Reason);
                 return;
             }
@@ -431,8 +434,8 @@ public sealed class QueueDrainService : IDisposable
                     location.Timestamp);
 
                 _consecutiveFailures = 0;
-                _logger.LogDebug(
-                    "Location {Id} synced successfully via check-in",
+                _logger.LogInformation(
+                    "QueueDrain: Location {Id} synced successfully via check-in",
                     location.Id);
             }
             else if (result.Skipped)

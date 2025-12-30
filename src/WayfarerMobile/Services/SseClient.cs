@@ -8,6 +8,23 @@ using WayfarerMobile.Core.Models;
 namespace WayfarerMobile.Services;
 
 /// <summary>
+/// Exception thrown when SSE encounters a permanent error that should not be retried.
+/// Examples: 401 Unauthorized, 403 Forbidden, 404 Not Found.
+/// </summary>
+public class SsePermanentErrorException : Exception
+{
+    /// <summary>HTTP status code that caused the error.</summary>
+    public int StatusCode { get; }
+
+    /// <summary>Creates a new instance.</summary>
+    public SsePermanentErrorException(int statusCode, string message)
+        : base($"SSE permanent error ({statusCode}): {message}")
+    {
+        StatusCode = statusCode;
+    }
+}
+
+/// <summary>
 /// Client for subscribing to Server-Sent Events (SSE) location updates.
 /// Supports per-user and group-level channels with automatic reconnection.
 /// </summary>
@@ -40,6 +57,12 @@ public class SseClient : ISseClient
     /// </summary>
     private static readonly int[] BackoffDelaysMs = [1000, 2000, 5000];
 
+    /// <summary>
+    /// HTTP status codes that should not trigger reconnection attempts.
+    /// These represent permanent errors that won't be resolved by retrying.
+    /// </summary>
+    private static readonly HashSet<int> NonRetryableStatusCodes = [401, 403, 404];
+
     #endregion
 
     #region Events
@@ -67,6 +90,9 @@ public class SseClient : ISseClient
 
     /// <inheritdoc />
     public event EventHandler<SseReconnectEventArgs>? Reconnecting;
+
+    /// <inheritdoc />
+    public event EventHandler<SsePermanentErrorEventArgs>? PermanentError;
 
     #endregion
 
@@ -255,6 +281,15 @@ public class SseClient : ISseClient
                 _logger.LogInformation("SSE subscription stopped: {Message}", ex.Message);
                 break;
             }
+            catch (SsePermanentErrorException ex)
+            {
+                // Permanent error (401, 403, 404) - do not retry
+                _logger.LogWarning(
+                    "SSE subscription terminated due to permanent error on {Channel}: {StatusCode}",
+                    channelName, ex.StatusCode);
+                _isConnected = false;
+                break; // Exit loop - no retry
+            }
             catch (Exception ex)
             {
                 // Real connection error - log and retry with backoff
@@ -275,6 +310,12 @@ public class SseClient : ISseClient
     private async Task ConnectAndStreamAsync(string url, CancellationToken cancellationToken)
     {
         string? apiToken = _settings.ApiToken;
+        _logger.LogInformation(
+            "SSE connecting to {Url}, token available: {HasToken}, token length: {TokenLength}",
+            url,
+            !string.IsNullOrWhiteSpace(apiToken),
+            apiToken?.Length ?? 0);
+
         if (string.IsNullOrWhiteSpace(apiToken))
         {
             _logger.LogError("API token not configured for SSE subscription");
@@ -318,8 +359,25 @@ public class SseClient : ISseClient
             if (!response.IsSuccessStatusCode)
             {
                 string error = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                int statusCode = (int)response.StatusCode;
+
                 _logger.LogError("SSE subscription failed: {StatusCode} - {Error}",
                     response.StatusCode, error);
+
+                // Check if this is a permanent error that should not trigger reconnection
+                if (NonRetryableStatusCodes.Contains(statusCode))
+                {
+                    _logger.LogWarning(
+                        "SSE permanent error (will not retry): {StatusCode} - {Error}",
+                        statusCode, error);
+
+                    // Fire event to notify subscribers of permanent failure
+                    PermanentError?.Invoke(this, new SsePermanentErrorEventArgs(statusCode, error));
+
+                    // Throw specific exception that will be caught and NOT retried
+                    throw new SsePermanentErrorException(statusCode, error);
+                }
+
                 throw new HttpRequestException($"SSE subscription failed: {response.StatusCode}");
             }
 
