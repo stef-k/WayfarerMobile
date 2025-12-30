@@ -370,14 +370,17 @@ public class DatabaseService : IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets the count of pending locations.
+    /// Gets the count of pending locations that can be synced.
+    /// Excludes filtered and server-rejected locations to match drain logic.
     /// </summary>
     public async Task<int> GetPendingCountAsync()
     {
         await EnsureInitializedAsync();
 
         return await _database!.Table<QueuedLocation>()
-            .Where(l => l.SyncStatus == SyncStatus.Pending)
+            .Where(l => l.SyncStatus == SyncStatus.Pending &&
+                       !l.IsFiltered &&
+                       !l.IsServerRejected)
             .CountAsync();
     }
 
@@ -1135,13 +1138,28 @@ public class DatabaseService : IAsyncDisposable
     #region Diagnostic Queries
 
     /// <summary>
-    /// Gets the count of pending locations for diagnostics.
+    /// Gets the count of pending locations that can be synced (for diagnostics).
+    /// Excludes filtered and server-rejected locations to match drain logic.
     /// </summary>
     public async Task<int> GetPendingLocationCountAsync()
     {
         await EnsureInitializedAsync();
         return await _database!.Table<QueuedLocation>()
-            .Where(l => l.SyncStatus == SyncStatus.Pending)
+            .Where(l => l.SyncStatus == SyncStatus.Pending &&
+                       !l.IsFiltered &&
+                       !l.IsServerRejected)
+            .CountAsync();
+    }
+
+    /// <summary>
+    /// Gets the count of filtered locations (for diagnostics).
+    /// These are locations that were skipped by the drain service due to threshold filters.
+    /// </summary>
+    public async Task<int> GetFilteredLocationCountAsync()
+    {
+        await EnsureInitializedAsync();
+        return await _database!.Table<QueuedLocation>()
+            .Where(l => l.IsFiltered)
             .CountAsync();
     }
 
