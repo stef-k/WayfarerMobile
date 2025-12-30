@@ -323,7 +323,7 @@ public class TripSyncService : ITripSyncService
         if (operationType == "Update")
         {
             var existing = await _database!.Table<PendingTripMutation>()
-                .Where(m => m.EntityId == entityId && m.EntityType == "Place" && !m.IsServerRejected && m.OperationType != "Delete")
+                .Where(m => m.EntityId == entityId && m.EntityType == "Place" && !m.IsRejected && m.OperationType != "Delete")
                 .FirstOrDefaultAsync();
 
             if (existing != null)
@@ -388,7 +388,7 @@ public class TripSyncService : ITripSyncService
         if (operationType == "Update")
         {
             var existing = await _database!.Table<PendingTripMutation>()
-                .Where(m => m.EntityId == entityId && m.EntityType == "Place" && !m.IsServerRejected && m.OperationType != "Delete")
+                .Where(m => m.EntityId == entityId && m.EntityType == "Place" && !m.IsRejected && m.OperationType != "Delete")
                 .FirstOrDefaultAsync();
 
             if (existing != null)
@@ -668,7 +668,7 @@ public class TripSyncService : ITripSyncService
         if (operationType == "Update")
         {
             var existing = await _database!.Table<PendingTripMutation>()
-                .Where(m => m.EntityId == entityId && m.EntityType == "Region" && !m.IsServerRejected && m.OperationType != "Delete")
+                .Where(m => m.EntityId == entityId && m.EntityType == "Region" && !m.IsRejected && m.OperationType != "Delete")
                 .FirstOrDefaultAsync();
 
             if (existing != null)
@@ -727,7 +727,7 @@ public class TripSyncService : ITripSyncService
         if (operationType == "Update")
         {
             var existing = await _database!.Table<PendingTripMutation>()
-                .Where(m => m.EntityId == entityId && m.EntityType == "Region" && !m.IsServerRejected && m.OperationType != "Delete")
+                .Where(m => m.EntityId == entityId && m.EntityType == "Region" && !m.IsRejected && m.OperationType != "Delete")
                 .FirstOrDefaultAsync();
 
             if (existing != null)
@@ -855,7 +855,7 @@ public class TripSyncService : ITripSyncService
         bool includeNotes)
     {
         var existing = await _database!.Table<PendingTripMutation>()
-            .Where(m => m.EntityId == tripId && m.EntityType == "Trip" && !m.IsServerRejected)
+            .Where(m => m.EntityId == tripId && m.EntityType == "Trip" && !m.IsRejected)
             .FirstOrDefaultAsync();
 
         if (existing != null)
@@ -956,7 +956,7 @@ public class TripSyncService : ITripSyncService
         string? notes)
     {
         var existing = await _database!.Table<PendingTripMutation>()
-            .Where(m => m.EntityId == segmentId && m.EntityType == "Segment" && !m.IsServerRejected)
+            .Where(m => m.EntityId == segmentId && m.EntityType == "Segment" && !m.IsRejected)
             .FirstOrDefaultAsync();
 
         if (existing != null)
@@ -988,7 +988,7 @@ public class TripSyncService : ITripSyncService
         string? originalNotes)
     {
         var existing = await _database!.Table<PendingTripMutation>()
-            .Where(m => m.EntityId == segmentId && m.EntityType == "Segment" && !m.IsServerRejected)
+            .Where(m => m.EntityId == segmentId && m.EntityType == "Segment" && !m.IsRejected)
             .FirstOrDefaultAsync();
 
         if (existing != null)
@@ -1090,7 +1090,7 @@ public class TripSyncService : ITripSyncService
         string? notes)
     {
         var existing = await _database!.Table<PendingTripMutation>()
-            .Where(m => m.EntityId == areaId && m.EntityType == "Area" && !m.IsServerRejected)
+            .Where(m => m.EntityId == areaId && m.EntityType == "Area" && !m.IsRejected)
             .FirstOrDefaultAsync();
 
         if (existing != null)
@@ -1122,7 +1122,7 @@ public class TripSyncService : ITripSyncService
         string? originalNotes)
     {
         var existing = await _database!.Table<PendingTripMutation>()
-            .Where(m => m.EntityId == areaId && m.EntityType == "Area" && !m.IsServerRejected)
+            .Where(m => m.EntityId == areaId && m.EntityType == "Area" && !m.IsRejected)
             .FirstOrDefaultAsync();
 
         if (existing != null)
@@ -1211,8 +1211,9 @@ public class TripSyncService : ITripSyncService
 
         if (!IsConnected) return;
 
+        // Inline CanSync expression - SQLite-net can't translate computed properties
         var pending = await _database!.Table<PendingTripMutation>()
-            .Where(m => m.CanSync)
+            .Where(m => !m.IsRejected && m.SyncAttempts < PendingTripMutation.MaxSyncAttempts)
             .OrderBy(m => m.CreatedAt)
             .ToListAsync();
 
@@ -1242,7 +1243,8 @@ public class TripSyncService : ITripSyncService
                 // Roll back optimistic changes since they can never be synced
                 await RestoreOriginalValuesAsync(mutation);
 
-                mutation.IsServerRejected = true;
+                mutation.IsRejected = true;
+                mutation.RejectionReason = $"Server: {ex.Message}";
                 mutation.LastError = ex.Message;
                 await _database.UpdateAsync(mutation);
                 SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = mutation.EntityId, ErrorMessage = ex.Message, IsClientError = true });
@@ -1407,8 +1409,9 @@ public class TripSyncService : ITripSyncService
     public async Task<int> GetPendingCountAsync()
     {
         await EnsureInitializedAsync();
+        // Inline CanSync expression - SQLite-net can't translate computed properties
         return await _database!.Table<PendingTripMutation>()
-            .Where(m => m.CanSync)
+            .Where(m => !m.IsRejected && m.SyncAttempts < PendingTripMutation.MaxSyncAttempts)
             .CountAsync();
     }
 
@@ -1419,7 +1422,7 @@ public class TripSyncService : ITripSyncService
     {
         await EnsureInitializedAsync();
         await _database!.Table<PendingTripMutation>()
-            .Where(m => m.IsServerRejected)
+            .Where(m => m.IsRejected)
             .DeleteAsync();
     }
 
@@ -1430,7 +1433,7 @@ public class TripSyncService : ITripSyncService
     {
         await EnsureInitializedAsync();
         return await _database!.Table<PendingTripMutation>()
-            .Where(m => m.IsServerRejected || m.SyncAttempts >= PendingTripMutation.MaxSyncAttempts)
+            .Where(m => m.IsRejected || m.SyncAttempts >= PendingTripMutation.MaxSyncAttempts)
             .CountAsync();
     }
 
@@ -1441,7 +1444,7 @@ public class TripSyncService : ITripSyncService
     {
         await EnsureInitializedAsync();
         var failed = await _database!.Table<PendingTripMutation>()
-            .Where(m => !m.IsServerRejected && m.SyncAttempts >= PendingTripMutation.MaxSyncAttempts)
+            .Where(m => !m.IsRejected && m.SyncAttempts >= PendingTripMutation.MaxSyncAttempts)
             .ToListAsync();
 
         foreach (var mutation in failed)
@@ -1497,7 +1500,7 @@ public class TripSyncService : ITripSyncService
     {
         await EnsureInitializedAsync();
         return await _database!.Table<PendingTripMutation>()
-            .Where(m => m.TripId == tripId && (m.IsServerRejected || m.SyncAttempts >= PendingTripMutation.MaxSyncAttempts))
+            .Where(m => m.TripId == tripId && (m.IsRejected || m.SyncAttempts >= PendingTripMutation.MaxSyncAttempts))
             .ToListAsync();
     }
 
@@ -1508,7 +1511,7 @@ public class TripSyncService : ITripSyncService
     {
         await EnsureInitializedAsync();
         return await _database!.Table<PendingTripMutation>()
-            .Where(m => m.TripId == tripId && (m.IsServerRejected || m.SyncAttempts >= PendingTripMutation.MaxSyncAttempts))
+            .Where(m => m.TripId == tripId && (m.IsRejected || m.SyncAttempts >= PendingTripMutation.MaxSyncAttempts))
             .CountAsync();
     }
 
@@ -1519,7 +1522,7 @@ public class TripSyncService : ITripSyncService
     {
         await EnsureInitializedAsync();
         var failed = await _database!.Table<PendingTripMutation>()
-            .Where(m => m.TripId == tripId && !m.IsServerRejected && m.SyncAttempts >= PendingTripMutation.MaxSyncAttempts)
+            .Where(m => m.TripId == tripId && !m.IsRejected && m.SyncAttempts >= PendingTripMutation.MaxSyncAttempts)
             .ToListAsync();
 
         foreach (var mutation in failed)

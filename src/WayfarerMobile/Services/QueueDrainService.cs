@@ -26,14 +26,14 @@ public sealed class QueueDrainService : IDisposable
     private const int MaxDrainsPerHour = 55;
 
     /// <summary>
-    /// Time threshold in minutes for client-side filtering (mirrors server's log-location).
+    /// Gets time threshold in minutes from settings (synced from server).
     /// </summary>
-    private const int TimeThresholdMinutes = 5;
+    private int TimeThresholdMinutes => _settings.LocationTimeThresholdMinutes;
 
     /// <summary>
-    /// Distance threshold in meters for client-side filtering (mirrors server's log-location).
+    /// Gets distance threshold in meters from settings (synced from server).
     /// </summary>
-    private const int DistanceThresholdMeters = 100;
+    private int DistanceThresholdMeters => _settings.LocationDistanceThresholdMeters;
 
     /// <summary>
     /// Timer interval for checking queue (seconds).
@@ -200,11 +200,10 @@ public sealed class QueueDrainService : IDisposable
     {
         try
         {
-            // Validate reference point isn't impossibly old
-            if (_settings.HasValidSyncReference() &&
-                _settings.LastSyncedTimestamp.HasValue)
+            // Validate reference point isn't impossibly old (atomic read to avoid race)
+            if (_settings.TryGetSyncReference(out _, out _, out var refTime))
             {
-                var age = DateTime.UtcNow - _settings.LastSyncedTimestamp.Value;
+                var age = DateTime.UtcNow - refTime;
                 if (age.TotalDays > MaxReferenceAgeDays)
                 {
                     _logger.LogWarning(
@@ -395,10 +394,10 @@ public sealed class QueueDrainService : IDisposable
 
             if (!filterResult.ShouldSync)
             {
-                // Mark as filtered and continue to next
-                await _database.MarkLocationFilteredAsync(location.Id, filterResult.Reason!);
+                // Mark as rejected and continue to next
+                await _database.MarkLocationRejectedAsync(location.Id, $"Client: {filterResult.Reason}");
                 _logger.LogInformation(
-                    "QueueDrain: Location {Id} filtered: {Reason}",
+                    "QueueDrain: Location {Id} rejected: {Reason}",
                     location.Id, filterResult.Reason);
                 return;
             }
@@ -441,9 +440,9 @@ public sealed class QueueDrainService : IDisposable
             else if (result.Skipped)
             {
                 // Server skipped due to its own thresholds - mark as rejected
-                await _database.MarkLocationServerRejectedAsync(
+                await _database.MarkLocationRejectedAsync(
                     location.Id,
-                    result.Message ?? "Server skipped");
+                    $"Server: {result.Message ?? "skipped"}");
                 _consecutiveFailures = 0;
                 _logger.LogDebug(
                     "Location {Id} skipped by server: {Message}",
@@ -452,9 +451,9 @@ public sealed class QueueDrainService : IDisposable
             else if (result.StatusCode.HasValue && result.StatusCode >= 400 && result.StatusCode < 500)
             {
                 // Client error (4xx) - server rejection, don't retry
-                await _database.MarkLocationServerRejectedAsync(
+                await _database.MarkLocationRejectedAsync(
                     location.Id,
-                    result.Message ?? $"HTTP {result.StatusCode}");
+                    $"Server: {result.Message ?? $"HTTP {result.StatusCode}"}");
                 _consecutiveFailures = 0;
                 _logger.LogWarning(
                     "Location {Id} rejected by server (HTTP {StatusCode}): {Message}",
@@ -501,16 +500,13 @@ public sealed class QueueDrainService : IDisposable
     /// </summary>
     private (bool ShouldSync, string? Reason) ShouldSyncLocation(QueuedLocation location)
     {
-        // First sync - no reference point, always sync
-        if (!_settings.HasValidSyncReference())
+        // Atomically get sync reference to avoid race with logout/clear
+        if (!_settings.TryGetSyncReference(out var refLat, out var refLon, out var refTime))
         {
+            // First sync - no reference point, always sync
             _logger.LogDebug("No sync reference, first location will sync");
             return (true, null);
         }
-
-        var refLat = _settings.LastSyncedLatitude!.Value;
-        var refLon = _settings.LastSyncedLongitude!.Value;
-        var refTime = _settings.LastSyncedTimestamp!.Value;
 
         // MEDIUM FIX: Handle out-of-order locations
         // If location is older than or equal to reference, skip it

@@ -864,18 +864,17 @@ public partial class SettingsViewModel : BaseViewModel
             var csv = new StringBuilder();
 
             // Header row
-            csv.AppendLine("Id,Timestamp,Latitude,Longitude,Altitude,Accuracy,Speed,Bearing,Provider,SyncStatus,SyncAttempts,LastSyncAttempt,IsServerRejected,LastError,Notes");
+            csv.AppendLine("Id,Timestamp,Latitude,Longitude,Altitude,Accuracy,Speed,Bearing,Provider,SyncStatus,SyncAttempts,LastSyncAttempt,IsRejected,RejectionReason,LastError,Notes");
 
             // Data rows
             foreach (var loc in locations)
             {
                 var status = loc.SyncStatus switch
                 {
-                    SyncStatus.Pending => loc.IsServerRejected ? "ServerRejected" :
-                                         loc.SyncAttempts >= 5 ? "Failed" :
+                    SyncStatus.Pending => loc.IsRejected ? "Rejected" :
                                          loc.SyncAttempts > 0 ? $"Retrying({loc.SyncAttempts})" : "Pending",
                     SyncStatus.Synced => "Synced",
-                    SyncStatus.Failed => "Failed",
+                    SyncStatus.Failed => "Failed", // Legacy status
                     _ => "Unknown"
                 };
 
@@ -894,7 +893,8 @@ public partial class SettingsViewModel : BaseViewModel
                     $"{status}," +
                     $"{loc.SyncAttempts}," +
                     $"{(loc.LastSyncAttempt.HasValue ? loc.LastSyncAttempt.Value.ToString("yyyy-MM-dd HH:mm:ss") : "")}," +
-                    $"{loc.IsServerRejected}," +
+                    $"{loc.IsRejected}," +
+                    $"\"{loc.RejectionReason?.Replace("\"", "\"\"") ?? ""}\"," +
                     $"\"{loc.LastError?.Replace("\"", "\"\"") ?? ""}\"," +
                     $"\"{loc.Notes?.Replace("\"", "\"\"") ?? ""}\"");
             }

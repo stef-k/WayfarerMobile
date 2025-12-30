@@ -88,24 +88,27 @@ public class QueuedLocation
     public string? LastError { get; set; }
 
     /// <summary>
-    /// Gets or sets whether the server explicitly rejected this location.
-    /// When true, this location should not be retried (unlike technical failures).
+    /// Gets or sets whether this location was rejected (by client threshold check or server).
+    /// When true, this location should not be retried.
     /// </summary>
-    public bool IsServerRejected { get; set; }
+    [Indexed]
+    public bool IsRejected { get; set; }
 
     /// <summary>
-    /// Gets or sets whether this location was filtered by client-side threshold check.
-    /// Used by queue drain service when location doesn't meet time AND distance thresholds.
+    /// Gets or sets the reason for rejection.
+    /// Examples: "Client: Time 2.3min &lt; 5min threshold", "Server: HTTP 400 Bad Request"
     /// </summary>
-    public bool IsFiltered { get; set; }
-
-    /// <summary>
-    /// Gets or sets the reason for filtering.
-    /// </summary>
-    public string? FilterReason { get; set; }
+    public string? RejectionReason { get; set; }
 
     /// <summary>
     /// Gets or sets when this record was created.
     /// </summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Gets whether this location can be synced (pending and not rejected).
+    /// Valid locations retry until 300-day purge regardless of attempt count.
+    /// </summary>
+    [Ignore]
+    public bool CanSync => SyncStatus == SyncStatus.Pending && !IsRejected;
 }

@@ -84,7 +84,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
     private int _syncedLocations;
 
     [ObservableProperty]
-    private int _failedLocations;
+    private int _rejectedLocations;
 
     [ObservableProperty]
     private string _oldestPendingAge = "N/A";
@@ -423,7 +423,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
     [RelayCommand]
     private async Task ClearAllQueueAsync()
     {
-        var total = PendingLocations + SyncedLocations + FailedLocations;
+        var total = PendingLocations + SyncedLocations + RejectedLocations;
         if (total == 0)
         {
             await _toastService.ShowAsync("Queue is already empty");
@@ -469,17 +469,16 @@ public partial class DiagnosticsViewModel : BaseViewModel
             }
 
             var csv = new StringBuilder();
-            csv.AppendLine("Id,Timestamp,Latitude,Longitude,Altitude,Accuracy,Speed,Bearing,Provider,SyncStatus,SyncAttempts,LastSyncAttempt,IsServerRejected,LastError,Notes");
+            csv.AppendLine("Id,Timestamp,Latitude,Longitude,Altitude,Accuracy,Speed,Bearing,Provider,SyncStatus,SyncAttempts,LastSyncAttempt,IsRejected,RejectionReason,LastError,Notes");
 
             foreach (var loc in locations)
             {
                 var status = loc.SyncStatus switch
                 {
-                    Core.Enums.SyncStatus.Pending => loc.IsServerRejected ? "ServerRejected" :
-                                         loc.SyncAttempts >= 5 ? "Failed" :
+                    Core.Enums.SyncStatus.Pending => loc.IsRejected ? "Rejected" :
                                          loc.SyncAttempts > 0 ? $"Retrying({loc.SyncAttempts})" : "Pending",
                     Core.Enums.SyncStatus.Synced => "Synced",
-                    Core.Enums.SyncStatus.Failed => "Failed",
+                    Core.Enums.SyncStatus.Failed => "Failed", // Legacy status
                     _ => "Unknown"
                 };
 
@@ -497,7 +496,8 @@ public partial class DiagnosticsViewModel : BaseViewModel
                     $"{status}," +
                     $"{loc.SyncAttempts}," +
                     $"{(loc.LastSyncAttempt.HasValue ? loc.LastSyncAttempt.Value.ToString("yyyy-MM-dd HH:mm:ss") : "")}," +
-                    $"{loc.IsServerRejected}," +
+                    $"{loc.IsRejected}," +
+                    $"\"{loc.RejectionReason?.Replace("\"", "\"\"") ?? ""}\"," +
                     $"\"{loc.LastError?.Replace("\"", "\"\"") ?? ""}\"," +
                     $"\"{loc.Notes?.Replace("\"", "\"\"") ?? ""}\"");
             }
@@ -568,11 +568,10 @@ public partial class DiagnosticsViewModel : BaseViewModel
             {
                 var status = loc.SyncStatus switch
                 {
-                    Core.Enums.SyncStatus.Pending => loc.IsServerRejected ? "REJECTED" :
-                                         loc.SyncAttempts >= 5 ? "FAILED" :
+                    Core.Enums.SyncStatus.Pending => loc.IsRejected ? "REJECTED" :
                                          loc.SyncAttempts > 0 ? $"RETRY({loc.SyncAttempts})" : "PENDING",
                     Core.Enums.SyncStatus.Synced => "SYNCED",
-                    Core.Enums.SyncStatus.Failed => "FAILED",
+                    Core.Enums.SyncStatus.Failed => "FAILED", // Legacy status
                     _ => "?"
                 };
 
@@ -639,7 +638,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
         QueueHealthStatus = diag.QueueHealthStatus;
         PendingLocations = diag.PendingCount;
         SyncedLocations = diag.SyncedCount;
-        FailedLocations = diag.FailedCount;
+        RejectedLocations = diag.RejectedCount;
 
         if (diag.OldestPendingTimestamp.HasValue)
         {

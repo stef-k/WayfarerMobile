@@ -163,13 +163,13 @@ public class DatabaseServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetPendingLocationsAsync_ExcludesServerRejectedLocations()
+    public async Task GetPendingLocationsAsync_ExcludesRejectedLocations()
     {
         // Arrange
         await InsertQueuedLocationAsync(CreateLocationData(51.0, -0.1), SyncStatus.Pending);
 
         var rejected = await InsertQueuedLocationAsync(CreateLocationData(52.0, -0.2), SyncStatus.Pending);
-        rejected.IsServerRejected = true;
+        rejected.IsRejected = true;
         await _database.UpdateAsync(rejected);
 
         await InsertQueuedLocationAsync(CreateLocationData(53.0, -0.3), SyncStatus.Pending);
@@ -183,19 +183,18 @@ public class DatabaseServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetPendingLocationsAsync_ExcludesLocationsExceedingMaxAttempts()
+    public async Task GetPendingLocationsAsync_IncludesLocationsRegardlessOfAttemptCount()
     {
-        // Arrange
+        // Arrange - Valid locations retry until 300-day purge regardless of attempts
         await InsertQueuedLocationAsync(CreateLocationData(51.0, -0.1), SyncStatus.Pending, syncAttempts: 0);
         await InsertQueuedLocationAsync(CreateLocationData(52.0, -0.2), SyncStatus.Pending, syncAttempts: MaxSyncAttempts);
-        await InsertQueuedLocationAsync(CreateLocationData(53.0, -0.3), SyncStatus.Pending, syncAttempts: MaxSyncAttempts + 1);
+        await InsertQueuedLocationAsync(CreateLocationData(53.0, -0.3), SyncStatus.Pending, syncAttempts: MaxSyncAttempts + 100);
 
         // Act
         var pending = await GetPendingLocationsAsync();
 
-        // Assert
-        pending.Should().HaveCount(1);
-        pending[0].Latitude.Should().Be(51.0);
+        // Assert - All pending locations included regardless of attempt count
+        pending.Should().HaveCount(3);
     }
 
     [Fact]
@@ -355,22 +354,22 @@ public class DatabaseServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task MarkLocationFailedAsync_SetsFailedStatusWhenMaxAttemptsReached()
+    public async Task MarkLocationFailedAsync_KeepsPendingStatusAlways()
     {
-        // Arrange - Already at 4 attempts, one more will hit max
+        // Arrange - Valid locations stay pending regardless of attempt count
         var queued = await InsertQueuedLocationAsync(CreateLocationData(51.0, -0.1), SyncStatus.Pending, syncAttempts: MaxSyncAttempts - 1);
 
         // Act
-        await MarkLocationFailedAsync(queued.Id, "Final failure");
+        await MarkLocationFailedAsync(queued.Id, "Transient error");
 
-        // Assert
+        // Assert - Status stays Pending, only SyncAttempts incremented for diagnostics
         var updated = await _database.Table<QueuedLocation>().FirstOrDefaultAsync(l => l.Id == queued.Id);
         updated!.SyncAttempts.Should().Be(MaxSyncAttempts);
-        updated.SyncStatus.Should().Be(SyncStatus.Failed);
+        updated.SyncStatus.Should().Be(SyncStatus.Pending); // Stays pending for retry
     }
 
     [Fact]
-    public async Task MarkLocationFailedAsync_KeepsPendingStatusBelowMaxAttempts()
+    public async Task MarkLocationFailedAsync_IncrementsAttemptCountForDiagnostics()
     {
         // Arrange
         var queued = await InsertQueuedLocationAsync(CreateLocationData(51.0, -0.1), SyncStatus.Pending, syncAttempts: 2);
@@ -378,10 +377,10 @@ public class DatabaseServiceTests : IAsyncLifetime
         // Act
         await MarkLocationFailedAsync(queued.Id, "Transient error");
 
-        // Assert
+        // Assert - Attempt count tracked for diagnostics
         var updated = await _database.Table<QueuedLocation>().FirstOrDefaultAsync(l => l.Id == queued.Id);
         updated!.SyncAttempts.Should().Be(3);
-        updated.SyncStatus.Should().Be(SyncStatus.Pending); // Still pending, not failed
+        updated.SyncStatus.Should().Be(SyncStatus.Pending);
     }
 
     [Fact]
@@ -402,43 +401,43 @@ public class DatabaseServiceTests : IAsyncLifetime
 
     #endregion
 
-    #region MarkLocationServerRejectedAsync Tests
+    #region MarkLocationRejectedAsync Tests
 
     [Fact]
-    public async Task MarkLocationServerRejectedAsync_SetsRejectedFlag()
+    public async Task MarkLocationRejectedAsync_SetsRejectedFlag()
     {
         // Arrange
         var queued = await InsertQueuedLocationAsync(CreateLocationData(51.0, -0.1), SyncStatus.Pending);
 
         // Act
-        await MarkLocationServerRejectedAsync(queued.Id, "Threshold validation failed");
+        await MarkLocationRejectedAsync(queued.Id, "Server: Threshold validation failed");
 
         // Assert
         var updated = await _database.Table<QueuedLocation>().FirstOrDefaultAsync(l => l.Id == queued.Id);
-        updated!.IsServerRejected.Should().BeTrue();
+        updated!.IsRejected.Should().BeTrue();
         updated.SyncStatus.Should().Be(SyncStatus.Synced); // Marked as "done"
-        updated.LastError.Should().Be("Threshold validation failed");
+        updated.RejectionReason.Should().Be("Server: Threshold validation failed");
     }
 
     [Fact]
-    public async Task MarkLocationServerRejectedAsync_NonExistentId_DoesNotThrow()
+    public async Task MarkLocationRejectedAsync_NonExistentId_DoesNotThrow()
     {
         // Act
-        var act = async () => await MarkLocationServerRejectedAsync(9999, "Test rejection");
+        var act = async () => await MarkLocationRejectedAsync(9999, "Test rejection");
 
         // Assert
         await act.Should().NotThrowAsync();
     }
 
     [Fact]
-    public async Task MarkLocationServerRejectedAsync_RejectedLocationExcludedFromPending()
+    public async Task MarkLocationRejectedAsync_RejectedLocationExcludedFromPending()
     {
         // Arrange
         var queued1 = await InsertQueuedLocationAsync(CreateLocationData(51.0, -0.1), SyncStatus.Pending);
         var queued2 = await InsertQueuedLocationAsync(CreateLocationData(52.0, -0.2), SyncStatus.Pending);
 
         // Act
-        await MarkLocationServerRejectedAsync(queued1.Id, "Rejected");
+        await MarkLocationRejectedAsync(queued1.Id, "Client: Time below threshold");
 
         // Assert
         var pending = await GetPendingLocationsAsync();
@@ -472,18 +471,18 @@ public class DatabaseServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task PurgeSyncedLocationsAsync_DeletesOldServerRejectedLocations()
+    public async Task PurgeSyncedLocationsAsync_DeletesOldRejectedLocations()
     {
         // Arrange
         var oldDate = DateTime.UtcNow.AddDays(-5);
         var recentDate = DateTime.UtcNow.AddDays(-1);
 
         var oldRejected = await InsertQueuedLocationAsync(CreateLocationData(51.0, -0.1), SyncStatus.Synced, createdAt: oldDate);
-        oldRejected.IsServerRejected = true;
+        oldRejected.IsRejected = true;
         await _database.UpdateAsync(oldRejected);
 
         var recentRejected = await InsertQueuedLocationAsync(CreateLocationData(52.0, -0.2), SyncStatus.Synced, createdAt: recentDate);
-        recentRejected.IsServerRejected = true;
+        recentRejected.IsRejected = true;
         await _database.UpdateAsync(recentRejected);
 
         // Act
@@ -498,8 +497,8 @@ public class DatabaseServiceTests : IAsyncLifetime
     [Fact]
     public async Task PurgeSyncedLocationsAsync_DeletesVeryOldPendingLocations()
     {
-        // Arrange - 30+ days old pending locations are considered stale
-        var veryOldDate = DateTime.UtcNow.AddDays(-35);
+        // Arrange - 300+ days old pending locations are considered stale
+        var veryOldDate = DateTime.UtcNow.AddDays(-305);
         var recentDate = DateTime.UtcNow.AddDays(-5);
 
         await InsertQueuedLocationAsync(CreateLocationData(51.0, -0.1), SyncStatus.Pending, createdAt: veryOldDate);
@@ -1099,31 +1098,36 @@ public class DatabaseServiceTests : IAsyncLifetime
     #region Edge Cases Tests
 
     [Fact]
-    public async Task GetPendingLocationsAsync_ExactlyAtMaxAttempts_Excluded()
+    public async Task GetPendingLocationsAsync_HighAttemptCount_StillIncluded()
     {
-        // Arrange - Location exactly at max attempts should be excluded
+        // Arrange - Valid locations retry until 300-day purge regardless of attempts
         var queued = await InsertQueuedLocationAsync(
-            CreateLocationData(51.0, -0.1), SyncStatus.Pending, syncAttempts: MaxSyncAttempts);
+            CreateLocationData(51.0, -0.1), SyncStatus.Pending, syncAttempts: 1000);
 
         // Act
         var pending = await GetPendingLocationsAsync();
 
-        // Assert
-        pending.Should().BeEmpty();
+        // Assert - Location included regardless of high attempt count
+        pending.Should().HaveCount(1);
     }
 
     [Fact]
-    public async Task GetPendingLocationsAsync_OneBelowMaxAttempts_Included()
+    public async Task GetPendingLocationsAsync_OnlyRejectedExcluded()
     {
-        // Arrange - Location one below max should be included
-        var queued = await InsertQueuedLocationAsync(
-            CreateLocationData(51.0, -0.1), SyncStatus.Pending, syncAttempts: MaxSyncAttempts - 1);
+        // Arrange - Only rejected locations are excluded, not high-attempt ones
+        var valid = await InsertQueuedLocationAsync(
+            CreateLocationData(51.0, -0.1), SyncStatus.Pending, syncAttempts: 500);
+        var rejected = await InsertQueuedLocationAsync(
+            CreateLocationData(52.0, -0.2), SyncStatus.Pending, syncAttempts: 0);
+        rejected.IsRejected = true;
+        await _database.UpdateAsync(rejected);
 
         // Act
         var pending = await GetPendingLocationsAsync();
 
-        // Assert
+        // Assert - Only rejected excluded
         pending.Should().HaveCount(1);
+        pending[0].Id.Should().Be(valid.Id);
     }
 
     [Fact]
@@ -1363,13 +1367,12 @@ public class DatabaseServiceTests : IAsyncLifetime
 
     /// <summary>
     /// Gets pending locations from the database.
+    /// Valid locations retry until purge regardless of attempt count.
     /// </summary>
     private async Task<List<QueuedLocation>> GetPendingLocationsAsync(int limit = 100)
     {
         return await _database.Table<QueuedLocation>()
-            .Where(l => l.SyncStatus == SyncStatus.Pending &&
-                       l.SyncAttempts < MaxSyncAttempts &&
-                       !l.IsServerRejected)
+            .Where(l => l.SyncStatus == SyncStatus.Pending && !l.IsRejected)
             .OrderBy(l => l.Timestamp)
             .Take(limit)
             .ToListAsync();
@@ -1398,33 +1401,33 @@ public class DatabaseServiceTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// Marks a location as failed.
+    /// Records a failure for diagnostics (increments attempts, keeps Pending status).
     /// </summary>
     private async Task MarkLocationFailedAsync(int id, string error)
     {
+        // Status stays Pending - valid locations retry until 300-day purge
         await _database.ExecuteAsync(
             @"UPDATE QueuedLocations
               SET SyncAttempts = SyncAttempts + 1,
                   LastSyncAttempt = ?,
-                  LastError = ?,
-                  SyncStatus = CASE WHEN SyncAttempts + 1 >= ? THEN ? ELSE SyncStatus END
+                  LastError = ?
               WHERE Id = ?",
-            DateTime.UtcNow, error, MaxSyncAttempts, (int)SyncStatus.Failed, id);
+            DateTime.UtcNow, error, id);
     }
 
     /// <summary>
-    /// Marks a location as server rejected.
+    /// Marks a location as rejected.
     /// </summary>
-    private async Task MarkLocationServerRejectedAsync(int id, string reason)
+    private async Task MarkLocationRejectedAsync(int id, string reason)
     {
         var location = await _database.Table<QueuedLocation>()
             .FirstOrDefaultAsync(l => l.Id == id);
 
         if (location != null)
         {
-            location.IsServerRejected = true;
+            location.IsRejected = true;
             location.SyncStatus = SyncStatus.Synced;
-            location.LastError = reason;
+            location.RejectionReason = reason;
             location.LastSyncAttempt = DateTime.UtcNow;
             await _database.UpdateAsync(location);
         }
@@ -1442,10 +1445,11 @@ public class DatabaseServiceTests : IAsyncLifetime
 
         var rejectedCutoff = DateTime.UtcNow.AddDays(-2);
         var deletedRejected = await _database.ExecuteAsync(
-            "DELETE FROM QueuedLocations WHERE IsServerRejected = 1 AND CreatedAt < ?",
+            "DELETE FROM QueuedLocations WHERE IsRejected = 1 AND CreatedAt < ?",
             rejectedCutoff);
 
-        var pendingCutoff = DateTime.UtcNow.AddDays(-30);
+        // 300 days matches production purge window
+        var pendingCutoff = DateTime.UtcNow.AddDays(-300);
         var deletedOldPending = await _database.ExecuteAsync(
             "DELETE FROM QueuedLocations WHERE SyncStatus = ? AND CreatedAt < ?",
             (int)SyncStatus.Pending, pendingCutoff);

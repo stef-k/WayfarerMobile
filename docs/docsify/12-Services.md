@@ -270,17 +270,22 @@ Synced    Mark Failed
 
 | Status | Description |
 |--------|-------------|
-| `Pending` | Awaiting sync |
+| `Pending` | Awaiting sync (retries until 300-day purge) |
 | `Synced` | Successfully sent to server |
-| `Failed` | Max retries exceeded |
 
-### Server Rejection Handling
+### Rejection Handling
 
-Server may reject locations due to threshold validation. These are marked with `IsServerRejected = true` and not retried:
+Locations can be rejected by client threshold checks or server validation. These are marked with `IsRejected = true` and `RejectionReason` for debugging:
 
 ```csharp
-await _databaseService.MarkLocationServerRejectedAsync(id, "threshold skipped");
+// Client rejection (threshold not met)
+await _databaseService.MarkLocationRejectedAsync(id, "Client: Time 2.3min below 5min threshold");
+
+// Server rejection (4xx response)
+await _databaseService.MarkLocationRejectedAsync(id, "Server: HTTP 400 Bad Request");
 ```
+
+Rejected locations are not retried and are purged after 2 days.
 
 ---
 

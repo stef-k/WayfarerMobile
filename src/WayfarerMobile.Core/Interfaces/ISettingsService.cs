@@ -253,6 +253,16 @@ public interface ISettingsService
     bool HasValidSyncReference();
 
     /// <summary>
+    /// Atomically retrieves the sync reference point.
+    /// Use this instead of reading individual properties to avoid race conditions.
+    /// </summary>
+    /// <param name="latitude">The latitude of the last synced location.</param>
+    /// <param name="longitude">The longitude of the last synced location.</param>
+    /// <param name="timestamp">The timestamp of the last synced location.</param>
+    /// <returns>True if a valid reference exists; false if no reference or partial data.</returns>
+    bool TryGetSyncReference(out double latitude, out double longitude, out DateTime timestamp);
+
+    /// <summary>
     /// Updates the sync reference point after a successful sync.
     /// Called only when server accepts a location.
     /// </summary>
