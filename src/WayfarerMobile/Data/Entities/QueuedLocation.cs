@@ -91,15 +91,28 @@ public class QueuedLocation
     public bool IsServerRejected { get; set; }
 
     /// <summary>
+    /// Gets or sets whether this location was filtered by client-side threshold check.
+    /// Used by queue drain service when location doesn't meet time AND distance thresholds.
+    /// Filtered locations are not sent to server but are kept for cleanup.
+    /// </summary>
+    public bool IsFiltered { get; set; }
+
+    /// <summary>
+    /// Gets or sets the reason for filtering (e.g., "Distance: 50m, threshold is 100m").
+    /// Populated when IsFiltered is true for debugging/diagnostics.
+    /// </summary>
+    public string? FilterReason { get; set; }
+
+    /// <summary>
     /// Gets or sets when this record was created.
     /// </summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// Gets whether this location can be synced (not rejected, under max attempts).
+    /// Gets whether this location can be synced (not rejected, not filtered, under max attempts).
     /// </summary>
     [Ignore]
-    public bool CanSync => SyncStatus == SyncStatus.Pending && !IsServerRejected && SyncAttempts < MaxSyncAttempts;
+    public bool CanSync => SyncStatus == SyncStatus.Pending && !IsServerRejected && !IsFiltered && SyncAttempts < MaxSyncAttempts;
 
     /// <summary>
     /// Maximum sync attempts before giving up.

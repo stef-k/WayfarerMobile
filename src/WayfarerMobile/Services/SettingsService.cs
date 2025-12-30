@@ -48,6 +48,11 @@ public class SettingsService : ISettingsService
     private const string KeyVisitNotificationStyle = "visit_notification_style";
     private const string KeyVisitVoiceAnnouncementEnabled = "visit_voice_announcement_enabled";
 
+    // Queue sync reference point
+    private const string KeyLastSyncedLatitude = "last_synced_latitude";
+    private const string KeyLastSyncedLongitude = "last_synced_longitude";
+    private const string KeyLastSyncedTimestamp = "last_synced_timestamp";
+
     #endregion
 
     #region ISettingsService Implementation
@@ -560,6 +565,109 @@ public class SettingsService : ISettingsService
 
     #endregion
 
+    #region Queue Sync Reference Point
+
+    /// <summary>
+    /// Gets or sets the latitude of the last successfully synced location.
+    /// Used as reference point for threshold calculations in queue drain.
+    /// </summary>
+    public double? LastSyncedLatitude
+    {
+        get
+        {
+            if (!Preferences.ContainsKey(KeyLastSyncedLatitude))
+                return null;
+            return Preferences.Get(KeyLastSyncedLatitude, 0.0);
+        }
+        set
+        {
+            if (value.HasValue)
+                Preferences.Set(KeyLastSyncedLatitude, value.Value);
+            else
+                Preferences.Remove(KeyLastSyncedLatitude);
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the longitude of the last successfully synced location.
+    /// Used as reference point for threshold calculations in queue drain.
+    /// </summary>
+    public double? LastSyncedLongitude
+    {
+        get
+        {
+            if (!Preferences.ContainsKey(KeyLastSyncedLongitude))
+                return null;
+            return Preferences.Get(KeyLastSyncedLongitude, 0.0);
+        }
+        set
+        {
+            if (value.HasValue)
+                Preferences.Set(KeyLastSyncedLongitude, value.Value);
+            else
+                Preferences.Remove(KeyLastSyncedLongitude);
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the timestamp of the last successfully synced location.
+    /// Used as reference point for threshold calculations in queue drain.
+    /// </summary>
+    public DateTime? LastSyncedTimestamp
+    {
+        get
+        {
+            if (!Preferences.ContainsKey(KeyLastSyncedTimestamp))
+                return null;
+            var ticks = Preferences.Get(KeyLastSyncedTimestamp, 0L);
+            return ticks > 0 ? new DateTime(ticks, DateTimeKind.Utc) : null;
+        }
+        set
+        {
+            if (value.HasValue)
+                Preferences.Set(KeyLastSyncedTimestamp, value.Value.Ticks);
+            else
+                Preferences.Remove(KeyLastSyncedTimestamp);
+        }
+    }
+
+    /// <summary>
+    /// Checks if a valid sync reference point exists.
+    /// Returns false on first sync (no previous reference).
+    /// </summary>
+    public bool HasValidSyncReference()
+    {
+        return LastSyncedLatitude.HasValue &&
+               LastSyncedLongitude.HasValue &&
+               LastSyncedTimestamp.HasValue;
+    }
+
+    /// <summary>
+    /// Updates the sync reference point after a successful sync.
+    /// Called only when server accepts a location.
+    /// </summary>
+    /// <param name="latitude">Latitude of synced location.</param>
+    /// <param name="longitude">Longitude of synced location.</param>
+    public void UpdateLastSyncedLocation(double latitude, double longitude)
+    {
+        LastSyncedLatitude = latitude;
+        LastSyncedLongitude = longitude;
+        LastSyncedTimestamp = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Clears the sync reference point.
+    /// Called on logout or when reference is stale (>30 days).
+    /// </summary>
+    public void ClearSyncReference()
+    {
+        LastSyncedLatitude = null;
+        LastSyncedLongitude = null;
+        LastSyncedTimestamp = null;
+    }
+
+    #endregion
+
     #region Methods
 
     /// <summary>
@@ -574,12 +682,21 @@ public class SettingsService : ISettingsService
 
     /// <summary>
     /// Clears authentication data only.
-    /// Removes sensitive data from SecureStorage.
+    /// Removes sensitive data from SecureStorage and clears sync reference.
     /// </summary>
     public void ClearAuth()
     {
         SecureStorage.Default.Remove(KeyApiToken);
         SecureStorage.Default.Remove(KeyServerUrl);
+
+        // Clear cached values
+        _cachedApiToken = null;
+        _cachedServerUrl = null;
+        _apiTokenLoaded = true;
+        _serverUrlLoaded = true;
+
+        // Clear sync reference - new account will have different timeline
+        ClearSyncReference();
     }
 
     /// <summary>
