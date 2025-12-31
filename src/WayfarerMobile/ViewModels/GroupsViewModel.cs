@@ -493,9 +493,19 @@ public partial class GroupsViewModel : BaseViewModel
                 SelectedGroup = lastGroup ?? Groups[0];
             }
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error loading groups");
+            ErrorMessage = "Failed to load groups. Please check your connection and try again.";
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out loading groups");
+            ErrorMessage = "Request timed out. Please try again.";
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load groups");
+            _logger.LogError(ex, "Unexpected error loading groups");
             ErrorMessage = "Failed to load groups. Please check your connection and try again.";
         }
         finally
@@ -572,9 +582,19 @@ public partial class GroupsViewModel : BaseViewModel
                 UpdateMapMarkers();
             }
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error loading members for group {GroupId}", SelectedGroup?.Id);
+            ErrorMessage = "Failed to load members. Please check your connection and try again.";
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out loading members for group {GroupId}", SelectedGroup?.Id);
+            ErrorMessage = "Request timed out. Please try again.";
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load members for group {GroupId}", SelectedGroup?.Id);
+            _logger.LogError(ex, "Unexpected error loading members for group {GroupId}", SelectedGroup?.Id);
             ErrorMessage = "Failed to load members. Please check your connection and try again.";
         }
         finally
@@ -625,9 +645,17 @@ public partial class GroupsViewModel : BaseViewModel
                 }
             });
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Network error refreshing locations");
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogWarning(ex, "Request timed out refreshing locations");
+        }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Refresh locations error");
+            _logger.LogWarning(ex, "Unexpected error refreshing locations");
         }
     }
 
@@ -731,13 +759,29 @@ public partial class GroupsViewModel : BaseViewModel
                 }
             }
         }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out loading historical locations");
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                ErrorMessage = "Request timed out loading historical locations";
+            });
+        }
         catch (OperationCanceledException)
         {
             _logger.LogDebug("LoadHistoricalLocationsAsync - Cancelled");
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error loading historical locations");
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                ErrorMessage = "Failed to load historical locations";
+            });
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load historical locations");
+            _logger.LogError(ex, "Unexpected error loading historical locations");
             MainThread.BeginInvokeOnMainThread(() =>
             {
                 ErrorMessage = "Failed to load historical locations";
@@ -955,9 +999,17 @@ public partial class GroupsViewModel : BaseViewModel
                 });
             }
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error loading historical locations for {Date}", date);
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out loading historical locations for {Date}", date);
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load historical locations for {Date}", date);
+            _logger.LogError(ex, "Unexpected error loading historical locations for {Date}", date);
         }
         finally
         {
@@ -1024,9 +1076,17 @@ public partial class GroupsViewModel : BaseViewModel
                 });
             }
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error loading historical locations for {Date}", data.NewDate);
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out loading historical locations for {Date}", data.NewDate);
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load historical locations for {Date}", data.NewDate);
+            _logger.LogError(ex, "Unexpected error loading historical locations for {Date}", data.NewDate);
         }
         finally
         {
@@ -1117,9 +1177,19 @@ public partial class GroupsViewModel : BaseViewModel
                 ErrorMessage = "Failed to update peer visibility";
             }
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error toggling peer visibility");
+            ErrorMessage = "Failed to update peer visibility";
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out toggling peer visibility");
+            ErrorMessage = "Request timed out";
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error toggling peer visibility");
+            _logger.LogError(ex, "Unexpected error toggling peer visibility");
             ErrorMessage = "Failed to update peer visibility";
         }
     }
@@ -1311,9 +1381,13 @@ public partial class GroupsViewModel : BaseViewModel
             var options = new MapLaunchOptions { Name = SelectedMember.DisplayText };
             await Microsoft.Maui.ApplicationModel.Map.Default.OpenAsync(location, options);
         }
+        catch (FeatureNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Maps feature not supported on this device");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to open maps");
+            _logger.LogError(ex, "Unexpected error opening maps");
         }
     }
 
@@ -1330,9 +1404,13 @@ public partial class GroupsViewModel : BaseViewModel
             var url = $"https://en.wikipedia.org/wiki/Special:Nearby#/coord/{SelectedMember.LastLocation.Latitude},{SelectedMember.LastLocation.Longitude}";
             await Launcher.OpenAsync(new Uri(url));
         }
+        catch (UriFormatException ex)
+        {
+            _logger.LogError(ex, "Invalid Wikipedia URL");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to open Wikipedia");
+            _logger.LogError(ex, "Unexpected error opening Wikipedia");
         }
     }
 
@@ -1355,9 +1433,14 @@ public partial class GroupsViewModel : BaseViewModel
             await _toastService.ShowAsync("Coordinates copied");
             _logger.LogInformation("Coordinates copied to clipboard: {Coords}", coords);
         }
+        catch (FeatureNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Clipboard not supported on this device");
+            await _toastService.ShowErrorAsync("Clipboard not available");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to copy coordinates");
+            _logger.LogError(ex, "Unexpected error copying coordinates");
             await _toastService.ShowErrorAsync("Failed to copy coordinates");
         }
     }
@@ -1381,9 +1464,13 @@ public partial class GroupsViewModel : BaseViewModel
                 Text = text
             });
         }
+        catch (FeatureNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Share feature not supported on this device");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to share location");
+            _logger.LogError(ex, "Unexpected error sharing location");
         }
     }
 
@@ -1498,9 +1585,19 @@ public partial class GroupsViewModel : BaseViewModel
             _logger.LogInformation("Started navigation to {Member}: {Distance:F1}km",
                 destName, route.TotalDistanceMeters / 1000);
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error calculating route");
+            await _toastService.ShowErrorAsync("Failed to calculate route");
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Route calculation timed out");
+            await _toastService.ShowErrorAsync("Route calculation timed out");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to start navigation");
+            _logger.LogError(ex, "Unexpected error starting navigation");
             await _toastService.ShowErrorAsync("Failed to start navigation");
         }
         finally
@@ -1523,6 +1620,20 @@ public partial class GroupsViewModel : BaseViewModel
 
             await Microsoft.Maui.ApplicationModel.Map.Default.OpenAsync(location, options);
         }
+        catch (FeatureNotSupportedException)
+        {
+            // Fallback to Google Maps URL
+            try
+            {
+                var url = $"https://www.google.com/maps/dir/?api=1&destination={lat},{lon}&travelmode=walking";
+                await Launcher.OpenAsync(new Uri(url));
+            }
+            catch (Exception fallbackEx)
+            {
+                _logger.LogError(fallbackEx, "Failed to open external maps via fallback URL");
+                await _toastService.ShowErrorAsync("Unable to open maps");
+            }
+        }
         catch (Exception ex)
         {
             // Fallback to Google Maps URL
@@ -1531,9 +1642,10 @@ public partial class GroupsViewModel : BaseViewModel
                 var url = $"https://www.google.com/maps/dir/?api=1&destination={lat},{lon}&travelmode=walking";
                 await Launcher.OpenAsync(new Uri(url));
             }
-            catch
+            catch (Exception fallbackEx)
             {
                 _logger.LogError(ex, "Failed to open external maps");
+                _logger.LogError(fallbackEx, "Fallback URL also failed");
                 await _toastService.ShowErrorAsync("Unable to open maps");
             }
         }
@@ -1710,9 +1822,13 @@ public partial class GroupsViewModel : BaseViewModel
             {
                 _logger.LogDebug("Group SSE subscription cancelled");
             }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "Network error in SSE subscription");
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Group SSE subscription error");
+                _logger.LogError(ex, "Unexpected error in SSE subscription");
             }
         });
     }
@@ -1757,6 +1873,10 @@ public partial class GroupsViewModel : BaseViewModel
                 oldGroupClient?.Stop();
                 oldGroupClient?.Dispose();
             }
+            catch (ObjectDisposedException)
+            {
+                // Already disposed, ignore
+            }
             catch (Exception ex)
             {
                 _logger.LogDebug("SSE client cleanup error: {Message}", ex.Message);
@@ -1765,6 +1885,10 @@ public partial class GroupsViewModel : BaseViewModel
             try
             {
                 oldCts?.Dispose();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Already disposed, ignore
             }
             catch (Exception ex)
             {
@@ -1814,9 +1938,13 @@ public partial class GroupsViewModel : BaseViewModel
             // Refresh the specific member's location
             await RefreshMemberLocationAsync(userId);
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Network error handling SSE location event");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error handling SSE location event");
+            _logger.LogError(ex, "Unexpected error handling SSE location event");
         }
     }
 
@@ -1846,9 +1974,13 @@ public partial class GroupsViewModel : BaseViewModel
             // Refresh the specific member's location to get their new latest
             await RefreshMemberLocationAsync(userId);
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Network error handling SSE location deleted event");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error handling SSE location deleted event");
+            _logger.LogError(ex, "Unexpected error handling SSE location deleted event");
         }
     }
 
@@ -1900,9 +2032,13 @@ public partial class GroupsViewModel : BaseViewModel
                     break;
             }
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Network error handling SSE membership event");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error handling SSE membership event");
+            _logger.LogError(ex, "Unexpected error handling SSE membership event");
         }
     }
 
@@ -2016,9 +2152,17 @@ public partial class GroupsViewModel : BaseViewModel
                 });
             }
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Network error refreshing location for {UserId}", userId);
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogWarning(ex, "Request timed out refreshing location for {UserId}", userId);
+        }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to refresh location for {UserId}", userId);
+            _logger.LogWarning(ex, "Unexpected error refreshing location for {UserId}", userId);
         }
     }
 
