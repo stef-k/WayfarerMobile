@@ -70,9 +70,19 @@ public class GroupsService : IGroupsService
 
             return groups ?? new List<GroupSummary>();
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error fetching groups");
+            return new List<GroupSummary>();
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out fetching groups");
+            return new List<GroupSummary>();
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching groups");
+            _logger.LogError(ex, "Unexpected error fetching groups");
             return new List<GroupSummary>();
         }
     }
@@ -108,9 +118,19 @@ public class GroupsService : IGroupsService
 
             return members ?? new List<GroupMember>();
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error fetching group members for {GroupId}", groupId);
+            return new List<GroupMember>();
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out fetching group members for {GroupId}", groupId);
+            return new List<GroupMember>();
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching group members for {GroupId}", groupId);
+            _logger.LogError(ex, "Unexpected error fetching group members for {GroupId}", groupId);
             return new List<GroupMember>();
         }
     }
@@ -153,9 +173,19 @@ public class GroupsService : IGroupsService
 
             return locations;
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error fetching latest locations for {GroupId}", groupId);
+            return new Dictionary<string, MemberLocation>();
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out fetching latest locations for {GroupId}", groupId);
+            return new Dictionary<string, MemberLocation>();
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching latest locations for {GroupId}", groupId);
+            _logger.LogError(ex, "Unexpected error fetching latest locations for {GroupId}", groupId);
             return new Dictionary<string, MemberLocation>();
         }
     }
@@ -219,9 +249,19 @@ public class GroupsService : IGroupsService
 
             return queryResponse;
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error querying locations for {GroupId}", groupId);
+            return null;
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out querying locations for {GroupId}", groupId);
+            return null;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error querying locations for {GroupId}", groupId);
+            _logger.LogError(ex, "Unexpected error querying locations for {GroupId}", groupId);
             return null;
         }
     }
@@ -260,9 +300,19 @@ public class GroupsService : IGroupsService
             _logger.LogDebug("Updated peer visibility for group {GroupId}: disabled={Disabled}", groupId, disabled);
             return true;
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error updating peer visibility for {GroupId}", groupId);
+            return false;
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out updating peer visibility for {GroupId}", groupId);
+            return false;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating peer visibility for {GroupId}", groupId);
+            _logger.LogError(ex, "Unexpected error updating peer visibility for {GroupId}", groupId);
             return false;
         }
     }
