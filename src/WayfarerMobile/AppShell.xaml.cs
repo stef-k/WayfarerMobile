@@ -35,8 +35,8 @@ public partial class AppShell : Shell
         catch (Exception ex)
         {
             // DI resolution failed - likely corrupted state after data clear
-            System.Diagnostics.Debug.WriteLine($"[AppShell] Critical service resolution failed: {ex.Message}");
-            System.Diagnostics.Debug.WriteLine("[AppShell] Entering recovery mode");
+            Console.WriteLine($"[AppShell] Critical service resolution failed: {ex.Message}");
+            Console.WriteLine("[AppShell] Entering recovery mode");
 
             _recoveryMode = true;
 
@@ -52,7 +52,7 @@ public partial class AppShell : Shell
             catch
             {
                 // Still failing - services will remain null, we'll handle in OnShellLoaded
-                System.Diagnostics.Debug.WriteLine("[AppShell] Services still unavailable after recovery attempt");
+                Console.WriteLine("[AppShell] Services still unavailable after recovery attempt");
             }
         }
 
@@ -94,27 +94,27 @@ public partial class AppShell : Shell
             if (settings != null)
             {
                 settings.ResetToDefaults();
-                System.Diagnostics.Debug.WriteLine("[AppShell] Settings reset via service");
+                Console.WriteLine("[AppShell] Settings reset via service");
                 return;
             }
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[AppShell] Could not reset via service: {ex.Message}");
+            Console.WriteLine($"[AppShell] Could not reset via service: {ex.Message}");
         }
 
         // If we can't get the service, try direct reset
         try
         {
-            System.Diagnostics.Debug.WriteLine("[AppShell] Attempting direct preferences/storage reset");
+            Console.WriteLine("[AppShell] Attempting direct preferences/storage reset");
             Preferences.Clear();
             SecureStorage.Default.RemoveAll();
             Preferences.Set("is_first_run", true);
-            System.Diagnostics.Debug.WriteLine("[AppShell] Direct reset complete");
+            Console.WriteLine("[AppShell] Direct reset complete");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[AppShell] Direct reset failed: {ex.Message}");
+            Console.WriteLine($"[AppShell] Direct reset failed: {ex.Message}");
         }
     }
 
@@ -128,7 +128,7 @@ public partial class AppShell : Shell
         // If in recovery mode or settings unavailable, go to onboarding
         if (_recoveryMode || _settingsService == null)
         {
-            System.Diagnostics.Debug.WriteLine("[AppShell] Recovery mode or missing settings - navigating to onboarding");
+            Console.WriteLine("[AppShell] Recovery mode or missing settings - navigating to onboarding");
             await GoToAsync("//onboarding");
             return;
         }

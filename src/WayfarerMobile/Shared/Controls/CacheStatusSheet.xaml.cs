@@ -81,13 +81,13 @@ public partial class CacheStatusSheet : ContentView
 
     private static void OnIsOpenChanged(BindableObject bindable, object oldValue, object newValue)
     {
-        System.Diagnostics.Debug.WriteLine($"[CacheStatusSheet] OnIsOpenChanged: {oldValue} -> {newValue}");
+        Console.WriteLine($"[CacheStatusSheet] OnIsOpenChanged: {oldValue} -> {newValue}");
 
         if (bindable is CacheStatusSheet sheet && newValue is bool isOpen)
         {
             // Control visibility directly via code-behind (avoids x:Reference binding issues)
             sheet.SheetContainer.IsVisible = isOpen;
-            System.Diagnostics.Debug.WriteLine($"[CacheStatusSheet] SheetContainer.IsVisible = {isOpen}");
+            Console.WriteLine($"[CacheStatusSheet] SheetContainer.IsVisible = {isOpen}");
 
             // When closed, make ContentView input transparent so touches pass through
             // When open, capture touches
@@ -95,13 +95,13 @@ public partial class CacheStatusSheet : ContentView
 
             if (isOpen && sheet.ViewModel != null)
             {
-                System.Diagnostics.Debug.WriteLine("[CacheStatusSheet] Calling ViewModel.OnAppearingAsync()");
+                Console.WriteLine("[CacheStatusSheet] Calling ViewModel.OnAppearingAsync()");
                 // Load data when sheet opens
                 _ = sheet.ViewModel.OnAppearingAsync();
             }
             else if (isOpen && sheet.ViewModel == null)
             {
-                System.Diagnostics.Debug.WriteLine("[CacheStatusSheet] WARNING: ViewModel is null!");
+                Console.WriteLine("[CacheStatusSheet] WARNING: ViewModel is null!");
             }
         }
     }

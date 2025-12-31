@@ -354,7 +354,7 @@ public partial class MarkerEditorViewModel : BaseViewModel, IQueryAttributable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[MarkerEditorViewModel] Save error: {ex.Message}");
+            Console.WriteLine($"[MarkerEditorViewModel] Save error: {ex.Message}");
             await _toastService.ShowErrorAsync($"Failed to save: {ex.Message}");
         }
         finally

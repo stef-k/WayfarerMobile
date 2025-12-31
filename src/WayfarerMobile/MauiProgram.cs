@@ -120,7 +120,6 @@ public static class MauiProgram
                 try
                 {
                     File.Delete(file);
-                    System.Diagnostics.Debug.WriteLine($"[MauiProgram] Deleted old log file: {Path.GetFileName(file)}");
                 }
                 catch
                 {
@@ -128,10 +127,7 @@ public static class MauiProgram
                 }
             }
 
-            if (oldLogFiles.Count > 0)
-            {
-                System.Diagnostics.Debug.WriteLine($"[MauiProgram] Cleaned up {oldLogFiles.Count} old-format log files");
-            }
+            // Silently clean up old log files during startup
         }
         catch
         {

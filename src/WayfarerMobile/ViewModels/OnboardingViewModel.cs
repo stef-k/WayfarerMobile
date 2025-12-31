@@ -331,7 +331,7 @@ public partial class OnboardingViewModel : BaseViewModel
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Onboarding] Failed to navigate to QR scanner: {ex}");
+            Console.WriteLine($"[Onboarding] Failed to navigate to QR scanner: {ex}");
             var page = Application.Current?.Windows.FirstOrDefault()?.Page;
             if (page != null)
             {
@@ -399,16 +399,16 @@ public partial class OnboardingViewModel : BaseViewModel
             {
                 _settingsService.LocationTimeThresholdMinutes = serverSettings.LocationTimeThresholdMinutes;
                 _settingsService.LocationDistanceThresholdMeters = serverSettings.LocationDistanceThresholdMeters;
-                System.Diagnostics.Debug.WriteLine($"[Onboarding] Fetched settings: {serverSettings.LocationTimeThresholdMinutes}min, {serverSettings.LocationDistanceThresholdMeters}m");
+                Console.WriteLine($"[Onboarding] Fetched settings: {serverSettings.LocationTimeThresholdMinutes}min, {serverSettings.LocationDistanceThresholdMeters}m");
             }
 
             // Sync activities from server
             var activitySuccess = await _activitySyncService.SyncWithServerAsync();
-            System.Diagnostics.Debug.WriteLine($"[Onboarding] Activities sync: {(activitySuccess ? "success" : "failed")}");
+            Console.WriteLine($"[Onboarding] Activities sync: {(activitySuccess ? "success" : "failed")}");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Onboarding] Failed to fetch server data: {ex.Message}");
+            Console.WriteLine($"[Onboarding] Failed to fetch server data: {ex.Message}");
         }
     }
 
@@ -499,7 +499,7 @@ public partial class OnboardingViewModel : BaseViewModel
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Onboarding] Failed to request battery optimization exemption: {ex.Message}");
+            Console.WriteLine($"[Onboarding] Failed to request battery optimization exemption: {ex.Message}");
 
             // Fallback: open general battery settings
             try
@@ -561,7 +561,7 @@ public partial class OnboardingViewModel : BaseViewModel
         // Store user's background tracking choice for health check comparison
         // This allows us to alert users if they had 24/7 tracking but revoked permission
         _settingsService.BackgroundTrackingEnabled = BackgroundLocationGranted;
-        System.Diagnostics.Debug.WriteLine($"[Onboarding] BackgroundTrackingEnabled set to: {BackgroundLocationGranted}");
+        Console.WriteLine($"[Onboarding] BackgroundTrackingEnabled set to: {BackgroundLocationGranted}");
 
         // Start the location tracking service if basic location permission was granted
         // - With background permission: runs 24/7
@@ -579,11 +579,11 @@ public partial class OnboardingViewModel : BaseViewModel
                 {
                     await _locationBridge.StartAsync();
                     var mode = backgroundGranted ? "24/7 background" : "foreground only";
-                    System.Diagnostics.Debug.WriteLine($"[Onboarding] Location tracking service started ({mode} mode)");
+                    Console.WriteLine($"[Onboarding] Location tracking service started ({mode} mode)");
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[Onboarding] Failed to start location service: {ex.Message}");
+                    Console.WriteLine($"[Onboarding] Failed to start location service: {ex.Message}");
                 }
             });
         }

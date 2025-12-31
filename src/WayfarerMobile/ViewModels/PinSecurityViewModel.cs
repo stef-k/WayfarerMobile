@@ -75,11 +75,11 @@ public partial class PinSecurityViewModel : ObservableObject
             IsPinLockEnabled = _appLockService.IsProtectionEnabled;
             UpdateButtonText();
 
-            System.Diagnostics.Debug.WriteLine($"[PinSecurityViewModel] Settings loaded: PinConfigured={IsPinConfigured}, LockEnabled={IsPinLockEnabled}");
+            Console.WriteLine($"[PinSecurityViewModel] Settings loaded: PinConfigured={IsPinConfigured}, LockEnabled={IsPinLockEnabled}");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[PinSecurityViewModel] Error loading settings: {ex.Message}");
+            Console.WriteLine($"[PinSecurityViewModel] Error loading settings: {ex.Message}");
         }
         finally
         {
@@ -200,7 +200,7 @@ public partial class PinSecurityViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[PinSecurityViewModel] Error setting PIN: {ex.Message}");
+            Console.WriteLine($"[PinSecurityViewModel] Error setting PIN: {ex.Message}");
             var page = GetCurrentPage();
             if (page != null)
             {
@@ -269,7 +269,7 @@ public partial class PinSecurityViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[PinSecurityViewModel] Error removing PIN: {ex.Message}");
+            Console.WriteLine($"[PinSecurityViewModel] Error removing PIN: {ex.Message}");
             var page = GetCurrentPage();
             if (page != null)
             {
@@ -329,7 +329,7 @@ public partial class PinSecurityViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[PinSecurityViewModel] Error toggling PIN lock: {ex.Message}");
+            Console.WriteLine($"[PinSecurityViewModel] Error toggling PIN lock: {ex.Message}");
             var page = GetCurrentPage();
             if (page != null)
             {

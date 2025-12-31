@@ -166,7 +166,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Error in OnMapInfo: {ex.Message}");
+            Console.WriteLine($"[MainPage] Error in OnMapInfo: {ex.Message}");
         }
     }
 
@@ -301,7 +301,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// </summary>
     private async void OnMainSheetStateChanged(object? sender, Syncfusion.Maui.Toolkit.BottomSheet.StateChangedEventArgs e)
     {
-        System.Diagnostics.Debug.WriteLine($"[MainPage] SheetStateChanged: {e.OldState} -> {e.NewState}, " +
+        Console.WriteLine($"[MainPage] SheetStateChanged: {e.OldState} -> {e.NewState}, " +
             $"IsNavigatingToSubEditor={_viewModel.IsNavigatingToSubEditor}, " +
             $"IsTripSheetOpen={_viewModel.IsTripSheetOpen}, " +
             $"SelectedPlace={_viewModel.SelectedTripPlace?.Name ?? "null"}");
@@ -313,14 +313,14 @@ public partial class MainPage : ContentPage, IQueryAttributable
             // The sheet goes hidden during navigation but we want to preserve selection
             if (_viewModel.IsNavigatingToSubEditor)
             {
-                System.Diagnostics.Debug.WriteLine("[MainPage] Skipping cleanup - navigating to sub-editor");
+                Console.WriteLine("[MainPage] Skipping cleanup - navigating to sub-editor");
                 return;
             }
 
             // Handle check-in sheet cleanup if it was open
             if (_viewModel.IsCheckInSheetOpen)
             {
-                System.Diagnostics.Debug.WriteLine("[MainPage] Running check-in sheet cleanup");
+                Console.WriteLine("[MainPage] Running check-in sheet cleanup");
                 _viewModel.IsCheckInSheetOpen = false;
                 await _viewModel.OnCheckInSheetClosedAsync();
             }
@@ -328,7 +328,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
             // Handle trip sheet cleanup if it was open
             if (_viewModel.IsTripSheetOpen)
             {
-                System.Diagnostics.Debug.WriteLine("[MainPage] Running trip sheet cleanup - calling TripSheetBackCommand");
+                Console.WriteLine("[MainPage] Running trip sheet cleanup - calling TripSheetBackCommand");
                 _viewModel.IsTripSheetOpen = false;
                 _viewModel.TripSheetBackCommand.Execute(null);
             }
@@ -364,7 +364,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[MainPage] Failed to share location: {ex.Message}");
+            Console.WriteLine($"[MainPage] Failed to share location: {ex.Message}");
         }
     }
 
@@ -385,7 +385,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[MainPage] Failed to copy coordinates: {ex.Message}");
+            Console.WriteLine($"[MainPage] Failed to copy coordinates: {ex.Message}");
         }
     }
 

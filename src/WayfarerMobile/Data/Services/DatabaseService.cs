@@ -83,7 +83,7 @@ public class DatabaseService : IAsyncDisposable
             await _database.CreateTableAsync<TripDownloadStateEntity>();
 
             _initialized = true;
-            System.Diagnostics.Debug.WriteLine($"[DatabaseService] Initialized: {DatabasePath}");
+            Console.WriteLine($"[DatabaseService] Initialized: {DatabasePath}");
         }
         finally
         {
@@ -117,7 +117,7 @@ public class DatabaseService : IAsyncDisposable
         };
 
         await _database!.InsertAsync(queued);
-        System.Diagnostics.Debug.WriteLine($"[DatabaseService] Location queued: {location}");
+        Console.WriteLine($"[DatabaseService] Location queued: {location}");
 
         // Cleanup old locations if queue is too large
         await CleanupOldLocationsAsync();
@@ -423,7 +423,7 @@ public class DatabaseService : IAsyncDisposable
                 "DELETE FROM QueuedLocations WHERE Id IN (SELECT Id FROM QueuedLocations WHERE SyncStatus = ? ORDER BY Timestamp LIMIT ?)",
                 (int)SyncStatus.Synced, count - MaxQueuedLocations + 1000);
 
-            System.Diagnostics.Debug.WriteLine("[DatabaseService] Cleaned up old synced locations");
+            Console.WriteLine("[DatabaseService] Cleaned up old synced locations");
         }
     }
 

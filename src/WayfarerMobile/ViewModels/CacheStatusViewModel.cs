@@ -261,7 +261,7 @@ public partial class CacheStatusViewModel : BaseViewModel
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[CacheStatusViewModel] Error loading data: {ex.Message}");
+            Console.WriteLine($"[CacheStatusViewModel] Error loading data: {ex.Message}");
             Status = CacheCoverageStatus.Error;
         }
         finally
@@ -288,7 +288,7 @@ public partial class CacheStatusViewModel : BaseViewModel
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[CacheStatusViewModel] Error toggling overlay: {ex.Message}");
+            Console.WriteLine($"[CacheStatusViewModel] Error toggling overlay: {ex.Message}");
             await _toastService.ShowErrorAsync("Failed to toggle overlay");
         }
     }
@@ -318,7 +318,7 @@ public partial class CacheStatusViewModel : BaseViewModel
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[CacheStatusViewModel] Error clearing cache: {ex.Message}");
+            Console.WriteLine($"[CacheStatusViewModel] Error clearing cache: {ex.Message}");
             await _toastService.ShowErrorAsync("Failed to clear cache");
         }
         finally

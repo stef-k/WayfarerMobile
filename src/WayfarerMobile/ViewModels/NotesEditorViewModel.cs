@@ -185,7 +185,7 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[NotesEditorViewModel] Failed to load editor: {ex.Message}");
+            Console.WriteLine($"[NotesEditorViewModel] Failed to load editor: {ex.Message}");
             return string.Empty;
         }
     }
@@ -255,7 +255,7 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[NotesEditorViewModel] Save error: {ex.Message}");
+            Console.WriteLine($"[NotesEditorViewModel] Save error: {ex.Message}");
             await _toastService.ShowErrorAsync($"Failed to save: {ex.Message}");
         }
         finally

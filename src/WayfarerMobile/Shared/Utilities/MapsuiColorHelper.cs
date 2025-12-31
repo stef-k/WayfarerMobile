@@ -47,7 +47,7 @@ public static class MapsuiColorHelper
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[MapsuiColorHelper] Failed to parse color '{hexColor}': {ex.Message}");
+            Console.WriteLine($"[MapsuiColorHelper] Failed to parse color '{hexColor}': {ex.Message}");
         }
 
         return fallback;

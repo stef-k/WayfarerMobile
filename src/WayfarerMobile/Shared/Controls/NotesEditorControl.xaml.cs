@@ -188,7 +188,7 @@ public partial class NotesEditorControl : ContentView
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[NotesEditor] Failed to open: {ex.Message}");
+            Console.WriteLine($"[NotesEditor] Failed to open: {ex.Message}");
         }
     }
 
@@ -214,7 +214,7 @@ public partial class NotesEditorControl : ContentView
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[NotesEditor] Failed to load editor: {ex.Message}");
+            Console.WriteLine($"[NotesEditor] Failed to load editor: {ex.Message}");
         }
     }
 
@@ -265,7 +265,7 @@ public partial class NotesEditorControl : ContentView
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[NotesEditor] Failed to load viewer: {ex.Message}");
+            Console.WriteLine($"[NotesEditor] Failed to load viewer: {ex.Message}");
         }
     }
 
@@ -392,7 +392,7 @@ public partial class NotesEditorControl : ContentView
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[NotesEditor] Save error: {ex.Message}");
+            Console.WriteLine($"[NotesEditor] Save error: {ex.Message}");
         }
     }
 
@@ -446,7 +446,7 @@ public partial class NotesEditorControl : ContentView
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[NotesEditor] Close error: {ex.Message}");
+            Console.WriteLine($"[NotesEditor] Close error: {ex.Message}");
         }
     }
 

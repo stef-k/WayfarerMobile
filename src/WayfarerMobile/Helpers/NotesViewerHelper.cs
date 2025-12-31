@@ -32,11 +32,11 @@ public static class NotesViewerHelper
             using var stream = await FileSystem.Current.OpenAppPackageFileAsync("viewer/notes-viewer.html");
             using var reader = new StreamReader(stream);
             _cachedTemplate = await reader.ReadToEndAsync();
-            System.Diagnostics.Debug.WriteLine("[NotesViewerHelper] Template loaded successfully");
+            Console.WriteLine("[NotesViewerHelper] Template loaded successfully");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[NotesViewerHelper] Failed to load template: {ex.Message}");
+            Console.WriteLine($"[NotesViewerHelper] Failed to load template: {ex.Message}");
         }
     }
 
@@ -58,19 +58,19 @@ public static class NotesViewerHelper
 
         if (_cachedTemplate == null)
         {
-            System.Diagnostics.Debug.WriteLine("[NotesViewerHelper] Template not loaded, cannot prepare notes");
+            Console.WriteLine("[NotesViewerHelper] Template not loaded, cannot prepare notes");
             return null;
         }
 
         try
         {
-            System.Diagnostics.Debug.WriteLine($"[NotesViewerHelper] Input HTML (first 500): {(notesHtml.Length > 500 ? notesHtml[..500] : notesHtml)}");
-            System.Diagnostics.Debug.WriteLine($"[NotesViewerHelper] Backend URL: {backendBaseUrl}");
+            Console.WriteLine($"[NotesViewerHelper] Input HTML (first 500): {(notesHtml.Length > 500 ? notesHtml[..500] : notesHtml)}");
+            Console.WriteLine($"[NotesViewerHelper] Backend URL: {backendBaseUrl}");
 
             // Convert images to proxy URLs
             var processedHtml = ImageProxyHelper.ConvertImagesToProxyUrls(notesHtml, backendBaseUrl);
 
-            System.Diagnostics.Debug.WriteLine($"[NotesViewerHelper] After proxy (first 500): {(processedHtml.Length > 500 ? processedHtml[..500] : processedHtml)}");
+            Console.WriteLine($"[NotesViewerHelper] After proxy (first 500): {(processedHtml.Length > 500 ? processedHtml[..500] : processedHtml)}");
 
             // Remove plain text URLs that are already displayed as images
             // Google MyMaps often includes both <img> tags and the raw URL as text
@@ -82,7 +82,7 @@ public static class NotesViewerHelper
             // JSON-serialize the content for safe injection into JavaScript
             var jsonContent = JsonSerializer.Serialize(processedHtml);
 
-            System.Diagnostics.Debug.WriteLine($"[NotesViewerHelper] JSON content (first 500): {(jsonContent.Length > 500 ? jsonContent[..500] : jsonContent)}");
+            Console.WriteLine($"[NotesViewerHelper] JSON content (first 500): {(jsonContent.Length > 500 ? jsonContent[..500] : jsonContent)}");
 
             // Replace placeholder in template
             var finalHtml = _cachedTemplate
@@ -92,7 +92,7 @@ public static class NotesViewerHelper
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[NotesViewerHelper] Error preparing notes: {ex.Message}");
+            Console.WriteLine($"[NotesViewerHelper] Error preparing notes: {ex.Message}");
             return null;
         }
     }
