@@ -141,9 +141,19 @@ public class ApiClient : IApiClient, IVisitApiClient
             _logger.LogWarning("Failed to get settings: {StatusCode}", response.StatusCode);
             return null;
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error fetching server settings");
+            return null;
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out fetching server settings");
+            return null;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching server settings");
+            _logger.LogError(ex, "Unexpected error fetching server settings");
             return null;
         }
     }
@@ -176,9 +186,19 @@ public class ApiClient : IApiClient, IVisitApiClient
             _logger.LogWarning("Failed to get trips: {StatusCode}", response.StatusCode);
             return new List<TripSummary>();
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error getting trips");
+            return new List<TripSummary>();
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out getting trips");
+            return new List<TripSummary>();
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting trips");
+            _logger.LogError(ex, "Unexpected error getting trips");
             return new List<TripSummary>();
         }
     }
@@ -211,9 +231,19 @@ public class ApiClient : IApiClient, IVisitApiClient
             _logger.LogWarning("Failed to get trip details: {StatusCode}", response.StatusCode);
             return null;
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error getting trip details for {TripId}", tripId);
+            return null;
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out getting trip details for {TripId}", tripId);
+            return null;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting trip details for {TripId}", tripId);
+            _logger.LogError(ex, "Unexpected error getting trip details for {TripId}", tripId);
             return null;
         }
     }
@@ -246,9 +276,19 @@ public class ApiClient : IApiClient, IVisitApiClient
             _logger.LogWarning("Failed to get trip boundary: {StatusCode}", response.StatusCode);
             return null;
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error getting trip boundary for {TripId}", tripId);
+            return null;
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out getting trip boundary for {TripId}", tripId);
+            return null;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting trip boundary for {TripId}", tripId);
+            _logger.LogError(ex, "Unexpected error getting trip boundary for {TripId}", tripId);
             return null;
         }
     }
@@ -284,9 +324,19 @@ public class ApiClient : IApiClient, IVisitApiClient
             _logger.LogWarning("Failed to create place: {StatusCode}", response.StatusCode);
             return new PlaceResponse { Success = false, Error = $"HTTP {(int)response.StatusCode}" };
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error creating place in trip {TripId}", tripId);
+            return new PlaceResponse { Success = false, Error = $"Network error: {ex.Message}" };
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out creating place in trip {TripId}", tripId);
+            return new PlaceResponse { Success = false, Error = "Request timed out" };
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating place in trip {TripId}", tripId);
+            _logger.LogError(ex, "Unexpected error creating place in trip {TripId}", tripId);
             return new PlaceResponse { Success = false, Error = ex.Message };
         }
     }
@@ -320,9 +370,19 @@ public class ApiClient : IApiClient, IVisitApiClient
             _logger.LogWarning("Failed to update place {PlaceId}: {StatusCode}", placeId, response.StatusCode);
             return new PlaceResponse { Success = false, Error = $"HTTP {(int)response.StatusCode}" };
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error updating place {PlaceId}", placeId);
+            return new PlaceResponse { Success = false, Error = $"Network error: {ex.Message}" };
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out updating place {PlaceId}", placeId);
+            return new PlaceResponse { Success = false, Error = "Request timed out" };
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating place {PlaceId}", placeId);
+            _logger.LogError(ex, "Unexpected error updating place {PlaceId}", placeId);
             return new PlaceResponse { Success = false, Error = ex.Message };
         }
     }
@@ -351,9 +411,19 @@ public class ApiClient : IApiClient, IVisitApiClient
             _logger.LogWarning("Failed to delete place {PlaceId}: {StatusCode}", placeId, response.StatusCode);
             return false;
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error deleting place {PlaceId}", placeId);
+            return false;
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out deleting place {PlaceId}", placeId);
+            return false;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting place {PlaceId}", placeId);
+            _logger.LogError(ex, "Unexpected error deleting place {PlaceId}", placeId);
             return false;
         }
     }
@@ -395,9 +465,19 @@ public class ApiClient : IApiClient, IVisitApiClient
             _logger.LogDebug("Failed to get recent visits: {StatusCode}", response.StatusCode);
             return new List<SseVisitStartedEvent>();
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogDebug(ex, "Network error fetching recent visits");
+            return new List<SseVisitStartedEvent>();
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogDebug(ex, "Request timed out fetching recent visits");
+            return new List<SseVisitStartedEvent>();
+        }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Error fetching recent visits");
+            _logger.LogDebug(ex, "Unexpected error fetching recent visits");
             return new List<SseVisitStartedEvent>();
         }
     }
@@ -445,9 +525,19 @@ public class ApiClient : IApiClient, IVisitApiClient
             _logger.LogWarning("Failed to update timeline location {LocationId}: {StatusCode}", locationId, response.StatusCode);
             return new TimelineUpdateResponse { Success = false, Error = $"HTTP {(int)response.StatusCode}" };
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error updating timeline location {LocationId}", locationId);
+            return new TimelineUpdateResponse { Success = false, Error = $"Network error: {ex.Message}" };
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out updating timeline location {LocationId}", locationId);
+            return new TimelineUpdateResponse { Success = false, Error = "Request timed out" };
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating timeline location {LocationId}", locationId);
+            _logger.LogError(ex, "Unexpected error updating timeline location {LocationId}", locationId);
             return new TimelineUpdateResponse { Success = false, Error = ex.Message };
         }
     }
@@ -477,9 +567,19 @@ public class ApiClient : IApiClient, IVisitApiClient
             _logger.LogWarning("Failed to delete timeline location {LocationId}: {StatusCode}", locationId, response.StatusCode);
             return false;
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error deleting timeline location {LocationId}", locationId);
+            return false;
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out deleting timeline location {LocationId}", locationId);
+            return false;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting timeline location {LocationId}", locationId);
+            _logger.LogError(ex, "Unexpected error deleting timeline location {LocationId}", locationId);
             return false;
         }
     }
@@ -517,9 +617,19 @@ public class ApiClient : IApiClient, IVisitApiClient
             _logger.LogWarning("Failed to create region: {StatusCode}", response.StatusCode);
             return new RegionResponse { Success = false, Error = $"HTTP {(int)response.StatusCode}" };
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error creating region in trip {TripId}", tripId);
+            return new RegionResponse { Success = false, Error = $"Network error: {ex.Message}" };
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out creating region in trip {TripId}", tripId);
+            return new RegionResponse { Success = false, Error = "Request timed out" };
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating region in trip {TripId}", tripId);
+            _logger.LogError(ex, "Unexpected error creating region in trip {TripId}", tripId);
             return new RegionResponse { Success = false, Error = ex.Message };
         }
     }
@@ -553,9 +663,19 @@ public class ApiClient : IApiClient, IVisitApiClient
             _logger.LogWarning("Failed to update region {RegionId}: {StatusCode}", regionId, response.StatusCode);
             return new RegionResponse { Success = false, Error = $"HTTP {(int)response.StatusCode}" };
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error updating region {RegionId}", regionId);
+            return new RegionResponse { Success = false, Error = $"Network error: {ex.Message}" };
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out updating region {RegionId}", regionId);
+            return new RegionResponse { Success = false, Error = "Request timed out" };
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating region {RegionId}", regionId);
+            _logger.LogError(ex, "Unexpected error updating region {RegionId}", regionId);
             return new RegionResponse { Success = false, Error = ex.Message };
         }
     }
@@ -584,9 +704,19 @@ public class ApiClient : IApiClient, IVisitApiClient
             _logger.LogWarning("Failed to delete region {RegionId}: {StatusCode}", regionId, response.StatusCode);
             return false;
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error deleting region {RegionId}", regionId);
+            return false;
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out deleting region {RegionId}", regionId);
+            return false;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting region {RegionId}", regionId);
+            _logger.LogError(ex, "Unexpected error deleting region {RegionId}", regionId);
             return false;
         }
     }
@@ -642,9 +772,19 @@ public class ApiClient : IApiClient, IVisitApiClient
             _logger.LogWarning("Failed to get public trips: {StatusCode}", response.StatusCode);
             return null;
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error fetching public trips");
+            return null;
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out fetching public trips");
+            return null;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching public trips");
+            _logger.LogError(ex, "Unexpected error fetching public trips");
             return null;
         }
     }
@@ -691,9 +831,19 @@ public class ApiClient : IApiClient, IVisitApiClient
                 Error = $"HTTP {(int)response.StatusCode}: {errorBody}"
             };
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error cloning trip {TripId}", tripId);
+            return new CloneTripResponse { Success = false, Error = $"Network error: {ex.Message}" };
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out cloning trip {TripId}", tripId);
+            return new CloneTripResponse { Success = false, Error = "Request timed out" };
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error cloning trip {TripId}", tripId);
+            _logger.LogError(ex, "Unexpected error cloning trip {TripId}", tripId);
             return new CloneTripResponse { Success = false, Error = ex.Message };
         }
     }
@@ -737,9 +887,19 @@ public class ApiClient : IApiClient, IVisitApiClient
                 Error = $"HTTP {(int)response.StatusCode}: {errorBody}"
             };
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error updating trip {TripId}", tripId);
+            return new TripUpdateResponse { Success = false, Error = $"Network error: {ex.Message}" };
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out updating trip {TripId}", tripId);
+            return new TripUpdateResponse { Success = false, Error = "Request timed out" };
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating trip {TripId}", tripId);
+            _logger.LogError(ex, "Unexpected error updating trip {TripId}", tripId);
             return new TripUpdateResponse { Success = false, Error = ex.Message };
         }
     }
@@ -787,9 +947,19 @@ public class ApiClient : IApiClient, IVisitApiClient
                 Error = $"HTTP {(int)response.StatusCode}: {errorBody}"
             };
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error updating segment {SegmentId}", segmentId);
+            return new SegmentUpdateResponse { Success = false, Error = $"Network error: {ex.Message}" };
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out updating segment {SegmentId}", segmentId);
+            return new SegmentUpdateResponse { Success = false, Error = "Request timed out" };
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating segment {SegmentId}", segmentId);
+            _logger.LogError(ex, "Unexpected error updating segment {SegmentId}", segmentId);
             return new SegmentUpdateResponse { Success = false, Error = ex.Message };
         }
     }
@@ -833,9 +1003,19 @@ public class ApiClient : IApiClient, IVisitApiClient
 
             return new AreaUpdateResponse { Success = false };
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error updating area {AreaId}", areaId);
+            return new AreaUpdateResponse { Success = false };
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out updating area {AreaId}", areaId);
+            return new AreaUpdateResponse { Success = false };
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating area {AreaId}", areaId);
+            _logger.LogError(ex, "Unexpected error updating area {AreaId}", areaId);
             return new AreaUpdateResponse { Success = false };
         }
     }
@@ -891,9 +1071,19 @@ public class ApiClient : IApiClient, IVisitApiClient
             _logger.LogWarning("Failed to get timeline locations: {StatusCode}", response.StatusCode);
             return null;
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error fetching timeline locations");
+            return null;
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out fetching timeline locations");
+            return null;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching timeline locations");
+            _logger.LogError(ex, "Unexpected error fetching timeline locations");
             return null;
         }
     }
