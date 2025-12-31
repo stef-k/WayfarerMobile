@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.ApplicationModel;
 using WayfarerMobile.Core.Interfaces;
 
 namespace WayfarerMobile.Services;
@@ -146,6 +147,7 @@ public class DiagnosticService
         };
 
         // Battery info may fail on some devices without BATTERY_STATS permission
+        // This is expected on Android - the permission is a system permission not available to regular apps
         try
         {
             info.BatteryLevel = Battery.Default.ChargeLevel;
@@ -153,17 +155,26 @@ public class DiagnosticService
             info.PowerSource = Battery.Default.PowerSource.ToString();
             info.IsEnergySaver = Battery.Default.EnergySaverStatus == EnergySaverStatus.On;
         }
-        catch (FeatureNotSupportedException ex)
+        catch (FeatureNotSupportedException)
         {
-            _logger.LogDebug(ex, "Battery info not supported on this platform");
+            // Expected on some platforms - don't log, just set defaults
             info.BatteryLevel = -1;
             info.BatteryState = "Not Supported";
             info.PowerSource = "Unknown";
             info.IsEnergySaver = false;
         }
+        catch (PermissionException)
+        {
+            // Expected on Android - BATTERY_STATS is a system permission not available to regular apps
+            // Don't log as warning since this is normal behavior
+            info.BatteryLevel = -1;
+            info.BatteryState = "Not Available";
+            info.PowerSource = "Unknown";
+            info.IsEnergySaver = false;
+        }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Could not read battery info");
+            _logger.LogDebug(ex, "Could not read battery info");
             info.BatteryLevel = -1;
             info.BatteryState = "Unknown";
             info.PowerSource = "Unknown";
