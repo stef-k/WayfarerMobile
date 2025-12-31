@@ -1,5 +1,6 @@
 using Android.Content;
 using Android.OS;
+using Android.Util;
 using Android.Views;
 using WayfarerMobile.Core.Interfaces;
 
@@ -11,6 +12,7 @@ namespace WayfarerMobile.Platforms.Android.Services;
 /// </summary>
 public class WakeLockService : IWakeLockService
 {
+    private const string LogTag = "WayfarerWakeLock";
     private PowerManager.WakeLock? _wakeLock;
     private bool _keepingScreenOn;
     private readonly object _lock = new();
@@ -73,7 +75,7 @@ public class WakeLockService : IWakeLockService
             var activity = Platform.CurrentActivity;
             if (activity == null)
             {
-                System.Diagnostics.Debug.WriteLine("[WakeLockService] No activity available for screen-on flag");
+                Log.Warn(LogTag, "No activity available for screen-on flag");
                 return;
             }
 
@@ -81,12 +83,12 @@ public class WakeLockService : IWakeLockService
             {
                 activity.Window?.AddFlags(WindowManagerFlags.KeepScreenOn);
                 _keepingScreenOn = true;
-                System.Diagnostics.Debug.WriteLine("[WakeLockService] Screen-on flag acquired");
+                Log.Debug(LogTag, "Screen-on flag acquired");
             });
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[WakeLockService] Error acquiring screen-on flag: {ex.Message}");
+            Log.Warn(LogTag, $"Error acquiring screen-on flag: {ex.Message}");
         }
     }
 
@@ -111,12 +113,12 @@ public class WakeLockService : IWakeLockService
             {
                 activity.Window?.ClearFlags(WindowManagerFlags.KeepScreenOn);
                 _keepingScreenOn = false;
-                System.Diagnostics.Debug.WriteLine("[WakeLockService] Screen-on flag released");
+                Log.Debug(LogTag, "Screen-on flag released");
             });
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[WakeLockService] Error releasing screen-on flag: {ex.Message}");
+            Log.Warn(LogTag, $"Error releasing screen-on flag: {ex.Message}");
         }
     }
 
@@ -128,7 +130,7 @@ public class WakeLockService : IWakeLockService
     {
         if (_wakeLock?.IsHeld == true)
         {
-            System.Diagnostics.Debug.WriteLine("[WakeLockService] Wake lock already held");
+            Log.Debug(LogTag, "Wake lock already held");
             return;
         }
 
@@ -139,7 +141,7 @@ public class WakeLockService : IWakeLockService
 
             if (powerManager == null)
             {
-                System.Diagnostics.Debug.WriteLine("[WakeLockService] PowerManager not available");
+                Log.Warn(LogTag, "PowerManager not available");
                 return;
             }
 
@@ -149,18 +151,18 @@ public class WakeLockService : IWakeLockService
 
             if (_wakeLock == null)
             {
-                System.Diagnostics.Debug.WriteLine("[WakeLockService] Failed to create wake lock");
+                Log.Warn(LogTag, "Failed to create wake lock");
                 return;
             }
 
             // Set timeout to 4 hours max to prevent battery drain from leaks
             _wakeLock.Acquire(4 * 60 * 60 * 1000);
 
-            System.Diagnostics.Debug.WriteLine("[WakeLockService] Partial wake lock acquired");
+            Log.Debug(LogTag, "Partial wake lock acquired");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[WakeLockService] Error acquiring wake lock: {ex.Message}");
+            Log.Warn(LogTag, $"Error acquiring wake lock: {ex.Message}");
         }
     }
 
@@ -177,12 +179,12 @@ public class WakeLockService : IWakeLockService
             if (_wakeLock.IsHeld)
             {
                 _wakeLock.Release();
-                System.Diagnostics.Debug.WriteLine("[WakeLockService] Partial wake lock released");
+                Log.Debug(LogTag, "Partial wake lock released");
             }
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[WakeLockService] Error releasing wake lock: {ex.Message}");
+            Log.Warn(LogTag, $"Error releasing wake lock: {ex.Message}");
         }
         finally
         {

@@ -2,6 +2,7 @@ using System.Text.Json;
 using Android.Content;
 using Android.Gms.Common;
 using Android.Gms.Location;
+using Android.Util;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
@@ -19,6 +20,7 @@ public class LocationBridge : ILocationBridge, IDisposable
     #region Constants
 
     private const string LastLocationKey = "last_known_location";
+    private const string LogTag = "WayfarerLocation";
 
     #endregion
 
@@ -90,7 +92,7 @@ public class LocationBridge : ILocationBridge, IDisposable
         // 2. Try to get fresher location from FusedLocationProviderClient (async, non-blocking)
         _ = TryGetFusedLastLocationAsync();
 
-        System.Diagnostics.Debug.WriteLine($"[LocationBridge] Initialized, persisted location: {(LastLocation != null ? "available" : "none")}");
+        Log.Debug(LogTag, $"LocationBridge initialized, persisted location: {(LastLocation != null ? "available" : "none")}");
     }
 
     #endregion
@@ -133,7 +135,7 @@ public class LocationBridge : ILocationBridge, IDisposable
         LocationServiceCallbacks.StateChanged += OnStateChanged;
         _isRegistered = true;
 
-        System.Diagnostics.Debug.WriteLine("[LocationBridge] Registered for callbacks");
+        Log.Debug(LogTag, "LocationBridge registered for callbacks");
     }
 
     /// <summary>
@@ -148,7 +150,7 @@ public class LocationBridge : ILocationBridge, IDisposable
         LocationServiceCallbacks.StateChanged -= OnStateChanged;
         _isRegistered = false;
 
-        System.Diagnostics.Debug.WriteLine("[LocationBridge] Unregistered from callbacks");
+        Log.Debug(LogTag, "LocationBridge unregistered from callbacks");
     }
 
     #endregion
@@ -173,7 +175,7 @@ public class LocationBridge : ILocationBridge, IDisposable
             context.StartService(intent);
         }
 
-        System.Diagnostics.Debug.WriteLine("[LocationBridge] Start command sent");
+        Log.Debug(LogTag, "LocationBridge start command sent");
         return Task.CompletedTask;
     }
 
@@ -187,7 +189,7 @@ public class LocationBridge : ILocationBridge, IDisposable
         intent.SetAction(LocationTrackingService.ActionStop);
         context.StartService(intent);
 
-        System.Diagnostics.Debug.WriteLine("[LocationBridge] Stop command sent");
+        Log.Debug(LogTag, "LocationBridge stop command sent");
         return Task.CompletedTask;
     }
 
@@ -202,7 +204,7 @@ public class LocationBridge : ILocationBridge, IDisposable
         intent.SetAction(LocationTrackingService.ActionPause);
         context.StartService(intent);
 
-        System.Diagnostics.Debug.WriteLine("[LocationBridge] Pause command sent");
+        Log.Debug(LogTag, "LocationBridge pause command sent");
         return Task.CompletedTask;
     }
 
@@ -217,7 +219,7 @@ public class LocationBridge : ILocationBridge, IDisposable
         intent.SetAction(LocationTrackingService.ActionResume);
         context.StartService(intent);
 
-        System.Diagnostics.Debug.WriteLine("[LocationBridge] Resume command sent");
+        Log.Debug(LogTag, "LocationBridge resume command sent");
         return Task.CompletedTask;
     }
 
@@ -245,7 +247,7 @@ public class LocationBridge : ILocationBridge, IDisposable
         // but does NOT start the service if it's not running
         context.StartService(intent);
 
-        System.Diagnostics.Debug.WriteLine($"[LocationBridge] Performance mode set to {mode}");
+        Log.Debug(LogTag, $"LocationBridge performance mode set to {mode}");
         return Task.CompletedTask;
     }
 
@@ -284,7 +286,7 @@ public class LocationBridge : ILocationBridge, IDisposable
             var resultCode = availability.IsGooglePlayServicesAvailable(context);
             if (resultCode != ConnectionResult.Success)
             {
-                System.Diagnostics.Debug.WriteLine("[LocationBridge] Google Play Services not available for quick location");
+                Log.Debug(LogTag, "LocationBridge: Google Play Services not available for quick location");
                 return;
             }
 
@@ -314,19 +316,19 @@ public class LocationBridge : ILocationBridge, IDisposable
                     // Notify listeners of the quick location
                     LocationReceived?.Invoke(this, locationData);
 
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[LocationBridge] Got quick fused location: {locationData.Latitude:F6}, {locationData.Longitude:F6} " +
+                    Log.Debug(LogTag,
+                        $"LocationBridge got quick fused location: {locationData.Latitude:F6}, {locationData.Longitude:F6} " +
                         $"(age: {(DateTime.UtcNow - locationData.Timestamp).TotalSeconds:F0}s)");
                 }
             }
             else
             {
-                System.Diagnostics.Debug.WriteLine("[LocationBridge] FusedLocationProvider returned null");
+                Log.Debug(LogTag, "LocationBridge: FusedLocationProvider returned null");
             }
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[LocationBridge] Failed to get fused last location: {ex.Message}");
+            Log.Warn(LogTag, $"LocationBridge failed to get fused last location: {ex.Message}");
         }
     }
 
