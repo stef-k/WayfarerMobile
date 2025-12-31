@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using SQLite;
 using WayfarerMobile.Core.Algorithms;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
@@ -90,9 +91,14 @@ public class LocalTimelineStorageService : IDisposable
             _isInitialized = true;
             _logger.LogInformation("LocalTimelineStorageService initialized");
         }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error initializing LocalTimelineStorageService");
+            throw;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to initialize LocalTimelineStorageService");
+            _logger.LogError(ex, "Unexpected error initializing LocalTimelineStorageService");
             throw;
         }
     }
@@ -161,9 +167,13 @@ public class LocalTimelineStorageService : IDisposable
                 location.Longitude,
                 location.Timestamp);
         }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error storing location to local timeline");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to store location to local timeline");
+            _logger.LogError(ex, "Unexpected error storing location to local timeline");
         }
     }
 
@@ -192,9 +202,13 @@ public class LocalTimelineStorageService : IDisposable
                     e.Timestamp);
             }
         }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error updating ServerId for synced location");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to update ServerId for synced location");
+            _logger.LogError(ex, "Unexpected error updating ServerId for synced location");
         }
     }
 
@@ -223,9 +237,13 @@ public class LocalTimelineStorageService : IDisposable
                     e.Timestamp);
             }
         }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error removing skipped location from local timeline");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to remove skipped location from local timeline");
+            _logger.LogError(ex, "Unexpected error removing skipped location from local timeline");
         }
     }
 

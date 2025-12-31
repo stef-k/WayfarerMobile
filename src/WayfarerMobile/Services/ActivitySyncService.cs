@@ -162,9 +162,14 @@ public class ActivitySyncService : IActivitySyncService
             var serverActivities = all.Where(a => a.Id > 0).ToList();
             return serverActivities.Count > 0 ? serverActivities : all.Where(a => a.Id < 0).ToList();
         }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error getting activity types");
+            return [];
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting activity types");
+            _logger.LogError(ex, "Unexpected error getting activity types");
             return [];
         }
     }
@@ -181,9 +186,14 @@ public class ActivitySyncService : IActivitySyncService
                 .Where(a => a.Id == id)
                 .FirstOrDefaultAsync();
         }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error getting activity by ID {Id}", id);
+            return null;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting activity by ID {Id}", id);
+            _logger.LogError(ex, "Unexpected error getting activity by ID {Id}", id);
             return null;
         }
     }
@@ -251,9 +261,24 @@ public class ActivitySyncService : IActivitySyncService
             _logger.LogInformation("Synced {Count} activity types from server", inserted);
             return inserted > 0;
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error syncing activities from server");
+            return false;
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out syncing activities from server");
+            return false;
+        }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error syncing activities from server");
+            return false;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error syncing activities from server");
+            _logger.LogError(ex, "Unexpected error syncing activities from server");
             return false;
         }
     }
@@ -293,9 +318,19 @@ public class ActivitySyncService : IActivitySyncService
 
             return true; // No sync needed, data is fresh
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error during auto sync check");
+            return false;
+        }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error during auto sync check");
+            return false;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during auto sync check");
+            _logger.LogError(ex, "Unexpected error during auto sync check");
             return false;
         }
     }
