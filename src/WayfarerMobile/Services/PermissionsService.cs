@@ -28,6 +28,11 @@ public class PermissionsService : IPermissionsService
             var status = await Permissions.CheckStatusAsync<Permissions.LocationWhenInUse>();
             return status == PermissionStatus.Granted;
         }
+        catch (FeatureNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Location permission check not supported on this platform");
+            return false;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error checking location permission");
@@ -42,6 +47,11 @@ public class PermissionsService : IPermissionsService
         {
             var status = await Permissions.CheckStatusAsync<Permissions.LocationAlways>();
             return status == PermissionStatus.Granted;
+        }
+        catch (FeatureNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Background location permission check not supported on this platform");
+            return false;
         }
         catch (Exception ex)
         {
@@ -61,6 +71,11 @@ public class PermissionsService : IPermissionsService
             {
                 var status = await Permissions.CheckStatusAsync<NotificationPermission>();
                 return status == PermissionStatus.Granted;
+            }
+            catch (FeatureNotSupportedException ex)
+            {
+                _logger.LogWarning(ex, "Notification permission check not supported on this platform");
+                return false;
             }
             catch (Exception ex)
             {
@@ -97,6 +112,11 @@ public class PermissionsService : IPermissionsService
 
             return status == PermissionStatus.Granted;
         }
+        catch (FeatureNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Location permission request not supported on this platform");
+            return false;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error requesting location permission");
@@ -129,6 +149,11 @@ public class PermissionsService : IPermissionsService
 
             return status == PermissionStatus.Granted;
         }
+        catch (FeatureNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Background location permission request not supported on this platform");
+            return false;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error requesting background location permission");
@@ -156,6 +181,11 @@ public class PermissionsService : IPermissionsService
                 _logger.LogInformation("Notification permission request result: {Status}", status);
 
                 return status == PermissionStatus.Granted;
+            }
+            catch (FeatureNotSupportedException ex)
+            {
+                _logger.LogWarning(ex, "Notification permission request not supported on this platform");
+                return false;
             }
             catch (Exception ex)
             {
@@ -225,6 +255,10 @@ public class PermissionsService : IPermissionsService
         try
         {
             AppInfo.ShowSettingsUI();
+        }
+        catch (FeatureNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Opening app settings not supported on this platform");
         }
         catch (Exception ex)
         {
