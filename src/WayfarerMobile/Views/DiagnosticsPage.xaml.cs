@@ -23,7 +23,20 @@ public partial class DiagnosticsPage : ContentPage
     protected override void OnAppearing()
     {
         base.OnAppearing();
+
+        // Subscribe to location events for real-time GPS status updates
+        _viewModel.OnAppearing();
+
         // Fire-and-forget: let page render immediately, show loading indicator while data loads
         _ = _viewModel.LoadDataCommand.ExecuteAsync(null);
+    }
+
+    /// <inheritdoc/>
+    protected override void OnDisappearing()
+    {
+        base.OnDisappearing();
+
+        // Unsubscribe from location events to prevent memory leaks
+        _viewModel.OnDisappearing();
     }
 }

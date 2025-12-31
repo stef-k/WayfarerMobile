@@ -4,7 +4,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using SQLite;
+using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Services;
 using WayfarerMobile.Services;
 
@@ -17,17 +19,20 @@ namespace WayfarerMobile.ViewModels;
 public partial class DiagnosticsViewModel : BaseViewModel
 {
     private readonly ILogger<DiagnosticsViewModel> _logger;
+    private readonly ILocationBridge _locationBridge;
     private readonly DiagnosticService _diagnosticService;
     private readonly AppDiagnosticService _appDiagnosticService;
     private readonly PerformanceMonitorService _performanceService;
     private readonly IToastService _toastService;
     private readonly DatabaseService _databaseService;
+    private bool _isSubscribed;
 
     /// <summary>
     /// Initializes a new instance of the DiagnosticsViewModel class.
     /// </summary>
     public DiagnosticsViewModel(
         ILogger<DiagnosticsViewModel> logger,
+        ILocationBridge locationBridge,
         DiagnosticService diagnosticService,
         AppDiagnosticService appDiagnosticService,
         PerformanceMonitorService performanceService,
@@ -35,6 +40,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
         DatabaseService databaseService)
     {
         _logger = logger;
+        _locationBridge = locationBridge;
         _diagnosticService = diagnosticService;
         _appDiagnosticService = appDiagnosticService;
         _performanceService = performanceService;
@@ -44,6 +50,151 @@ public partial class DiagnosticsViewModel : BaseViewModel
 
         LogFiles = [];
     }
+
+    #region Lifecycle Methods
+
+    /// <summary>
+    /// Called when the page appears. Subscribes to location events for real-time updates.
+    /// </summary>
+    public void OnAppearing()
+    {
+        if (!_isSubscribed)
+        {
+            _locationBridge.StateChanged += OnLocationStateChanged;
+            _locationBridge.LocationReceived += OnLocationReceived;
+            _isSubscribed = true;
+            _logger.LogDebug("Subscribed to location bridge events");
+
+            // Initialize from current state immediately
+            var currentState = _locationBridge.CurrentState;
+            IsGpsRunning = currentState == Core.Enums.TrackingState.Active;
+            TrackingState = currentState.ToString();
+        }
+    }
+
+    /// <summary>
+    /// Called when the page disappears. Unsubscribes from location events.
+    /// </summary>
+    public void OnDisappearing()
+    {
+        if (_isSubscribed)
+        {
+            _locationBridge.StateChanged -= OnLocationStateChanged;
+            _locationBridge.LocationReceived -= OnLocationReceived;
+            _isSubscribed = false;
+            _logger.LogDebug("Unsubscribed from location bridge events");
+        }
+    }
+
+    /// <summary>
+    /// Handles location state changes to update GPS status in real-time.
+    /// </summary>
+    private void OnLocationStateChanged(object? sender, TrackingState newState)
+    {
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            var wasRunning = IsGpsRunning;
+            IsGpsRunning = newState == Core.Enums.TrackingState.Active;
+
+            // Always update the tracking state display
+            TrackingState = newState.ToString();
+
+            if (wasRunning != IsGpsRunning)
+            {
+                _logger.LogDebug("GPS status changed: {OldState} -> {NewState}", wasRunning, IsGpsRunning);
+
+                // Update overall health status
+                UpdateHealthStatusFromCurrentState();
+            }
+        });
+    }
+
+    /// <summary>
+    /// Handles new location updates to refresh tracking info.
+    /// </summary>
+    private void OnLocationReceived(object? sender, LocationData location)
+    {
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            // Update last location info display
+            LastLocationInfo = $"{location.Latitude:F5}, {location.Longitude:F5} " +
+                               $"({location.Accuracy:F0}m) at {location.Timestamp.ToLocalTime():HH:mm:ss}";
+
+            // If GPS wasn't marked as running, update it now since we got a location
+            if (!IsGpsRunning)
+            {
+                IsGpsRunning = true;
+                UpdateHealthStatusFromCurrentState();
+            }
+        });
+    }
+
+    /// <summary>
+    /// Updates the health status display based on current property values.
+    /// </summary>
+    private void UpdateHealthStatusFromCurrentState()
+    {
+        // Recalculate overall health based on current state
+        var overallHealth = CalculateOverallHealthFromProperties();
+
+        HealthStatus = overallHealth switch
+        {
+            Services.HealthStatus.Healthy => "Healthy",
+            Services.HealthStatus.Warning => "Warning",
+            Services.HealthStatus.Critical => "Critical",
+            Services.HealthStatus.Error => "Error",
+            _ => "Unknown"
+        };
+
+        HealthStatusColor = overallHealth switch
+        {
+            Services.HealthStatus.Healthy => Colors.Green,
+            Services.HealthStatus.Warning => Colors.Orange,
+            Services.HealthStatus.Critical => Colors.Red,
+            Services.HealthStatus.Error => Colors.Red,
+            _ => Colors.Gray
+        };
+    }
+
+    /// <summary>
+    /// Calculates overall health status from current property values.
+    /// </summary>
+    private Services.HealthStatus CalculateOverallHealthFromProperties()
+    {
+        // GPS permissions are critical
+        if (!HasForegroundLocation)
+        {
+            return Services.HealthStatus.Critical;
+        }
+
+        // Background permission missing is a warning
+        if (!HasBackgroundLocation)
+        {
+            return Services.HealthStatus.Warning;
+        }
+
+        // GPS not running is a warning
+        if (!IsGpsRunning)
+        {
+            return Services.HealthStatus.Warning;
+        }
+
+        // Missing server config when tracking is enabled
+        if (IsTrackingEnabled && !HasServerConfig)
+        {
+            return Services.HealthStatus.Warning;
+        }
+
+        // No network when tracking is enabled
+        if (IsTrackingEnabled && !HasNetwork)
+        {
+            return Services.HealthStatus.Warning;
+        }
+
+        return Services.HealthStatus.Healthy;
+    }
+
+    #endregion
 
     #region Health Check Properties
 
@@ -86,6 +237,9 @@ public partial class DiagnosticsViewModel : BaseViewModel
 
     [ObservableProperty]
     private int _rejectedLocations;
+
+    [ObservableProperty]
+    private int _failedLocations;
 
     [ObservableProperty]
     private string _oldestPendingAge = "N/A";
@@ -709,6 +863,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
         PendingLocations = diag.PendingCount;
         SyncedLocations = diag.SyncedCount;
         RejectedLocations = diag.RejectedCount;
+        FailedLocations = diag.FailedCount;
 
         if (diag.OldestPendingTimestamp.HasValue)
         {
