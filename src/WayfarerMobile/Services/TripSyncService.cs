@@ -134,10 +134,22 @@ public class TripSyncService : ITripSyncService
             SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = tempClientId, ErrorMessage = $"Server rejected: {ex.Message}", IsClientError = true });
             return Guid.Empty;
         }
+        catch (HttpRequestException ex)
+        {
+            await EnqueuePlaceMutationAsync("Create", tempClientId, tripId, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder, true, tempClientId);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tempClientId, Message = $"Network error: {ex.Message} - will retry" });
+            return tempClientId;
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            await EnqueuePlaceMutationAsync("Create", tempClientId, tripId, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder, true, tempClientId);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tempClientId, Message = "Request timed out - will retry" });
+            return tempClientId;
+        }
         catch (Exception ex)
         {
             await EnqueuePlaceMutationAsync("Create", tempClientId, tripId, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder, true, tempClientId);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tempClientId, Message = $"Sync failed: {ex.Message} - will retry" });
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tempClientId, Message = $"Unexpected error: {ex.Message} - will retry" });
             return tempClientId;
         }
     }
@@ -239,13 +251,29 @@ public class TripSyncService : ITripSyncService
             }
             SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = placeId, ErrorMessage = $"Server rejected: {ex.Message}", IsClientError = true });
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            // Network/server error - queue for retry with original values
+            // Network error - queue for retry with original values
             await EnqueuePlaceMutationWithOriginalAsync("Update", placeId, tripId, null,
                 name, latitude, longitude, notes, iconName, markerColor, displayOrder, includeNotes, null,
                 originalName, originalLatitude, originalLongitude, originalNotes, originalIconName, originalMarkerColor, originalDisplayOrder);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = placeId, Message = $"Sync failed: {ex.Message} - will retry" });
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = placeId, Message = $"Network error: {ex.Message} - will retry" });
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            // Timeout - queue for retry with original values
+            await EnqueuePlaceMutationWithOriginalAsync("Update", placeId, tripId, null,
+                name, latitude, longitude, notes, iconName, markerColor, displayOrder, includeNotes, null,
+                originalName, originalLatitude, originalLongitude, originalNotes, originalIconName, originalMarkerColor, originalDisplayOrder);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = placeId, Message = "Request timed out - will retry" });
+        }
+        catch (Exception ex)
+        {
+            // Unexpected error - queue for retry with original values
+            await EnqueuePlaceMutationWithOriginalAsync("Update", placeId, tripId, null,
+                name, latitude, longitude, notes, iconName, markerColor, displayOrder, includeNotes, null,
+                originalName, originalLatitude, originalLongitude, originalNotes, originalIconName, originalMarkerColor, originalDisplayOrder);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = placeId, Message = $"Unexpected error: {ex.Message} - will retry" });
         }
     }
 
@@ -297,10 +325,20 @@ public class TripSyncService : ITripSyncService
             }
             SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = placeId, ErrorMessage = $"Server rejected: {ex.Message}", IsClientError = true });
         }
+        catch (HttpRequestException ex)
+        {
+            await EnqueueDeleteMutationWithOriginalAsync("Place", placeId, tripId, offlinePlace);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = placeId, Message = $"Network error: {ex.Message} - will retry" });
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            await EnqueueDeleteMutationWithOriginalAsync("Place", placeId, tripId, offlinePlace);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = placeId, Message = "Request timed out - will retry" });
+        }
         catch (Exception ex)
         {
             await EnqueueDeleteMutationWithOriginalAsync("Place", placeId, tripId, offlinePlace);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = placeId, Message = $"Delete failed: {ex.Message} - will retry" });
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = placeId, Message = $"Unexpected error: {ex.Message} - will retry" });
         }
     }
 
@@ -494,10 +532,22 @@ public class TripSyncService : ITripSyncService
             SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = tempClientId, ErrorMessage = $"Server rejected: {ex.Message}", IsClientError = true });
             return Guid.Empty;
         }
+        catch (HttpRequestException ex)
+        {
+            await EnqueueRegionMutationAsync("Create", tempClientId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, true, tempClientId);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tempClientId, Message = $"Network error: {ex.Message} - will retry" });
+            return tempClientId;
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            await EnqueueRegionMutationAsync("Create", tempClientId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, true, tempClientId);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tempClientId, Message = "Request timed out - will retry" });
+            return tempClientId;
+        }
         catch (Exception ex)
         {
             await EnqueueRegionMutationAsync("Create", tempClientId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, true, tempClientId);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tempClientId, Message = $"Sync failed: {ex.Message} - will retry" });
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tempClientId, Message = $"Unexpected error: {ex.Message} - will retry" });
             return tempClientId;
         }
     }
@@ -588,12 +638,26 @@ public class TripSyncService : ITripSyncService
             }
             SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = regionId, ErrorMessage = $"Server rejected: {ex.Message}", IsClientError = true });
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            // Network/server error - queue for retry with original values
+            // Network error - queue for retry with original values
             await EnqueueRegionMutationWithOriginalAsync("Update", regionId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, includeNotes, null,
                 originalName, originalNotes, null, originalCenterLatitude, originalCenterLongitude, originalDisplayOrder);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = regionId, Message = $"Sync failed: {ex.Message} - will retry" });
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = regionId, Message = $"Network error: {ex.Message} - will retry" });
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            // Timeout - queue for retry with original values
+            await EnqueueRegionMutationWithOriginalAsync("Update", regionId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, includeNotes, null,
+                originalName, originalNotes, null, originalCenterLatitude, originalCenterLongitude, originalDisplayOrder);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = regionId, Message = "Request timed out - will retry" });
+        }
+        catch (Exception ex)
+        {
+            // Unexpected error - queue for retry with original values
+            await EnqueueRegionMutationWithOriginalAsync("Update", regionId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, includeNotes, null,
+                originalName, originalNotes, null, originalCenterLatitude, originalCenterLongitude, originalDisplayOrder);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = regionId, Message = $"Unexpected error: {ex.Message} - will retry" });
         }
     }
 
@@ -645,10 +709,20 @@ public class TripSyncService : ITripSyncService
             }
             SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = regionId, ErrorMessage = $"Server rejected: {ex.Message}", IsClientError = true });
         }
+        catch (HttpRequestException ex)
+        {
+            await EnqueueDeleteRegionMutationWithOriginalAsync(regionId, tripId, offlineArea);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = regionId, Message = $"Network error: {ex.Message} - will retry" });
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            await EnqueueDeleteRegionMutationWithOriginalAsync(regionId, tripId, offlineArea);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = regionId, Message = "Request timed out - will retry" });
+        }
         catch (Exception ex)
         {
             await EnqueueDeleteRegionMutationWithOriginalAsync(regionId, tripId, offlineArea);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = regionId, Message = $"Delete failed: {ex.Message} - will retry" });
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = regionId, Message = $"Unexpected error: {ex.Message} - will retry" });
         }
     }
 
@@ -841,10 +915,20 @@ public class TripSyncService : ITripSyncService
         {
             SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = tripId, ErrorMessage = $"Server rejected: {ex.Message}", IsClientError = true });
         }
+        catch (HttpRequestException ex)
+        {
+            await EnqueueTripMutationAsync(tripId, name, notes, includeNotes);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tripId, Message = $"Network error: {ex.Message} - will retry" });
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            await EnqueueTripMutationAsync(tripId, name, notes, includeNotes);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tripId, Message = "Request timed out - will retry" });
+        }
         catch (Exception ex)
         {
             await EnqueueTripMutationAsync(tripId, name, notes, includeNotes);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tripId, Message = $"Sync failed: {ex.Message} - will retry" });
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tripId, Message = $"Unexpected error: {ex.Message} - will retry" });
         }
     }
 
@@ -943,10 +1027,20 @@ public class TripSyncService : ITripSyncService
             }
             SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = segmentId, ErrorMessage = $"Server rejected: {ex.Message}", IsClientError = true });
         }
+        catch (HttpRequestException ex)
+        {
+            await EnqueueSegmentMutationWithOriginalAsync(segmentId, tripId, notes, originalNotes);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = segmentId, Message = $"Network error: {ex.Message} - will retry" });
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            await EnqueueSegmentMutationWithOriginalAsync(segmentId, tripId, notes, originalNotes);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = segmentId, Message = "Request timed out - will retry" });
+        }
         catch (Exception ex)
         {
             await EnqueueSegmentMutationWithOriginalAsync(segmentId, tripId, notes, originalNotes);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = segmentId, Message = $"Sync failed: {ex.Message} - will retry" });
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = segmentId, Message = $"Unexpected error: {ex.Message} - will retry" });
         }
     }
 
@@ -1077,10 +1171,20 @@ public class TripSyncService : ITripSyncService
             }
             SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = areaId, ErrorMessage = $"Server rejected: {ex.Message}", IsClientError = true });
         }
+        catch (HttpRequestException ex)
+        {
+            await EnqueueAreaMutationWithOriginalAsync(areaId, tripId, notes, originalNotes);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = areaId, Message = $"Network error: {ex.Message} - will retry" });
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            await EnqueueAreaMutationWithOriginalAsync(areaId, tripId, notes, originalNotes);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = areaId, Message = "Request timed out - will retry" });
+        }
         catch (Exception ex)
         {
             await EnqueueAreaMutationWithOriginalAsync(areaId, tripId, notes, originalNotes);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = areaId, Message = $"Sync failed: {ex.Message} - will retry" });
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = areaId, Message = $"Unexpected error: {ex.Message} - will retry" });
         }
     }
 
@@ -1249,9 +1353,22 @@ public class TripSyncService : ITripSyncService
                 await _database.UpdateAsync(mutation);
                 SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = mutation.EntityId, ErrorMessage = ex.Message, IsClientError = true });
             }
+            catch (HttpRequestException ex)
+            {
+                // Network error - will retry
+                mutation.LastError = $"Network error: {ex.Message}";
+                await _database.UpdateAsync(mutation);
+            }
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            {
+                // Timeout - will retry
+                mutation.LastError = "Request timed out";
+                await _database.UpdateAsync(mutation);
+            }
             catch (Exception ex)
             {
-                mutation.LastError = ex.Message;
+                // Unexpected error - will retry
+                mutation.LastError = $"Unexpected error: {ex.Message}";
                 await _database.UpdateAsync(mutation);
             }
         }

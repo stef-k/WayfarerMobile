@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using SQLite;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
@@ -222,9 +223,14 @@ public sealed class QueueDrainService : IDisposable
                     resetCount);
             }
         }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error during QueueDrainService initialization");
+            // Continue anyway - initialization errors shouldn't prevent service from running
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during QueueDrainService initialization");
+            _logger.LogError(ex, "Unexpected error during QueueDrainService initialization");
             // Continue anyway - initialization errors shouldn't prevent service from running
         }
     }
@@ -363,9 +369,14 @@ public sealed class QueueDrainService : IDisposable
             // This prevents race conditions in rate limiting
             RecordDrainAttempt();
         }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error getting pending location from queue");
+            return;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting pending location from queue");
+            _logger.LogError(ex, "Unexpected error getting pending location from queue");
             return;
         }
         finally
@@ -482,12 +493,19 @@ public sealed class QueueDrainService : IDisposable
             _consecutiveFailures++;
             _logger.LogWarning("Location {Id} sync timed out", location.Id);
         }
+        catch (HttpRequestException ex)
+        {
+            // Network error - reset to pending for retry
+            await _database.ResetLocationToPendingAsync(location.Id);
+            _consecutiveFailures++;
+            _logger.LogWarning(ex, "Network error syncing location {Id}", location.Id);
+        }
         catch (Exception ex)
         {
             // Unexpected error - mark as failed
-            await _database.MarkLocationFailedAsync(location.Id, ex.Message);
+            await _database.MarkLocationFailedAsync(location.Id, $"Unexpected: {ex.Message}");
             _consecutiveFailures++;
-            _logger.LogError(ex, "Error processing location {Id}", location.Id);
+            _logger.LogError(ex, "Unexpected error processing location {Id}", location.Id);
         }
     }
 
