@@ -81,6 +81,14 @@ public class AppLifecycleService : IAppLifecycleService
 
             _logger.LogInformation("App state saved successfully");
         }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "App suspension cancelled");
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Invalid operation during app suspension");
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during app suspension");
@@ -123,6 +131,14 @@ public class AppLifecycleService : IAppLifecycleService
 
             _logger.LogInformation("App state restored successfully");
         }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "App resume cancelled");
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Invalid operation during app resume");
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during app resume");
@@ -144,6 +160,10 @@ public class AppLifecycleService : IAppLifecycleService
             Preferences.Set(NavigationStateKey, json);
 
             _logger.LogDebug("Navigation state saved: {State}", json);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "JSON error saving navigation state");
         }
         catch (Exception ex)
         {
@@ -176,6 +196,12 @@ public class AppLifecycleService : IAppLifecycleService
             }
 
             return _cachedState;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "JSON error loading navigation state");
+            ClearNavigationState();
+            return null;
         }
         catch (Exception ex)
         {
