@@ -1,6 +1,7 @@
 using Android.App;
 using Android.Content;
 using Android.OS;
+using Android.Util;
 using WayfarerMobile.Platforms.Android.Services;
 
 namespace WayfarerMobile.Platforms.Android.Receivers;
@@ -16,6 +17,8 @@ namespace WayfarerMobile.Platforms.Android.Receivers;
 }, Priority = 1000)]
 public class BootReceiver : BroadcastReceiver
 {
+    private const string LogTag = "WayfarerBootReceiver";
+
     /// <summary>
     /// Handles boot completed and package replacement events.
     /// </summary>
@@ -26,13 +29,13 @@ public class BootReceiver : BroadcastReceiver
 
         try
         {
-            System.Diagnostics.Debug.WriteLine($"[BootReceiver] Triggered by: {intent.Action}");
+            Log.Info(LogTag, $"Triggered by: {intent.Action}");
 
             // Check if user has completed onboarding (has permissions)
             var isFirstRun = Preferences.Get("is_first_run", true);
             if (isFirstRun)
             {
-                System.Diagnostics.Debug.WriteLine("[BootReceiver] First run - not starting service (user needs to complete onboarding)");
+                Log.Debug(LogTag, "First run - not starting service (user needs to complete onboarding)");
                 return;
             }
 
@@ -41,7 +44,7 @@ public class BootReceiver : BroadcastReceiver
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[BootReceiver] Error: {ex.Message}");
+            Log.Error(LogTag, $"Error: {ex.Message}");
         }
     }
 
@@ -52,7 +55,7 @@ public class BootReceiver : BroadcastReceiver
     {
         try
         {
-            System.Diagnostics.Debug.WriteLine("[BootReceiver] Starting location tracking service");
+            Log.Info(LogTag, "Starting location tracking service");
 
             var serviceIntent = new Intent(context, typeof(LocationTrackingService));
             serviceIntent.SetAction(LocationTrackingService.ActionStart);
@@ -67,11 +70,11 @@ public class BootReceiver : BroadcastReceiver
                 context.StartService(serviceIntent);
             }
 
-            System.Diagnostics.Debug.WriteLine("[BootReceiver] Location tracking service started successfully");
+            Log.Info(LogTag, "Location tracking service started successfully");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[BootReceiver] Failed to start service: {ex.Message}");
+            Log.Error(LogTag, $"Failed to start service: {ex.Message}");
         }
     }
 }

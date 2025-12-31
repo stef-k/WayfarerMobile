@@ -97,7 +97,7 @@ public class TrackingNotificationService : NSObject, IUNUserNotificationCenterDe
         UNUserNotificationCenter.Current.SetNotificationCategories(
             new NSSet<UNNotificationCategory>(category));
 
-        System.Diagnostics.Debug.WriteLine("[iOS TrackingNotificationService] Registered notification actions");
+        Console.WriteLine("[iOS TrackingNotificationService] Registered notification actions");
     }
 
     /// <summary>
@@ -122,11 +122,11 @@ public class TrackingNotificationService : NSObject, IUNUserNotificationCenterDe
         try
         {
             await UNUserNotificationCenter.Current.AddNotificationRequestAsync(request);
-            System.Diagnostics.Debug.WriteLine($"[iOS TrackingNotificationService] Notification shown (paused: {isPaused})");
+            Console.WriteLine($"[iOS TrackingNotificationService] Notification shown (paused: {isPaused})");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[iOS TrackingNotificationService] Failed to show notification: {ex.Message}");
+            Console.WriteLine($"[iOS TrackingNotificationService] Failed to show notification: {ex.Message}");
         }
     }
 
@@ -150,7 +150,7 @@ public class TrackingNotificationService : NSObject, IUNUserNotificationCenterDe
         UNUserNotificationCenter.Current.RemoveDeliveredNotifications(
             new[] { NotificationIdentifier });
 
-        System.Diagnostics.Debug.WriteLine("[iOS TrackingNotificationService] Notification hidden");
+        Console.WriteLine("[iOS TrackingNotificationService] Notification hidden");
         return Task.CompletedTask;
     }
 
@@ -172,7 +172,7 @@ public class TrackingNotificationService : NSObject, IUNUserNotificationCenterDe
     {
         try
         {
-            System.Diagnostics.Debug.WriteLine($"[iOS TrackingNotificationService] Received action: {response.ActionIdentifier}");
+            Console.WriteLine($"[iOS TrackingNotificationService] Received action: {response.ActionIdentifier}");
 
             switch (response.ActionIdentifier)
             {
@@ -194,13 +194,13 @@ public class TrackingNotificationService : NSObject, IUNUserNotificationCenterDe
 
                 default:
                     // User tapped the notification itself (not an action)
-                    System.Diagnostics.Debug.WriteLine($"[iOS TrackingNotificationService] Notification tapped: {response.ActionIdentifier}");
+                    Console.WriteLine($"[iOS TrackingNotificationService] Notification tapped: {response.ActionIdentifier}");
                     break;
             }
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[iOS TrackingNotificationService] Action handler error: {ex.Message}");
+            Console.WriteLine($"[iOS TrackingNotificationService] Action handler error: {ex.Message}");
         }
         finally
         {
@@ -237,7 +237,7 @@ public class TrackingNotificationService : NSObject, IUNUserNotificationCenterDe
         if (lastLocation == null)
         {
             LocationServiceCallbacks.NotifyCheckInPerformed(false, "No location available");
-            System.Diagnostics.Debug.WriteLine("[iOS TrackingNotificationService] Check-in failed: no location");
+            Console.WriteLine("[iOS TrackingNotificationService] Check-in failed: no location");
             return;
         }
 
@@ -247,14 +247,14 @@ public class TrackingNotificationService : NSObject, IUNUserNotificationCenterDe
             if (apiClient == null)
             {
                 LocationServiceCallbacks.NotifyCheckInPerformed(false, "Service unavailable");
-                System.Diagnostics.Debug.WriteLine("[iOS TrackingNotificationService] Check-in failed: IApiClient not available");
+                Console.WriteLine("[iOS TrackingNotificationService] Check-in failed: IApiClient not available");
                 return;
             }
 
             if (!apiClient.IsConfigured)
             {
                 LocationServiceCallbacks.NotifyCheckInPerformed(false, "Server not configured");
-                System.Diagnostics.Debug.WriteLine("[iOS TrackingNotificationService] Check-in failed: API client not configured");
+                Console.WriteLine("[iOS TrackingNotificationService] Check-in failed: API client not configured");
                 return;
             }
 
@@ -276,18 +276,17 @@ public class TrackingNotificationService : NSObject, IUNUserNotificationCenterDe
                 result.Success,
                 result.Success ? "Checked in successfully" : result.Message);
 
-            System.Diagnostics.Debug.WriteLine(
-                $"[iOS TrackingNotificationService] Check-in {(result.Success ? "successful" : $"failed: {result.Message}")}");
+            Console.WriteLine($"[iOS TrackingNotificationService] Check-in {(result.Success ? "successful" : $"failed: {result.Message}")}");
         }
         catch (OperationCanceledException)
         {
             LocationServiceCallbacks.NotifyCheckInPerformed(false, "Timeout");
-            System.Diagnostics.Debug.WriteLine("[iOS TrackingNotificationService] Check-in timed out");
+            Console.WriteLine("[iOS TrackingNotificationService] Check-in timed out");
         }
         catch (Exception ex)
         {
             LocationServiceCallbacks.NotifyCheckInPerformed(false, ex.Message);
-            System.Diagnostics.Debug.WriteLine($"[iOS TrackingNotificationService] Check-in error: {ex.Message}");
+            Console.WriteLine($"[iOS TrackingNotificationService] Check-in error: {ex.Message}");
         }
     }
 

@@ -83,7 +83,7 @@ public class LocationBridge : ILocationBridge, IDisposable
 
         Register();
 
-        System.Diagnostics.Debug.WriteLine($"[iOS LocationBridge] Initialized, persisted location: {(LastLocation != null ? "available" : "none")}");
+        Console.WriteLine($"[iOS LocationBridge] Initialized, persisted location: {(LastLocation != null ? "available" : "none")}");
     }
 
     #endregion
@@ -126,7 +126,7 @@ public class LocationBridge : ILocationBridge, IDisposable
         LocationServiceCallbacks.StateChanged += OnStateChanged;
         _isRegistered = true;
 
-        System.Diagnostics.Debug.WriteLine("[iOS LocationBridge] Registered for callbacks");
+        Console.WriteLine("[iOS LocationBridge] Registered for callbacks");
     }
 
     /// <summary>
@@ -141,7 +141,7 @@ public class LocationBridge : ILocationBridge, IDisposable
         LocationServiceCallbacks.StateChanged -= OnStateChanged;
         _isRegistered = false;
 
-        System.Diagnostics.Debug.WriteLine("[iOS LocationBridge] Unregistered from callbacks");
+        Console.WriteLine("[iOS LocationBridge] Unregistered from callbacks");
     }
 
     #endregion
@@ -154,7 +154,7 @@ public class LocationBridge : ILocationBridge, IDisposable
     public Task StartAsync()
     {
         LocationTrackingService.Instance.Start();
-        System.Diagnostics.Debug.WriteLine("[iOS LocationBridge] Start command sent");
+        Console.WriteLine("[iOS LocationBridge] Start command sent");
         return Task.CompletedTask;
     }
 
@@ -164,7 +164,7 @@ public class LocationBridge : ILocationBridge, IDisposable
     public Task StopAsync()
     {
         LocationTrackingService.Instance.Stop();
-        System.Diagnostics.Debug.WriteLine("[iOS LocationBridge] Stop command sent");
+        Console.WriteLine("[iOS LocationBridge] Stop command sent");
         return Task.CompletedTask;
     }
 
@@ -174,7 +174,7 @@ public class LocationBridge : ILocationBridge, IDisposable
     public Task PauseAsync()
     {
         LocationTrackingService.Instance.Pause();
-        System.Diagnostics.Debug.WriteLine("[iOS LocationBridge] Pause command sent");
+        Console.WriteLine("[iOS LocationBridge] Pause command sent");
         return Task.CompletedTask;
     }
 
@@ -184,7 +184,7 @@ public class LocationBridge : ILocationBridge, IDisposable
     public Task ResumeAsync()
     {
         LocationTrackingService.Instance.Resume();
-        System.Diagnostics.Debug.WriteLine("[iOS LocationBridge] Resume command sent");
+        Console.WriteLine("[iOS LocationBridge] Resume command sent");
         return Task.CompletedTask;
     }
 
@@ -195,7 +195,7 @@ public class LocationBridge : ILocationBridge, IDisposable
     {
         LocationTrackingService.Instance.SetPerformanceMode(mode);
         CurrentMode = mode;
-        System.Diagnostics.Debug.WriteLine($"[iOS LocationBridge] Performance mode set to {mode}");
+        Console.WriteLine($"[iOS LocationBridge] Performance mode set to {mode}");
         return Task.CompletedTask;
     }
 

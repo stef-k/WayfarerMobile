@@ -1,6 +1,7 @@
 using Android.App;
 using Android.Content;
 using Android.OS;
+using Android.Util;
 using AndroidX.Core.App;
 using WayfarerMobile.Core.Interfaces;
 using Application = Android.App.Application;
@@ -13,6 +14,8 @@ namespace WayfarerMobile.Platforms.Android.Services;
 public class LocalNotificationService : ILocalNotificationService
 {
     #region Constants
+
+    private const string LogTag = "WayfarerNotification";
 
     /// <summary>
     /// Notification channel ID for normal visit notifications (with sound/vibration).
@@ -84,7 +87,7 @@ public class LocalNotificationService : ILocalNotificationService
             var context = Application.Context;
             if (context == null)
             {
-                System.Diagnostics.Debug.WriteLine("[Android LocalNotificationService] Context is null");
+                Log.Warn(LogTag, "Context is null");
                 return Task.FromResult(-1);
             }
 
@@ -141,15 +144,13 @@ public class LocalNotificationService : ILocalNotificationService
 
             _notificationManager?.Notify(notificationId, builder.Build());
 
-            System.Diagnostics.Debug.WriteLine(
-                $"[Android LocalNotificationService] Showed notification {notificationId}: {title} (silent: {silent}, channel: {channelId})");
+            Log.Debug(LogTag, $"Showed notification {notificationId}: {title} (silent: {silent}, channel: {channelId})");
 
             return Task.FromResult(notificationId);
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine(
-                $"[Android LocalNotificationService] Failed to show notification: {ex.Message}");
+            Log.Warn(LogTag, $"Failed to show notification: {ex.Message}");
             return Task.FromResult(-1);
         }
     }
@@ -160,12 +161,11 @@ public class LocalNotificationService : ILocalNotificationService
         try
         {
             _notificationManager?.Cancel(notificationId);
-            System.Diagnostics.Debug.WriteLine($"[Android LocalNotificationService] Cancelled notification {notificationId}");
+            Log.Debug(LogTag, $"Cancelled notification {notificationId}");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine(
-                $"[Android LocalNotificationService] Failed to cancel notification: {ex.Message}");
+            Log.Warn(LogTag, $"Failed to cancel notification: {ex.Message}");
         }
     }
 
@@ -175,12 +175,11 @@ public class LocalNotificationService : ILocalNotificationService
         try
         {
             _notificationManager?.CancelAll();
-            System.Diagnostics.Debug.WriteLine("[Android LocalNotificationService] Cancelled all notifications");
+            Log.Debug(LogTag, "Cancelled all notifications");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine(
-                $"[Android LocalNotificationService] Failed to cancel all notifications: {ex.Message}");
+            Log.Warn(LogTag, $"Failed to cancel all notifications: {ex.Message}");
         }
     }
 
@@ -254,12 +253,11 @@ public class LocalNotificationService : ILocalNotificationService
 
             _channelsCreated = true;
 
-            System.Diagnostics.Debug.WriteLine("[Android LocalNotificationService] Created visit notification channels (normal + silent)");
+            Log.Debug(LogTag, "Created visit notification channels (normal + silent)");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine(
-                $"[Android LocalNotificationService] Failed to create notification channels: {ex.Message}");
+            Log.Warn(LogTag, $"Failed to create notification channels: {ex.Message}");
         }
     }
 
