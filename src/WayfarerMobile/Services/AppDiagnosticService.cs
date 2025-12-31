@@ -54,6 +54,7 @@ public class AppDiagnosticService
             var pendingCount = await _databaseService.GetPendingLocationCountAsync();
             var syncedCount = await _databaseService.GetSyncedLocationCountAsync();
             var rejectedCount = await _databaseService.GetRejectedLocationCountAsync();
+            var failedCount = await _databaseService.GetFailedLocationCountAsync();
             var oldestPending = await _databaseService.GetOldestPendingLocationAsync();
             var lastSynced = await _databaseService.GetLastSyncedLocationAsync();
 
@@ -62,10 +63,11 @@ public class AppDiagnosticService
                 PendingCount = pendingCount,
                 SyncedCount = syncedCount,
                 RejectedCount = rejectedCount,
+                FailedCount = failedCount,
                 TotalCount = pendingCount + syncedCount + rejectedCount,
                 OldestPendingTimestamp = oldestPending?.Timestamp,
                 LastSyncedTimestamp = lastSynced?.LastSyncAttempt,
-                QueueHealthStatus = CalculateQueueHealth(pendingCount, rejectedCount),
+                QueueHealthStatus = CalculateQueueHealth(pendingCount, failedCount),
                 IsTrackingEnabled = _settingsService.TimelineTrackingEnabled,
                 IsServerConfigured = _settingsService.IsConfigured
             };
@@ -82,9 +84,9 @@ public class AppDiagnosticService
         }
     }
 
-    private static string CalculateQueueHealth(int pending, int rejected)
+    private static string CalculateQueueHealth(int pending, int failed)
     {
-        if (rejected > 50) return "Warning"; // Many rejections may indicate threshold issues
+        if (failed > 0) return "Warning"; // Server errors or network issues
         if (pending > 1000) return "Warning"; // Large backlog
         return "Healthy";
     }
@@ -420,6 +422,7 @@ public class LocationQueueDiagnostics
     public int PendingCount { get; set; }
     public int SyncedCount { get; set; }
     public int RejectedCount { get; set; }
+    public int FailedCount { get; set; }
     public int TotalCount { get; set; }
     public DateTime? OldestPendingTimestamp { get; set; }
     public DateTime? LastSyncedTimestamp { get; set; }

@@ -64,6 +64,11 @@ public partial class DiagnosticsViewModel : BaseViewModel
             _locationBridge.LocationReceived += OnLocationReceived;
             _isSubscribed = true;
             _logger.LogDebug("Subscribed to location bridge events");
+
+            // Initialize from current state immediately
+            var currentState = _locationBridge.CurrentState;
+            IsGpsRunning = currentState == Core.Enums.TrackingState.Active;
+            TrackingState = currentState.ToString();
         }
     }
 
@@ -90,6 +95,9 @@ public partial class DiagnosticsViewModel : BaseViewModel
         {
             var wasRunning = IsGpsRunning;
             IsGpsRunning = newState == Core.Enums.TrackingState.Active;
+
+            // Always update the tracking state display
+            TrackingState = newState.ToString();
 
             if (wasRunning != IsGpsRunning)
             {
@@ -229,6 +237,9 @@ public partial class DiagnosticsViewModel : BaseViewModel
 
     [ObservableProperty]
     private int _rejectedLocations;
+
+    [ObservableProperty]
+    private int _failedLocations;
 
     [ObservableProperty]
     private string _oldestPendingAge = "N/A";
@@ -852,6 +863,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
         PendingLocations = diag.PendingCount;
         SyncedLocations = diag.SyncedCount;
         RejectedLocations = diag.RejectedCount;
+        FailedLocations = diag.FailedCount;
 
         if (diag.OldestPendingTimestamp.HasValue)
         {
