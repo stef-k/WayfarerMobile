@@ -196,20 +196,20 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
 
         try
         {
-            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] OnCreate starting - initiating foreground");
+            Log.Info(LogTag, "OnCreate starting - initiating foreground");
 
             _notificationManager = (NotificationManager?)GetSystemService(NotificationService);
             if (_notificationManager == null)
             {
-                System.Diagnostics.Debug.WriteLine("[LocationTrackingService] WARNING: NotificationManager is null!");
+                Log.Warn(LogTag, "NotificationManager is null!");
             }
 
             CreateNotificationChannel();
-            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Notification channel created");
+            Log.Debug(LogTag, "Notification channel created");
 
             // CRITICAL: Start foreground IMMEDIATELY to satisfy Android's 5-second requirement.
             var notification = CreateNotification("Initializing...");
-            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Notification created, calling StartForeground");
+            Log.Debug(LogTag, "Notification created, calling StartForeground");
 
             StartForeground(NotificationId, notification);
             _currentState = TrackingState.Ready;
@@ -242,14 +242,14 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
 
         // Load timeline tracking setting (controls whether locations are logged to server)
         _timelineTrackingEnabled = Preferences.Get("timeline_tracking_enabled", true);
-        System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] TimelineTrackingEnabled: {_timelineTrackingEnabled}");
+        Log.Debug(LogTag, $"TimelineTrackingEnabled: {_timelineTrackingEnabled}");
 
         // Load server thresholds for location filtering (respects server configuration)
         // Defaults match SettingsService: 5 min / 15 m
         var timeThreshold = Preferences.Get("location_time_threshold", 5);
         var distanceThreshold = Preferences.Get("location_distance_threshold", 15);
         _thresholdFilter.UpdateThresholds(timeThreshold, distanceThreshold);
-        System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] Thresholds: {timeThreshold}min / {distanceThreshold}m");
+        Log.Debug(LogTag, $"Thresholds: {timeThreshold}min / {distanceThreshold}m");
 
         // Check for Google Play Services availability (can be slow - system IPC call)
         _hasPlayServices = GoogleApiAvailability.Instance
@@ -260,16 +260,16 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
             // Use Google's FusedLocationProvider - better accuracy through sensor fusion
             _fusedClient = LocationServices.GetFusedLocationProviderClient(this);
             _fusedCallback = new FusedLocationCallback(this);
-            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Using Google Play Services FusedLocationProvider");
+            Log.Info(LogTag, "Using Google Play Services FusedLocationProvider");
         }
         else
         {
             // Fallback to standard LocationManager for devices without Play Services
             _locationManager = (LocationManager?)GetSystemService(LocationService);
-            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Using fallback LocationManager (no Play Services)");
+            Log.Info(LogTag, "Using fallback LocationManager (no Play Services)");
         }
 
-        System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Service created");
+        Log.Info(LogTag, "Service created");
     }
 
     /// <summary>
@@ -283,7 +283,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     {
         var action = intent?.Action ?? ActionStart;
 
-        System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] OnStartCommand: {action}");
+        Log.Debug(LogTag, $"OnStartCommand: {action}");
 
         // CRITICAL: If started via startForegroundService(), we MUST call startForeground()
         // even if already in foreground. This handles:
@@ -355,7 +355,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     /// </remarks>
     public override void OnDestroy()
     {
-        System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Service destroying - stopping foreground");
+        Log.Info(LogTag, "Service destroying - stopping foreground");
 
         StopLocationUpdates();
 
@@ -387,7 +387,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         _currentState = TrackingState.NotInitialized;
         SendStateChangeBroadcast();
 
-        System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Service destroyed");
+        Log.Info(LogTag, "Service destroyed");
 
         base.OnDestroy();
     }
@@ -417,7 +417,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         {
             if (_currentState == TrackingState.Active)
             {
-                System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Already tracking");
+                Log.Debug(LogTag, "Already tracking");
                 return;
             }
 
@@ -435,7 +435,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
             var initialStatus = _timelineTrackingEnabled ? "Timeline: ON" : "Timeline: OFF";
             UpdateNotification($"{initialStatus} • Acquiring GPS...");
 
-            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Tracking started");
+            Log.Info(LogTag, "Tracking started");
         }
     }
 
@@ -455,7 +455,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
             _currentState = TrackingState.Ready;
             SendStateChangeBroadcast();
 
-            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Tracking stopped");
+            Log.Info(LogTag, "Tracking stopped");
         }
     }
 
@@ -474,7 +474,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
             SendStateChangeBroadcast();
             UpdateNotification("Tracking paused");
 
-            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Tracking paused");
+            Log.Info(LogTag, "Tracking paused");
         }
     }
 
@@ -494,7 +494,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
             var resumeStatus = _timelineTrackingEnabled ? "Timeline: ON" : "Timeline: OFF";
             UpdateNotification($"{resumeStatus} • Resuming...");
 
-            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Tracking resumed");
+            Log.Info(LogTag, "Tracking resumed");
         }
     }
 
@@ -509,7 +509,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
                 return;
 
             _performanceMode = mode;
-            System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] Performance mode: {mode}");
+            Log.Debug(LogTag, $"Performance mode: {mode}");
 
             // Restart location updates with new interval
             if (_currentState == TrackingState.Active)
@@ -542,7 +542,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         }
         catch (Java.Lang.SecurityException ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] Permission denied: {ex.Message}");
+            Log.Error(LogTag, $"Permission denied: {ex.Message}");
             _currentState = TrackingState.PermissionsDenied;
             SendStateChangeBroadcast();
         }
@@ -720,8 +720,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
                 this);
         }
 
-        System.Diagnostics.Debug.WriteLine(
-            $"[LocationTrackingService] Fallback location updates started (interval: {interval}ms)");
+        Log.Info(LogTag, $"Fallback location updates started (interval: {interval}ms)");
     }
 
     /// <summary>
@@ -734,7 +733,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
             if (_hasPlayServices && _fusedClient != null && _fusedCallback != null)
             {
                 _fusedClient.RemoveLocationUpdatesAsync(_fusedCallback);
-                System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Fused location updates stopped");
+                Log.Info(LogTag, "Fused location updates stopped");
             }
             else if (_locationManager != null)
             {
@@ -1106,7 +1105,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     /// </summary>
     public void OnProviderDisabled(string provider)
     {
-        System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] Provider disabled: {provider}");
+        Log.Info(LogTag, $"Provider disabled: {provider}");
     }
 
     /// <summary>
@@ -1114,7 +1113,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     /// </summary>
     public void OnProviderEnabled(string provider)
     {
-        System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] Provider enabled: {provider}");
+        Log.Info(LogTag, $"Provider enabled: {provider}");
     }
 
     /// <summary>
@@ -1122,7 +1121,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     /// </summary>
     public void OnStatusChanged(string? provider, [GeneratedEnum] Availability status, Bundle? extras)
     {
-        System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] Provider {provider} status: {status}");
+        Log.Debug(LogTag, $"Provider {provider} status: {status}");
     }
 
     #endregion
@@ -1312,8 +1311,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     public void UpdateThresholds(int timeMinutes, int distanceMeters)
     {
         _thresholdFilter?.UpdateThresholds(timeMinutes, distanceMeters);
-        System.Diagnostics.Debug.WriteLine(
-            $"[LocationTrackingService] Thresholds updated: {timeMinutes}min / {distanceMeters}m");
+        Log.Debug(LogTag, $"Thresholds updated: {timeMinutes}min / {distanceMeters}m");
     }
 
     #endregion

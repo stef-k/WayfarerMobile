@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 
 namespace WayfarerMobile.Services.Security;
@@ -14,6 +15,17 @@ namespace WayfarerMobile.Services.Security;
 /// </summary>
 public sealed class AppLockService : IAppLockService
 {
+    private readonly ILogger<AppLockService> _logger;
+
+    /// <summary>
+    /// Creates a new instance of AppLockService.
+    /// </summary>
+    /// <param name="logger">Logger instance.</param>
+    public AppLockService(ILogger<AppLockService> logger)
+    {
+        _logger = logger;
+    }
+
     #region Constants
 
     private const string PinHashKey = "AppPinHash";
@@ -78,7 +90,7 @@ public sealed class AppLockService : IAppLockService
             SaveProtectionEnabled();
         }
 
-        System.Diagnostics.Debug.WriteLine($"[AppLockService] Initialized: PinConfigured={IsPinConfigured}, ProtectionEnabled={IsProtectionEnabled}");
+        _logger.LogDebug("Initialized: PinConfigured={PinConfigured}, ProtectionEnabled={ProtectionEnabled}", IsPinConfigured, IsProtectionEnabled);
     }
 
     /// <inheritdoc/>
@@ -87,14 +99,14 @@ public sealed class AppLockService : IAppLockService
         // S3 -> S2: Lock session when app goes to background
         IsSessionUnlocked = false;
         IsPromptAwaiting = false;
-        System.Diagnostics.Debug.WriteLine("[AppLockService] Session locked (app to background)");
+        _logger.LogDebug("Session locked (app to background)");
     }
 
     /// <inheritdoc/>
     public void OnAppToForeground()
     {
         // Remain in current state (locked if protection enabled)
-        System.Diagnostics.Debug.WriteLine($"[AppLockService] App to foreground: ProtectionEnabled={IsProtectionEnabled}, SessionUnlocked={IsSessionUnlocked}");
+        _logger.LogDebug("App to foreground: ProtectionEnabled={ProtectionEnabled}, SessionUnlocked={SessionUnlocked}", IsProtectionEnabled, IsSessionUnlocked);
     }
 
     #endregion
@@ -123,12 +135,12 @@ public sealed class AppLockService : IAppLockService
             await SecureStorage.Default.SetAsync(PinHashKey, hash);
 
             IsPinConfigured = true;
-            System.Diagnostics.Debug.WriteLine("[AppLockService] PIN set successfully with salted hash");
+            _logger.LogDebug("PIN set successfully with salted hash");
             return true;
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[AppLockService] Error setting PIN: {ex.Message}");
+            _logger.LogError(ex, "Error setting PIN");
             return false;
         }
     }
@@ -165,7 +177,7 @@ public sealed class AppLockService : IAppLockService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[AppLockService] Error verifying PIN: {ex.Message}");
+            _logger.LogError(ex, "Error verifying PIN");
             return false;
         }
     }
@@ -181,11 +193,11 @@ public sealed class AppLockService : IAppLockService
             IsProtectionEnabled = false;
             SaveProtectionEnabled();
             IsSessionUnlocked = false;
-            System.Diagnostics.Debug.WriteLine("[AppLockService] PIN and salt removed");
+            _logger.LogDebug("PIN and salt removed");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[AppLockService] Error removing PIN: {ex.Message}");
+            _logger.LogError(ex, "Error removing PIN");
         }
 
         await Task.CompletedTask;
@@ -217,7 +229,7 @@ public sealed class AppLockService : IAppLockService
         SaveProtectionEnabled();
         IsSessionUnlocked = true;
 
-        System.Diagnostics.Debug.WriteLine("[AppLockService] Protection enabled");
+        _logger.LogDebug("Protection enabled");
         return Task.FromResult(true);
     }
 
@@ -241,7 +253,7 @@ public sealed class AppLockService : IAppLockService
         SaveProtectionEnabled();
         IsSessionUnlocked = false;
 
-        System.Diagnostics.Debug.WriteLine("[AppLockService] Protection disabled");
+        _logger.LogDebug("Protection disabled");
         return true;
     }
 
@@ -257,7 +269,7 @@ public sealed class AppLockService : IAppLockService
         {
             // S2 -> S3: Unlock session
             IsSessionUnlocked = true;
-            System.Diagnostics.Debug.WriteLine("[AppLockService] Session unlocked");
+            _logger.LogDebug("Session unlocked");
         }
 
         return verified;
@@ -301,7 +313,7 @@ public sealed class AppLockService : IAppLockService
 
                     await SecureStorage.Default.SetAsync(PinSaltKey, saltBase64);
                     await SecureStorage.Default.SetAsync(PinHashKey, hash);
-                    System.Diagnostics.Debug.WriteLine("[AppLockService] Migrated legacy PIN storage with salted hash");
+                    _logger.LogInformation("Migrated legacy PIN storage with salted hash");
                 }
 
                 // Remove old storage
@@ -310,7 +322,7 @@ public sealed class AppLockService : IAppLockService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[AppLockService] Legacy migration failed: {ex.Message}");
+            _logger.LogWarning(ex, "Legacy migration failed");
         }
     }
 

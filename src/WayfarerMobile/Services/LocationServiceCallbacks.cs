@@ -105,7 +105,6 @@ public static class LocationServiceCallbacks
     /// </summary>
     public static void RequestPause()
     {
-        System.Diagnostics.Debug.WriteLine("[LocationServiceCallbacks] Pause requested");
         MainThread.BeginInvokeOnMainThread(() =>
         {
             PauseRequested?.Invoke(null, EventArgs.Empty);
@@ -118,7 +117,6 @@ public static class LocationServiceCallbacks
     /// </summary>
     public static void RequestResume()
     {
-        System.Diagnostics.Debug.WriteLine("[LocationServiceCallbacks] Resume requested");
         MainThread.BeginInvokeOnMainThread(() =>
         {
             ResumeRequested?.Invoke(null, EventArgs.Empty);
@@ -131,7 +129,6 @@ public static class LocationServiceCallbacks
     /// </summary>
     public static void RequestStop()
     {
-        System.Diagnostics.Debug.WriteLine("[LocationServiceCallbacks] Stop requested");
         MainThread.BeginInvokeOnMainThread(() =>
         {
             StopRequested?.Invoke(null, EventArgs.Empty);

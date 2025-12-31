@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using SQLite;
 using WayfarerMobile.Core.Algorithms;
 using WayfarerMobile.Core.Interfaces;
@@ -22,6 +23,7 @@ public class UnifiedTileCacheService : IDisposable
     private readonly DatabaseService _databaseService;
     private readonly ILocationBridge _locationBridge;
     private readonly ISettingsService _settingsService;
+    private readonly ILogger<UnifiedTileCacheService> _logger;
 
     // Cache the active trip to avoid repeated database queries
     private DownloadedTripEntity? _cachedActiveTrip;
@@ -57,18 +59,26 @@ public class UnifiedTileCacheService : IDisposable
     /// <summary>
     /// Creates a new instance of UnifiedTileCacheService.
     /// </summary>
+    /// <param name="liveTileService">Live tile cache service.</param>
+    /// <param name="tripDownloadService">Trip download service.</param>
+    /// <param name="databaseService">Database service.</param>
+    /// <param name="locationBridge">Location bridge.</param>
+    /// <param name="settingsService">Settings service.</param>
+    /// <param name="logger">Logger instance.</param>
     public UnifiedTileCacheService(
         LiveTileCacheService liveTileService,
         TripDownloadService tripDownloadService,
         DatabaseService databaseService,
         ILocationBridge locationBridge,
-        ISettingsService settingsService)
+        ISettingsService settingsService,
+        ILogger<UnifiedTileCacheService> logger)
     {
         _liveTileService = liveTileService;
         _tripDownloadService = tripDownloadService;
         _databaseService = databaseService;
         _locationBridge = locationBridge;
         _settingsService = settingsService;
+        _logger = logger;
 
         // Subscribe to location updates to trigger prefetch
         _locationBridge.LocationReceived += OnLocationReceived;
@@ -81,7 +91,7 @@ public class UnifiedTileCacheService : IDisposable
         // This ensures incomplete cache gets completed without requiring location events
         _retryTimer = new Timer(OnRetryTimerTick, null, RetryTimerInterval, RetryTimerInterval);
 
-        System.Diagnostics.Debug.WriteLine("[UnifiedTileCacheService] Initialized with background retry timer");
+        _logger.LogDebug("Initialized with background retry timer");
     }
 
     /// <summary>
@@ -156,7 +166,7 @@ public class UnifiedTileCacheService : IDisposable
                     var batteryState = Battery.Default.State;
                     if (batteryLevel < 0.2 && batteryState == BatteryState.Discharging)
                     {
-                        System.Diagnostics.Debug.WriteLine("[UnifiedTileCacheService] Retry skipped - low battery");
+                        _logger.LogDebug("Retry skipped - low battery");
                         return;
                     }
                 }
@@ -171,7 +181,7 @@ public class UnifiedTileCacheService : IDisposable
                 if (locationToRetry == null)
                     return;
 
-                System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Background retry - cache incomplete ({_lastPrefetchDownloaded}/{_lastPrefetchTotal})");
+                _logger.LogDebug("Background retry - cache incomplete ({Downloaded}/{Total})", _lastPrefetchDownloaded, _lastPrefetchTotal);
             }
 
             // Trigger prefetch outside the lock on low-priority background thread
@@ -180,7 +190,7 @@ public class UnifiedTileCacheService : IDisposable
         catch (Exception ex)
         {
             // Never let timer callback crash - tile caching is non-critical
-            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Retry timer error (ignored): {ex.Message}");
+            _logger.LogDebug(ex, "Retry timer error (ignored)");
         }
     }
 
@@ -231,7 +241,7 @@ public class UnifiedTileCacheService : IDisposable
                 var timeSinceLastPrefetch = DateTime.UtcNow - _lastPrefetchTime;
                 if (timeSinceLastPrefetch >= RetryInterval)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Retrying prefetch - incomplete ({_lastPrefetchDownloaded}/{_lastPrefetchTotal})");
+                    _logger.LogDebug("Retrying prefetch - incomplete ({Downloaded}/{Total})", _lastPrefetchDownloaded, _lastPrefetchTotal);
                     return true;
                 }
             }
@@ -253,7 +263,7 @@ public class UnifiedTileCacheService : IDisposable
 
             if (usagePercent >= 90)
             {
-                System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Skipping prefetch - cache at {usagePercent:F0}% capacity");
+                _logger.LogDebug("Skipping prefetch - cache at {UsagePercent:F0}% capacity", usagePercent);
                 return false;
             }
 
@@ -322,17 +332,17 @@ public class UnifiedTileCacheService : IDisposable
         }
         catch (IOException ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] I/O error getting tile {z}/{x}/{y}: {ex.Message}");
+            _logger.LogDebug(ex, "I/O error getting tile {Z}/{X}/{Y}", z, x, y);
             return null;
         }
         catch (HttpRequestException ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Network error getting tile {z}/{x}/{y}: {ex.Message}");
+            _logger.LogDebug(ex, "Network error getting tile {Z}/{X}/{Y}", z, x, y);
             return null;
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Unexpected error getting tile {z}/{x}/{y}: {ex.Message}");
+            _logger.LogDebug(ex, "Unexpected error getting tile {Z}/{X}/{Y}", z, x, y);
             return null;
         }
     }
@@ -370,7 +380,7 @@ public class UnifiedTileCacheService : IDisposable
                     _cachedActiveTrip = trip;
                     _lastLocationCheck = currentLocation;
                     _lastTripCheckTime = DateTime.UtcNow;
-                    System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] User in trip area: {trip.Name}");
+                    _logger.LogDebug("User in trip area: {TripName}", trip.Name);
                     return trip;
                 }
             }
@@ -378,7 +388,7 @@ public class UnifiedTileCacheService : IDisposable
             // No active trip found
             if (_cachedActiveTrip != null)
             {
-                System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] User left trip area: {_cachedActiveTrip.Name}");
+                _logger.LogDebug("User left trip area: {TripName}", _cachedActiveTrip.Name);
             }
 
             _cachedActiveTrip = null;
@@ -389,12 +399,12 @@ public class UnifiedTileCacheService : IDisposable
         }
         catch (SQLiteException ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Database error detecting active trip: {ex.Message}");
+            _logger.LogDebug(ex, "Database error detecting active trip");
             return null;
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Unexpected error detecting active trip: {ex.Message}");
+            _logger.LogDebug(ex, "Unexpected error detecting active trip");
             return null;
         }
     }
@@ -429,7 +439,7 @@ public class UnifiedTileCacheService : IDisposable
                 return;
             }
 
-            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Starting prefetch at {currentLocation.Latitude:F4}, {currentLocation.Longitude:F4}");
+            _logger.LogDebug("Starting prefetch at {Latitude:F4}, {Longitude:F4}", currentLocation.Latitude, currentLocation.Longitude);
 
             await _liveTileService.PrefetchAroundLocationAsync(currentLocation.Latitude, currentLocation.Longitude);
 
@@ -439,19 +449,19 @@ public class UnifiedTileCacheService : IDisposable
                 _lastPrefetchTime = DateTime.UtcNow;
             }
 
-            System.Diagnostics.Debug.WriteLine("[UnifiedTileCacheService] Prefetch completed");
+            _logger.LogDebug("Prefetch completed");
         }
         catch (IOException ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] I/O error during prefetch: {ex.Message}");
+            _logger.LogDebug(ex, "I/O error during prefetch");
         }
         catch (HttpRequestException ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Network error during prefetch: {ex.Message}");
+            _logger.LogDebug(ex, "Network error during prefetch");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Unexpected error during prefetch: {ex.Message}");
+            _logger.LogDebug(ex, "Unexpected error during prefetch");
         }
         finally
         {
@@ -484,17 +494,17 @@ public class UnifiedTileCacheService : IDisposable
         }
         catch (SQLiteException ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Database error getting statistics: {ex.Message}");
+            _logger.LogDebug(ex, "Database error getting statistics");
             return new TileCacheStatistics();
         }
         catch (IOException ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] I/O error getting statistics: {ex.Message}");
+            _logger.LogDebug(ex, "I/O error getting statistics");
             return new TileCacheStatistics();
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Unexpected error getting statistics: {ex.Message}");
+            _logger.LogDebug(ex, "Unexpected error getting statistics");
             return new TileCacheStatistics();
         }
     }
@@ -513,15 +523,15 @@ public class UnifiedTileCacheService : IDisposable
             _lastLocationCheck = null;
             _lastTripCheckTime = DateTime.MinValue;
 
-            System.Diagnostics.Debug.WriteLine("[UnifiedTileCacheService] All caches cleared");
+            _logger.LogDebug("All caches cleared");
         }
         catch (IOException ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] I/O error clearing caches: {ex.Message}");
+            _logger.LogWarning(ex, "I/O error clearing caches");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Unexpected error clearing caches: {ex.Message}");
+            _logger.LogWarning(ex, "Unexpected error clearing caches");
         }
     }
 
@@ -604,7 +614,7 @@ public class UnifiedTileCacheService : IDisposable
             _liveTileService.PrefetchProgress -= OnPrefetchProgress;
             _liveTileService.PrefetchCompleted -= OnPrefetchCompleted;
 
-            System.Diagnostics.Debug.WriteLine("[UnifiedTileCacheService] Disposed");
+            _logger.LogDebug("Disposed");
         }
 
         _disposed = true;
