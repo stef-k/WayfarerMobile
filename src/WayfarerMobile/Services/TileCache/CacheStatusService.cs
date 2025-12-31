@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 
@@ -13,6 +14,7 @@ public class CacheStatusService
     private readonly ILocationBridge _locationBridge;
     private readonly ISettingsService _settingsService;
     private readonly LiveTileCacheService _liveTileCacheService;
+    private readonly ILogger<CacheStatusService> _logger;
     private readonly string _liveCacheDirectory;
     private readonly string _tripCacheDirectory;
 
@@ -46,14 +48,20 @@ public class CacheStatusService
     /// <summary>
     /// Creates a new instance of CacheStatusService.
     /// </summary>
+    /// <param name="locationBridge">Location bridge.</param>
+    /// <param name="settingsService">Settings service.</param>
+    /// <param name="liveTileCacheService">Live tile cache service.</param>
+    /// <param name="logger">Logger instance.</param>
     public CacheStatusService(
         ILocationBridge locationBridge,
         ISettingsService settingsService,
-        LiveTileCacheService liveTileCacheService)
+        LiveTileCacheService liveTileCacheService,
+        ILogger<CacheStatusService> logger)
     {
         _locationBridge = locationBridge;
         _settingsService = settingsService;
         _liveTileCacheService = liveTileCacheService;
+        _logger = logger;
         _liveCacheDirectory = Path.Combine(FileSystem.CacheDirectory, "tiles", "live");
         _tripCacheDirectory = Path.Combine(FileSystem.CacheDirectory, "tiles", "trips");
 
@@ -64,7 +72,7 @@ public class CacheStatusService
         _liveTileCacheService.PrefetchProgress += OnPrefetchProgress;
         _liveTileCacheService.PrefetchCompleted += OnPrefetchCompleted;
 
-        System.Diagnostics.Debug.WriteLine("[CacheStatusService] Initialized and subscribed to LocationBridge and LiveTileCacheService");
+        _logger.LogDebug("Initialized and subscribed to LocationBridge and LiveTileCacheService");
     }
 
     /// <summary>
@@ -85,7 +93,7 @@ public class CacheStatusService
     /// </summary>
     private void OnPrefetchProgress(object? sender, (int Downloaded, int Total) progress)
     {
-        System.Diagnostics.Debug.WriteLine($"[CacheStatusService] Prefetch progress: {progress.Downloaded}/{progress.Total}");
+        _logger.LogDebug("Prefetch progress: {Downloaded}/{Total}", progress.Downloaded, progress.Total);
         _ = ForceRefreshAsync();
     }
 
@@ -94,7 +102,7 @@ public class CacheStatusService
     /// </summary>
     private void OnPrefetchCompleted(object? sender, int downloadedCount)
     {
-        System.Diagnostics.Debug.WriteLine($"[CacheStatusService] Prefetch completed with {downloadedCount} tiles, refreshing status");
+        _logger.LogDebug("Prefetch completed with {Count} tiles, refreshing status", downloadedCount);
         _ = ForceRefreshAsync();
     }
 
@@ -221,7 +229,7 @@ public class CacheStatusService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[CacheStatusService] Error: {ex.Message}");
+            _logger.LogDebug(ex, "Error checking cache status");
         }
     }
 
@@ -360,7 +368,7 @@ public class CacheStatusService
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[CacheStatusService] Error: {ex.Message}");
+                _logger.LogDebug(ex, "Error getting detailed cache info");
                 return new DetailedCacheInfo { Status = "Error" };
             }
         });

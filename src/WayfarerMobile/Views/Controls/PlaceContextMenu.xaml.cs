@@ -135,7 +135,7 @@ public partial class PlaceContextMenu : ContentView
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[PlaceContextMenu] Failed to open Google Maps: {ex.Message}");
+            Console.WriteLine($"[PlaceContextMenu] Failed to open Google Maps: {ex.Message}");
             NavigateGoogleMapsRequested?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -168,7 +168,7 @@ public partial class PlaceContextMenu : ContentView
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[PlaceContextMenu] Failed to copy coordinates: {ex.Message}");
+            Console.WriteLine($"[PlaceContextMenu] Failed to copy coordinates: {ex.Message}");
         }
     }
 

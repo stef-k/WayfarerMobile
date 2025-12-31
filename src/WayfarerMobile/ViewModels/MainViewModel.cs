@@ -3702,7 +3702,7 @@ public partial class MainViewModel : BaseViewModel
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[MainViewModel] Error showing cache status: {ex.Message}");
+            _logger.LogWarning(ex, "Error showing cache status");
             await _toastService.ShowErrorAsync("Could not load cache status");
         }
     }

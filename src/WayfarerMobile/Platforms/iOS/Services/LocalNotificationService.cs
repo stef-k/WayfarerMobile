@@ -87,15 +87,13 @@ public class LocalNotificationService : ILocalNotificationService
 
             await UNUserNotificationCenter.Current.AddNotificationRequestAsync(request);
 
-            System.Diagnostics.Debug.WriteLine(
-                $"[iOS LocalNotificationService] Showed notification {identifier}: {title} (silent: {silent})");
+            Console.WriteLine($"[iOS LocalNotificationService] Showed notification {identifier}: {title} (silent: {silent})");
 
             return notificationId;
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine(
-                $"[iOS LocalNotificationService] Failed to show notification: {ex.Message}");
+            Console.WriteLine($"[iOS LocalNotificationService] Failed to show notification: {ex.Message}");
             return -1;
         }
     }
@@ -109,12 +107,11 @@ public class LocalNotificationService : ILocalNotificationService
             UNUserNotificationCenter.Current.RemoveDeliveredNotifications(new[] { identifier });
             UNUserNotificationCenter.Current.RemovePendingNotificationRequests(new[] { identifier });
 
-            System.Diagnostics.Debug.WriteLine($"[iOS LocalNotificationService] Cancelled notification {identifier}");
+            Console.WriteLine($"[iOS LocalNotificationService] Cancelled notification {identifier}");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine(
-                $"[iOS LocalNotificationService] Failed to cancel notification: {ex.Message}");
+            Console.WriteLine($"[iOS LocalNotificationService] Failed to cancel notification: {ex.Message}");
         }
     }
 
@@ -126,12 +123,11 @@ public class LocalNotificationService : ILocalNotificationService
             UNUserNotificationCenter.Current.RemoveAllDeliveredNotifications();
             UNUserNotificationCenter.Current.RemoveAllPendingNotificationRequests();
 
-            System.Diagnostics.Debug.WriteLine("[iOS LocalNotificationService] Cancelled all notifications");
+            Console.WriteLine("[iOS LocalNotificationService] Cancelled all notifications");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine(
-                $"[iOS LocalNotificationService] Failed to cancel all notifications: {ex.Message}");
+            Console.WriteLine($"[iOS LocalNotificationService] Failed to cancel all notifications: {ex.Message}");
         }
     }
 
@@ -145,19 +141,16 @@ public class LocalNotificationService : ILocalNotificationService
 
             if (error != null)
             {
-                System.Diagnostics.Debug.WriteLine(
-                    $"[iOS LocalNotificationService] Permission request error: {error.LocalizedDescription}");
+                Console.WriteLine($"[iOS LocalNotificationService] Permission request error: {error.LocalizedDescription}");
             }
 
-            System.Diagnostics.Debug.WriteLine(
-                $"[iOS LocalNotificationService] Notification permission: {(granted ? "granted" : "denied")}");
+            Console.WriteLine($"[iOS LocalNotificationService] Notification permission: {(granted ? "granted" : "denied")}");
 
             return granted;
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine(
-                $"[iOS LocalNotificationService] Failed to request permission: {ex.Message}");
+            Console.WriteLine($"[iOS LocalNotificationService] Failed to request permission: {ex.Message}");
             return false;
         }
     }
@@ -190,12 +183,11 @@ public class LocalNotificationService : ILocalNotificationService
 
             _categoryRegistered = true;
 
-            System.Diagnostics.Debug.WriteLine("[iOS LocalNotificationService] Registered visit notification category");
+            Console.WriteLine("[iOS LocalNotificationService] Registered visit notification category");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine(
-                $"[iOS LocalNotificationService] Failed to register category: {ex.Message}");
+            Console.WriteLine($"[iOS LocalNotificationService] Failed to register category: {ex.Message}");
         }
     }
 

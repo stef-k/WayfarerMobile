@@ -128,21 +128,21 @@ public partial class GroupsPage : ContentPage
         // Mapsui 5.0: Use GetMapInfo with specific layers to get tap info
         var mapInfo = e.GetMapInfo(targetLayers);
 
-        System.Diagnostics.Debug.WriteLine($"[Groups] OnMapInfo: HasMapInfo={mapInfo != null}, Feature={mapInfo?.Feature != null}");
+        Console.WriteLine($"[Groups] OnMapInfo: HasMapInfo={mapInfo != null}, Feature={mapInfo?.Feature != null}");
 
         if (mapInfo?.Feature == null)
         {
-            System.Diagnostics.Debug.WriteLine("[Groups] OnMapInfo: No feature found at tap location");
+            Console.WriteLine("[Groups] OnMapInfo: No feature found at tap location");
             return;
         }
 
         var feature = mapInfo.Feature;
-        System.Diagnostics.Debug.WriteLine($"[Groups] OnMapInfo: Feature found, checking for UserId...");
+        Console.WriteLine($"[Groups] OnMapInfo: Feature found, checking for UserId...");
 
         // Check if a group member marker was tapped
         if (feature["UserId"] is string userId && !string.IsNullOrEmpty(userId))
         {
-            System.Diagnostics.Debug.WriteLine($"[Groups] OnMapInfo: Tapped member {userId}");
+            Console.WriteLine($"[Groups] OnMapInfo: Tapped member {userId}");
             _viewModel.ShowMemberDetailsByUserId(userId);
             BottomSheet.State = BottomSheetState.FullExpanded;
         }
@@ -152,7 +152,7 @@ public partial class GroupsPage : ContentPage
             var historicalUserId = feature["UserId"] as string;
             if (!string.IsNullOrEmpty(historicalUserId))
             {
-                System.Diagnostics.Debug.WriteLine($"[Groups] OnMapInfo: Tapped historical location for {historicalUserId}");
+                Console.WriteLine($"[Groups] OnMapInfo: Tapped historical location for {historicalUserId}");
                 _viewModel.ShowMemberDetailsByUserId(historicalUserId);
                 BottomSheet.State = BottomSheetState.FullExpanded;
             }

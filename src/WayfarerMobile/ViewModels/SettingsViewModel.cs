@@ -686,7 +686,7 @@ public partial class SettingsViewModel : BaseViewModel
         // Note: This preference is stored and will be used by the navigation voice service
         // when generating turn-by-turn instructions. We do NOT change CultureInfo here
         // as this setting is only for navigation voice guidance, not the app UI.
-        System.Diagnostics.Debug.WriteLine($"[SettingsViewModel] Navigation voice language set to: {languageCode}");
+        Console.WriteLine($"[SettingsViewModel] Navigation voice language set to: {languageCode}");
     }
 
     #endregion

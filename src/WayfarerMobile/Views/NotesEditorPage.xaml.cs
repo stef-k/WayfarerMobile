@@ -47,7 +47,7 @@ public partial class NotesEditorPage : ContentPage
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[NotesEditorPage] Failed to load editor: {ex.Message}");
+            Console.WriteLine($"[NotesEditorPage] Failed to load editor: {ex.Message}");
         }
     }
 

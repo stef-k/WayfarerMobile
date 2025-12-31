@@ -1,4 +1,5 @@
 using Android.Content;
+using Android.Util;
 using Android.Widget;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
@@ -14,6 +15,8 @@ namespace WayfarerMobile.Platforms.Android.Receivers;
 [BroadcastReceiver(Enabled = true, Exported = false)]
 public class NotificationActionReceiver : BroadcastReceiver
 {
+    private const string LogTag = "WayfarerNotifyAction";
+
     /// <summary>Action intent for manual check-in from notification.</summary>
     public const string ActionCheckIn = "com.wayfarer.mobile.notification.CHECK_IN";
 
@@ -27,7 +30,7 @@ public class NotificationActionReceiver : BroadcastReceiver
         if (context == null || intent?.Action == null)
             return;
 
-        System.Diagnostics.Debug.WriteLine($"[NotificationActionReceiver] Received action: {intent.Action}");
+        Log.Debug(LogTag, $"Received action: {intent.Action}");
 
         if (intent.Action == ActionCheckIn)
         {
@@ -47,7 +50,7 @@ public class NotificationActionReceiver : BroadcastReceiver
             if (lastLocation == null)
             {
                 ShowToast(context, "No location available for check-in");
-                System.Diagnostics.Debug.WriteLine("[NotificationActionReceiver] Check-in failed: no location");
+                Log.Warn(LogTag, "Check-in failed: no location");
                 return;
             }
 
@@ -56,14 +59,14 @@ public class NotificationActionReceiver : BroadcastReceiver
             if (apiClient == null)
             {
                 ShowToast(context, "Check-in service unavailable");
-                System.Diagnostics.Debug.WriteLine("[NotificationActionReceiver] Check-in failed: IApiClient not available");
+                Log.Warn(LogTag, "Check-in failed: IApiClient not available");
                 return;
             }
 
             if (!apiClient.IsConfigured)
             {
                 ShowToast(context, "Server not configured");
-                System.Diagnostics.Debug.WriteLine("[NotificationActionReceiver] Check-in failed: API client not configured");
+                Log.Warn(LogTag, "Check-in failed: API client not configured");
                 return;
             }
 
@@ -87,26 +90,26 @@ public class NotificationActionReceiver : BroadcastReceiver
             {
                 ShowToast(context, "Check-in successful");
                 LocationServiceCallbacks.NotifyCheckInPerformed(true, null);
-                System.Diagnostics.Debug.WriteLine("[NotificationActionReceiver] Check-in successful");
+                Log.Info(LogTag, "Check-in successful");
             }
             else
             {
                 ShowToast(context, $"Check-in failed: {result.Message ?? "Unknown error"}");
                 LocationServiceCallbacks.NotifyCheckInPerformed(false, result.Message);
-                System.Diagnostics.Debug.WriteLine($"[NotificationActionReceiver] Check-in failed: {result.Message}");
+                Log.Warn(LogTag, $"Check-in failed: {result.Message}");
             }
         }
         catch (OperationCanceledException)
         {
             ShowToast(context, "Check-in timed out");
             LocationServiceCallbacks.NotifyCheckInPerformed(false, "Timeout");
-            System.Diagnostics.Debug.WriteLine("[NotificationActionReceiver] Check-in timed out");
+            Log.Warn(LogTag, "Check-in timed out");
         }
         catch (Exception ex)
         {
             ShowToast(context, "Check-in error");
             LocationServiceCallbacks.NotifyCheckInPerformed(false, ex.Message);
-            System.Diagnostics.Debug.WriteLine($"[NotificationActionReceiver] Check-in error: {ex.Message}");
+            Log.Error(LogTag, $"Check-in error: {ex.Message}");
         }
     }
 

@@ -2,6 +2,7 @@
 using Android.Content;
 using Android.Content.PM;
 using Android.OS;
+using Android.Util;
 using Android.Views;
 using AndroidX.Core.View;
 
@@ -21,6 +22,7 @@ public class MainActivity : MauiAppCompatActivity
     /// Key used to mark that we've written to preferences in this process.
     /// </summary>
     private const string ProcessMarkerKey = "process_marker";
+    private const string LogTag = "WayfarerMainActivity";
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
@@ -29,7 +31,7 @@ public class MainActivity : MauiAppCompatActivity
         if (DetectAndRecoverFromCorruptedState())
         {
             // State was corrupted - we've cleared it, now restart the app process
-            System.Diagnostics.Debug.WriteLine("[MainActivity] Corrupted state detected - restarting app");
+            Log.Warn(LogTag, "Corrupted state detected - restarting app");
             RestartApp();
             return;
         }
@@ -79,7 +81,7 @@ public class MainActivity : MauiAppCompatActivity
             // Case 1: Process was initialized before, but marker is gone → data was cleared
             if (s_processInitialized && !hasProcessMarker)
             {
-                System.Diagnostics.Debug.WriteLine("[MainActivity] Corruption detected: process initialized but marker missing");
+                Log.Warn(LogTag, "Corruption detected: process initialized but marker missing");
                 return true; // Will trigger restart
             }
 
@@ -93,14 +95,14 @@ public class MainActivity : MauiAppCompatActivity
                 editor?.PutBoolean(ProcessMarkerKey, true);
                 editor?.Apply();
 
-                System.Diagnostics.Debug.WriteLine("[MainActivity] Process marker set");
+                Log.Debug(LogTag, "Process marker set");
             }
 
             return false;
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[MainActivity] Error checking state: {ex.Message}");
+            Log.Warn(LogTag, $"Error checking state: {ex.Message}");
             return false;
         }
     }
@@ -126,7 +128,7 @@ public class MainActivity : MauiAppCompatActivity
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[MainActivity] Failed to restart app: {ex.Message}");
+            Log.Warn(LogTag, $"Failed to restart app: {ex.Message}");
             // Fall through to normal startup
         }
     }

@@ -37,7 +37,7 @@ public class WakeLockService : IWakeLockService
         {
             if (_isWakeLockHeld)
             {
-                System.Diagnostics.Debug.WriteLine("[WakeLockService] Wake lock already held");
+                Console.WriteLine("[WakeLockService] Wake lock already held");
                 return;
             }
 
@@ -46,14 +46,14 @@ public class WakeLockService : IWakeLockService
                 MainThread.BeginInvokeOnMainThread(() =>
                 {
                     UIApplication.SharedApplication.IdleTimerDisabled = true;
-                    System.Diagnostics.Debug.WriteLine("[WakeLockService] Idle timer disabled (screen will stay on)");
+                    Console.WriteLine("[WakeLockService] Idle timer disabled (screen will stay on)");
                 });
 
                 _isWakeLockHeld = true;
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[WakeLockService] Error acquiring wake lock: {ex.Message}");
+                Console.WriteLine($"[WakeLockService] Error acquiring wake lock: {ex.Message}");
             }
         }
     }
@@ -73,14 +73,14 @@ public class WakeLockService : IWakeLockService
                 MainThread.BeginInvokeOnMainThread(() =>
                 {
                     UIApplication.SharedApplication.IdleTimerDisabled = false;
-                    System.Diagnostics.Debug.WriteLine("[WakeLockService] Idle timer enabled (screen can turn off)");
+                    Console.WriteLine("[WakeLockService] Idle timer enabled (screen can turn off)");
                 });
 
                 _isWakeLockHeld = false;
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[WakeLockService] Error releasing wake lock: {ex.Message}");
+                Console.WriteLine($"[WakeLockService] Error releasing wake lock: {ex.Message}");
             }
         }
     }

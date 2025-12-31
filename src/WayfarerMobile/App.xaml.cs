@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Helpers;
 using WayfarerMobile.Services;
@@ -11,6 +12,7 @@ namespace WayfarerMobile;
 public partial class App : Application
 {
     private readonly IServiceProvider _serviceProvider;
+    private readonly ILogger<App> _logger;
 
     /// <summary>
     /// Tracks if this is the initial cold start. Set to false after first OnWindowResumed.
@@ -31,6 +33,7 @@ public partial class App : Application
     {
         InitializeComponent();
         _serviceProvider = serviceProvider;
+        _logger = serviceProvider.GetRequiredService<ILogger<App>>();
 
         // Apply saved theme and language settings on startup
         ApplySavedSettings();
@@ -126,7 +129,7 @@ public partial class App : Application
 
             // Apply theme preference
             SettingsViewModel.ApplyTheme(settings.ThemePreference);
-            System.Diagnostics.Debug.WriteLine($"[App] Applied theme: {settings.ThemePreference}");
+            _logger.LogDebug("Applied theme: {Theme}", settings.ThemePreference);
 
             // Apply keep screen on setting
             ApplyKeepScreenOn(settings.KeepScreenOn);
@@ -137,7 +140,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[App] Failed to apply saved settings: {ex.Message}");
+            _logger.LogWarning(ex, "Failed to apply saved settings");
         }
     }
 
@@ -150,11 +153,11 @@ public partial class App : Application
         try
         {
             DeviceDisplay.Current.KeepScreenOn = keepScreenOn;
-            System.Diagnostics.Debug.WriteLine($"[App] Keep screen on: {keepScreenOn}");
+            // Note: No logging here - static method, called frequently on resume
         }
-        catch (Exception ex)
+        catch
         {
-            System.Diagnostics.Debug.WriteLine($"[App] Failed to apply keep screen on: {ex.Message}");
+            // Silently ignore - not critical functionality
         }
     }
 
@@ -167,11 +170,11 @@ public partial class App : Application
         {
             var exceptionHandler = _serviceProvider.GetService<IExceptionHandlerService>();
             exceptionHandler?.Initialize();
-            System.Diagnostics.Debug.WriteLine("[App] Global exception handler initialized");
+            _logger.LogDebug("Global exception handler initialized");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[App] Failed to initialize exception handler: {ex.Message}");
+            _logger.LogError(ex, "Failed to initialize exception handler");
         }
     }
 
@@ -188,23 +191,23 @@ public partial class App : Application
             if (settings != null)
             {
                 _ = settings.PreloadSecureSettingsAsync();
-                System.Diagnostics.Debug.WriteLine("[App] Secure settings preload started");
+                _logger.LogDebug("Secure settings preload started");
             }
 
             // Start location sync service (server sync)
             var syncService = _serviceProvider.GetService<LocationSyncService>();
             syncService?.Start();
-            System.Diagnostics.Debug.WriteLine("[App] Background sync service started");
+            _logger.LogDebug("Background sync service started");
 
             // Start queue drain service (offline queue sync via check-in endpoint)
             var queueDrainService = _serviceProvider.GetService<QueueDrainService>();
             _ = queueDrainService?.StartAsync();
-            System.Diagnostics.Debug.WriteLine("[App] Queue drain service started");
+            _logger.LogDebug("Queue drain service started");
 
             // Initialize local timeline storage service (subscribes to location events)
             var timelineStorageService = _serviceProvider.GetService<LocalTimelineStorageService>();
             _ = timelineStorageService?.InitializeAsync();
-            System.Diagnostics.Debug.WriteLine("[App] Local timeline storage service initialization started");
+            _logger.LogDebug("Local timeline storage service initialization started");
 
             // Note: Settings sync is handled by SettingsSyncService, triggered opportunistically
             // in AppLifecycleService.OnResumingAsync() with a 6-hour minimum interval
@@ -216,14 +219,14 @@ public partial class App : Application
             // Start visit notification service if enabled (subscribes to SSE visit events)
             var visitNotificationService = _serviceProvider.GetService<IVisitNotificationService>();
             _ = visitNotificationService?.StartAsync();
-            System.Diagnostics.Debug.WriteLine("[App] Visit notification service initialization started");
+            _logger.LogDebug("Visit notification service initialization started");
 
             // Note: Location tracking service start is handled by OnWindowActivatedForServiceStart
             // to ensure deterministic timing after UI is fully initialized.
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[App] Failed to start background services: {ex.Message}");
+            _logger.LogError(ex, "Failed to start background services");
         }
     }
 
@@ -264,25 +267,25 @@ public partial class App : Application
 
             if (settings.IsFirstRun)
             {
-                System.Diagnostics.Debug.WriteLine("[App] First run - skipping location service start (will start after onboarding)");
+                _logger.LogDebug("First run - skipping location service start (will start after onboarding)");
                 return;
             }
 
             var hasPermissions = await permissions.AreTrackingPermissionsGrantedAsync();
             if (!hasPermissions)
             {
-                System.Diagnostics.Debug.WriteLine("[App] Location permissions not granted - skipping location service start");
+                _logger.LogDebug("Location permissions not granted - skipping location service start");
                 return;
             }
 
             // No delay needed - this method is called from Window.Activated via
             // MainThread.BeginInvokeOnMainThread(), ensuring the main thread is free.
             await locationBridge.StartAsync();
-            System.Diagnostics.Debug.WriteLine("[App] Location tracking service started (24/7 mode)");
+            _logger.LogInformation("Location tracking service started (24/7 mode)");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[App] Failed to start location tracking service: {ex.Message}");
+            _logger.LogError(ex, "Failed to start location tracking service");
         }
     }
 
@@ -297,12 +300,12 @@ public partial class App : Application
             if (appLockService != null)
             {
                 await appLockService.InitializeAsync();
-                System.Diagnostics.Debug.WriteLine("[App] App lock service initialized");
+                _logger.LogDebug("App lock service initialized");
             }
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[App] Failed to initialize app lock service: {ex.Message}");
+            _logger.LogError(ex, "Failed to initialize app lock service");
         }
     }
 
@@ -339,7 +342,7 @@ public partial class App : Application
             if (_isColdStart)
             {
                 _isColdStart = false;
-                System.Diagnostics.Debug.WriteLine("[App] Skipping health check on cold start");
+                _logger.LogDebug("Skipping health check on cold start");
             }
             else
             {
@@ -364,7 +367,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[App] Error in OnWindowResumed: {ex.Message}");
+            _logger.LogError(ex, "Error in OnWindowResumed");
         }
     }
 
@@ -381,7 +384,7 @@ public partial class App : Application
             var settings = _serviceProvider.GetService<ISettingsService>();
             if (settings == null)
             {
-                System.Diagnostics.Debug.WriteLine("[App] Settings service unavailable - triggering recovery");
+                _logger.LogWarning("Settings service unavailable - triggering recovery");
                 await TriggerRecoveryAsync();
                 return true;
             }
@@ -404,14 +407,14 @@ public partial class App : Application
                 // If IsConfigured is false but IsFirstRun is also false, state is corrupted
                 if (!settings.IsConfigured)
                 {
-                    System.Diagnostics.Debug.WriteLine("[App] State corruption detected (not configured, not first run, no canary) - triggering recovery");
+                    _logger.LogWarning("State corruption detected (not configured, not first run, no canary) - triggering recovery");
                     settings.ResetToDefaults();
                     await TriggerRecoveryAsync();
                     return true;
                 }
 
                 // State is valid - set canary for future detection
-                System.Diagnostics.Debug.WriteLine("[App] Setting state canary after successful state validation");
+                _logger.LogDebug("Setting state canary after successful state validation");
                 Preferences.Set(canaryKey, "active");
             }
 
@@ -422,7 +425,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[App] State check failed with exception - triggering recovery: {ex.Message}");
+            _logger.LogWarning(ex, "State check failed with exception - triggering recovery");
 
             try
             {
@@ -456,7 +459,7 @@ public partial class App : Application
     {
         try
         {
-            System.Diagnostics.Debug.WriteLine("[App] Triggering recovery - navigating to onboarding");
+            _logger.LogInformation("Triggering recovery - navigating to onboarding");
 
             if (Shell.Current != null)
             {
@@ -465,7 +468,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[App] Failed to navigate to onboarding during recovery: {ex.Message}");
+            _logger.LogError(ex, "Failed to navigate to onboarding during recovery");
         }
     }
 
@@ -503,7 +506,7 @@ public partial class App : Application
             // Check 1: Basic location permission or configuration missing
             if (!hasLocationPermission || !isConfigured)
             {
-                System.Diagnostics.Debug.WriteLine($"[App] Health check failed - Permission: {hasLocationPermission}, Configured: {isConfigured}");
+                _logger.LogWarning("Health check failed - Permission: {HasPermission}, Configured: {IsConfigured}", hasLocationPermission, isConfigured);
 
                 // Stop the location service if running (permission revoked)
                 if (locationBridge != null && !hasLocationPermission)
@@ -519,7 +522,7 @@ public partial class App : Application
             // Check 2: User had 24/7 tracking but background permission was revoked
             if (settings.BackgroundTrackingEnabled && !hasBackgroundPermission)
             {
-                System.Diagnostics.Debug.WriteLine("[App] Health check: Background permission revoked by 24/7 tracking user");
+                _logger.LogWarning("Health check: Background permission revoked by 24/7 tracking user");
 
                 // Redirect to onboarding to re-grant or downgrade to casual use
                 await RedirectToOnboardingAsync(backgroundPermissionRevoked: true, notConfigured: false);
@@ -530,11 +533,11 @@ public partial class App : Application
             // Service is started by:
             // 1. Onboarding (when user completes setup)
             // 2. StartBackgroundServices() on cold start (if already configured)
-            System.Diagnostics.Debug.WriteLine("[App] Health check passed");
+            _logger.LogDebug("Health check passed");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[App] Permission health check error: {ex.Message}");
+            _logger.LogError(ex, "Permission health check error");
         }
     }
 
@@ -594,7 +597,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[App] Failed to redirect to onboarding: {ex.Message}");
+            _logger.LogError(ex, "Failed to redirect to onboarding");
         }
     }
 
@@ -619,7 +622,7 @@ public partial class App : Application
             var currentRoute = Shell.Current?.CurrentState?.Location?.OriginalString ?? "";
             if (currentRoute.Contains("lockscreen", StringComparison.OrdinalIgnoreCase))
             {
-                System.Diagnostics.Debug.WriteLine("[App] Already on lock screen, skipping navigation");
+                _logger.LogDebug("Already on lock screen, skipping navigation");
                 return;
             }
 
@@ -630,7 +633,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[App] Error showing lock screen: {ex.Message}");
+            _logger.LogError(ex, "Error showing lock screen");
 
             // Reset prompt awaiting flag on error
             var appLockService = _serviceProvider.GetService<IAppLockService>();
@@ -662,7 +665,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[App] Error in OnWindowStopped: {ex.Message}");
+            _logger.LogError(ex, "Error in OnWindowStopped");
         }
     }
 }

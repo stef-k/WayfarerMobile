@@ -356,7 +356,7 @@ public partial class CheckInViewModel : BaseViewModel
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[CheckInViewModel] Quick location failed: {ex.Message}");
+            Console.WriteLine($"[CheckInViewModel] Quick location failed: {ex.Message}");
         }
     }
 

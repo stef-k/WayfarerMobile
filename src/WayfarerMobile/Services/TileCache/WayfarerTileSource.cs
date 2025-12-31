@@ -1,6 +1,7 @@
 using BruTile;
 using BruTile.Predefined;
 using Mapsui.Tiling.Provider;
+using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 
@@ -17,6 +18,7 @@ public class WayfarerTileSource : ILocalTileSource
 
     private readonly UnifiedTileCacheService _unifiedTileService;
     private readonly ILocationBridge _locationBridge;
+    private readonly ILogger<WayfarerTileSource> _logger;
 
     #endregion
 
@@ -27,14 +29,17 @@ public class WayfarerTileSource : ILocalTileSource
     /// </summary>
     /// <param name="unifiedTileService">The unified tile cache service.</param>
     /// <param name="locationBridge">The location bridge for current location context.</param>
+    /// <param name="logger">Logger instance.</param>
     /// <param name="name">Display name for the tile source.</param>
     public WayfarerTileSource(
         UnifiedTileCacheService unifiedTileService,
         ILocationBridge locationBridge,
+        ILogger<WayfarerTileSource> logger,
         string name = "WayfarerCached")
     {
         _unifiedTileService = unifiedTileService ?? throw new ArgumentNullException(nameof(unifiedTileService));
         _locationBridge = locationBridge ?? throw new ArgumentNullException(nameof(locationBridge));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         Name = name;
 
         // Use GlobalSphericalMercator schema (same as OSM)
@@ -89,7 +94,7 @@ public class WayfarerTileSource : ILocalTileSource
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[WayfarerTileSource] Error getting tile: {ex.Message}");
+            _logger.LogWarning(ex, "Error getting tile z={Zoom} x={X} y={Y}", tileInfo.Index.Level, tileInfo.Index.Col, tileInfo.Index.Row);
             return null;
         }
     }

@@ -42,7 +42,7 @@ public partial class TripOverviewContent : ContentView
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[TripOverviewContent] Failed to open URL: {ex.Message}");
+                Console.WriteLine($"[TripOverviewContent] Failed to open URL: {ex.Message}");
             }
         }
     }

@@ -94,11 +94,11 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
         try
         {
             _database = new DatabaseService();
-            System.Diagnostics.Debug.WriteLine("[iOS LocationService] Database service created");
+            Console.WriteLine("[iOS LocationService] Database service created");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[iOS LocationService] Database init failed: {ex.Message}");
+            Console.WriteLine($"[iOS LocationService] Database init failed: {ex.Message}");
         }
     }
 
@@ -151,11 +151,11 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
             _currentState = TrackingState.Active;
             LocationServiceCallbacks.NotifyStateChanged(_currentState);
 
-            System.Diagnostics.Debug.WriteLine("[iOS LocationService] Started");
+            Console.WriteLine("[iOS LocationService] Started");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[iOS LocationService] Start failed: {ex.Message}");
+            Console.WriteLine($"[iOS LocationService] Start failed: {ex.Message}");
             _currentState = TrackingState.Error;
             LocationServiceCallbacks.NotifyStateChanged(_currentState);
         }
@@ -191,11 +191,11 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
             _currentState = TrackingState.Ready;
             LocationServiceCallbacks.NotifyStateChanged(_currentState);
 
-            System.Diagnostics.Debug.WriteLine("[iOS LocationService] Stopped");
+            Console.WriteLine("[iOS LocationService] Stopped");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[iOS LocationService] Stop failed: {ex.Message}");
+            Console.WriteLine($"[iOS LocationService] Stop failed: {ex.Message}");
         }
     }
 
@@ -211,7 +211,7 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
         _currentState = TrackingState.Paused;
         LocationServiceCallbacks.NotifyStateChanged(_currentState);
 
-        System.Diagnostics.Debug.WriteLine("[iOS LocationService] Paused");
+        Console.WriteLine("[iOS LocationService] Paused");
     }
 
     /// <summary>
@@ -226,7 +226,7 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
         _currentState = TrackingState.Active;
         LocationServiceCallbacks.NotifyStateChanged(_currentState);
 
-        System.Diagnostics.Debug.WriteLine("[iOS LocationService] Resumed");
+        Console.WriteLine("[iOS LocationService] Resumed");
     }
 
     /// <summary>
@@ -251,7 +251,7 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
             _locationManager.DistanceFilter = MinDistanceMeters;
         }
 
-        System.Diagnostics.Debug.WriteLine($"[iOS LocationService] Performance mode: {mode}");
+        Console.WriteLine($"[iOS LocationService] Performance mode: {mode}");
     }
 
     #endregion
@@ -300,9 +300,7 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
         // Queue for sync
         _ = QueueLocationAsync(location);
 
-        System.Diagnostics.Debug.WriteLine(
-            $"[iOS LocationService] Location: {location.Latitude:F6}, {location.Longitude:F6}, " +
-            $"accuracy: {location.Accuracy:F1}m");
+        Console.WriteLine($"[iOS LocationService] Location: {location.Latitude:F6}, {location.Longitude:F6}, accuracy: {location.Accuracy:F1}m");
     }
 
     /// <summary>
@@ -311,7 +309,7 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
     [Export("locationManager:didFailWithError:")]
     public void Failed(CLLocationManager manager, NSError error)
     {
-        System.Diagnostics.Debug.WriteLine($"[iOS LocationService] Error: {error.LocalizedDescription}");
+        Console.WriteLine($"[iOS LocationService] Error: {error.LocalizedDescription}");
 
         if (error.Code == (long)CLError.Denied)
         {
@@ -326,7 +324,7 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
     [Export("locationManager:didChangeAuthorizationStatus:")]
     public void AuthorizationChanged(CLLocationManager manager, CLAuthorizationStatus status)
     {
-        System.Diagnostics.Debug.WriteLine($"[iOS LocationService] Auth status: {status}");
+        Console.WriteLine($"[iOS LocationService] Auth status: {status}");
 
         switch (status)
         {
@@ -366,7 +364,7 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[iOS LocationService] Queue failed: {ex.Message}");
+            Console.WriteLine($"[iOS LocationService] Queue failed: {ex.Message}");
         }
     }
 
