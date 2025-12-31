@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.Extensions.Logging;
+using SQLite;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Data.Services;
 using WayfarerMobile.Services.TileCache;
@@ -69,6 +70,11 @@ public class AppDiagnosticService
                 IsServerConfigured = _settingsService.IsConfigured
             };
         }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error getting location queue diagnostics");
+            return new LocationQueueDiagnostics { QueueHealthStatus = "Database Error" };
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting location queue diagnostics");
@@ -129,6 +135,16 @@ public class AppDiagnosticService
                     _settingsService.MaxLiveCacheSizeMB)
             };
         }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error getting tile cache diagnostics");
+            return new TileCacheDiagnostics { CacheHealthStatus = "Database Error" };
+        }
+        catch (IOException ex)
+        {
+            _logger.LogError(ex, "File I/O error getting tile cache diagnostics");
+            return new TileCacheDiagnostics { CacheHealthStatus = "File Error" };
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting tile cache diagnostics");
@@ -169,6 +185,11 @@ public class AppDiagnosticService
                     : overallCoverage >= 0.2 ? "Partial"
                     : "Poor"
             };
+        }
+        catch (IOException ex)
+        {
+            _logger.LogError(ex, "File I/O error getting cache coverage");
+            return new CacheCoverageInfo { CoverageStatus = "File Error" };
         }
         catch (Exception ex)
         {
@@ -258,6 +279,11 @@ public class AppDiagnosticService
                 TrackingHealthStatus = CalculateTrackingHealth(hasForeground, hasBackground, _locationBridge.CurrentState.ToString())
             };
         }
+        catch (FeatureNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Feature not supported getting tracking diagnostics");
+            return new TrackingDiagnostics { TrackingHealthStatus = "Not Supported" };
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting tracking diagnostics");
@@ -299,6 +325,11 @@ public class AppDiagnosticService
                 CacheAgeSeconds = 0,
                 IsCacheValid = false
             });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Invalid state getting navigation diagnostics");
+            return Task.FromResult(new NavigationDiagnostics());
         }
         catch (Exception ex)
         {
