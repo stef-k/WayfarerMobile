@@ -1161,9 +1161,13 @@ public partial class MainViewModel : BaseViewModel
             {
                 await Shell.Current.GoToAsync(sourcePageRoute);
             }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Invalid shell navigation to {Route}", sourcePageRoute);
+            }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[MainViewModel] Failed to navigate to {sourcePageRoute}: {ex.Message}");
+                _logger.LogWarning(ex, "Failed to navigate to {Route}", sourcePageRoute);
             }
         }
     }
@@ -1573,11 +1577,21 @@ public partial class MainViewModel : BaseViewModel
             await _navigationHudViewModel.StartNavigationAsync(route);
             IsFollowingLocation = false;
 
-            System.Diagnostics.Debug.WriteLine($"[MainViewModel] Started navigation to dropped pin: {route.TotalDistanceMeters / 1000:F1}km");
+            _logger.LogInformation("Started navigation to dropped pin: {Distance:F1}km", route.TotalDistanceMeters / 1000);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error calculating route");
+            await _toastService.ShowErrorAsync("Network error. Please check your connection.");
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Route calculation timed out");
+            await _toastService.ShowErrorAsync("Request timed out. Please try again.");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[MainViewModel] Failed to start navigation: {ex.Message}");
+            _logger.LogError(ex, "Failed to start navigation");
             await _toastService.ShowErrorAsync("Failed to start navigation");
         }
         finally
@@ -1598,6 +1612,20 @@ public partial class MainViewModel : BaseViewModel
 
             await Microsoft.Maui.ApplicationModel.Map.Default.OpenAsync(location, options);
         }
+        catch (FeatureNotSupportedException)
+        {
+            // Fallback to Google Maps URL
+            try
+            {
+                var url = $"https://www.google.com/maps/dir/?api=1&destination={lat},{lon}&travelmode=walking";
+                await Launcher.OpenAsync(new Uri(url));
+            }
+            catch (Exception fallbackEx)
+            {
+                _logger.LogError(fallbackEx, "Failed to open external maps via fallback URL");
+                await _toastService.ShowErrorAsync("Unable to open maps");
+            }
+        }
         catch (Exception ex)
         {
             // Fallback to Google Maps URL
@@ -1606,8 +1634,10 @@ public partial class MainViewModel : BaseViewModel
                 var url = $"https://www.google.com/maps/dir/?api=1&destination={lat},{lon}&travelmode=walking";
                 await Launcher.OpenAsync(new Uri(url));
             }
-            catch
+            catch (Exception fallbackEx)
             {
+                _logger.LogError(ex, "Failed to open external maps");
+                _logger.LogError(fallbackEx, "Fallback URL also failed");
                 await _toastService.ShowErrorAsync($"Unable to open maps: {ex.Message}");
             }
         }
@@ -1920,9 +1950,14 @@ public partial class MainViewModel : BaseViewModel
                 NavigationMode = NavigationMode.None
             });
         }
+        catch (FeatureNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Maps feature not supported on this device");
+            await _toastService.ShowErrorAsync("Maps not available on this device");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to open maps");
+            _logger.LogError(ex, "Unexpected error opening maps");
             await _toastService.ShowErrorAsync("Failed to open maps");
         }
     }
@@ -1959,9 +1994,14 @@ public partial class MainViewModel : BaseViewModel
                 Text = $"{SelectedTripPlace.Name}\n{mapsUrl}"
             });
         }
+        catch (FeatureNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Share feature not supported on this device");
+            await _toastService.ShowErrorAsync("Share not available");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to share place");
+            _logger.LogError(ex, "Unexpected error sharing place");
             await _toastService.ShowErrorAsync("Failed to share");
         }
     }
