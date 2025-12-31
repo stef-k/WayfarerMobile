@@ -3,6 +3,7 @@ using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using SQLite;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Data.Services;
 using WayfarerMobile.Services;
@@ -256,6 +257,16 @@ public partial class DiagnosticsViewModel : BaseViewModel
             }
             RecentLogs = await _diagnosticService.GetRecentLogsAsync(50);
         }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error loading diagnostic data");
+            await _toastService.ShowErrorAsync("Database error loading diagnostics");
+        }
+        catch (IOException ex)
+        {
+            _logger.LogError(ex, "File I/O error loading diagnostic data");
+            await _toastService.ShowErrorAsync("Failed to read diagnostic files");
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error loading diagnostic data");
@@ -295,6 +306,16 @@ public partial class DiagnosticsViewModel : BaseViewModel
 
             await _toastService.ShowSuccessAsync("Report generated");
         }
+        catch (IOException ex)
+        {
+            _logger.LogError(ex, "File I/O error sharing diagnostic report");
+            await _toastService.ShowErrorAsync("Failed to write report file");
+        }
+        catch (FeatureNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Share feature not supported on this device");
+            await _toastService.ShowErrorAsync("Sharing not available on this device");
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error sharing diagnostic report");
@@ -323,6 +344,11 @@ public partial class DiagnosticsViewModel : BaseViewModel
             await Clipboard.Default.SetTextAsync(fullReport);
             await _toastService.ShowSuccessAsync("Report copied to clipboard");
         }
+        catch (FeatureNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Clipboard feature not supported on this device");
+            await _toastService.ShowErrorAsync("Clipboard not available on this device");
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error copying diagnostic report");
@@ -343,6 +369,10 @@ public partial class DiagnosticsViewModel : BaseViewModel
         try
         {
             RecentLogs = await _diagnosticService.GetRecentLogsAsync(100);
+        }
+        catch (IOException ex)
+        {
+            _logger.LogError(ex, "File I/O error refreshing logs");
         }
         catch (Exception ex)
         {
@@ -376,6 +406,11 @@ public partial class DiagnosticsViewModel : BaseViewModel
                 File = new ShareFile(logFile.FilePath)
             });
         }
+        catch (FeatureNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Share feature not supported for log file: {FileName}", logFile.FileName);
+            await _toastService.ShowErrorAsync("Sharing not available on this device");
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error sharing log file: {FileName}", logFile.FileName);
@@ -408,6 +443,11 @@ public partial class DiagnosticsViewModel : BaseViewModel
                 var deleted = await _databaseService.ClearSyncedQueueAsync();
                 await _toastService.ShowSuccessAsync($"{deleted} synced locations cleared");
                 await LoadDataAsync();
+            }
+            catch (SQLiteException ex)
+            {
+                _logger.LogError(ex, "Database error clearing synced queue");
+                await _toastService.ShowErrorAsync("Database error clearing synced locations");
             }
             catch (Exception ex)
             {
@@ -443,6 +483,11 @@ public partial class DiagnosticsViewModel : BaseViewModel
                 var deleted = await _databaseService.ClearAllQueueAsync();
                 await _toastService.ShowSuccessAsync($"{deleted} locations cleared");
                 await LoadDataAsync();
+            }
+            catch (SQLiteException ex)
+            {
+                _logger.LogError(ex, "Database error clearing all queue");
+                await _toastService.ShowErrorAsync("Database error clearing queue");
             }
             catch (Exception ex)
             {
@@ -512,6 +557,21 @@ public partial class DiagnosticsViewModel : BaseViewModel
                 File = new ShareFile(tempPath)
             });
         }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error exporting queue");
+            await _toastService.ShowErrorAsync("Database error exporting queue");
+        }
+        catch (IOException ex)
+        {
+            _logger.LogError(ex, "File I/O error exporting queue");
+            await _toastService.ShowErrorAsync("Failed to write export file");
+        }
+        catch (FeatureNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Share feature not supported for export");
+            await _toastService.ShowErrorAsync("Sharing not available on this device");
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error exporting queue");
@@ -531,6 +591,11 @@ public partial class DiagnosticsViewModel : BaseViewModel
             UpdateLocationQueue(queueDiag);
             await LoadQueueDetailsAsync();
             await _toastService.ShowSuccessAsync("Queue refreshed");
+        }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error refreshing queue");
+            await _toastService.ShowErrorAsync("Database error refreshing queue");
         }
         catch (Exception ex)
         {
@@ -593,6 +658,11 @@ public partial class DiagnosticsViewModel : BaseViewModel
             }
 
             QueueDetails = sb.ToString();
+        }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error loading queue details");
+            QueueDetails = "Database error loading queue details";
         }
         catch (Exception ex)
         {

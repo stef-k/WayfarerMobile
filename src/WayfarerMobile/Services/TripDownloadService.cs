@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Security;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
@@ -784,9 +785,17 @@ public class TripDownloadService : ITripDownloadService
                     deletedCount++;
                 }
             }
+            catch (IOException ex)
+            {
+                _logger.LogWarning(ex, "I/O error deleting tile file: {FilePath}", filePath);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogWarning(ex, "Access denied deleting tile file: {FilePath}", filePath);
+            }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to delete tile file: {FilePath}", filePath);
+                _logger.LogWarning(ex, "Unexpected error deleting tile file: {FilePath}", filePath);
             }
         }
 
@@ -2352,9 +2361,19 @@ public class TripDownloadService : ITripDownloadService
             _logger.LogDebug("Available storage: {FreeSpace} MB", freeSpaceMB);
             return freeSpaceMB >= MinRequiredSpaceMB;
         }
+        catch (IOException ex)
+        {
+            _logger.LogWarning(ex, "I/O error checking storage space, assuming sufficient");
+            return true;
+        }
+        catch (SecurityException ex)
+        {
+            _logger.LogWarning(ex, "Security error checking storage space, assuming sufficient");
+            return true;
+        }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Could not check storage space, assuming sufficient");
+            _logger.LogWarning(ex, "Unexpected error checking storage space, assuming sufficient");
             return true;
         }
     }
@@ -2426,9 +2445,17 @@ public class TripDownloadService : ITripDownloadService
                         cleanedCount++;
                     }
                 }
+                catch (IOException ex)
+                {
+                    _logger.LogDebug(ex, "I/O error deleting temp file: {FilePath}", tempFile);
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    _logger.LogDebug(ex, "Access denied deleting temp file: {FilePath}", tempFile);
+                }
                 catch (Exception ex)
                 {
-                    _logger.LogDebug(ex, "Could not delete temp file: {FilePath}", tempFile);
+                    _logger.LogDebug(ex, "Unexpected error deleting temp file: {FilePath}", tempFile);
                 }
             }
 
@@ -2437,9 +2464,13 @@ public class TripDownloadService : ITripDownloadService
                 _logger.LogInformation("Cleaned up {Count} orphaned temp files", cleanedCount);
             }
         }
+        catch (IOException ex)
+        {
+            _logger.LogWarning(ex, "I/O error during temp file cleanup");
+        }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error during temp file cleanup");
+            _logger.LogWarning(ex, "Unexpected error during temp file cleanup");
         }
 
         return cleanedCount;

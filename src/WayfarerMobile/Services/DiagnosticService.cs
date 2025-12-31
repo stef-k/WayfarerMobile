@@ -72,6 +72,11 @@ public class DiagnosticService
             _logger.LogInformation("Diagnostic report generated successfully");
             return report.ToString();
         }
+        catch (IOException ex)
+        {
+            _logger.LogError(ex, "File I/O error generating diagnostic report");
+            return $"File error generating diagnostic report: {ex.Message}";
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error generating diagnostic report");
@@ -111,6 +116,11 @@ public class DiagnosticService
 
             return result;
         }
+        catch (FeatureNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Feature not supported during health check");
+            return new HealthCheckResult { OverallHealth = HealthStatus.Warning };
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error running health check");
@@ -142,6 +152,14 @@ public class DiagnosticService
             info.BatteryState = Battery.Default.State.ToString();
             info.PowerSource = Battery.Default.PowerSource.ToString();
             info.IsEnergySaver = Battery.Default.EnergySaverStatus == EnergySaverStatus.On;
+        }
+        catch (FeatureNotSupportedException ex)
+        {
+            _logger.LogDebug(ex, "Battery info not supported on this platform");
+            info.BatteryLevel = -1;
+            info.BatteryState = "Not Supported";
+            info.PowerSource = "Unknown";
+            info.IsEnergySaver = false;
         }
         catch (Exception ex)
         {
@@ -211,6 +229,16 @@ public class DiagnosticService
             var recentLines = lines.TakeLast(lineCount);
             return string.Join(Environment.NewLine, recentLines);
         }
+        catch (IOException ex)
+        {
+            _logger.LogError(ex, "File I/O error reading recent logs");
+            return $"Error reading logs: {ex.Message}";
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogError(ex, "Access denied reading log files");
+            return "Access denied reading log files";
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error reading recent logs");
@@ -248,6 +276,11 @@ public class DiagnosticService
                 report.AppendLine("   POST_NOTIFICATIONS: Check Android 13+ notification settings");
             }
 #endif
+        }
+        catch (FeatureNotSupportedException ex)
+        {
+            _logger.LogDebug(ex, "Permission check not supported on this platform");
+            report.AppendLine("   Permission check not supported on this platform");
         }
         catch (Exception ex)
         {

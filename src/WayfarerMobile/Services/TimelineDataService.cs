@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using SQLite;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
@@ -51,9 +52,14 @@ public class TimelineDataService
             _logger.LogDebug("Retrieved {Count} local entries for {Date:yyyy-MM-dd}", entries.Count, date);
             return entries;
         }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error getting local entries for {Date:yyyy-MM-dd}", date);
+            return new List<LocalTimelineEntry>();
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get local entries for {Date:yyyy-MM-dd}", date);
+            _logger.LogError(ex, "Unexpected error getting local entries for {Date:yyyy-MM-dd}", date);
             return new List<LocalTimelineEntry>();
         }
     }
@@ -75,9 +81,14 @@ public class TimelineDataService
                 entries.Count, fromDate, toDate);
             return entries;
         }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error getting local entries for range");
+            return new List<LocalTimelineEntry>();
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get local entries for range");
+            _logger.LogError(ex, "Unexpected error getting local entries for range");
             return new List<LocalTimelineEntry>();
         }
     }
@@ -92,9 +103,14 @@ public class TimelineDataService
         {
             return await _databaseService.GetAllLocalTimelineEntriesAsync();
         }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error getting all local entries");
+            return new List<LocalTimelineEntry>();
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get all local entries");
+            _logger.LogError(ex, "Unexpected error getting all local entries");
             return new List<LocalTimelineEntry>();
         }
     }
@@ -209,9 +225,24 @@ public class TimelineDataService
 
             return true;
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error enriching from server for {Date:yyyy-MM-dd}", date);
+            return false;
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out enriching from server for {Date:yyyy-MM-dd}", date);
+            return false;
+        }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error enriching from server for {Date:yyyy-MM-dd}", date);
+            return false;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to enrich from server for {Date:yyyy-MM-dd}", date);
+            _logger.LogError(ex, "Unexpected error enriching from server for {Date:yyyy-MM-dd}", date);
             return false;
         }
     }
@@ -281,9 +312,14 @@ public class TimelineDataService
         {
             return await _databaseService.GetLocalTimelineEntryCountAsync();
         }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error getting entry count");
+            return 0;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get entry count");
+            _logger.LogError(ex, "Unexpected error getting entry count");
             return 0;
         }
     }

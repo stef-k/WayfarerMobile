@@ -1,3 +1,4 @@
+using SQLite;
 using WayfarerMobile.Core.Algorithms;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
@@ -319,9 +320,19 @@ public class UnifiedTileCacheService : IDisposable
             RecordHit("miss");
             return null;
         }
+        catch (IOException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] I/O error getting tile {z}/{x}/{y}: {ex.Message}");
+            return null;
+        }
+        catch (HttpRequestException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Network error getting tile {z}/{x}/{y}: {ex.Message}");
+            return null;
+        }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Error getting tile {z}/{x}/{y}: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Unexpected error getting tile {z}/{x}/{y}: {ex.Message}");
             return null;
         }
     }
@@ -376,9 +387,14 @@ public class UnifiedTileCacheService : IDisposable
 
             return null;
         }
+        catch (SQLiteException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Database error detecting active trip: {ex.Message}");
+            return null;
+        }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Error detecting active trip: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Unexpected error detecting active trip: {ex.Message}");
             return null;
         }
     }
@@ -425,9 +441,17 @@ public class UnifiedTileCacheService : IDisposable
 
             System.Diagnostics.Debug.WriteLine("[UnifiedTileCacheService] Prefetch completed");
         }
+        catch (IOException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] I/O error during prefetch: {ex.Message}");
+        }
+        catch (HttpRequestException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Network error during prefetch: {ex.Message}");
+        }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Error during prefetch: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Unexpected error during prefetch: {ex.Message}");
         }
         finally
         {
@@ -458,9 +482,19 @@ public class UnifiedTileCacheService : IDisposable
                 ActiveTripName = _cachedActiveTrip?.Name
             };
         }
+        catch (SQLiteException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Database error getting statistics: {ex.Message}");
+            return new TileCacheStatistics();
+        }
+        catch (IOException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] I/O error getting statistics: {ex.Message}");
+            return new TileCacheStatistics();
+        }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Error getting statistics: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Unexpected error getting statistics: {ex.Message}");
             return new TileCacheStatistics();
         }
     }
@@ -481,9 +515,13 @@ public class UnifiedTileCacheService : IDisposable
 
             System.Diagnostics.Debug.WriteLine("[UnifiedTileCacheService] All caches cleared");
         }
+        catch (IOException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] I/O error clearing caches: {ex.Message}");
+        }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Error clearing caches: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[UnifiedTileCacheService] Unexpected error clearing caches: {ex.Message}");
         }
     }
 

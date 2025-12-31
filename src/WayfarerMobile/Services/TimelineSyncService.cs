@@ -137,14 +137,34 @@ public class TimelineSyncService : ITimelineSyncService
                 IsClientError = true
             });
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            // Network error or 5xx - queue for retry (keep local changes)
+            // Network error - queue for retry (keep local changes)
             await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, originalValues);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs
             {
                 EntityId = Guid.Empty,
-                Message = $"Sync failed: {ex.Message} - will retry"
+                Message = $"Network error: {ex.Message} - will retry"
+            });
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            // Timeout - queue for retry (keep local changes)
+            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, originalValues);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs
+            {
+                EntityId = Guid.Empty,
+                Message = "Request timed out - will retry"
+            });
+        }
+        catch (Exception ex)
+        {
+            // Unexpected error - queue for retry (keep local changes)
+            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, originalValues);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs
+            {
+                EntityId = Guid.Empty,
+                Message = $"Unexpected error: {ex.Message} - will retry"
             });
         }
     }
@@ -196,13 +216,31 @@ public class TimelineSyncService : ITimelineSyncService
                 IsClientError = true
             });
         }
+        catch (HttpRequestException ex)
+        {
+            await EnqueueDeleteMutationWithRollbackAsync(locationId, deletedEntryJson);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs
+            {
+                EntityId = Guid.Empty,
+                Message = $"Network error: {ex.Message} - will retry"
+            });
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            await EnqueueDeleteMutationWithRollbackAsync(locationId, deletedEntryJson);
+            SyncQueued?.Invoke(this, new SyncQueuedEventArgs
+            {
+                EntityId = Guid.Empty,
+                Message = "Request timed out - will retry"
+            });
+        }
         catch (Exception ex)
         {
             await EnqueueDeleteMutationWithRollbackAsync(locationId, deletedEntryJson);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs
             {
                 EntityId = Guid.Empty,
-                Message = $"Delete failed: {ex.Message} - will retry"
+                Message = $"Unexpected error: {ex.Message} - will retry"
             });
         }
     }
@@ -279,9 +317,22 @@ public class TimelineSyncService : ITimelineSyncService
                     IsClientError = true
                 });
             }
+            catch (HttpRequestException ex)
+            {
+                // Network error - will retry
+                mutation.LastError = $"Network error: {ex.Message}";
+                await _database.UpdateAsync(mutation);
+            }
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            {
+                // Timeout - will retry
+                mutation.LastError = "Request timed out";
+                await _database.UpdateAsync(mutation);
+            }
             catch (Exception ex)
             {
-                mutation.LastError = ex.Message;
+                // Unexpected error - will retry
+                mutation.LastError = $"Unexpected: {ex.Message}";
                 await _database.UpdateAsync(mutation);
             }
         }

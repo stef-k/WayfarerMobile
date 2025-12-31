@@ -3,6 +3,8 @@ using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Mapsui;
+using Microsoft.Extensions.Logging;
+using SQLite;
 using Mapsui.Layers;
 using Mapsui.Nts;
 using Mapsui.Projections;
@@ -57,6 +59,7 @@ public partial class TimelineViewModel : BaseViewModel
     private readonly IMapBuilder _mapBuilder;
     private readonly ITimelineLayerService _timelineLayerService;
     private readonly TimelineDataService _timelineDataService;
+    private readonly ILogger<TimelineViewModel> _logger;
     private Map? _map;
     private WritableLayer? _timelineLayer;
     private WritableLayer? _tempMarkerLayer;
@@ -234,6 +237,7 @@ public partial class TimelineViewModel : BaseViewModel
     /// <param name="mapBuilder">The map builder for creating isolated map instances.</param>
     /// <param name="timelineLayerService">The timeline layer service for rendering markers.</param>
     /// <param name="timelineDataService">The timeline data service for local storage access.</param>
+    /// <param name="logger">The logger for diagnostic output.</param>
     public TimelineViewModel(
         IApiClient apiClient,
         DatabaseService database,
@@ -242,7 +246,8 @@ public partial class TimelineViewModel : BaseViewModel
         ISettingsService settingsService,
         IMapBuilder mapBuilder,
         ITimelineLayerService timelineLayerService,
-        TimelineDataService timelineDataService)
+        TimelineDataService timelineDataService,
+        ILogger<TimelineViewModel> logger)
     {
         _apiClient = apiClient;
         _database = database;
@@ -252,6 +257,7 @@ public partial class TimelineViewModel : BaseViewModel
         _mapBuilder = mapBuilder;
         _timelineLayerService = timelineLayerService;
         _timelineDataService = timelineDataService;
+        _logger = logger;
         Title = "Timeline";
 
         // Subscribe to sync events
@@ -405,9 +411,21 @@ public partial class TimelineViewModel : BaseViewModel
             // Update map
             UpdateMapLocations();
         }
+        catch (HttpRequestException)
+        {
+            // On network error, try loading from local storage as fallback
+            await LoadFromLocalAsync();
+            await _toastService.ShowWarningAsync("Server unavailable. Showing local data.");
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            // On timeout, try loading from local storage as fallback
+            await LoadFromLocalAsync();
+            await _toastService.ShowWarningAsync("Request timed out. Showing local data.");
+        }
         catch (Exception)
         {
-            // On server error, try loading from local storage as fallback
+            // On any other error, try loading from local storage as fallback
             await LoadFromLocalAsync();
             await _toastService.ShowWarningAsync("Server unavailable. Showing local data.");
         }
@@ -460,8 +478,16 @@ public partial class TimelineViewModel : BaseViewModel
             // Update map
             UpdateMapLocations();
         }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error loading local timeline data");
+            await _toastService.ShowErrorAsync("Failed to load local data");
+            IsEmpty = true;
+            StatsText = "Error loading data";
+        }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unexpected error loading local timeline data");
             await _toastService.ShowErrorAsync($"Failed to load local data: {ex.Message}");
             IsEmpty = true;
             StatsText = "Error loading data";
@@ -631,9 +657,14 @@ public partial class TimelineViewModel : BaseViewModel
             var options = new MapLaunchOptions { Name = $"Location at {SelectedLocation.TimeText}" };
             await Microsoft.Maui.ApplicationModel.Map.Default.OpenAsync(location, options);
         }
+        catch (FeatureNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Maps feature not supported on this device");
+            await _toastService.ShowErrorAsync("Maps not available");
+        }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[TimelineViewModel] Failed to open maps: {ex.Message}");
+            _logger.LogError(ex, "Failed to open maps");
             await _toastService.ShowErrorAsync("Could not open maps");
         }
     }
@@ -652,9 +683,14 @@ public partial class TimelineViewModel : BaseViewModel
             var url = $"https://en.wikipedia.org/wiki/Special:Nearby#/coord/{SelectedLocation.Latitude},{SelectedLocation.Longitude}";
             await Launcher.OpenAsync(new Uri(url));
         }
+        catch (UriFormatException ex)
+        {
+            _logger.LogError(ex, "Invalid Wikipedia URL");
+            await _toastService.ShowErrorAsync("Could not open Wikipedia");
+        }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[TimelineViewModel] Failed to open Wikipedia: {ex.Message}");
+            _logger.LogError(ex, "Failed to open Wikipedia");
             await _toastService.ShowErrorAsync("Could not open Wikipedia");
         }
     }
@@ -674,9 +710,14 @@ public partial class TimelineViewModel : BaseViewModel
             await Clipboard.SetTextAsync(coords);
             await _toastService.ShowAsync("Coordinates copied");
         }
+        catch (FeatureNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Clipboard not supported on this device");
+            await _toastService.ShowErrorAsync("Clipboard not available");
+        }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[TimelineViewModel] Failed to copy coordinates: {ex.Message}");
+            _logger.LogError(ex, "Failed to copy coordinates");
             await _toastService.ShowErrorAsync("Could not copy coordinates");
         }
     }
@@ -701,9 +742,14 @@ public partial class TimelineViewModel : BaseViewModel
                 Text = text
             });
         }
+        catch (FeatureNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Share feature not supported on this device");
+            await _toastService.ShowErrorAsync("Share not available");
+        }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[TimelineViewModel] Failed to share: {ex.Message}");
+            _logger.LogError(ex, "Failed to share location");
             await _toastService.ShowErrorAsync("Could not share location");
         }
     }
@@ -787,8 +833,14 @@ public partial class TimelineViewModel : BaseViewModel
             ShowLocationDetails(locationId);
             IsLocationSheetOpen = true;
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error saving coordinates");
+            await _toastService.ShowErrorAsync("Network error. Changes will sync when online.");
+        }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unexpected error saving coordinates");
             await _toastService.ShowErrorAsync($"Failed to save: {ex.Message}");
         }
         finally
@@ -873,8 +925,14 @@ public partial class TimelineViewModel : BaseViewModel
             ShowLocationDetails(locationId);
             IsLocationSheetOpen = true;
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error saving datetime");
+            await _toastService.ShowErrorAsync("Network error. Changes will sync when online.");
+        }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unexpected error saving datetime");
             await _toastService.ShowErrorAsync($"Failed to save: {ex.Message}");
         }
         finally
@@ -924,8 +982,14 @@ public partial class TimelineViewModel : BaseViewModel
             // Re-select the location to show updated details
             ShowLocationDetails(SelectedLocation.LocationId);
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error saving notes");
+            await _toastService.ShowErrorAsync("Network error. Changes will sync when online.");
+        }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unexpected error saving notes");
             await _toastService.ShowErrorAsync($"Failed to save: {ex.Message}");
         }
         finally

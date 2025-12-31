@@ -8,6 +8,7 @@ using Android.OS;
 using Android.Runtime;
 using Android.Util;
 using AndroidX.Core.App;
+using SQLite;
 using WayfarerMobile.Core.Algorithms;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Models;
@@ -212,12 +213,22 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
 
             StartForeground(NotificationId, notification);
             _currentState = TrackingState.Ready;
-            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Foreground started successfully in OnCreate");
+            Log.Info(LogTag, "Foreground started successfully in OnCreate");
+        }
+        catch (Java.Lang.SecurityException ex)
+        {
+            Log.Error(LogTag, $"Security error in Phase 1: {ex.Message}");
+            throw;
+        }
+        catch (InvalidOperationException ex)
+        {
+            Log.Error(LogTag, $"Invalid operation in Phase 1: {ex.Message}");
+            throw;
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] CRITICAL ERROR in Phase 1: {ex.Message}");
-            System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] Stack trace: {ex.StackTrace}");
+            Log.Error(LogTag, $"CRITICAL ERROR in Phase 1: {ex.Message}");
+            Log.Error(LogTag, $"Stack trace: {ex.StackTrace}");
             throw; // Re-throw to see the real error
         }
 
@@ -285,11 +296,19 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
             {
                 var notification = CreateNotification(GetCurrentNotificationText());
                 StartForeground(NotificationId, notification);
-                System.Diagnostics.Debug.WriteLine("[LocationTrackingService] StartForeground called in OnStartCommand");
+                Log.Info(LogTag, "StartForeground called in OnStartCommand");
+            }
+            catch (Java.Lang.SecurityException ex)
+            {
+                Log.Error(LogTag, $"Security error in OnStartCommand StartForeground: {ex.Message}");
+            }
+            catch (InvalidOperationException ex)
+            {
+                Log.Error(LogTag, $"Invalid operation in OnStartCommand StartForeground: {ex.Message}");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] Error in OnStartCommand StartForeground: {ex.Message}");
+                Log.Error(LogTag, $"Error in OnStartCommand StartForeground: {ex.Message}");
             }
         }
 
@@ -354,11 +373,15 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
                 StopForeground(true);
                 #pragma warning restore CA1422
             }
-            System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Foreground stopped");
+            Log.Info(LogTag, "Foreground stopped");
+        }
+        catch (Java.Lang.IllegalStateException ex)
+        {
+            Log.Warn(LogTag, $"Service not in foreground state: {ex.Message}");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] Error stopping foreground: {ex.Message}");
+            Log.Error(LogTag, $"Error stopping foreground: {ex.Message}");
         }
 
         _currentState = TrackingState.NotInitialized;
@@ -716,12 +739,20 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
             else if (_locationManager != null)
             {
                 _locationManager.RemoveUpdates(this);
-                System.Diagnostics.Debug.WriteLine("[LocationTrackingService] Fallback location updates stopped");
+                Log.Info(LogTag, "Fallback location updates stopped");
             }
+        }
+        catch (Java.Lang.IllegalArgumentException ex)
+        {
+            Log.Warn(LogTag, $"Location listener not registered: {ex.Message}");
+        }
+        catch (Java.Lang.SecurityException ex)
+        {
+            Log.Error(LogTag, $"Security error stopping updates: {ex.Message}");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] Error stopping updates: {ex.Message}");
+            Log.Error(LogTag, $"Error stopping updates: {ex.Message}");
         }
     }
 
@@ -1134,11 +1165,15 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         try
         {
             await _databaseService.QueueLocationAsync(location);
-            System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] Queued for sync: {location}");
+            Log.Debug(LogTag, $"Queued for sync: {location}");
+        }
+        catch (SQLiteException ex)
+        {
+            Log.Error(LogTag, $"Database error queuing location: {ex.Message}");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[LocationTrackingService] Failed to queue location: {ex.Message}");
+            Log.Error(LogTag, $"Failed to queue location: {ex.Message}");
         }
     }
 

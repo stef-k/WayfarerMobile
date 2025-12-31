@@ -1,3 +1,4 @@
+using SQLite;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Data.Entities;
 using WayfarerMobile.Data.Services;
@@ -236,9 +237,21 @@ public class LiveTileCacheService
             var result = await DownloadTileAsync(zoom, x, y);
             return result != null;
         }
+        catch (HttpRequestException ex)
+        {
+            // Network error during prefetch - not critical
+            System.Diagnostics.Debug.WriteLine($"[LiveTileCache] Network error prefetching {zoom}/{x}/{y}: {ex.Message}");
+            return false;
+        }
+        catch (IOException ex)
+        {
+            // File I/O error during prefetch - not critical
+            System.Diagnostics.Debug.WriteLine($"[LiveTileCache] IO error prefetching {zoom}/{x}/{y}: {ex.Message}");
+            return false;
+        }
         catch (Exception ex)
         {
-            // Silently handle prefetch failures - not critical
+            // Unexpected error during prefetch - not critical
             System.Diagnostics.Debug.WriteLine($"[LiveTileCache] Prefetch failed {zoom}/{x}/{y}: {ex.Message}");
             return false;
         }
@@ -282,9 +295,17 @@ public class LiveTileCacheService
             await _databaseService.ClearLiveTilesAsync();
             System.Diagnostics.Debug.WriteLine("[LiveTileCacheService] Cache cleared");
         }
+        catch (IOException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LiveTileCacheService] IO error clearing cache: {ex.Message}");
+        }
+        catch (SQLiteException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LiveTileCacheService] Database error clearing cache: {ex.Message}");
+        }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[LiveTileCacheService] Error clearing cache: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[LiveTileCacheService] Unexpected error clearing cache: {ex.Message}");
         }
     }
 
@@ -314,6 +335,14 @@ public class LiveTileCacheService
 
                 if (currentSize <= maxSizeBytes * 0.8) // Evict to 80% of max
                     break;
+            }
+            catch (IOException)
+            {
+                // File deletion failed, continue evicting others
+            }
+            catch (SQLiteException)
+            {
+                // Database deletion failed, continue evicting others
             }
             catch
             {
@@ -378,10 +407,34 @@ public class LiveTileCacheService
 
             return new FileInfo(filePath);
         }
+        catch (HttpRequestException ex)
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+            System.Diagnostics.Debug.WriteLine($"[LiveTileCacheService] Network error downloading tile {z}/{x}/{y}: {ex.Message}");
+            return null;
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+            System.Diagnostics.Debug.WriteLine($"[LiveTileCacheService] Timeout downloading tile {z}/{x}/{y}: {ex.Message}");
+            return null;
+        }
+        catch (IOException ex)
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+            System.Diagnostics.Debug.WriteLine($"[LiveTileCacheService] IO error downloading tile {z}/{x}/{y}: {ex.Message}");
+            return null;
+        }
+        catch (SQLiteException ex)
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+            System.Diagnostics.Debug.WriteLine($"[LiveTileCacheService] Database error downloading tile {z}/{x}/{y}: {ex.Message}");
+            return null;
+        }
         catch (Exception ex)
         {
             try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
-            System.Diagnostics.Debug.WriteLine($"[LiveTileCacheService] Error downloading tile {z}/{x}/{y}: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[LiveTileCacheService] Unexpected error downloading tile {z}/{x}/{y}: {ex.Message}");
             return null;
         }
     }
@@ -395,9 +448,13 @@ public class LiveTileCacheService
         {
             await _databaseService.UpdateLiveTileAccessAsync($"{z}/{x}/{y}");
         }
+        catch (SQLiteException)
+        {
+            // Database error - non-critical, ignore
+        }
         catch
         {
-            // Non-critical, ignore
+            // Unexpected error - non-critical, ignore
         }
     }
 

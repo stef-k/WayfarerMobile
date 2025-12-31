@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Polly;
+using SQLite;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
@@ -183,9 +184,13 @@ public class LocationSyncService : IDisposable
             _logger.LogDebug("Running scheduled location cleanup");
             await PurgeOldLocationsAsync();
         }
+        catch (SQLiteException ex)
+        {
+            _logger.LogWarning(ex, "Database error during scheduled cleanup");
+        }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Scheduled cleanup failed");
+            _logger.LogWarning(ex, "Unexpected error during scheduled cleanup");
         }
     }
 
@@ -288,9 +293,19 @@ public class LocationSyncService : IDisposable
             RecordSync(); // Record for rate limiting
             return count;
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error during location sync");
+            return 0;
+        }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error during location sync");
+            return 0;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during location sync");
+            _logger.LogError(ex, "Unexpected error during location sync");
             return 0;
         }
         finally
@@ -462,10 +477,16 @@ public class LocationSyncService : IDisposable
             _logger.LogError(ex, "Network error syncing location {Id} after retries", location.Id);
             return (false, true); // Continue with next
         }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            await _database.IncrementRetryCountAsync(location.Id);
+            _logger.LogWarning(ex, "Timeout syncing location {Id}", location.Id);
+            return (false, true);
+        }
         catch (Exception ex)
         {
-            await _database.MarkLocationFailedAsync(location.Id, ex.Message);
-            _logger.LogError(ex, "Exception syncing location {Id}", location.Id);
+            await _database.MarkLocationFailedAsync(location.Id, $"Unexpected: {ex.Message}");
+            _logger.LogError(ex, "Unexpected error syncing location {Id}", location.Id);
             return (false, true);
         }
     }
@@ -483,9 +504,13 @@ public class LocationSyncService : IDisposable
                 _logger.LogDebug("Purged {Count} old synced locations", purged);
             }
         }
+        catch (SQLiteException ex)
+        {
+            _logger.LogWarning(ex, "Database error purging old locations");
+        }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to purge old locations");
+            _logger.LogWarning(ex, "Unexpected error purging old locations");
         }
     }
 
