@@ -384,9 +384,19 @@ public partial class TripsViewModel : BaseViewModel
             // Refresh sync queue status
             await RefreshSyncStatusAsync();
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error loading trips");
+            ErrorMessage = "Failed to load trips. Please check your connection.";
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out loading trips");
+            ErrorMessage = "Request timed out. Please try again.";
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load trips");
+            _logger.LogError(ex, "Unexpected error loading trips");
             ErrorMessage = $"Failed to load trips: {ex.Message}";
         }
         finally
@@ -407,9 +417,13 @@ public partial class TripsViewModel : BaseViewModel
             PendingSyncCount = await _tripSyncService.GetPendingCountAsync();
             FailedSyncCount = await _tripSyncService.GetFailedCountAsync();
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Network error refreshing sync status");
+        }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to refresh sync status");
+            _logger.LogWarning(ex, "Unexpected error refreshing sync status");
         }
     }
 
@@ -491,9 +505,14 @@ public partial class TripsViewModel : BaseViewModel
             await RefreshSyncStatusAsync();
             await _toastService.ShowSuccessAsync("Retrying sync...");
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error retrying sync");
+            await _toastService.ShowErrorAsync("Network error. Please try again.");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to retry sync");
+            _logger.LogError(ex, "Unexpected error retrying sync");
             await _toastService.ShowErrorAsync($"Failed to retry: {ex.Message}");
         }
     }
@@ -526,9 +545,14 @@ public partial class TripsViewModel : BaseViewModel
             // Reload trips to reflect any reverted changes
             await LoadTripsAsync();
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error canceling sync");
+            await _toastService.ShowErrorAsync("Network error. Please try again.");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to cancel sync");
+            _logger.LogError(ex, "Unexpected error canceling sync");
             await _toastService.ShowErrorAsync($"Failed to cancel: {ex.Message}");
         }
     }
@@ -568,9 +592,14 @@ public partial class TripsViewModel : BaseViewModel
                 ["LoadTrip"] = tripDetails
             });
         }
+        catch (IOException ex)
+        {
+            _logger.LogError(ex, "IO error loading trip to map");
+            await _toastService.ShowErrorAsync("Failed to read trip data. Please try downloading again.");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load trip to map");
+            _logger.LogError(ex, "Unexpected error loading trip to map");
             await _toastService.ShowErrorAsync($"Failed to load trip: {ex.Message}");
         }
     }
@@ -694,9 +723,14 @@ public partial class TripsViewModel : BaseViewModel
 
             await _toastService.ShowSuccessAsync("Offline data deleted");
         }
+        catch (IOException ex)
+        {
+            _logger.LogError(ex, "IO error deleting offline data");
+            await _toastService.ShowErrorAsync("Failed to delete files. Please try again.");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to delete offline data");
+            _logger.LogError(ex, "Unexpected error deleting offline data");
             await _toastService.ShowErrorAsync($"Failed to delete: {ex.Message}");
         }
     }
@@ -733,9 +767,14 @@ public partial class TripsViewModel : BaseViewModel
 
             await _toastService.ShowSuccessAsync($"Removed {deletedCount} map tiles");
         }
+        catch (IOException ex)
+        {
+            _logger.LogError(ex, "IO error deleting offline maps");
+            await _toastService.ShowErrorAsync("Failed to delete map files. Please try again.");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to delete offline maps");
+            _logger.LogError(ex, "Unexpected error deleting offline maps");
             await _toastService.ShowErrorAsync($"Failed to delete maps: {ex.Message}");
         }
     }
@@ -893,9 +932,25 @@ public partial class TripsViewModel : BaseViewModel
             IsDownloading = false;
             DownloadStatusMessage = "Download paused";
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error resuming download for trip {TripId}", tripId);
+            await _toastService.ShowErrorAsync("Network error. Please check your connection.");
+            IsDownloadPaused = true;
+            IsDownloading = false;
+            DownloadStatusMessage = "Resume failed";
+        }
+        catch (IOException ex)
+        {
+            _logger.LogError(ex, "IO error resuming download for trip {TripId}", tripId);
+            await _toastService.ShowErrorAsync("Failed to write files. Please check storage.");
+            IsDownloadPaused = true;
+            IsDownloading = false;
+            DownloadStatusMessage = "Resume failed";
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error resuming download for trip {TripId}", tripId);
+            _logger.LogError(ex, "Unexpected error resuming download for trip {TripId}", tripId);
             await _toastService.ShowErrorAsync($"Resume failed: {ex.Message}");
             // Reset to paused state on error
             IsDownloadPaused = true;
@@ -968,9 +1023,14 @@ public partial class TripsViewModel : BaseViewModel
 
             await _toastService.ShowSuccessAsync("Trip name updated");
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error updating trip name");
+            await _toastService.ShowErrorAsync("Network error. Changes saved locally.");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to update trip name");
+            _logger.LogError(ex, "Unexpected error updating trip name");
             await _toastService.ShowErrorAsync($"Failed to update: {ex.Message}");
         }
     }
@@ -997,9 +1057,14 @@ public partial class TripsViewModel : BaseViewModel
 
             await Shell.Current.GoToAsync("notesEditor", navParams);
         }
+        catch (IOException ex)
+        {
+            _logger.LogError(ex, "IO error loading trip for notes editor");
+            await _toastService.ShowErrorAsync("Failed to read trip data.");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to open notes editor");
+            _logger.LogError(ex, "Unexpected error opening notes editor");
             await _toastService.ShowErrorAsync($"Failed to open editor: {ex.Message}");
         }
     }
@@ -1095,9 +1160,19 @@ public partial class TripsViewModel : BaseViewModel
                 await _toastService.ShowErrorAsync($"Clone failed: {errorMessage}");
             }
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error cloning trip");
+            await _toastService.ShowErrorAsync("Network error. Please check your connection.");
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out cloning trip");
+            await _toastService.ShowErrorAsync("Request timed out. Please try again.");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to clone trip");
+            _logger.LogError(ex, "Unexpected error cloning trip");
             await _toastService.ShowErrorAsync("Failed to copy trip. Please try again.");
         }
         finally
@@ -1207,9 +1282,19 @@ public partial class TripsViewModel : BaseViewModel
         {
             _logger.LogInformation("Download cancelled");
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error during download");
+            await _toastService.ShowErrorAsync("Network error. Please check your connection.");
+        }
+        catch (IOException ex)
+        {
+            _logger.LogError(ex, "IO error during download");
+            await _toastService.ShowErrorAsync("Failed to save files. Please check storage.");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Download failed");
+            _logger.LogError(ex, "Unexpected error during download");
             await _toastService.ShowErrorAsync($"Download failed: {ex.Message}");
         }
         finally
@@ -1272,9 +1357,17 @@ public partial class TripsViewModel : BaseViewModel
 
             _logger.LogDebug("Loaded {Count} public trips (page {Page})", response.Trips.Count, _publicTripsPage);
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error loading public trips");
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Request timed out loading public trips");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load public trips");
+            _logger.LogError(ex, "Unexpected error loading public trips");
         }
     }
 
@@ -1549,9 +1642,13 @@ public partial class TripsViewModel : BaseViewModel
                 }
             }
         }
+        catch (IOException ex)
+        {
+            _logger.LogWarning(ex, "IO error checking for paused downloads");
+        }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to check for paused downloads");
+            _logger.LogWarning(ex, "Unexpected error checking for paused downloads");
         }
     }
 
