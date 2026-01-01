@@ -18,6 +18,15 @@ namespace WayfarerMobile.ViewModels;
 /// </summary>
 public partial class TripSheetViewModel : BaseViewModel
 {
+    #region Constants
+
+    /// <summary>
+    /// Name of the default unassigned places region.
+    /// </summary>
+    private const string UnassignedRegionName = "Unassigned Places";
+
+    #endregion
+
     #region Fields
 
     private readonly ITripSyncService _tripSyncService;
@@ -1080,9 +1089,9 @@ public partial class TripSheetViewModel : BaseViewModel
             return;
 
         // Prevent editing the "Unassigned Places" region
-        if (region.Name == "Unassigned Places")
+        if (region.Name == UnassignedRegionName)
         {
-            await _toastService.ShowWarningAsync("Cannot edit the Unassigned Places region");
+            await _toastService.ShowWarningAsync($"Cannot edit the {UnassignedRegionName} region");
             return;
         }
 
@@ -1120,7 +1129,7 @@ public partial class TripSheetViewModel : BaseViewModel
 
         var confirmed = await (_callbacks?.DisplayAlertAsync(
             "Delete Region",
-            $"Are you sure you want to delete '{region.Name}'? All places in this region will be moved to Unassigned Places.",
+            $"Are you sure you want to delete '{region.Name}'? All places in this region will be moved to {UnassignedRegionName}.",
             "Delete",
             "Cancel") ?? Task.FromResult(false));
 
@@ -1637,7 +1646,7 @@ public partial class TripSheetViewModel : BaseViewModel
             return;
 
         // Prevent reserved name
-        if (newName == "Unassigned Places")
+        if (newName == UnassignedRegionName)
         {
             await _toastService.ShowWarningAsync("Cannot use reserved name");
             return;
@@ -1739,7 +1748,7 @@ public partial class TripSheetViewModel : BaseViewModel
             return;
 
         // Find or create unassigned region
-        var region = LoadedTrip.Regions.FirstOrDefault(r => r.Name == "Unassigned Places")
+        var region = LoadedTrip.Regions.FirstOrDefault(r => r.Name == UnassignedRegionName)
             ?? LoadedTrip.Regions.FirstOrDefault();
 
         if (region == null)

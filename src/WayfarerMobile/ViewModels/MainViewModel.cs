@@ -498,8 +498,9 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         _locationBridge.LocationReceived += OnLocationReceived;
         _locationBridge.StateChanged += OnStateChanged;
 
-        // Subscribe to navigation shell navigation requests
+        // Subscribe to navigation shell navigation requests and property changes
         Navigation.NavigateToSourcePageRequested += OnNavigateToSourcePageRequested;
+        Navigation.PropertyChanged += OnNavigationPropertyChanged;
 
         // Subscribe to check-in completion to auto-close sheet
         _checkInViewModel.CheckInCompleted += OnCheckInCompleted;
@@ -742,6 +743,20 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         if (state == TrackingState.Ready || state == TrackingState.NotInitialized)
         {
             MapDisplay.ClearLocationIndicator();
+        }
+    }
+
+    /// <summary>
+    /// Handles property changes from NavigationCoordinatorViewModel.
+    /// Forwards property change notifications for UI bindings.
+    /// </summary>
+    private void OnNavigationPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(NavigationCoordinatorViewModel.IsNavigating):
+                OnPropertyChanged(nameof(IsNavigating));
+                break;
         }
     }
 
@@ -1419,6 +1434,7 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
 
         // Unsubscribe from child ViewModel events and dispose
         Navigation.NavigateToSourcePageRequested -= OnNavigateToSourcePageRequested;
+        Navigation.PropertyChanged -= OnNavigationPropertyChanged;
         Navigation.Dispose();
         _checkInViewModel.CheckInCompleted -= OnCheckInCompleted;
 

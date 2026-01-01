@@ -121,7 +121,7 @@
                                          ZIndex="5">
                         <!-- 0. Trip Overview (visible when trip loaded) -->
                         <ImageButton Source="trip.png"
-                                     Command="{Binding ToggleTripSheetCommand}"
+                                     Command="{Binding TripSheet.ToggleTripSheetCommand}"
                                      IsVisible="{Binding HasLoadedTrip}"
                                      WidthRequest="44"
                                      HeightRequest="44"

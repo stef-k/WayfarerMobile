@@ -4,6 +4,7 @@ using Mapsui.Nts;
 using Mapsui.Projections;
 using Mapsui.Styles;
 using Mapsui.UI.Maui;
+using Microsoft.Extensions.Logging;
 using NetTopologySuite.Geometries;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.ViewModels;
@@ -22,6 +23,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
 {
     private const string TempMarkerLayerName = "PlaceCoordinateEditTempMarker";
     private readonly MainViewModel _viewModel;
+    private readonly ILogger<MainPage> _logger;
     private TripDetails? _pendingTrip;
     private WritableLayer? _tempMarkerLayer;
 
@@ -29,10 +31,12 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// Creates a new instance of MainPage.
     /// </summary>
     /// <param name="viewModel">The view model for this page.</param>
-    public MainPage(MainViewModel viewModel)
+    /// <param name="logger">Logger for diagnostic output.</param>
+    public MainPage(MainViewModel viewModel, ILogger<MainPage> logger)
     {
         InitializeComponent();
         _viewModel = viewModel;
+        _logger = logger;
         BindingContext = viewModel;
 
         // Subscribe to map info events for tap handling
@@ -169,7 +173,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MainPage] Error in OnMapInfo: {ex.Message}");
+            _logger.LogError(ex, "Error in OnMapInfo");
         }
     }
 
@@ -304,10 +308,8 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// </summary>
     private async void OnMainSheetStateChanged(object? sender, Syncfusion.Maui.Toolkit.BottomSheet.StateChangedEventArgs e)
     {
-        Console.WriteLine($"[MainPage] SheetStateChanged: {e.OldState} -> {e.NewState}, " +
-            $"IsNavigatingToSubEditor={_viewModel.TripSheet.IsNavigatingToSubEditor}, " +
-            $"IsTripSheetOpen={_viewModel.IsTripSheetOpen}, " +
-            $"SelectedPlace={_viewModel.TripSheet.SelectedTripPlace?.Name ?? "null"}");
+        _logger.LogDebug("SheetStateChanged: {OldState} -> {NewState}, IsNavigatingToSubEditor={IsNavigatingToSubEditor}, IsTripSheetOpen={IsTripSheetOpen}, SelectedPlace={SelectedPlace}",
+            e.OldState, e.NewState, _viewModel.TripSheet.IsNavigatingToSubEditor, _viewModel.IsTripSheetOpen, _viewModel.TripSheet.SelectedTripPlace?.Name ?? "null");
 
         // Only handle when sheet becomes hidden (closed)
         if (e.NewState == Syncfusion.Maui.Toolkit.BottomSheet.BottomSheetState.Hidden)
@@ -316,14 +318,14 @@ public partial class MainPage : ContentPage, IQueryAttributable
             // The sheet goes hidden during navigation but we want to preserve selection
             if (_viewModel.TripSheet.IsNavigatingToSubEditor)
             {
-                Console.WriteLine("[MainPage] Skipping cleanup - navigating to sub-editor");
+                _logger.LogDebug("Skipping cleanup - navigating to sub-editor");
                 return;
             }
 
             // Handle check-in sheet cleanup if it was open
             if (_viewModel.IsCheckInSheetOpen)
             {
-                Console.WriteLine("[MainPage] Running check-in sheet cleanup");
+                _logger.LogDebug("Running check-in sheet cleanup");
                 _viewModel.IsCheckInSheetOpen = false;
                 await _viewModel.OnCheckInSheetClosedAsync();
             }
@@ -331,7 +333,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
             // Handle trip sheet cleanup if it was open
             if (_viewModel.IsTripSheetOpen)
             {
-                Console.WriteLine("[MainPage] Running trip sheet cleanup - calling TripSheetBackCommand");
+                _logger.LogDebug("Running trip sheet cleanup - calling TripSheetBackCommand");
                 _viewModel.IsTripSheetOpen = false;
                 _viewModel.TripSheet.TripSheetBackCommand.Execute(null);
             }
@@ -367,7 +369,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MainPage] Failed to share location: {ex.Message}");
+            _logger.LogError(ex, "Failed to share location");
         }
     }
 
@@ -388,7 +390,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MainPage] Failed to copy coordinates: {ex.Message}");
+            _logger.LogError(ex, "Failed to copy coordinates");
         }
     }
 
