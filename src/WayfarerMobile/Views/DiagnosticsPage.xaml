@@ -171,25 +171,34 @@
                 </sfExpander:SfExpander>
 
                 <!-- Zoom Coverage Section -->
-                <sfExpander:SfExpander IsExpanded="False" IsVisible="{Binding HasZoomCoverage}">
+                <sfExpander:SfExpander IsExpanded="False">
                     <sfExpander:SfExpander.Header>
-                        <Grid HeightRequest="48" Padding="10,0" ColumnDefinitions="*,Auto">
+                        <Grid HeightRequest="48" Padding="10,0" ColumnDefinitions="*,Auto,Auto">
                             <Label Grid.Column="0" Text="Coverage by Zoom" FontSize="16" FontAttributes="Bold" VerticalOptions="Center" />
-                            <Label Grid.Column="1" Text="{Binding OverallCoverage}" FontSize="14" VerticalOptions="Center" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            <ActivityIndicator Grid.Column="1" IsRunning="{Binding IsLoadingZoomCoverage}" IsVisible="{Binding IsLoadingZoomCoverage}" WidthRequest="20" HeightRequest="20" />
+                            <Label Grid.Column="2" Text="{Binding OverallCoverage}" FontSize="14" VerticalOptions="Center" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" IsVisible="{Binding HasZoomCoverage}" />
                         </Grid>
                     </sfExpander:SfExpander.Header>
                     <sfExpander:SfExpander.Content>
-                        <CollectionView ItemsSource="{Binding ZoomCoverageItems}" SelectionMode="None">
-                            <CollectionView.ItemTemplate>
-                                <DataTemplate x:DataType="vm:ZoomCoverageItem">
-                                    <Grid ColumnDefinitions="Auto,*,Auto" Padding="15,6" ColumnSpacing="10">
-                                        <Label Grid.Column="0" Text="{Binding ZoomLevel, StringFormat='Zoom {0}'}" WidthRequest="70" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-                                        <Label Grid.Column="1" Text="{Binding Tiles}" HorizontalOptions="End" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-                                        <Label Grid.Column="2" Text="{Binding Coverage}" WidthRequest="50" HorizontalTextAlignment="End" FontAttributes="Bold" />
-                                    </Grid>
-                                </DataTemplate>
-                            </CollectionView.ItemTemplate>
-                        </CollectionView>
+                        <Grid>
+                            <!-- Loading state -->
+                            <VerticalStackLayout IsVisible="{Binding IsLoadingZoomCoverage}" Padding="15" Spacing="8">
+                                <ActivityIndicator IsRunning="True" />
+                                <Label Text="Scanning tile cache..." HorizontalOptions="Center" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            </VerticalStackLayout>
+                            <!-- Data state -->
+                            <CollectionView ItemsSource="{Binding ZoomCoverageItems}" SelectionMode="None" IsVisible="{Binding HasZoomCoverage}">
+                                <CollectionView.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ZoomCoverageItem">
+                                        <Grid ColumnDefinitions="Auto,*,Auto" Padding="15,6" ColumnSpacing="10">
+                                            <Label Grid.Column="0" Text="{Binding ZoomLevel, StringFormat='Zoom {0}'}" WidthRequest="70" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                            <Label Grid.Column="1" Text="{Binding AreaKm}" HorizontalOptions="End" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                            <Label Grid.Column="2" Text="{Binding Coverage}" WidthRequest="50" HorizontalTextAlignment="End" FontAttributes="Bold" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </CollectionView.ItemTemplate>
+                            </CollectionView>
+                        </Grid>
                     </sfExpander:SfExpander.Content>
                 </sfExpander:SfExpander>
 
