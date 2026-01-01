@@ -437,33 +437,32 @@ The file `tests/WayfarerMobile.Tests/Infrastructure/TripDownloadTypes.cs` curren
 
 ## Implementation Checklist
 
-- [ ] **Phase 1: Extract Embedded Interfaces**
-  - [ ] 1.0: Extract `SyncEventArgs.cs` (4 event args classes) to Core
-  - [ ] 1.1: Extract `ITripSyncService.cs` to Core
-  - [ ] 1.2: Extract `ITimelineSyncService.cs` to Core
-  - [ ] 1.3: Extract `IDownloadNotificationService.cs` to WayfarerMobile/Interfaces (namespace: `WayfarerMobile.Interfaces`)
-  - [ ] 1.4: Extract `IWikipediaService.cs` to WayfarerMobile/Interfaces (namespace: `WayfarerMobile.Interfaces`)
-  - [ ] Update consumer `using` statements for 1.3 and 1.4
+- [x] **Phase 1: Extract Embedded Interfaces** ✓ COMPLETE
+  - [x] 1.0: Extract `SyncEventArgs.cs` (4 event args classes) to Core
+  - [x] 1.1: Extract `ITripSyncService.cs` to Core
+  - [x] 1.2: Extract `ITimelineSyncService.cs` to Core
+  - [x] 1.3: Extract `IDownloadNotificationService.cs` to WayfarerMobile/Interfaces (namespace: `WayfarerMobile.Interfaces`)
+  - [x] 1.4: Extract `IWikipediaService.cs` to WayfarerMobile/Interfaces (namespace: `WayfarerMobile.Interfaces`)
+  - [x] Update consumer `using` statements for 1.3 and 1.4
 
-- [ ] **Phase 2: Move Clean Interfaces to Core**
-  - [ ] Move 9 interfaces with their helper types (namespace unchanged)
+- [x] **Phase 2: Move Clean Interfaces to Core** ✓ COMPLETE
+  - [x] Move 9 interfaces with their helper types (namespace unchanged)
 
-- [ ] **Phase 3: Move MAUI-Dependent Interfaces**
-  - [ ] Extract `DownloadEventArgs.cs` (8 types) to Core first
-  - [ ] Move 8 interfaces to `WayfarerMobile/Interfaces/`
-  - [ ] Update namespace in each file to `WayfarerMobile.Interfaces`
-  - [ ] Update all consumer `using` statements (~20 files)
-  - [ ] Change `TripDownloadTypes.cs` namespace to `WayfarerMobile.Tests.Infrastructure`
+- [x] **Phase 3: Move MAUI-Dependent Interfaces** ✓ COMPLETE
+  - [x] Extract `DownloadEventArgs.cs` (8 types) to Core first
+  - [x] Move 8 interfaces to `WayfarerMobile/Interfaces/`
+  - [x] Update namespace in each file to `WayfarerMobile.Interfaces`
+  - [x] Update all consumer `using` statements (~14 files)
+  - [x] ~~Change `TripDownloadTypes.cs` namespace~~ File deleted (types now in Core)
 
-- [ ] **Phase 4: Create ITripNavigationService**
-  - [ ] Verify if `OsrmRoutingService` and `RouteCacheService` need interfaces
-  - [ ] Create `ITripNavigationService` interface in Core
-  - [ ] Update `TripNavigationService` to implement interface
-  - [ ] Update DI registration in `MauiProgram.cs`
-  - [ ] Update 4 ViewModel consumers
+- [x] **Phase 4: Create ITripNavigationService** ✓ COMPLETE
+  - [x] Create `ITripNavigationService` interface in Core
+  - [x] Update `TripNavigationService` to implement interface
+  - [x] Update DI registration in `MauiProgram.cs`
+  - [x] Update 4 ViewModel consumers (MainViewModel, TripsViewModel, GroupsViewModel, NavigationHudViewModel)
 
-- [ ] **Phase 5: Cleanup**
-  - [ ] Delete empty `WayfarerMobile/Core/Interfaces/` directory
-  - [ ] Delete `tests/WayfarerMobile.Tests/Infrastructure/TripDownloadTypes.cs`
-  - [ ] Run all tests
-  - [ ] Build Android + iOS
+- [x] **Phase 5: Cleanup** ✓ COMPLETE
+  - [x] Delete empty `WayfarerMobile/Core/Interfaces/` directory
+  - [x] Delete `tests/WayfarerMobile.Tests/Infrastructure/TripDownloadTypes.cs` (redundant - Core now has these types)
+  - [x] Run all tests (1692 passed)
+  - [x] Build Android + iOS

@@ -514,7 +514,7 @@ public partial class TimelineEntrySheet : ContentView
 
         try
         {
-            var wikipediaService = Application.Current?.Handler?.MauiContext?.Services.GetService<Services.IWikipediaService>();
+            var wikipediaService = Application.Current?.Handler?.MauiContext?.Services.GetService<Interfaces.IWikipediaService>();
             if (wikipediaService == null)
             {
                 await ShowAlertAsync("Error", "Wikipedia service not available.");

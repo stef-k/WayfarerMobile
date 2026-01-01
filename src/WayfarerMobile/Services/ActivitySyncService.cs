@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using SQLite;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Data.Entities;
+using WayfarerMobile.Interfaces;
 using WayfarerMobile.Data.Services;
 
 namespace WayfarerMobile.Services;

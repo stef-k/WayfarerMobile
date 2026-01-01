@@ -1,6 +1,6 @@
 using WayfarerMobile.Data.Entities;
 
-namespace WayfarerMobile.Core.Interfaces;
+namespace WayfarerMobile.Interfaces;
 
 /// <summary>
 /// Service interface for managing activity types with server sync and local caching.

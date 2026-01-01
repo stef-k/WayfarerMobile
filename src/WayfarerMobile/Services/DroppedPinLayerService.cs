@@ -4,6 +4,7 @@ using Mapsui.Projections;
 using Mapsui.Styles;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Interfaces;
 using Color = Mapsui.Styles.Color;
 using Brush = Mapsui.Styles.Brush;
 using Pen = Mapsui.Styles.Pen;

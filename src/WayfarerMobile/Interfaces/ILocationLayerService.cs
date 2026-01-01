@@ -2,7 +2,7 @@ using Mapsui;
 using Mapsui.Layers;
 using WayfarerMobile.Core.Models;
 
-namespace WayfarerMobile.Core.Interfaces;
+namespace WayfarerMobile.Interfaces;
 
 /// <summary>
 /// Service for managing the current user's location indicator on the map.

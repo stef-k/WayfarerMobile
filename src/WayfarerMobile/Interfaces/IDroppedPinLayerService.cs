@@ -1,6 +1,6 @@
 using Mapsui.Layers;
 
-namespace WayfarerMobile.Core.Interfaces;
+namespace WayfarerMobile.Interfaces;
 
 /// <summary>
 /// Service for managing dropped pin marker on the map.

@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Interfaces;
 using WayfarerMobile.Data.Entities;
 using WayfarerMobile.Data.Services;
 using WayfarerMobile.Services.TileCache;

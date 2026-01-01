@@ -9,6 +9,7 @@ using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.ApplicationModel.DataTransfer;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services;
 using WayfarerMobile.Shared.Collections;
 
@@ -25,7 +26,7 @@ public partial class GroupsViewModel : BaseViewModel
     private readonly ISseClientFactory _sseClientFactory;
     private readonly IToastService _toastService;
     private readonly ILogger<GroupsViewModel> _logger;
-    private readonly TripNavigationService _tripNavigationService;
+    private readonly ITripNavigationService _tripNavigationService;
     private readonly ILocationBridge _locationBridge;
     private readonly NavigationHudViewModel _navigationHudViewModel;
     private readonly IMapBuilder _mapBuilder;
@@ -302,7 +303,7 @@ public partial class GroupsViewModel : BaseViewModel
         ISettingsService settingsService,
         ISseClientFactory sseClientFactory,
         IToastService toastService,
-        TripNavigationService tripNavigationService,
+        ITripNavigationService tripNavigationService,
         ILocationBridge locationBridge,
         NavigationHudViewModel navigationHudViewModel,
         IMapBuilder mapBuilder,

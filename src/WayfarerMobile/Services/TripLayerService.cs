@@ -9,6 +9,7 @@ using NetTopologySuite.Geometries;
 using WayfarerMobile.Core.Helpers;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Interfaces;
 using WayfarerMobile.Shared.Utilities;
 using Color = Mapsui.Styles.Color;
 using Brush = Mapsui.Styles.Brush;

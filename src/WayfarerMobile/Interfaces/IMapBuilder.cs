@@ -3,7 +3,7 @@ using Mapsui.Layers;
 using WayfarerMobile.Core.Models;
 using Map = Mapsui.Map;
 
-namespace WayfarerMobile.Core.Interfaces;
+namespace WayfarerMobile.Interfaces;
 
 /// <summary>
 /// Interface for creating and managing map instances and layers.

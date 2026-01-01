@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Helpers;
+using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services;
 using WayfarerMobile.ViewModels;
 
