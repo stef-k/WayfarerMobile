@@ -162,7 +162,7 @@ public class AppDiagnosticService
         try
         {
             var zoomLevels = TileCacheConstants.AllZoomLevels;
-            var coverageByZoom = new Dictionary<int, ZoomLevelCoverage>();
+            var coverageByZoom = new Dictionary<int, DiagnosticZoomCoverage>();
 
             foreach (var zoom in zoomLevels)
             {
@@ -200,7 +200,7 @@ public class AppDiagnosticService
         }
     }
 
-    private async Task<ZoomLevelCoverage> CalculateZoomLevelCoverageAsync(double lat, double lon, int zoom)
+    private async Task<DiagnosticZoomCoverage> CalculateZoomLevelCoverageAsync(double lat, double lon, int zoom)
     {
         var (centerX, centerY) = LatLonToTile(lat, lon, zoom);
         const int radius = 3; // Check 7x7 grid
@@ -225,7 +225,7 @@ public class AppDiagnosticService
             }
         }
 
-        return new ZoomLevelCoverage
+        return new DiagnosticZoomCoverage
         {
             ZoomLevel = zoom,
             TotalTiles = totalTiles,
@@ -469,7 +469,7 @@ public class CacheCoverageInfo
 {
     public double Latitude { get; set; }
     public double Longitude { get; set; }
-    public Dictionary<int, ZoomLevelCoverage> CoverageByZoom { get; set; } = new();
+    public Dictionary<int, DiagnosticZoomCoverage> CoverageByZoom { get; set; } = new();
     public double OverallCoveragePercent { get; set; }
     public int TotalTilesNeeded { get; set; }
     public int TotalTilesCached { get; set; }
@@ -477,9 +477,9 @@ public class CacheCoverageInfo
 }
 
 /// <summary>
-/// Zoom level coverage information.
+/// Zoom level coverage information for diagnostics.
 /// </summary>
-public class ZoomLevelCoverage
+public class DiagnosticZoomCoverage
 {
     public int ZoomLevel { get; set; }
     public int TotalTiles { get; set; }
