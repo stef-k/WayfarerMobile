@@ -39,8 +39,7 @@ public partial class MainViewModel : BaseViewModel
     private readonly IToastService _toastService;
     private readonly CheckInViewModel _checkInViewModel;
     private readonly UnifiedTileCacheService _tileCacheService;
-    private readonly CacheStatusService _cacheStatusService;
-    private readonly CacheOverlayService _cacheOverlayService;
+    private readonly ICacheVisualizationService _cacheService;
     private readonly LocationIndicatorService _indicatorService;
 
     // Map composition services
@@ -898,8 +897,7 @@ public partial class MainViewModel : BaseViewModel
     /// <param name="toastService">The toast notification service.</param>
     /// <param name="checkInViewModel">The check-in view model.</param>
     /// <param name="tileCacheService">The tile cache service.</param>
-    /// <param name="cacheStatusService">The cache status service.</param>
-    /// <param name="cacheOverlayService">The cache overlay service.</param>
+    /// <param name="cacheService">The cache visualization service for status and overlay.</param>
     /// <param name="indicatorService">The location indicator service for smoothed heading.</param>
     /// <param name="mapBuilder">The map builder for creating isolated map instances.</param>
     /// <param name="locationLayerService">The location layer service for rendering current location.</param>
@@ -919,8 +917,7 @@ public partial class MainViewModel : BaseViewModel
         IToastService toastService,
         CheckInViewModel checkInViewModel,
         UnifiedTileCacheService tileCacheService,
-        CacheStatusService cacheStatusService,
-        CacheOverlayService cacheOverlayService,
+        ICacheVisualizationService cacheService,
         LocationIndicatorService indicatorService,
         IMapBuilder mapBuilder,
         ILocationLayerService locationLayerService,
@@ -940,8 +937,7 @@ public partial class MainViewModel : BaseViewModel
         _toastService = toastService;
         _checkInViewModel = checkInViewModel;
         _tileCacheService = tileCacheService;
-        _cacheStatusService = cacheStatusService;
-        _cacheOverlayService = cacheOverlayService;
+        _cacheService = cacheService;
         _indicatorService = indicatorService;
         _mapBuilder = mapBuilder;
         _locationLayerService = locationLayerService;
@@ -966,7 +962,7 @@ public partial class MainViewModel : BaseViewModel
         _checkInViewModel.CheckInCompleted += OnCheckInCompleted;
 
         // Subscribe to cache status updates (updates when location changes, NOT on startup)
-        _cacheStatusService.StatusChanged += OnCacheStatusChanged;
+        _cacheService.StatusChanged += OnCacheStatusChanged;
     }
 
     #endregion
@@ -3620,7 +3616,7 @@ public partial class MainViewModel : BaseViewModel
         _checkInViewModel.CheckInCompleted -= OnCheckInCompleted;
 
         // Unsubscribe from cache status events
-        _cacheStatusService.StatusChanged -= OnCacheStatusChanged;
+        _cacheService.StatusChanged -= OnCacheStatusChanged;
 
         // Stop location animation
         _locationLayerService.StopAnimation();
@@ -3676,14 +3672,14 @@ public partial class MainViewModel : BaseViewModel
     {
         try
         {
-            var info = await _cacheStatusService.GetDetailedCacheInfoAsync();
-            var message = _cacheStatusService.FormatStatusMessage(info);
+            var info = await _cacheService.GetDetailedCacheInfoAsync();
+            var message = _cacheService.FormatStatusMessage(info);
 
             var page = Application.Current?.Windows.FirstOrDefault()?.Page;
             if (page == null) return;
 
             // Button text depends on whether overlay is currently visible
-            var buttonText = _cacheOverlayService.IsVisible ? "Hide Overlay" : "Show on Map";
+            var buttonText = _cacheService.IsOverlayVisible ? "Hide Overlay" : "Show on Map";
 
             var toggleOverlay = await page.DisplayAlertAsync(
                 "Cache Status",
@@ -3693,7 +3689,7 @@ public partial class MainViewModel : BaseViewModel
 
             if (toggleOverlay && CurrentLocation != null)
             {
-                await _cacheOverlayService.ToggleOverlayAsync(
+                await _cacheService.ToggleOverlayAsync(
                     Map, CurrentLocation.Latitude, CurrentLocation.Longitude);
             }
             else if (toggleOverlay)

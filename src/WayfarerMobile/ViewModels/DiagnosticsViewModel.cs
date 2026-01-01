@@ -25,6 +25,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
     private readonly PerformanceMonitorService _performanceService;
     private readonly IToastService _toastService;
     private readonly DatabaseService _databaseService;
+    private readonly ISettingsService _settingsService;
     private bool _isSubscribed;
 
     /// <summary>
@@ -37,7 +38,8 @@ public partial class DiagnosticsViewModel : BaseViewModel
         AppDiagnosticService appDiagnosticService,
         PerformanceMonitorService performanceService,
         IToastService toastService,
-        DatabaseService databaseService)
+        DatabaseService databaseService,
+        ISettingsService settingsService)
     {
         _logger = logger;
         _locationBridge = locationBridge;
@@ -46,6 +48,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
         _performanceService = performanceService;
         _toastService = toastService;
         _databaseService = databaseService;
+        _settingsService = settingsService;
         Title = "Diagnostics";
 
         LogFiles = [];
@@ -289,6 +292,22 @@ public partial class DiagnosticsViewModel : BaseViewModel
 
     #endregion
 
+    #region Zoom Coverage Properties
+
+    [ObservableProperty]
+    private bool _hasZoomCoverage;
+
+    [ObservableProperty]
+    private bool _isLoadingZoomCoverage;
+
+    [ObservableProperty]
+    private string _overallCoverage = "—";
+
+    [ObservableProperty]
+    private ObservableCollection<ZoomCoverageItem> _zoomCoverageItems = [];
+
+    #endregion
+
     #region Tracking Properties
 
     [ObservableProperty]
@@ -429,6 +448,40 @@ public partial class DiagnosticsViewModel : BaseViewModel
         finally
         {
             IsLoading = false;
+
+            // Load zoom coverage separately (slower, shouldn't block other sections)
+            _ = LoadZoomCoverageAsync();
+        }
+    }
+
+    /// <summary>
+    /// Loads zoom coverage data separately to avoid blocking other diagnostics.
+    /// </summary>
+    private async Task LoadZoomCoverageAsync()
+    {
+        var location = _locationBridge.LastLocation;
+        if (location == null)
+        {
+            HasZoomCoverage = false;
+            return;
+        }
+
+        try
+        {
+            IsLoadingZoomCoverage = true;
+
+            var coverage = await _appDiagnosticService.GetCacheCoverageAsync(
+                location.Latitude, location.Longitude);
+            UpdateZoomCoverage(coverage);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading zoom coverage");
+            HasZoomCoverage = false;
+        }
+        finally
+        {
+            IsLoadingZoomCoverage = false;
         }
     }
 
@@ -958,5 +1011,57 @@ public partial class DiagnosticsViewModel : BaseViewModel
         GcCollections = $"Gen0: {memoryInfo.Gen0Collections}, Gen1: {memoryInfo.Gen1Collections}, Gen2: {memoryInfo.Gen2Collections}";
     }
 
+    private void UpdateZoomCoverage(CacheCoverageInfo? info)
+    {
+        if (info == null || info.CoverageByZoom.Count == 0)
+        {
+            HasZoomCoverage = false;
+            return;
+        }
+
+        HasZoomCoverage = true;
+        OverallCoverage = $"{info.OverallCoveragePercent:F0}%";
+
+        ZoomCoverageItems.Clear();
+        foreach (var (zoom, coverage) in info.CoverageByZoom.OrderBy(kv => kv.Key))
+        {
+            // Calculate coverage area in km using tile math
+            var radiusMeters = Services.TileCache.TileCacheConstants.CalculatePrefetchRadiusMeters(
+                _settingsService.LiveCachePrefetchRadius, zoom, info.Latitude);
+            var radiusKm = radiusMeters / 1000.0;
+
+            ZoomCoverageItems.Add(new ZoomCoverageItem
+            {
+                ZoomLevel = zoom,
+                Coverage = $"{coverage.CoveragePercent:F0}%",
+                AreaKm = radiusKm >= 10 ? $"{radiusKm:F0} km" : $"{radiusKm:F1} km"
+            });
+        }
+    }
+
     #endregion
+}
+
+/// <summary>
+/// Display model for zoom level cache coverage in diagnostics.
+/// </summary>
+public partial class ZoomCoverageItem : ObservableObject
+{
+    /// <summary>
+    /// The zoom level (8-17).
+    /// </summary>
+    [ObservableProperty]
+    private int _zoomLevel;
+
+    /// <summary>
+    /// Coverage percentage formatted as string (e.g., "85%").
+    /// </summary>
+    [ObservableProperty]
+    private string _coverage = "0%";
+
+    /// <summary>
+    /// Coverage radius in kilometers (e.g., "835 km", "7.5 km").
+    /// </summary>
+    [ObservableProperty]
+    private string _areaKm = "0 km";
 }

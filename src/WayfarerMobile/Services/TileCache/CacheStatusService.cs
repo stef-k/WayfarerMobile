@@ -9,7 +9,7 @@ namespace WayfarerMobile.Services.TileCache;
 /// cache status when location changes. Does NOT run on startup.
 /// Uses user-configured prefetch radius from settings.
 /// </summary>
-public class CacheStatusService
+public class CacheStatusService : ICacheStatusService
 {
     private readonly ILocationBridge _locationBridge;
     private readonly ISettingsService _settingsService;
@@ -406,34 +406,4 @@ public class CacheStatusService
         var y = (int)Math.Floor((1.0 - Math.Log(Math.Tan(latRad) + 1.0 / Math.Cos(latRad)) / Math.PI) / 2.0 * n);
         return (Math.Max(0, Math.Min((int)n - 1, x)), Math.Max(0, Math.Min((int)n - 1, y)));
     }
-}
-
-/// <summary>
-/// Detailed cache information for a location.
-/// </summary>
-public class DetailedCacheInfo
-{
-    public string Status { get; set; } = "";
-    public int CachedTiles { get; set; }
-    public int TotalTiles { get; set; }
-    public int LiveCachedTiles { get; set; }
-    public int TripCachedTiles { get; set; }
-    public long LocalSizeBytes { get; set; }
-    public double CoveragePercentage { get; set; }
-    public DateTime? LastUpdated { get; set; }
-    public List<ZoomLevelCoverage> ZoomLevelDetails { get; set; } = new();
-}
-
-/// <summary>
-/// Cache coverage for a specific zoom level.
-/// </summary>
-public class ZoomLevelCoverage
-{
-    public int ZoomLevel { get; set; }
-    public int TotalTiles { get; set; }
-    public int CachedTiles { get; set; }
-    public int LiveCachedTiles { get; set; }
-    public int TripCachedTiles { get; set; }
-    public double CoveragePercentage { get; set; }
-    public string PrimaryCacheSource { get; set; } = "None";
 }
