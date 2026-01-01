@@ -289,6 +289,19 @@ public partial class DiagnosticsViewModel : BaseViewModel
 
     #endregion
 
+    #region Zoom Coverage Properties
+
+    [ObservableProperty]
+    private bool _hasZoomCoverage;
+
+    [ObservableProperty]
+    private string _overallCoverage = "—";
+
+    [ObservableProperty]
+    private ObservableCollection<ZoomCoverageItem> _zoomCoverageItems = [];
+
+    #endregion
+
     #region Tracking Properties
 
     [ObservableProperty]
@@ -391,6 +404,19 @@ public partial class DiagnosticsViewModel : BaseViewModel
             UpdateTileCache(await cacheTask);
             UpdateTracking(await trackingTask);
             UpdateNavigation(await navTask);
+
+            // Load zoom coverage (requires current location)
+            var location = _locationBridge.LastLocation;
+            if (location != null)
+            {
+                var coverage = await _appDiagnosticService.GetCacheCoverageAsync(
+                    location.Latitude, location.Longitude);
+                UpdateZoomCoverage(coverage);
+            }
+            else
+            {
+                HasZoomCoverage = false;
+            }
 
             // Load queue details
             await LoadQueueDetailsAsync();
@@ -958,5 +984,52 @@ public partial class DiagnosticsViewModel : BaseViewModel
         GcCollections = $"Gen0: {memoryInfo.Gen0Collections}, Gen1: {memoryInfo.Gen1Collections}, Gen2: {memoryInfo.Gen2Collections}";
     }
 
+    private void UpdateZoomCoverage(CacheCoverageInfo? info)
+    {
+        if (info == null || info.CoverageByZoom.Count == 0)
+        {
+            HasZoomCoverage = false;
+            return;
+        }
+
+        HasZoomCoverage = true;
+        OverallCoverage = $"{info.OverallCoveragePercent:F0}%";
+
+        ZoomCoverageItems.Clear();
+        foreach (var (zoom, coverage) in info.CoverageByZoom.OrderBy(kv => kv.Key))
+        {
+            ZoomCoverageItems.Add(new ZoomCoverageItem
+            {
+                ZoomLevel = zoom,
+                Coverage = $"{coverage.CoveragePercent:F0}%",
+                Tiles = $"{coverage.CachedTiles}/{coverage.TotalTiles}"
+            });
+        }
+    }
+
     #endregion
+}
+
+/// <summary>
+/// Display model for zoom level cache coverage in diagnostics.
+/// </summary>
+public partial class ZoomCoverageItem : ObservableObject
+{
+    /// <summary>
+    /// The zoom level (8-17).
+    /// </summary>
+    [ObservableProperty]
+    private int _zoomLevel;
+
+    /// <summary>
+    /// Coverage percentage formatted as string (e.g., "85%").
+    /// </summary>
+    [ObservableProperty]
+    private string _coverage = "0%";
+
+    /// <summary>
+    /// Tile counts formatted as string (e.g., "95/121").
+    /// </summary>
+    [ObservableProperty]
+    private string _tiles = "0/0";
 }

@@ -117,8 +117,8 @@ public class CacheOverlayService
             map.Layers.Add(_overlayLayer);
             map.Layers.Add(_labelsLayer);
 
-            // Zoom out to fit all circles (largest is zoom level 10)
-            var largestRadius = GetRadiusForZoom(10);
+            // Zoom out to fit all circles (largest is zoom level 8)
+            var largestRadius = GetRadiusForZoom(TileCacheConstants.MinZoomLevel, latitude);
             var (centerX, centerY) = SphericalMercator.FromLonLat(longitude, latitude);
             var extent = new MRect(
                 centerX - largestRadius * 1.2,
@@ -247,7 +247,7 @@ public class CacheOverlayService
         try
         {
             var (x, y) = SphericalMercator.FromLonLat(lon, lat);
-            var radius = GetRadiusForZoom(zoom);
+            var radius = GetRadiusForZoom(zoom, lat);
 
             // Create circle geometry with fewer segments for faster rendering
             var factory = new GeometryFactory();
@@ -280,7 +280,7 @@ public class CacheOverlayService
         try
         {
             var (x, y) = SphericalMercator.FromLonLat(lon, lat);
-            var radius = GetRadiusForZoom(zoom);
+            var radius = GetRadiusForZoom(zoom, lat);
 
             // Offset labels to avoid overlap
             var angle = (zoom - 12) * 60.0 * Math.PI / 180.0;
@@ -310,23 +310,17 @@ public class CacheOverlayService
         }
     }
 
-    private static double GetRadiusForZoom(int zoom)
+    /// <summary>
+    /// Calculates the circle radius in meters for a given zoom level.
+    /// Uses the prefetch radius setting and tile math to show actual coverage area.
+    /// </summary>
+    /// <param name="zoom">The zoom level (8-17).</param>
+    /// <param name="latitude">The latitude in degrees.</param>
+    /// <returns>Circle radius in meters.</returns>
+    private double GetRadiusForZoom(int zoom, double latitude)
     {
-        // Radius decreases with higher zoom levels (covers all prefetch zoom levels 8-17)
-        return zoom switch
-        {
-            8 => 12000,
-            9 => 9000,
-            10 => 6000,
-            11 => 4500,
-            12 => 3000,
-            13 => 2000,
-            14 => 1500,
-            15 => 1000,
-            16 => 700,
-            17 => 500,
-            _ => 1000
-        };
+        int prefetchRadius = _settingsService.LiveCachePrefetchRadius;
+        return TileCacheConstants.CalculatePrefetchRadiusMeters(prefetchRadius, zoom, latitude);
     }
 
     private static Color GetColorForCoverage(double coverage)

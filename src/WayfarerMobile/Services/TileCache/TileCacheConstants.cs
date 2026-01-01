@@ -54,4 +54,43 @@ public static class TileCacheConstants
     /// Default tile request timeout in milliseconds.
     /// </summary>
     public const int TileTimeoutMs = 10000;
+
+    #region Tile Size Calculations
+
+    /// <summary>
+    /// Earth's circumference in meters (WGS84 equatorial).
+    /// Used for Web Mercator tile size calculations.
+    /// </summary>
+    public const double EarthCircumferenceMeters = 40_075_016.686;
+
+    /// <summary>
+    /// Calculates the size of a single tile in meters at a specific latitude and zoom.
+    /// Formula: (EarthCircumference / 2^zoom) * cos(latitude)
+    /// </summary>
+    /// <param name="zoom">The zoom level (8-17).</param>
+    /// <param name="latitudeRadians">The latitude in radians.</param>
+    /// <returns>Tile size in meters.</returns>
+    public static double GetTileSizeMeters(int zoom, double latitudeRadians)
+    {
+        double tilesAtZoom = 1 << zoom; // 2^zoom
+        double tileSizeAtEquator = EarthCircumferenceMeters / tilesAtZoom;
+        return tileSizeAtEquator * Math.Cos(latitudeRadians);
+    }
+
+    /// <summary>
+    /// Calculates the prefetch coverage radius in meters based on tile radius and zoom.
+    /// Uses diagonal distance (sqrt(2)) since prefetch covers a square grid of tiles.
+    /// </summary>
+    /// <param name="prefetchRadius">The prefetch radius in tiles (1-10).</param>
+    /// <param name="zoom">The zoom level (8-17).</param>
+    /// <param name="latitude">The latitude in degrees.</param>
+    /// <returns>Coverage radius in meters (diagonal from center to corner of tile grid).</returns>
+    public static double CalculatePrefetchRadiusMeters(int prefetchRadius, int zoom, double latitude)
+    {
+        double latRad = latitude * Math.PI / 180.0;
+        double tileSizeMeters = GetTileSizeMeters(zoom, latRad);
+        return prefetchRadius * Math.Sqrt(2) * tileSizeMeters;
+    }
+
+    #endregion
 }
