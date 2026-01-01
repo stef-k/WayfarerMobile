@@ -6,26 +6,62 @@
 
 ---
 
+## Peer Review Summary
+
+**Reviewed by:** Architect Reviewer, Code Reviewer
+**Review Date:** 2026-01-01
+
+### Critical Issues Identified
+
+| Issue | Severity | Resolution |
+|-------|----------|------------|
+| **Namespace strategy** - Using `WayfarerMobile.Core.Interfaces` for files in `WayfarerMobile/Interfaces/` is a "semantic lie" | HIGH | Use `WayfarerMobile.Interfaces` namespace for MAUI-dependent interfaces |
+| **Test infrastructure collision** - `TripDownloadTypes.cs` uses same namespace as production types | HIGH | Change test namespace to `WayfarerMobile.Tests.Infrastructure` |
+| **Event args location** - Pure event arg types from ITripDownloadService should be in Core | MEDIUM | Move 8 event args types to Core, keep interface in MAUI |
+| **Phase 1 ordering** - Sync event args must be extracted before sync interfaces | MEDIUM | Add explicit sub-step ordering |
+
+### Additional Findings
+
+- **Missing navigation interfaces:** Verify if `OsrmRoutingService` and `RouteCacheService` need interfaces
+- **DIP violation:** `ITripDownloadService` returns SQLite entities (track as separate refactor)
+- **Missing test file:** Add `GroupsServiceTests.cs` to test impact table
+- **Phase 1 consumers:** Document ViewModels consuming sync interfaces
+
+### Decision: Namespace Strategy
+
+**APPROVED CHANGE:** MAUI-dependent interfaces will use `WayfarerMobile.Interfaces` namespace (not `WayfarerMobile.Core.Interfaces`).
+
+**Rationale:**
+- Namespace should reflect actual file location
+- Test project cannot access MAUI project types - namespace makes this explicit
+- Consumers already need separate `using` statements for Mapsui types
+
+**Impact:** Files moving to `WayfarerMobile/Interfaces/` will need namespace change from `WayfarerMobile.Core.Interfaces` to `WayfarerMobile.Interfaces`.
+
+---
+
 ## Executive Summary
 
 Interface definitions are scattered across three locations:
 1. `src/WayfarerMobile/Core/Interfaces/` - **17 interfaces** (WRONG location)
-2. `src/WayfarerMobile.Core/Interfaces/` - **11 interfaces** (TARGET location)
+2. `src/WayfarerMobile.Core/Interfaces/` - **11 interfaces** (TARGET for pure interfaces)
 3. **Embedded in service files** - **4 interfaces + helper types**
 
 Additionally, `TripNavigationService` has **no interface** at all.
 
-### Key Finding: Show-Stopper Dependencies
+### Consolidation Strategy
 
-Several interfaces in `WayfarerMobile/Core/Interfaces/` have **Mapsui dependencies** that prevent simple file moves to `WayfarerMobile.Core`:
-- Mapsui is a MAUI-only NuGet package
-- `WayfarerMobile.Core` is a net10.0 class library with no MAUI dependencies
-- Adding Mapsui to Core would defeat its purpose as a lightweight shared library
+**Two-location model based on dependencies:**
 
-**Resolution Options:**
-1. **Keep Mapsui-dependent interfaces in WayfarerMobile** (but consolidate namespace)
-2. **Abstract away Mapsui types** (significant refactor)
-3. **Accept dual locations** with clear reasoning
+| Location | Namespace | Criteria | Count |
+|----------|-----------|----------|-------|
+| `WayfarerMobile.Core/Interfaces/` | `WayfarerMobile.Core.Interfaces` | Pure interfaces with no MAUI/platform dependencies | **20** |
+| `WayfarerMobile/Interfaces/` | `WayfarerMobile.Interfaces` | Interfaces depending on Mapsui, SQLite entities, or MAUI-specific types | **10** |
+
+This maintains clean architectural separation:
+- `WayfarerMobile.Core` remains a lightweight net10.0 library with no MAUI dependencies
+- `WayfarerMobile/Interfaces/` houses platform-specific abstractions with honest namespace
+- Pure event args types (e.g., `DownloadProgressEventArgs`) go to Core even if the interface stays in MAUI
 
 ---
 
@@ -33,49 +69,40 @@ Several interfaces in `WayfarerMobile/Core/Interfaces/` have **Mapsui dependenci
 
 ### Category A: Interfaces in `WayfarerMobile/Core/Interfaces/` (17 total)
 
-All use namespace `WayfarerMobile.Core.Interfaces` - so **no namespace changes needed** if we just move files.
+Currently all use namespace `WayfarerMobile.Core.Interfaces`. After refactor:
+- **9 clean interfaces** → keep `WayfarerMobile.Core.Interfaces` namespace
+- **8 MAUI-dependent interfaces** → change to `WayfarerMobile.Interfaces` namespace
 
-#### A1. Mapsui-Dependent Interfaces (SHOW-STOPPERS for Core project)
+#### A1. MAUI-Dependent Interfaces (Stay in WayfarerMobile)
 
-| Interface | File | Mapsui Dependencies | Consumers |
-|-----------|------|---------------------|-----------|
-| `IMapBuilder` | IMapBuilder.cs | `Map`, `WritableLayer`, `MPoint` | MapBuilder, tests |
-| `ITripLayerService` | ITripLayerService.cs | `WritableLayer`, `MPoint` | TripLayerService, MainViewModel |
-| `ILocationLayerService` | ILocationLayerService.cs | `WritableLayer`, `MPoint` | LocationLayerService, MainViewModel |
-| `ITimelineLayerService` | ITimelineLayerService.cs | `WritableLayer`, `MPoint` | TimelineLayerService, TimelineViewModel |
-| `IGroupLayerService` | IGroupLayerService.cs | `WritableLayer`, `MPoint` | GroupLayerService, GroupsViewModel |
-| `IDroppedPinLayerService` | IDroppedPinLayerService.cs | `WritableLayer` | DroppedPinLayerService, MainViewModel |
+| Interface | File | MAUI Dependencies | Target |
+|-----------|------|-------------------|--------|
+| `IMapBuilder` | IMapBuilder.cs | Mapsui: `Map`, `WritableLayer`, `MPoint` | `WayfarerMobile/Interfaces/` |
+| `ITripLayerService` | ITripLayerService.cs | Mapsui: `WritableLayer`, `MPoint` | `WayfarerMobile/Interfaces/` |
+| `ILocationLayerService` | ILocationLayerService.cs | Mapsui: `WritableLayer`, `MPoint` | `WayfarerMobile/Interfaces/` |
+| `ITimelineLayerService` | ITimelineLayerService.cs | Mapsui: `WritableLayer`, `MPoint` | `WayfarerMobile/Interfaces/` |
+| `IGroupLayerService` | IGroupLayerService.cs | Mapsui: `WritableLayer`, `MPoint` | `WayfarerMobile/Interfaces/` |
+| `IDroppedPinLayerService` | IDroppedPinLayerService.cs | Mapsui: `WritableLayer` | `WayfarerMobile/Interfaces/` |
+| `ITripDownloadService` | ITripDownloadService.cs | SQLite: `DownloadedTripEntity`, `TripDownloadStateEntity` | `WayfarerMobile/Interfaces/` |
+| `IActivitySyncService` | IActivitySyncService.cs | SQLite: `ActivityType` entity | `WayfarerMobile/Interfaces/` |
 
-**Impact:** Cannot move to `WayfarerMobile.Core/Interfaces/` without adding Mapsui dependency to Core project.
+**Total:** 8 interfaces → `WayfarerMobile/Interfaces/`
 
-**Recommendation:** Keep in a dedicated folder within WayfarerMobile project, e.g., `src/WayfarerMobile/Interfaces/Map/`
+#### A2. Clean Interfaces (Move to Core)
 
-#### A2. Data Entity-Dependent Interfaces
+| Interface | File | Dependencies | Target |
+|-----------|------|--------------|--------|
+| `IApiClient` | IApiClient.cs | `WayfarerMobile.Core.Models` only | `WayfarerMobile.Core/Interfaces/` |
+| `ILocationBridge` | ILocationBridge.cs | `WayfarerMobile.Core.Enums`, `.Models` | `WayfarerMobile.Core/Interfaces/` |
+| `IPermissionsService` | IPermissionsService.cs | None (self-contained) | `WayfarerMobile.Core/Interfaces/` |
+| `INavigationAudioService` | INavigationAudioService.cs | None | `WayfarerMobile.Core/Interfaces/` |
+| `IWakeLockService` | IWakeLockService.cs | None | `WayfarerMobile.Core/Interfaces/` |
+| `IAppLifecycleService` | IAppLifecycleService.cs | None (self-contained) | `WayfarerMobile.Core/Interfaces/` |
+| `IExceptionHandlerService` | IExceptionHandlerService.cs | None | `WayfarerMobile.Core/Interfaces/` |
+| `IGroupsService` | IGroupsService.cs | `WayfarerMobile.Core.Models` only | `WayfarerMobile.Core/Interfaces/` |
+| `IAppLockService` | IAppLockService.cs | None | `WayfarerMobile.Core/Interfaces/` |
 
-| Interface | File | Problematic Dependencies | Can Move to Core? |
-|-----------|------|--------------------------|-------------------|
-| `ITripDownloadService` | ITripDownloadService.cs | `WayfarerMobile.Data.Entities.DownloadedTripEntity`, `TripDownloadStateEntity` | **NO** - references SQLite entities |
-| `IActivitySyncService` | IActivitySyncService.cs | `WayfarerMobile.Data.Entities.ActivityType` | **NO** - references SQLite entities |
-
-**Impact:** These interfaces reference SQLite entity types that only exist in the MAUI project.
-
-**Recommendation:** Keep in WayfarerMobile project or extract entity interfaces.
-
-#### A3. Clean Interfaces (CAN move to Core)
-
-| Interface | File | Dependencies | Lines | Can Move? |
-|-----------|------|--------------|-------|-----------|
-| `IApiClient` | IApiClient.cs | `WayfarerMobile.Core.Models` only | 336 | **YES** |
-| `ILocationBridge` | ILocationBridge.cs | `WayfarerMobile.Core.Enums`, `.Models` | 63 | **YES** |
-| `IPermissionsService` | IPermissionsService.cs | None (self-contained) | 89 | **YES** |
-| `INavigationAudioService` | INavigationAudioService.cs | None | 62 | **YES** |
-| `IWakeLockService` | IWakeLockService.cs | None | 25 | **YES** |
-| `IAppLifecycleService` | IAppLifecycleService.cs | None (self-contained) | 72 | **YES** |
-| `IExceptionHandlerService` | IExceptionHandlerService.cs | None | 29 | **YES** |
-| `IGroupsService` | IGroupsService.cs | `WayfarerMobile.Core.Models` only | 63 | **YES** |
-| `IAppLockService` | IAppLockService.cs | None | 132 | **YES** |
-
-**Total moveable:** 9 interfaces
+**Total:** 9 interfaces → `WayfarerMobile.Core/Interfaces/`
 
 ---
 
@@ -101,16 +128,17 @@ These are correctly placed. No action needed.
 
 ### Category C: Interfaces Embedded in Service Files (4 total)
 
-| Interface | Embedded In | Helper Types Also Embedded | Lines |
-|-----------|-------------|---------------------------|-------|
-| `ITripSyncService` | TripSyncService.cs:1808 | `SyncFailureEventArgs`, `SyncQueuedEventArgs`, `SyncSuccessEventArgs`, `EntityCreatedEventArgs` | ~100 |
-| `ITimelineSyncService` | TimelineSyncService.cs:579 | Shares sync event args with TripSyncService | ~50 |
-| `IDownloadNotificationService` | DownloadNotificationService.cs:10 | `InterruptedDownloadInfo`, `DownloadInterruptionReason` | ~120 |
-| `IWikipediaService` | WikipediaService.cs:11 | `WikipediaSearchResult` | ~30 |
+| Interface | Embedded In | Helper Types Also Embedded | Target |
+|-----------|-------------|---------------------------|--------|
+| `ITripSyncService` | TripSyncService.cs:1808 | `SyncFailureEventArgs`, `SyncQueuedEventArgs`, `SyncSuccessEventArgs`, `EntityCreatedEventArgs` | `WayfarerMobile.Core/Interfaces/` |
+| `ITimelineSyncService` | TimelineSyncService.cs:579 | Shares sync event args with TripSyncService | `WayfarerMobile.Core/Interfaces/` |
+| `IDownloadNotificationService` | DownloadNotificationService.cs:10 | `InterruptedDownloadInfo`, `DownloadInterruptionReason` | `WayfarerMobile/Interfaces/` |
+| `IWikipediaService` | WikipediaService.cs:11 | `WikipediaSearchResult` | `WayfarerMobile/Interfaces/` |
 
-**Impact:**
-- Must extract interface + helper types together
-- Sync event args are shared between TripSyncService and TimelineSyncService
+**Notes:**
+- Sync event args are shared between TripSyncService and TimelineSyncService → extract to `SyncEventArgs.cs`
+- ITripSyncService and ITimelineSyncService have no MAUI dependencies → go to Core
+- IDownloadNotificationService and IWikipediaService are MAUI-specific → stay in WayfarerMobile
 
 ---
 
@@ -127,13 +155,15 @@ These are correctly placed. No action needed.
 - `NavigationHudViewModel` (field + constructor injection)
 - `MauiProgram.cs` (DI registration)
 
+**Target:** `WayfarerMobile.Core/Interfaces/ITripNavigationService.cs`
+
 ---
 
 ## Reference Analysis
 
 ### Files Using `WayfarerMobile.Core.Interfaces` Namespace
 
-**78 files** reference this namespace. Key categories:
+**78 files** reference this namespace:
 
 | Location | Count | Examples |
 |----------|-------|----------|
@@ -147,16 +177,13 @@ These are correctly placed. No action needed.
 ### Test Infrastructure
 
 Test project has its own copies of types in `tests/WayfarerMobile.Tests/Infrastructure/TripDownloadTypes.cs`:
-- `DownloadProgressEventArgs`
-- `CacheLimitEventArgs`
-- `CacheLimitLevel`
-- `CacheLimitCheckResult`
-- `CacheQuotaCheckResult`
-- `DownloadTerminalEventArgs`
-- `DownloadPausedEventArgs`
-- `DownloadPauseReasonType`
+- `DownloadProgressEventArgs`, `CacheLimitEventArgs`, `CacheLimitLevel`
+- `CacheLimitCheckResult`, `CacheQuotaCheckResult`
+- `DownloadTerminalEventArgs`, `DownloadPausedEventArgs`, `DownloadPauseReasonType`
 
 **Reason:** Test project targets net10.0 and cannot reference MAUI-specific types directly.
+
+**Recommendation:** Keep duplicates but add comment explaining why.
 
 ---
 
@@ -164,18 +191,29 @@ Test project has its own copies of types in `tests/WayfarerMobile.Tests/Infrastr
 
 ### Phase 1: Extract Embedded Interfaces (Low Risk)
 
-| Task | Source | Target | Helper Types |
-|------|--------|--------|--------------|
-| 1.1 | TripSyncService.cs | `WayfarerMobile.Core/Interfaces/ITripSyncService.cs` | Extract sync event args to shared file |
-| 1.2 | TimelineSyncService.cs | `WayfarerMobile.Core/Interfaces/ITimelineSyncService.cs` | Uses shared sync event args |
-| 1.3 | DownloadNotificationService.cs | `WayfarerMobile/Interfaces/IDownloadNotificationService.cs` | `InterruptedDownloadInfo`, `DownloadInterruptionReason` |
-| 1.4 | WikipediaService.cs | `WayfarerMobile/Interfaces/IWikipediaService.cs` | `WikipediaSearchResult` |
+**Execution order matters:**
+1. First extract `SyncEventArgs.cs` (shared event args) - required before sync interfaces
+2. Then extract sync interfaces in parallel
+3. Then extract MAUI-dependent interfaces
 
-**Breaking changes:** None - namespace stays the same
+| Task | Source | Target | Namespace | Helper Types |
+|------|--------|--------|-----------|--------------|
+| 1.0 | TripSyncService.cs:1996-2060 | `WayfarerMobile.Core/Interfaces/SyncEventArgs.cs` | `WayfarerMobile.Core.Interfaces` | 4 event args classes |
+| 1.1 | TripSyncService.cs:1808-1995 | `WayfarerMobile.Core/Interfaces/ITripSyncService.cs` | `WayfarerMobile.Core.Interfaces` | Uses SyncEventArgs.cs |
+| 1.2 | TimelineSyncService.cs:579-626 | `WayfarerMobile.Core/Interfaces/ITimelineSyncService.cs` | `WayfarerMobile.Core.Interfaces` | Uses SyncEventArgs.cs |
+| 1.3 | DownloadNotificationService.cs:10-118 | `WayfarerMobile/Interfaces/IDownloadNotificationService.cs` | `WayfarerMobile.Interfaces` | `InterruptedDownloadInfo`, `DownloadInterruptionReason` |
+| 1.4 | WikipediaService.cs:11-54 | `WayfarerMobile/Interfaces/IWikipediaService.cs` | `WayfarerMobile.Interfaces` | `WikipediaSearchResult` |
+
+**Sync interface consumers (need `using` updates after extraction):**
+- `MainViewModel.cs`, `MarkerEditorViewModel.cs`, `NotesEditorViewModel.cs`
+- `TimelineViewModel.cs`, `TripsViewModel.cs`, `TripDownloadService.cs`
+
+**Breaking changes:**
+- MAUI-dependent interfaces (1.3, 1.4) get new namespace → consumer files need `using WayfarerMobile.Interfaces;`
 
 ### Phase 2: Move Clean Interfaces to Core (Low Risk)
 
-Move these 9 interfaces from `WayfarerMobile/Core/Interfaces/` to `WayfarerMobile.Core/Interfaces/`:
+Move 9 interfaces from `WayfarerMobile/Core/Interfaces/` to `WayfarerMobile.Core/Interfaces/`:
 
 | Interface | Helper Types to Move |
 |-----------|---------------------|
@@ -191,48 +229,50 @@ Move these 9 interfaces from `WayfarerMobile/Core/Interfaces/` to `WayfarerMobil
 
 **Breaking changes:** None - namespace stays the same
 
-### Phase 3: Consolidate Mapsui-Dependent Interfaces (Medium Risk)
+### Phase 3: Move MAUI-Dependent Interfaces (Medium Risk)
 
-Move from `WayfarerMobile/Core/Interfaces/` to `WayfarerMobile/Interfaces/Map/`:
+Move 8 interfaces from `WayfarerMobile/Core/Interfaces/` to `WayfarerMobile/Interfaces/`:
 
-| Interface | Reason |
-|-----------|--------|
-| `IMapBuilder` | Mapsui dependency |
-| `ITripLayerService` | Mapsui dependency |
-| `ILocationLayerService` | Mapsui dependency |
-| `ITimelineLayerService` | Mapsui dependency |
-| `IGroupLayerService` | Mapsui dependency |
-| `IDroppedPinLayerService` | Mapsui dependency |
+| Interface | Dependency Type | Namespace Change |
+|-----------|-----------------|------------------|
+| `IMapBuilder` | Mapsui | → `WayfarerMobile.Interfaces` |
+| `ITripLayerService` | Mapsui | → `WayfarerMobile.Interfaces` |
+| `ILocationLayerService` | Mapsui | → `WayfarerMobile.Interfaces` |
+| `ITimelineLayerService` | Mapsui | → `WayfarerMobile.Interfaces` |
+| `IGroupLayerService` | Mapsui | → `WayfarerMobile.Interfaces` |
+| `IDroppedPinLayerService` | Mapsui | → `WayfarerMobile.Interfaces` |
+| `ITripDownloadService` | SQLite entities | → `WayfarerMobile.Interfaces` |
+| `IActivitySyncService` | SQLite entities | → `WayfarerMobile.Interfaces` |
 
-**Breaking changes:** None - namespace stays the same
+**Special handling for ITripDownloadService:**
+- **Interface** stays in `WayfarerMobile/Interfaces/` (has SQLite entity dependencies)
+- **Event args types** (pure C# records) move to `WayfarerMobile.Core/Interfaces/DownloadEventArgs.cs`:
+  - `DownloadProgressEventArgs`, `CacheLimitEventArgs`, `CacheLimitLevel`
+  - `CacheLimitCheckResult`, `CacheQuotaCheckResult`
+  - `DownloadTerminalEventArgs`, `DownloadPausedEventArgs`, `DownloadPauseReasonType`
 
-### Phase 4: Handle Entity-Dependent Interfaces (Medium Risk)
+**Breaking changes:**
+- All 8 interfaces change namespace → consumers need `using WayfarerMobile.Interfaces;`
+- Update `tests/WayfarerMobile.Tests/Infrastructure/TripDownloadTypes.cs` namespace to `WayfarerMobile.Tests.Infrastructure` to avoid collision
 
-Move from `WayfarerMobile/Core/Interfaces/` to `WayfarerMobile/Interfaces/`:
-
-| Interface | Reason |
-|-----------|--------|
-| `ITripDownloadService` | References `DownloadedTripEntity`, `TripDownloadStateEntity` |
-| `IActivitySyncService` | References `ActivityType` entity |
-
-**Breaking changes:** None - namespace stays the same
-
-### Phase 5: Create Missing Interface (Low Risk)
+### Phase 4: Create Missing Interface (Low Risk)
 
 Create `ITripNavigationService` interface:
-- Extract from `TripNavigationService` class
+- Extract public API from `TripNavigationService` class
+- Place in `WayfarerMobile.Core/Interfaces/`
 - Update DI registration to interface
-- Update all consumers
+- Update all 4 ViewModel consumers
 
 **Breaking changes:**
 - `MauiProgram.cs` DI registration change
 - 4 ViewModel constructor parameter type changes
 
-### Phase 6: Cleanup (Low Risk)
+### Phase 5: Cleanup (Low Risk)
 
 - Delete empty `WayfarerMobile/Core/Interfaces/` directory
-- Update any stale imports
+- Verify all imports resolve correctly
 - Run full test suite
+- Build Android + iOS
 
 ---
 
@@ -245,32 +285,32 @@ Create `ITripNavigationService` interface:
 | `src/WayfarerMobile.Core/Interfaces/ITripSyncService.cs` | Extracted from TripSyncService.cs |
 | `src/WayfarerMobile.Core/Interfaces/ITimelineSyncService.cs` | Extracted from TimelineSyncService.cs |
 | `src/WayfarerMobile.Core/Interfaces/SyncEventArgs.cs` | Shared sync event args |
+| `src/WayfarerMobile.Core/Interfaces/ITripNavigationService.cs` | New interface for TripNavigationService |
 | `src/WayfarerMobile/Interfaces/IDownloadNotificationService.cs` | Extracted from DownloadNotificationService.cs |
 | `src/WayfarerMobile/Interfaces/IWikipediaService.cs` | Extracted from WikipediaService.cs |
-| `src/WayfarerMobile/Interfaces/Map/` | Directory for Mapsui-dependent interfaces |
-| `src/WayfarerMobile.Core/Interfaces/ITripNavigationService.cs` | New interface for TripNavigationService |
 
 ### Files to MOVE
 
-| From | To |
-|------|-----|
-| `WayfarerMobile/Core/Interfaces/IApiClient.cs` | `WayfarerMobile.Core/Interfaces/` |
-| `WayfarerMobile/Core/Interfaces/ILocationBridge.cs` | `WayfarerMobile.Core/Interfaces/` |
-| `WayfarerMobile/Core/Interfaces/IPermissionsService.cs` | `WayfarerMobile.Core/Interfaces/` |
-| `WayfarerMobile/Core/Interfaces/INavigationAudioService.cs` | `WayfarerMobile.Core/Interfaces/` |
-| `WayfarerMobile/Core/Interfaces/IWakeLockService.cs` | `WayfarerMobile.Core/Interfaces/` |
-| `WayfarerMobile/Core/Interfaces/IAppLifecycleService.cs` | `WayfarerMobile.Core/Interfaces/` |
-| `WayfarerMobile/Core/Interfaces/IExceptionHandlerService.cs` | `WayfarerMobile.Core/Interfaces/` |
-| `WayfarerMobile/Core/Interfaces/IGroupsService.cs` | `WayfarerMobile.Core/Interfaces/` |
-| `WayfarerMobile/Core/Interfaces/IAppLockService.cs` | `WayfarerMobile.Core/Interfaces/` |
-| `WayfarerMobile/Core/Interfaces/IMapBuilder.cs` | `WayfarerMobile/Interfaces/Map/` |
-| `WayfarerMobile/Core/Interfaces/ITripLayerService.cs` | `WayfarerMobile/Interfaces/Map/` |
-| `WayfarerMobile/Core/Interfaces/ILocationLayerService.cs` | `WayfarerMobile/Interfaces/Map/` |
-| `WayfarerMobile/Core/Interfaces/ITimelineLayerService.cs` | `WayfarerMobile/Interfaces/Map/` |
-| `WayfarerMobile/Core/Interfaces/IGroupLayerService.cs` | `WayfarerMobile/Interfaces/Map/` |
-| `WayfarerMobile/Core/Interfaces/IDroppedPinLayerService.cs` | `WayfarerMobile/Interfaces/Map/` |
-| `WayfarerMobile/Core/Interfaces/ITripDownloadService.cs` | `WayfarerMobile/Interfaces/` |
-| `WayfarerMobile/Core/Interfaces/IActivitySyncService.cs` | `WayfarerMobile/Interfaces/` |
+**To `WayfarerMobile.Core/Interfaces/`:**
+- `IApiClient.cs` (with `ApiResult`, `ServerSettings`)
+- `ILocationBridge.cs`
+- `IPermissionsService.cs` (with `PermissionRequestResult`)
+- `INavigationAudioService.cs`
+- `IWakeLockService.cs`
+- `IAppLifecycleService.cs` (with `NavigationStateSnapshot`)
+- `IExceptionHandlerService.cs`
+- `IGroupsService.cs`
+- `IAppLockService.cs`
+
+**To `WayfarerMobile/Interfaces/`:**
+- `IMapBuilder.cs`
+- `ITripLayerService.cs`
+- `ILocationLayerService.cs`
+- `ITimelineLayerService.cs`
+- `IGroupLayerService.cs`
+- `IDroppedPinLayerService.cs`
+- `ITripDownloadService.cs` (with event args, enums, result types)
+- `IActivitySyncService.cs`
 
 ### Files to MODIFY
 
@@ -280,56 +320,18 @@ Create `ITripNavigationService` interface:
 | `TimelineSyncService.cs` | Remove embedded interface |
 | `DownloadNotificationService.cs` | Remove embedded interface + types |
 | `WikipediaService.cs` | Remove embedded interface + result class |
-| `TripNavigationService.cs` | Implement new interface |
-| `MauiProgram.cs` | Update TripNavigationService DI registration |
-| `MainViewModel.cs` | Change TripNavigationService to ITripNavigationService |
-| `TripsViewModel.cs` | Change TripNavigationService to ITripNavigationService |
-| `GroupsViewModel.cs` | Change TripNavigationService to ITripNavigationService |
-| `NavigationHudViewModel.cs` | Change TripNavigationService to ITripNavigationService |
+| `TripNavigationService.cs` | Implement `ITripNavigationService` |
+| `MauiProgram.cs` | Update DI: `ITripNavigationService` registration |
+| `MainViewModel.cs` | Change field/param: `ITripNavigationService` |
+| `TripsViewModel.cs` | Change field/param: `ITripNavigationService` |
+| `GroupsViewModel.cs` | Change field/param: `ITripNavigationService` |
+| `NavigationHudViewModel.cs` | Change field/param: `ITripNavigationService` |
 
-### Files to DELETE
+### Files/Directories to DELETE
 
-| File | Reason |
+| Path | Reason |
 |------|--------|
-| `WayfarerMobile/Core/Interfaces/` (entire directory) | Emptied after moves |
-
----
-
-## Test Impact
-
-### Tests That May Need Updates
-
-| Test File | Potential Impact |
-|-----------|-----------------|
-| `TripDownloadServiceTests.cs` | Uses mock types from Infrastructure |
-| `MapBuilderTests.cs` | Uses Mapsui types directly |
-| `TripLayerServiceTests.cs` | Uses Mapsui types |
-| `LocationLayerServiceTests.cs` | Uses Mapsui types |
-| `TimelineLayerServiceTests.cs` | Uses Mapsui types |
-| `GroupLayerServiceTests.cs` | Uses Mapsui types |
-| `DroppedPinLayerServiceTests.cs` | Uses Mapsui types |
-
-### Test Infrastructure Duplication
-
-The file `tests/WayfarerMobile.Tests/Infrastructure/TripDownloadTypes.cs` duplicates types from `ITripDownloadService.cs`. This is intentional because:
-- Test project is net10.0 (not MAUI)
-- Cannot reference MAUI project directly
-- Types needed for test mocking
-
-**Recommendation:** Keep duplicates but add comment explaining why.
-
----
-
-## Risk Assessment
-
-| Phase | Risk | Mitigation |
-|-------|------|------------|
-| Phase 1: Extract embedded | Low | Namespace unchanged, pure extraction |
-| Phase 2: Move clean interfaces | Low | File moves only, no code changes |
-| Phase 3: Mapsui interfaces | Medium | New folder structure, test path updates |
-| Phase 4: Entity interfaces | Medium | New folder structure |
-| Phase 5: Create ITripNavigationService | Low | New interface, straightforward DI update |
-| Phase 6: Cleanup | Low | Just delete empty directory |
+| `WayfarerMobile/Core/Interfaces/` | Empty after all moves |
 
 ---
 
@@ -337,63 +339,131 @@ The file `tests/WayfarerMobile.Tests/Infrastructure/TripDownloadTypes.cs` duplic
 
 ```
 src/
-├── WayfarerMobile.Core/
+├── WayfarerMobile.Core/                        # namespace: WayfarerMobile.Core.Interfaces
 │   └── Interfaces/
-│       ├── ISettingsService.cs          (existing)
-│       ├── IToastService.cs             (existing)
-│       ├── IDialogService.cs            (existing)
-│       ├── ICacheStatusService.cs       (existing)
-│       ├── ILocalNotificationService.cs (existing)
-│       ├── ILocationSyncEventBridge.cs  (existing)
-│       ├── ISseClientFactory.cs         (existing)
-│       ├── ISseClient.cs                (existing)
-│       ├── ITextToSpeechService.cs      (existing)
-│       ├── IVisitApiClient.cs           (existing)
-│       ├── IVisitNotificationService.cs (existing)
-│       ├── IApiClient.cs                (MOVED)
-│       ├── ILocationBridge.cs           (MOVED)
-│       ├── IPermissionsService.cs       (MOVED)
-│       ├── INavigationAudioService.cs   (MOVED)
-│       ├── IWakeLockService.cs          (MOVED)
-│       ├── IAppLifecycleService.cs      (MOVED)
-│       ├── IExceptionHandlerService.cs  (MOVED)
-│       ├── IGroupsService.cs            (MOVED)
-│       ├── IAppLockService.cs           (MOVED)
-│       ├── ITripSyncService.cs          (EXTRACTED)
-│       ├── ITimelineSyncService.cs      (EXTRACTED)
-│       ├── ITripNavigationService.cs    (NEW)
-│       └── SyncEventArgs.cs             (NEW - shared)
+│       ├── ISettingsService.cs                 (existing)
+│       ├── IToastService.cs                    (existing)
+│       ├── IDialogService.cs                   (existing)
+│       ├── ICacheStatusService.cs              (existing)
+│       ├── ILocalNotificationService.cs        (existing)
+│       ├── ILocationSyncEventBridge.cs         (existing)
+│       ├── ISseClientFactory.cs                (existing)
+│       ├── ISseClient.cs                       (existing)
+│       ├── ITextToSpeechService.cs             (existing)
+│       ├── IVisitApiClient.cs                  (existing)
+│       ├── IVisitNotificationService.cs        (existing)
+│       ├── IApiClient.cs                       (MOVED from WayfarerMobile)
+│       ├── ILocationBridge.cs                  (MOVED)
+│       ├── IPermissionsService.cs              (MOVED)
+│       ├── INavigationAudioService.cs          (MOVED)
+│       ├── IWakeLockService.cs                 (MOVED)
+│       ├── IAppLifecycleService.cs             (MOVED)
+│       ├── IExceptionHandlerService.cs         (MOVED)
+│       ├── IGroupsService.cs                   (MOVED)
+│       ├── IAppLockService.cs                  (MOVED)
+│       ├── ITripSyncService.cs                 (EXTRACTED)
+│       ├── ITimelineSyncService.cs             (EXTRACTED)
+│       ├── ITripNavigationService.cs           (NEW)
+│       ├── SyncEventArgs.cs                    (NEW - 4 sync event args)
+│       └── DownloadEventArgs.cs                (NEW - 8 download event types)
 │
-└── WayfarerMobile/
+└── WayfarerMobile/                             # namespace: WayfarerMobile.Interfaces
     ├── Interfaces/
-    │   ├── IDownloadNotificationService.cs (EXTRACTED)
-    │   ├── IWikipediaService.cs            (EXTRACTED)
-    │   ├── ITripDownloadService.cs         (MOVED)
-    │   ├── IActivitySyncService.cs         (MOVED)
-    │   └── Map/
-    │       ├── IMapBuilder.cs              (MOVED)
-    │       ├── ITripLayerService.cs        (MOVED)
-    │       ├── ILocationLayerService.cs    (MOVED)
-    │       ├── ITimelineLayerService.cs    (MOVED)
-    │       ├── IGroupLayerService.cs       (MOVED)
-    │       └── IDroppedPinLayerService.cs  (MOVED)
+    │   ├── IMapBuilder.cs                      (MOVED, namespace changed)
+    │   ├── ITripLayerService.cs                (MOVED, namespace changed)
+    │   ├── ILocationLayerService.cs            (MOVED, namespace changed)
+    │   ├── ITimelineLayerService.cs            (MOVED, namespace changed)
+    │   ├── IGroupLayerService.cs               (MOVED, namespace changed)
+    │   ├── IDroppedPinLayerService.cs          (MOVED, namespace changed)
+    │   ├── ITripDownloadService.cs             (MOVED, namespace changed, event args extracted)
+    │   ├── IActivitySyncService.cs             (MOVED, namespace changed)
+    │   ├── IDownloadNotificationService.cs     (EXTRACTED, new namespace)
+    │   └── IWikipediaService.cs                (EXTRACTED, new namespace)
     │
     └── Core/
-        └── Interfaces/ (DELETED - empty after refactor)
+        └── Interfaces/                         (DELETED - empty after refactor)
+
+tests/
+└── WayfarerMobile.Tests/
+    └── Infrastructure/
+        └── TripDownloadTypes.cs                (DELETED - no longer needed)
 ```
 
 ---
 
-## Checklist for Implementation
+## Test Impact
 
-- [ ] Phase 1.1: Extract ITripSyncService + sync event args
-- [ ] Phase 1.2: Extract ITimelineSyncService (use shared event args)
-- [ ] Phase 1.3: Extract IDownloadNotificationService + helper types
-- [ ] Phase 1.4: Extract IWikipediaService + WikipediaSearchResult
-- [ ] Phase 2: Move 9 clean interfaces to Core
-- [ ] Phase 3: Create Map/ subfolder, move 6 Mapsui interfaces
-- [ ] Phase 4: Move 2 entity-dependent interfaces
-- [ ] Phase 5: Create ITripNavigationService, update DI + consumers
-- [ ] Phase 6: Delete WayfarerMobile/Core/Interfaces/
-- [ ] Run all tests
-- [ ] Build Android + iOS
+### Tests That May Need Updates
+
+| Test File | Reason | Action |
+|-----------|--------|--------|
+| `MapBuilderTests.cs` | Uses Mapsui-dependent interface | Add `using WayfarerMobile.Interfaces;` |
+| `TripLayerServiceTests.cs` | Uses Mapsui-dependent interface | Add `using WayfarerMobile.Interfaces;` |
+| `LocationLayerServiceTests.cs` | Uses Mapsui-dependent interface | Add `using WayfarerMobile.Interfaces;` |
+| `TimelineLayerServiceTests.cs` | Uses Mapsui-dependent interface | Add `using WayfarerMobile.Interfaces;` |
+| `GroupLayerServiceTests.cs` | Uses Mapsui-dependent interface | Add `using WayfarerMobile.Interfaces;` |
+| `DroppedPinLayerServiceTests.cs` | Uses Mapsui-dependent interface | Add `using WayfarerMobile.Interfaces;` |
+| `TripDownloadServiceTests.cs` | Uses mock types from Infrastructure | Update namespace reference |
+| `GroupsServiceTests.cs` | Uses `IGroupsService` | Verify import after move |
+
+### Test Infrastructure Duplication
+
+The file `tests/WayfarerMobile.Tests/Infrastructure/TripDownloadTypes.cs` currently duplicates event args types from `ITripDownloadService.cs`.
+
+**After this refactor:**
+- Event args types (`DownloadProgressEventArgs`, etc.) will be in `WayfarerMobile.Core/Interfaces/DownloadEventArgs.cs`
+- Test project can reference these directly from Core
+- `TripDownloadTypes.cs` can be **deleted** (no longer needed)
+
+**Action:**
+1. Before deleting, change namespace to `WayfarerMobile.Tests.Infrastructure` to avoid collision during migration
+2. After Phase 3 completes, delete the file and reference Core types directly
+
+---
+
+## Risk Assessment
+
+| Phase | Risk | Mitigation |
+|-------|------|------------|
+| Phase 1: Extract embedded | Low | Core interfaces keep namespace; MAUI interfaces get new namespace |
+| Phase 2: Move clean to Core | Low | File moves only, namespace unchanged |
+| Phase 3: Move MAUI-dependent | **Medium** | Namespace changes require consumer updates |
+| Phase 4: Create ITripNavigationService | Low | New interface, straightforward DI update |
+| Phase 5: Cleanup | Low | Delete empty directory, delete test duplicates |
+
+**Overall Risk: MEDIUM** - Phase 3 requires namespace changes for 10 interfaces, affecting ~20 consumer files. All changes are mechanical (`using` statement updates) and will cause compile errors if missed (safe failure mode).
+
+---
+
+## Implementation Checklist
+
+- [ ] **Phase 1: Extract Embedded Interfaces**
+  - [ ] 1.0: Extract `SyncEventArgs.cs` (4 event args classes) to Core
+  - [ ] 1.1: Extract `ITripSyncService.cs` to Core
+  - [ ] 1.2: Extract `ITimelineSyncService.cs` to Core
+  - [ ] 1.3: Extract `IDownloadNotificationService.cs` to WayfarerMobile/Interfaces (namespace: `WayfarerMobile.Interfaces`)
+  - [ ] 1.4: Extract `IWikipediaService.cs` to WayfarerMobile/Interfaces (namespace: `WayfarerMobile.Interfaces`)
+  - [ ] Update consumer `using` statements for 1.3 and 1.4
+
+- [ ] **Phase 2: Move Clean Interfaces to Core**
+  - [ ] Move 9 interfaces with their helper types (namespace unchanged)
+
+- [ ] **Phase 3: Move MAUI-Dependent Interfaces**
+  - [ ] Extract `DownloadEventArgs.cs` (8 types) to Core first
+  - [ ] Move 8 interfaces to `WayfarerMobile/Interfaces/`
+  - [ ] Update namespace in each file to `WayfarerMobile.Interfaces`
+  - [ ] Update all consumer `using` statements (~20 files)
+  - [ ] Change `TripDownloadTypes.cs` namespace to `WayfarerMobile.Tests.Infrastructure`
+
+- [ ] **Phase 4: Create ITripNavigationService**
+  - [ ] Verify if `OsrmRoutingService` and `RouteCacheService` need interfaces
+  - [ ] Create `ITripNavigationService` interface in Core
+  - [ ] Update `TripNavigationService` to implement interface
+  - [ ] Update DI registration in `MauiProgram.cs`
+  - [ ] Update 4 ViewModel consumers
+
+- [ ] **Phase 5: Cleanup**
+  - [ ] Delete empty `WayfarerMobile/Core/Interfaces/` directory
+  - [ ] Delete `tests/WayfarerMobile.Tests/Infrastructure/TripDownloadTypes.cs`
+  - [ ] Run all tests
+  - [ ] Build Android + iOS
