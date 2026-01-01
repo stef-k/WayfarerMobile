@@ -1662,7 +1662,7 @@ public class TripDownloadService : ITripDownloadService
     /// <param name="initialBytes">Bytes already downloaded.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Result containing total bytes downloaded and actual tiles completed.</returns>
-    private async Task<TileDownloadResult> DownloadTilesWithStateAsync(
+    private async Task<BatchDownloadResult> DownloadTilesWithStateAsync(
         DownloadedTripEntity trip,
         List<TileCoordinate> tiles,
         int initialCompleted,
@@ -1673,7 +1673,7 @@ public class TripDownloadService : ITripDownloadService
         // Early return for empty tile list
         if (tiles.Count == 0)
         {
-            return new TileDownloadResult(
+            return new BatchDownloadResult(
                 TotalBytes: initialBytes,
                 TilesDownloaded: 0,
                 WasPaused: false,
@@ -1717,7 +1717,7 @@ public class TripDownloadService : ITripDownloadService
             await _databaseService.SaveDownloadedTripAsync(trip);
             _logger.LogWarning("Cache limit already reached before download for trip {TripId}", trip.Id);
 
-            return new TileDownloadResult(
+            return new BatchDownloadResult(
                 TotalBytes: totalBytes,
                 TilesDownloaded: 0,
                 WasPaused: false,
@@ -1957,7 +1957,7 @@ public class TripDownloadService : ITripDownloadService
                 CanResume = stopReason.PauseReason != DownloadPauseReason.UserCancel
             });
 
-            return new TileDownloadResult(
+            return new BatchDownloadResult(
                 TotalBytes: finalBytes,
                 TilesDownloaded: Volatile.Read(ref tilesDownloadedThisSession),
                 WasPaused: stopReason.WasPaused,
@@ -1986,7 +1986,7 @@ public class TripDownloadService : ITripDownloadService
         // Clean up download state on successful completion
         await _databaseService.DeleteDownloadStateAsync(trip.Id);
 
-        return new TileDownloadResult(
+        return new BatchDownloadResult(
             TotalBytes: Interlocked.Read(ref totalBytes),
             TilesDownloaded: Volatile.Read(ref tilesDownloadedThisSession),
             WasPaused: false,
@@ -2593,13 +2593,13 @@ internal class TripWarningState
 }
 
 /// <summary>
-/// Result of a tile download operation.
+/// Result of a batch tile download operation for a trip.
 /// </summary>
 /// <param name="TotalBytes">Total bytes downloaded (including any previously downloaded).</param>
 /// <param name="TilesDownloaded">Number of tiles successfully downloaded in this session.</param>
 /// <param name="WasPaused">Whether the download was paused (user, network, storage).</param>
 /// <param name="WasLimitReached">Whether the download was stopped due to cache limit.</param>
-internal record TileDownloadResult(
+internal record BatchDownloadResult(
     long TotalBytes,
     int TilesDownloaded,
     bool WasPaused,
