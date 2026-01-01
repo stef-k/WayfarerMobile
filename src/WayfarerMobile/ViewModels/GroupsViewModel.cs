@@ -2219,11 +2219,19 @@ public partial class GroupsViewModel : BaseViewModel
         {
             await LoadGroupsAsync();
         }
-        else if (SelectedGroup != null && IsToday)
+        else if (SelectedGroup != null)
         {
-            // Resume SSE subscriptions when returning to the page
-            // Fire and forget - don't block page appearing
-            _ = StartSseSubscriptionsAsync();
+            // Returning to page - restore markers that were cleared in OnDisappearingAsync
+            if (IsMapView)
+            {
+                UpdateMapMarkers();
+            }
+
+            // Resume SSE subscriptions for live updates (only when viewing today)
+            if (IsToday)
+            {
+                _ = StartSseSubscriptionsAsync();
+            }
         }
     }
 
