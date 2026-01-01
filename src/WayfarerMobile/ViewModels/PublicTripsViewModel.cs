@@ -14,12 +14,19 @@ namespace WayfarerMobile.ViewModels;
 public partial class PublicTripsViewModel : BaseViewModel
 {
     private readonly IApiClient _apiClient;
+    private readonly IToastService _toastService;
     private readonly ILogger<PublicTripsViewModel> _logger;
 
     private int _currentPage = 1;
     private const int PageSize = 20;
     private bool _hasMorePages = true;
     private CancellationTokenSource? _searchCts;
+
+    /// <summary>
+    /// Callback invoked when a trip is successfully cloned.
+    /// Set by the parent coordinator (TripsPageViewModel).
+    /// </summary>
+    public Func<Task>? OnCloneSuccess { get; set; }
 
     /// <summary>
     /// Gets the collection of public trips.
@@ -71,12 +78,15 @@ public partial class PublicTripsViewModel : BaseViewModel
     /// Creates a new instance of PublicTripsViewModel.
     /// </summary>
     /// <param name="apiClient">The API client.</param>
+    /// <param name="toastService">The toast service.</param>
     /// <param name="logger">The logger instance.</param>
     public PublicTripsViewModel(
         IApiClient apiClient,
+        IToastService toastService,
         ILogger<PublicTripsViewModel> logger)
     {
         _apiClient = apiClient;
+        _toastService = toastService;
         _logger = logger;
         Title = "Public Trips";
     }
@@ -219,9 +229,9 @@ public partial class PublicTripsViewModel : BaseViewModel
             return;
 
         var confirm = await Shell.Current.DisplayAlertAsync(
-            "Clone Trip",
-            $"Clone \"{trip.Name}\" to your trips? This will create a copy that you can edit.",
-            "Clone",
+            "Copy Trip",
+            $"Copy \"{trip.Name}\" to your trips? This will create a copy that you can edit.",
+            "Copy",
             "Cancel");
 
         if (!confirm)
@@ -237,30 +247,35 @@ public partial class PublicTripsViewModel : BaseViewModel
             if (result?.Success == true && result.NewTripId.HasValue)
             {
                 _logger.LogInformation("Successfully cloned trip {TripName} as {NewTripId}", trip.Name, result.NewTripId);
+                await _toastService.ShowSuccessAsync($"'{trip.Name}' added to your trips");
 
-                await Shell.Current.DisplayAlertAsync(
-                    "Trip Cloned",
-                    $"\"{trip.Name}\" has been added to your trips. Go to the Trips tab to download it for offline use.",
-                    "OK");
+                // Notify coordinator to refresh My Trips and switch tabs
+                if (OnCloneSuccess != null)
+                {
+                    await OnCloneSuccess();
+                }
             }
             else
             {
                 var errorMessage = result?.Error ?? "Unknown error occurred";
                 _logger.LogWarning("Failed to clone trip: {Error}", errorMessage);
-
-                await Shell.Current.DisplayAlertAsync(
-                    "Clone Failed",
-                    $"Could not clone trip: {errorMessage}",
-                    "OK");
+                await _toastService.ShowErrorAsync($"Clone failed: {errorMessage}");
             }
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error cloning trip {TripId}", trip.Id);
+            await _toastService.ShowErrorAsync("Network error. Please check your connection.");
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            _logger.LogError(ex, "Timeout cloning trip {TripId}", trip.Id);
+            await _toastService.ShowErrorAsync("Request timed out. Please try again.");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error cloning trip {TripId}", trip.Id);
-            await Shell.Current.DisplayAlertAsync(
-                "Clone Failed",
-                "An error occurred while cloning the trip. Please try again.",
-                "OK");
+            await _toastService.ShowErrorAsync("Failed to copy trip. Please try again.");
         }
         finally
         {

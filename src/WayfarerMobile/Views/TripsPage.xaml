@@ -7,7 +7,7 @@
              xmlns:offlineBanner="clr-namespace:WayfarerMobile.Views.Controls"
              xmlns:tabView="clr-namespace:Syncfusion.Maui.Toolkit.TabView;assembly=Syncfusion.Maui.Toolkit"
              x:Class="WayfarerMobile.Views.TripsPage"
-             x:DataType="viewmodels:TripsViewModel"
+             x:DataType="viewmodels:TripsPageViewModel"
              Title="Trips"
              BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}">
 
@@ -74,14 +74,14 @@
                 <!-- My Trips Tab -->
                 <tabView:SfTabItem Header="My Trips">
                     <tabView:SfTabItem.Content>
-                        <controls:MyTripsView BindingContext="{Binding}" />
+                        <controls:MyTripsView BindingContext="{Binding MyTrips}" />
                     </tabView:SfTabItem.Content>
                 </tabView:SfTabItem>
 
                 <!-- Public Trips Tab -->
                 <tabView:SfTabItem Header="Public Trips">
                     <tabView:SfTabItem.Content>
-                        <controls:PublicTripsView BindingContext="{Binding}" />
+                        <controls:PublicTripsView BindingContext="{Binding PublicTrips}" />
                     </tabView:SfTabItem.Content>
                 </tabView:SfTabItem>
 

@@ -273,12 +273,16 @@ public static class MauiProgram
         services.AddTransient<OnboardingViewModel>();
         services.AddTransient<TimelineViewModel>();
         services.AddTransient<CheckInViewModel>();
-        services.AddSingleton<TripsViewModel>();
-        services.AddSingleton<TripDownloadViewModel>();  // Child of TripsViewModel
+
+        // Trips ViewModels (coordinator pattern)
+        services.AddSingleton<TripDownloadViewModel>();    // Download operations
+        services.AddSingleton<MyTripsViewModel>();         // My Trips tab
+        services.AddSingleton<PublicTripsViewModel>();     // Public Trips tab
+        services.AddSingleton<TripsPageViewModel>();       // Coordinator
+
         services.AddTransient<PinSecurityViewModel>();
         services.AddSingleton<NavigationHudViewModel>();
         services.AddTransient<QrScannerViewModel>();
-        services.AddTransient<PublicTripsViewModel>();
         services.AddTransient<LockScreenViewModel>();
         services.AddTransient<AboutViewModel>();
         services.AddTransient<DiagnosticsViewModel>();

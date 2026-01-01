@@ -3,7 +3,7 @@ using WayfarerMobile.Core.Models;
 namespace WayfarerMobile.ViewModels;
 
 /// <summary>
-/// Callback interface for TripDownloadViewModel to communicate with TripsViewModel.
+/// Callback interface for TripDownloadViewModel to communicate with MyTripsViewModel.
 /// Enables the download ViewModel to update the trip list without direct coupling.
 /// </summary>
 public interface ITripDownloadCallbacks
