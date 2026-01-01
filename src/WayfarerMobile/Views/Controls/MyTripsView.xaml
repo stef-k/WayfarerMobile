@@ -173,7 +173,7 @@
 
                                         <!-- Download (Metadata only) -->
                                         <Button Text="Download"
-                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=QuickDownloadCommand}"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=Download.QuickDownloadCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanQuickDownload}"
                                                 BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
@@ -185,7 +185,7 @@
 
                                         <!-- Download + Offline Maps (With Tiles) -->
                                         <Button Text="+Offline Maps"
-                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=FullDownloadCommand}"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=Download.FullDownloadCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanFullDownload}"
                                                 BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
@@ -197,7 +197,7 @@
 
                                         <!-- Remove Offline Maps Only - keeps trip data -->
                                         <Button Text="Remove Maps"
-                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=DeleteTilesOnlyCommand}"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=Download.DeleteTilesOnlyCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanDeleteTilesOnly}"
                                                 BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
@@ -209,7 +209,7 @@
 
                                         <!-- Delete All - removes trip and all local data -->
                                         <Button Text="Remove All"
-                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=DeleteDownloadCommand}"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=Download.DeleteDownloadCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanDelete}"
                                                 BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
