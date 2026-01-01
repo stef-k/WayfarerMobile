@@ -21,6 +21,7 @@ public class TripSyncService : ITripSyncService
 {
     private readonly IApiClient _apiClient;
     private readonly DatabaseService _databaseService;
+    private readonly SemaphoreSlim _initLock = new(1, 1);
     private SQLiteAsyncConnection? _database;
     private bool _initialized;
 
@@ -58,14 +59,26 @@ public class TripSyncService : ITripSyncService
 
     /// <summary>
     /// Ensures the database connection is initialized.
+    /// Thread-safe initialization using double-check locking pattern.
     /// </summary>
     private async Task EnsureInitializedAsync()
     {
         if (_initialized) return;
 
-        _database = await _databaseService.GetConnectionAsync();
-        await _database.CreateTableAsync<PendingTripMutation>();
-        _initialized = true;
+        await _initLock.WaitAsync();
+        try
+        {
+            // Double-check after acquiring lock
+            if (_initialized) return;
+
+            _database = await _databaseService.GetConnectionAsync();
+            await _database.CreateTableAsync<PendingTripMutation>();
+            _initialized = true;
+        }
+        finally
+        {
+            _initLock.Release();
+        }
     }
 
     /// <summary>
