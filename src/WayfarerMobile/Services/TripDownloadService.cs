@@ -21,6 +21,9 @@ public class TripDownloadService : ITripDownloadService
     private readonly DatabaseService _databaseService;
     private readonly ISettingsService _settingsService;
     private readonly ITripSyncService _tripSyncService;
+    private readonly ITileDownloadService _tileDownloadService;
+    private readonly IDownloadStateManager _downloadStateManager;
+    private readonly ICacheLimitEnforcer _cacheLimitEnforcer;
     private readonly ILogger<TripDownloadService> _logger;
 
     #region Constants
@@ -50,20 +53,6 @@ public class TripDownloadService : ITripDownloadService
     #endregion
 
     #region Fields
-
-    // Rate limiting state
-    private readonly object _rateLimitLock = new();
-    private DateTime _lastRequestTime = DateTime.MinValue;
-
-    // Cache limit check synchronization (prevents parallel threads from checking simultaneously)
-    private readonly SemaphoreSlim _cacheLimitCheckLock = new(1, 1);
-    // Atomic cache: wrapper record allows volatile read/write as single reference
-    private volatile CachedLimitCheckState? _cachedLimitCheck;
-
-    // Pause/cancel state - tracks which downloads should be stopped and why
-    // Keyed by local trip ID (int) - available after trip entity is saved
-    // Value indicates the reason (UserPause = resumable, UserCancel = not resumable)
-    private readonly ConcurrentDictionary<int, string> _downloadStopRequests = new();
 
     // Active download guard - prevents concurrent downloads of the same trip
     // Keyed by server trip ID (Guid) - available at start of download before local ID exists
@@ -180,17 +169,28 @@ public class TripDownloadService : ITripDownloadService
         DatabaseService databaseService,
         ISettingsService settingsService,
         ITripSyncService tripSyncService,
+        ITileDownloadService tileDownloadService,
+        IDownloadStateManager downloadStateManager,
+        ICacheLimitEnforcer cacheLimitEnforcer,
         ILogger<TripDownloadService> logger)
     {
         _apiClient = apiClient;
         _databaseService = databaseService;
         _settingsService = settingsService;
         _tripSyncService = tripSyncService;
+        _tileDownloadService = tileDownloadService;
+        _downloadStateManager = downloadStateManager;
+        _cacheLimitEnforcer = cacheLimitEnforcer;
         _logger = logger;
 
         // Initialize shared HttpClient with appropriate timeout
         _tileHttpClient = new HttpClient { Timeout = TimeSpan.FromMilliseconds(TileTimeoutMs) };
         _tileHttpClient.DefaultRequestHeaders.UserAgent.ParseAdd("WayfarerMobile/1.0");
+
+        // Wire up cache limit events from the enforcer to our events
+        _cacheLimitEnforcer.CacheWarning += (s, e) => CacheWarning?.Invoke(this, e);
+        _cacheLimitEnforcer.CacheCritical += (s, e) => CacheCritical?.Invoke(this, e);
+        _cacheLimitEnforcer.CacheLimitReached += (s, e) => CacheLimitReached?.Invoke(this, e);
     }
 
     /// <summary>
@@ -228,14 +228,14 @@ public class TripDownloadService : ITripDownloadService
             _logger.LogInformation("Starting download for trip: {TripName}", tripSummary.Name);
 
             // Check network connectivity
-            if (!IsNetworkAvailable())
+            if (!_tileDownloadService.IsNetworkAvailable())
             {
                 _logger.LogWarning("Cannot download trip - no network connection");
                 return null;
             }
 
             // Check storage space
-            if (!HasSufficientStorage())
+            if (!_tileDownloadService.HasSufficientStorage())
             {
                 _logger.LogWarning("Cannot download trip - insufficient storage space");
                 return null;
@@ -869,7 +869,7 @@ public class TripDownloadService : ITripDownloadService
             return false;
         }
 
-        _downloadStopRequests[tripId] = DownloadPauseReason.UserPause;
+        _downloadStateManager.RequestStop(tripId, DownloadStopReason.UserPause);
         _logger.LogInformation("Pause requested for trip {TripId}", tripId);
         return true;
     }
@@ -910,7 +910,7 @@ public class TripDownloadService : ITripDownloadService
         try
         {
             // Clear stop request and reset per-trip warning state for resumed download
-            _downloadStopRequests.TryRemove(tripId, out _);
+            _downloadStateManager.ClearStopRequest(tripId);
             _tripWarningStates[tripId] = new TripWarningState();
 
             // Update state to in progress
@@ -1040,14 +1040,14 @@ public class TripDownloadService : ITripDownloadService
 
         // Set cancel flag to stop download loop - distinct from pause to prevent state saving
         // The flag will be cleaned up when starting a new download for this trip
-        _downloadStopRequests[tripId] = DownloadPauseReason.UserCancel;
+        _downloadStateManager.RequestStop(tripId, DownloadStopReason.UserCancel);
 
         var trip = await _databaseService.GetDownloadedTripAsync(tripId);
         if (trip == null)
         {
             _logger.LogWarning("Cannot cancel - trip {TripId} not found", tripId);
             // Still clean up the stop request if trip doesn't exist
-            _downloadStopRequests.TryRemove(tripId, out _);
+            _downloadStateManager.ClearStopRequest(tripId);
             return false;
         }
 
@@ -1061,7 +1061,7 @@ public class TripDownloadService : ITripDownloadService
             _logger.LogInformation("Cancelled and cleaned up trip {TripId}", tripId);
 
             // Clean up stop request and warning state since trip is deleted
-            _downloadStopRequests.TryRemove(tripId, out _);
+            _downloadStateManager.ClearStopRequest(tripId);
             _tripWarningStates.TryRemove(tripId, out _);
         }
         else
@@ -1098,8 +1098,8 @@ public class TripDownloadService : ITripDownloadService
     {
         // Check in-memory flag first (faster, catches recent pause requests)
         // Only UserPause is considered "paused" - UserCancel is not resumable
-        if (_downloadStopRequests.TryGetValue(tripId, out var reason) &&
-            reason == DownloadPauseReason.UserPause)
+        if (_downloadStateManager.TryGetStopReason(tripId, out var reason) &&
+            reason == DownloadStopReason.UserPause)
         {
             return true;
         }
@@ -1165,7 +1165,7 @@ public class TripDownloadService : ITripDownloadService
             if (localTrip == null)
                 return false;
 
-            if (!IsNetworkAvailable())
+            if (!_tileDownloadService.IsNetworkAvailable())
                 return false;
 
             // Fetch current trip summary from server
@@ -1210,7 +1210,7 @@ public class TripDownloadService : ITripDownloadService
                 return null;
             }
 
-            if (!IsNetworkAvailable())
+            if (!_tileDownloadService.IsNetworkAvailable())
             {
                 _logger.LogWarning("Cannot sync trip - no network connection");
                 return null;
@@ -1437,7 +1437,7 @@ public class TripDownloadService : ITripDownloadService
     {
         var tripsNeedingUpdate = new List<DownloadedTripEntity>();
 
-        if (!IsNetworkAvailable())
+        if (!_tileDownloadService.IsNetworkAvailable())
             return tripsNeedingUpdate;
 
         var downloadedTrips = await _databaseService.GetDownloadedTripsAsync();
@@ -1468,7 +1468,7 @@ public class TripDownloadService : ITripDownloadService
     /// <returns>Number of trips successfully synced.</returns>
     public async Task<int> SyncAllTripsAsync(CancellationToken cancellationToken = default)
     {
-        if (!IsNetworkAvailable())
+        if (!_tileDownloadService.IsNetworkAvailable())
         {
             _logger.LogWarning("Cannot sync trips - no network connection");
             return 0;
@@ -1682,14 +1682,14 @@ public class TripDownloadService : ITripDownloadService
 
         // Clear any stale stop request from previous cancel/pause
         // This allows re-downloading a trip that was previously cancelled
-        _downloadStopRequests.TryRemove(trip.Id, out _);
+        _downloadStateManager.ClearStopRequest(trip.Id);
 
         // Thread-safe counters for parallel downloads
         long totalBytes = initialBytes;
         int processed = 0; // Tiles processed this session (success or fail)
         int tilesDownloadedThisSession = 0;
         int lastStateSaveProcessed = 0;
-        var tileCacheDir = GetTileCacheDirectory(trip.Id);
+        var tileCacheDir = _tileDownloadService.GetTileCacheDirectory(trip.Id);
         var failedTiles = new ConcurrentBag<TileCoordinate>();
         var succeededIndices = new ConcurrentDictionary<int, bool>(); // Track which tile indices succeeded
 
@@ -1697,7 +1697,7 @@ public class TripDownloadService : ITripDownloadService
         Directory.CreateDirectory(tileCacheDir);
 
         // Check cache limit at start (before downloading any tiles)
-        var initialLimitCheck = await CheckTripCacheLimitAsync();
+        var initialLimitCheck = await _cacheLimitEnforcer.CheckLimitAsync();
         if (initialLimitCheck.IsLimitReached)
         {
             var eventArgs = new CacheLimitEventArgs
@@ -1753,14 +1753,14 @@ public class TripDownloadService : ITripDownloadService
                         return;
 
                     // Check stop request (pause or cancel)
-                    if (_downloadStopRequests.TryGetValue(trip.Id, out var requestedStopReason))
+                    if (_downloadStateManager.TryGetStopReason(trip.Id, out var requestedStopReason))
                     {
                         stopReason.SetPaused(requestedStopReason);
                         return;
                     }
 
                     // Check network (only first tile in batch to avoid thrashing)
-                    if (item.index % maxConcurrency == 0 && !IsNetworkAvailable())
+                    if (item.index % maxConcurrency == 0 && !_tileDownloadService.IsNetworkAvailable())
                     {
                         stopReason.SetPaused(DownloadPauseReason.NetworkLost);
                         _logger.LogWarning("Network lost during download for trip {TripId}", trip.Id);
@@ -1802,7 +1802,7 @@ public class TripDownloadService : ITripDownloadService
                     // Periodic cache limit check (synchronized across parallel threads)
                     if (currentCompleted % CacheLimitCheckIntervalTiles == 0)
                     {
-                        var limitResult = await GetCachedLimitCheckAsync();
+                        var limitResult = await _cacheLimitEnforcer.GetCachedLimitCheckAsync();
 
                         // Raise warning/critical events using per-trip state
                         if (_tripWarningStates.TryGetValue(trip.Id, out var warningState))
@@ -1848,7 +1848,7 @@ public class TripDownloadService : ITripDownloadService
                     // Periodic storage check
                     if (currentCompleted % StorageCheckIntervalTiles == 0)
                     {
-                        if (!HasSufficientStorage())
+                        if (!_tileDownloadService.HasSufficientStorage())
                         {
                             stopReason.SetPaused(DownloadPauseReason.StorageLow);
                             _logger.LogWarning("Storage low during download for trip {TripId}", trip.Id);
@@ -1875,9 +1875,9 @@ public class TripDownloadService : ITripDownloadService
         catch (OperationCanceledException)
         {
             // Check if this was a pause request (which also cancels CTS) or actual cancel
-            // This handles the race where CTS cancellation fires before workers see _downloadStopRequests
-            if (_downloadStopRequests.TryGetValue(trip.Id, out var requestedReason) &&
-                requestedReason == DownloadPauseReason.UserPause)
+            // This handles the race where CTS cancellation fires before workers see _downloadStateManager
+            if (_downloadStateManager.TryGetStopReason(trip.Id, out var requestedReason) &&
+                requestedReason == DownloadStopReason.UserPause)
             {
                 stopReason.SetPaused(DownloadPauseReason.UserPause);
             }
@@ -1901,7 +1901,7 @@ public class TripDownloadService : ITripDownloadService
 
             if (stopReason.WasLimitReached)
             {
-                var limitResult = await CheckTripCacheLimitAsync();
+                var limitResult = await _cacheLimitEnforcer.CheckLimitAsync();
                 var eventArgs = new CacheLimitEventArgs
                 {
                     TripId = trip.Id,
@@ -2023,61 +2023,9 @@ public class TripDownloadService : ITripDownloadService
     /// Checks if the trip cache limit has been reached.
     /// </summary>
     /// <returns>Result indicating current usage and whether limit is reached.</returns>
-    public async Task<CacheLimitCheckResult> CheckTripCacheLimitAsync()
+    public Task<CacheLimitCheckResult> CheckTripCacheLimitAsync()
     {
-        var currentSize = await _databaseService.GetTripCacheSizeAsync();
-        var maxSizeMB = _settingsService.MaxTripCacheSizeMB;
-        var maxSizeBytes = (long)maxSizeMB * 1024 * 1024;
-        var currentSizeMB = currentSize / (1024.0 * 1024.0);
-        var usagePercent = maxSizeBytes > 0 ? (currentSize * 100.0 / maxSizeBytes) : 0;
-
-        return new CacheLimitCheckResult
-        {
-            CurrentSizeBytes = currentSize,
-            CurrentSizeMB = currentSizeMB,
-            MaxSizeMB = maxSizeMB,
-            UsagePercent = usagePercent,
-            IsLimitReached = currentSize >= maxSizeBytes,
-            IsWarningLevel = usagePercent >= 80 && usagePercent < 100
-        };
-    }
-
-    /// <summary>
-    /// Gets cache limit check result with caching to avoid parallel database hits.
-    /// Returns cached result if checked within last 2 seconds.
-    /// </summary>
-    private async Task<CacheLimitCheckResult> GetCachedLimitCheckAsync()
-    {
-        const double CacheWindowSeconds = 2.0; // Reduced from 5s to minimize overshoot
-
-        // Fast path: single volatile read for atomic access to both values
-        var cachedState = _cachedLimitCheck;
-        if (cachedState != null && (DateTime.UtcNow - cachedState.CheckTime).TotalSeconds < CacheWindowSeconds)
-        {
-            return cachedState.Result;
-        }
-
-        // Slow path: acquire lock and check
-        await _cacheLimitCheckLock.WaitAsync();
-        try
-        {
-            // Double-check after acquiring lock (single volatile read)
-            cachedState = _cachedLimitCheck;
-            if (cachedState != null && (DateTime.UtcNow - cachedState.CheckTime).TotalSeconds < CacheWindowSeconds)
-            {
-                return cachedState.Result;
-            }
-
-            // Actually perform the check
-            var result = await CheckTripCacheLimitAsync();
-            // Atomic write of both values together via single reference assignment
-            _cachedLimitCheck = new CachedLimitCheckState(result, DateTime.UtcNow);
-            return result;
-        }
-        finally
-        {
-            _cacheLimitCheckLock.Release();
-        }
+        return _cacheLimitEnforcer.CheckLimitAsync();
     }
 
     /// <summary>
@@ -2087,7 +2035,7 @@ public class TripDownloadService : ITripDownloadService
     /// <returns>Estimated size in bytes.</returns>
     public long EstimateDownloadSize(int tileCount)
     {
-        return tileCount * EstimatedTileSizeBytes;
+        return _cacheLimitEnforcer.EstimateDownloadSize(tileCount);
     }
 
     /// <summary>
@@ -2100,7 +2048,7 @@ public class TripDownloadService : ITripDownloadService
         if (boundingBox == null)
             return 0;
 
-        return CalculateTilesForBoundingBox(boundingBox).Count;
+        return _cacheLimitEnforcer.EstimateTileCount(boundingBox);
     }
 
     /// <summary>
@@ -2108,13 +2056,19 @@ public class TripDownloadService : ITripDownloadService
     /// </summary>
     /// <param name="boundingBox">The trip's bounding box.</param>
     /// <returns>Result with quota details and tile count.</returns>
-    public async Task<CacheQuotaCheckResult> CheckCacheQuotaForTripAsync(BoundingBox? boundingBox)
+    public Task<CacheQuotaCheckResult> CheckCacheQuotaForTripAsync(BoundingBox? boundingBox)
     {
-        var tileCount = EstimateTileCount(boundingBox);
-        var estimatedBytes = EstimateDownloadSize(tileCount);
-        var result = await CheckCacheQuotaAsync(estimatedBytes);
-        // Create new result with TileCount set (init-only property)
-        return result with { TileCount = tileCount };
+        if (boundingBox == null)
+        {
+            return Task.FromResult(new CacheQuotaCheckResult
+            {
+                TileCount = 0,
+                EstimatedSizeBytes = 0,
+                HasSufficientQuota = true
+            });
+        }
+
+        return _cacheLimitEnforcer.CheckQuotaForTripAsync(boundingBox);
     }
 
     /// <summary>
@@ -2122,25 +2076,9 @@ public class TripDownloadService : ITripDownloadService
     /// </summary>
     /// <param name="estimatedBytes">Estimated download size in bytes.</param>
     /// <returns>Result with quota details.</returns>
-    public async Task<CacheQuotaCheckResult> CheckCacheQuotaAsync(long estimatedBytes)
+    public Task<CacheQuotaCheckResult> CheckCacheQuotaAsync(long estimatedBytes)
     {
-        var limitResult = await CheckTripCacheLimitAsync();
-        var maxSizeBytes = (long)limitResult.MaxSizeMB * 1024 * 1024;
-        var availableBytes = maxSizeBytes - limitResult.CurrentSizeBytes;
-        var estimatedMB = estimatedBytes / (1024.0 * 1024.0);
-        var availableMB = availableBytes / (1024.0 * 1024.0);
-
-        return new CacheQuotaCheckResult
-        {
-            EstimatedSizeBytes = estimatedBytes,
-            EstimatedSizeMB = estimatedMB,
-            AvailableBytes = availableBytes,
-            AvailableMB = availableMB,
-            CurrentUsageMB = limitResult.CurrentSizeMB,
-            MaxSizeMB = limitResult.MaxSizeMB,
-            HasSufficientQuota = availableBytes >= estimatedBytes,
-            WouldExceedBy = estimatedBytes > availableBytes ? (estimatedBytes - availableBytes) / (1024.0 * 1024.0) : 0
-        };
+        return _cacheLimitEnforcer.CheckQuotaAsync(estimatedBytes);
     }
 
     /// <summary>
@@ -2169,10 +2107,10 @@ public class TripDownloadService : ITripDownloadService
             }
 
             // Check network before download
-            if (!IsNetworkAvailable())
+            if (!_tileDownloadService.IsNetworkAvailable())
             {
                 _logger.LogDebug("Waiting for network before downloading tile {TileId}...", tile.Id);
-                if (!await WaitForNetworkAsync(TimeSpan.FromSeconds(30), cancellationToken))
+                if (!await _tileDownloadService.WaitForNetworkAsync(TimeSpan.FromSeconds(30), cancellationToken))
                 {
                     _logger.LogWarning("Network not available for tile {TileId}", tile.Id);
                     return 0;
@@ -2180,7 +2118,7 @@ public class TripDownloadService : ITripDownloadService
             }
 
             // Enforce rate limiting
-            await EnforceRateLimitAsync(cancellationToken);
+            await _tileDownloadService.EnforceRateLimitAsync(cancellationToken);
 
             // Ensure directory exists
             var dir = Path.GetDirectoryName(filePath)!;
@@ -2266,15 +2204,6 @@ public class TripDownloadService : ITripDownloadService
     }
 
     /// <summary>
-    /// Gets the tile cache directory for a trip.
-    /// </summary>
-    private string GetTileCacheDirectory(int tripId)
-    {
-        var cacheDir = Path.Combine(FileSystem.CacheDirectory, "tiles", $"trip_{tripId}");
-        return cacheDir;
-    }
-
-    /// <summary>
     /// Gets a cached tile file path.
     /// </summary>
     /// <param name="tripId">The trip ID.</param>
@@ -2286,132 +2215,13 @@ public class TripDownloadService : ITripDownloadService
     {
         ThrowIfDisposed();
 
-        var filePath = Path.Combine(GetTileCacheDirectory(tripId), $"{zoom}", $"{x}", $"{y}.png");
+        var filePath = Path.Combine(_tileDownloadService.GetTileCacheDirectory(tripId), $"{zoom}", $"{x}", $"{y}.png");
         return File.Exists(filePath) ? filePath : null;
     }
 
     #endregion
 
-    #region Network and Storage Monitoring
-
-    /// <summary>
-    /// Checks if network is available.
-    /// </summary>
-    private static bool IsNetworkAvailable()
-    {
-        return Connectivity.Current.NetworkAccess == NetworkAccess.Internet;
-    }
-
-    /// <summary>
-    /// Waits for network to become available with timeout.
-    /// </summary>
-    /// <param name="timeout">Maximum time to wait.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>True if network became available, false if timed out.</returns>
-    private async Task<bool> WaitForNetworkAsync(TimeSpan timeout, CancellationToken cancellationToken)
-    {
-        if (IsNetworkAvailable())
-            return true;
-
-        var tcs = new TaskCompletionSource<bool>();
-        var startTime = DateTime.UtcNow;
-
-        void OnConnectivityChanged(object? sender, ConnectivityChangedEventArgs e)
-        {
-            if (e.NetworkAccess == NetworkAccess.Internet)
-            {
-                tcs.TrySetResult(true);
-            }
-        }
-
-        Connectivity.ConnectivityChanged += OnConnectivityChanged;
-        try
-        {
-            using var timeoutCts = new CancellationTokenSource(timeout);
-            using var combined = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
-
-            // Dispose the registration to prevent memory leak
-            using var registration = combined.Token.Register(() => tcs.TrySetResult(false));
-
-            return await tcs.Task;
-        }
-        finally
-        {
-            Connectivity.ConnectivityChanged -= OnConnectivityChanged;
-        }
-    }
-
-    /// <summary>
-    /// Checks if sufficient storage space is available.
-    /// </summary>
-    private bool HasSufficientStorage()
-    {
-        try
-        {
-            var cacheDir = FileSystem.CacheDirectory;
-            var pathRoot = Path.GetPathRoot(cacheDir);
-            if (string.IsNullOrEmpty(pathRoot))
-            {
-                _logger.LogWarning("Could not determine path root for cache directory, assuming sufficient storage");
-                return true;
-            }
-
-            var driveInfo = new DriveInfo(pathRoot);
-            var freeSpaceMB = driveInfo.AvailableFreeSpace / (1024 * 1024);
-
-            _logger.LogDebug("Available storage: {FreeSpace} MB", freeSpaceMB);
-            return freeSpaceMB >= MinRequiredSpaceMB;
-        }
-        catch (IOException ex)
-        {
-            _logger.LogWarning(ex, "I/O error checking storage space, assuming sufficient");
-            return true;
-        }
-        catch (SecurityException ex)
-        {
-            _logger.LogWarning(ex, "Security error checking storage space, assuming sufficient");
-            return true;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Unexpected error checking storage space, assuming sufficient");
-            return true;
-        }
-    }
-
-    /// <summary>
-    /// Enforces minimum delay between requests to respect tile server.
-    /// Uses lock to ensure thread-safe slot reservation for concurrent requests.
-    /// </summary>
-    private async Task EnforceRateLimitAsync(CancellationToken cancellationToken)
-    {
-        TimeSpan waitTime;
-        lock (_rateLimitLock)
-        {
-            var now = DateTime.UtcNow;
-            var minimumDelay = TimeSpan.FromMilliseconds(MinRequestDelayMs);
-
-            // Calculate when we can make the next request
-            var earliestNextRequest = _lastRequestTime.Add(minimumDelay);
-
-            if (now < earliestNextRequest)
-            {
-                waitTime = earliestNextRequest - now;
-            }
-            else
-            {
-                waitTime = TimeSpan.Zero;
-            }
-
-            // Reserve our slot: the next request must wait until after our request
-            _lastRequestTime = now.Add(waitTime);
-        }
-
-        if (waitTime > TimeSpan.Zero)
-        {
-            await Task.Delay(waitTime, cancellationToken);
-        }
-    }
+    #region Maintenance
 
     /// <summary>
     /// Cleans up orphaned temporary files from interrupted downloads.
@@ -2501,19 +2311,13 @@ public class TripDownloadService : ITripDownloadService
 
         if (disposing)
         {
-            // Signal any active downloads to stop gracefully (pause, not cancel)
-            foreach (var tripId in _downloadStopRequests.Keys)
-            {
-                _downloadStopRequests[tripId] = DownloadPauseReason.UserPause;
-            }
-
             // Clear active downloads tracking (graceful shutdown)
+            // Active downloads will be stopped when their cancellation tokens are triggered
             _activeDownloads.Clear();
             _tripWarningStates.Clear();
 
             // Dispose managed resources
             _tileHttpClient?.Dispose();
-            _cacheLimitCheckLock?.Dispose();
         }
 
         _disposed = true;
@@ -2604,11 +2408,6 @@ internal record BatchDownloadResult(
     int TilesDownloaded,
     bool WasPaused,
     bool WasLimitReached);
-
-/// <summary>
-/// Immutable wrapper for cache limit check state, enabling atomic read/write via volatile reference.
-/// </summary>
-internal sealed record CachedLimitCheckState(CacheLimitCheckResult Result, DateTime CheckTime);
 
 /// <summary>
 /// Thread-safe helper for tracking stop reasons during parallel tile downloads.
