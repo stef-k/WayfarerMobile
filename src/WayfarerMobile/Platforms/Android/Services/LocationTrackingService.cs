@@ -213,6 +213,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
 
             StartForeground(NotificationId, notification);
             _currentState = TrackingState.Ready;
+            SendStateChangeBroadcast();
             Log.Info(LogTag, "Foreground started successfully in OnCreate");
         }
         catch (Java.Lang.SecurityException ex)
@@ -417,7 +418,8 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         {
             if (_currentState == TrackingState.Active)
             {
-                Log.Debug(LogTag, "Already tracking");
+                Log.Debug(LogTag, "Already tracking, broadcasting current state for new clients");
+                SendStateChangeBroadcast();
                 return;
             }
 
