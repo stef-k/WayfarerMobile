@@ -22,6 +22,7 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
 
     private readonly TripDownloadService _downloadService;
     private readonly ITripNavigationService _tripNavigationService;
+    private readonly ITripStateManager _tripStateManager;
     private readonly IToastService _toastService;
     private readonly ILogger<TripDownloadViewModel> _logger;
 
@@ -119,11 +120,13 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
     public TripDownloadViewModel(
         TripDownloadService downloadService,
         ITripNavigationService tripNavigationService,
+        ITripStateManager tripStateManager,
         IToastService toastService,
         ILogger<TripDownloadViewModel> logger)
     {
         _downloadService = downloadService;
         _tripNavigationService = tripNavigationService;
+        _tripStateManager = tripStateManager;
         _toastService = toastService;
         _logger = logger;
 
@@ -236,7 +239,7 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
         try
         {
             // Check if this trip is currently loaded using single source of truth
-            var isCurrentlyLoaded = MainViewModel.CurrentLoadedTripId == item.ServerId;
+            var isCurrentlyLoaded = _tripStateManager.CurrentLoadedTripId == item.ServerId;
 
             await _downloadService.DeleteTripAsync(item.ServerId);
 

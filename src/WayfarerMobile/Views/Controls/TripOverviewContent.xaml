@@ -13,7 +13,7 @@
 
         <!-- Header (hidden when search is active in overview mode) -->
         <Grid Grid.Row="0" Padding="8,8,8,8" ColumnDefinitions="Auto,*,Auto,Auto"
-              IsVisible="{Binding IsPlaceSearchVisible, Converter={StaticResource InvertedBoolConverter}}">
+              IsVisible="{Binding TripSheet.IsPlaceSearchVisible, Converter={StaticResource InvertedBoolConverter}}">
             <!-- Back Button (visible when showing details - goes back to overview) -->
             <Button Grid.Column="0"
                     Text="←"
@@ -24,8 +24,8 @@
                     CornerRadius="18"
                     BackgroundColor="Transparent"
                     TextColor="{StaticResource Primary}"
-                    Command="{Binding TripSheetBackCommand}"
-                    IsVisible="{Binding IsTripSheetShowingDetails}" />
+                    Command="{Binding TripSheet.TripSheetBackCommand}"
+                    IsVisible="{Binding TripSheet.IsTripSheetShowingDetails}" />
             <!-- My Trips Button (visible when showing overview - goes to My Trips tab) -->
             <Button Grid.Column="0"
                     Text="←"
@@ -36,20 +36,20 @@
                     CornerRadius="18"
                     BackgroundColor="Transparent"
                     TextColor="{StaticResource Primary}"
-                    Command="{Binding GoToMyTripsCommand}"
-                    IsVisible="{Binding IsTripSheetShowingOverview}" />
+                    Command="{Binding TripSheet.GoToMyTripsCommand}"
+                    IsVisible="{Binding TripSheet.IsTripSheetShowingOverview}" />
 
             <!-- Title -->
             <VerticalStackLayout Grid.Column="1" VerticalOptions="Center">
-                <Label Text="{Binding TripSheetTitle}"
+                <Label Text="{Binding TripSheet.TripSheetTitle}"
                        FontSize="16"
                        FontAttributes="Bold"
                        LineBreakMode="WordWrap"
                        MaxLines="2" />
-                <Label Text="{Binding TripSheetSubtitle}"
+                <Label Text="{Binding TripSheet.TripSheetSubtitle}"
                        FontSize="12"
                        TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
-                       IsVisible="{Binding TripSheetSubtitle, Converter={StaticResource IsNotNullConverter}}" />
+                       IsVisible="{Binding TripSheet.TripSheetSubtitle, Converter={StaticResource IsNotNullConverter}}" />
             </VerticalStackLayout>
 
             <!-- Search Toggle Button (visible in overview mode only) -->
@@ -62,8 +62,8 @@
                     CornerRadius="18"
                     BackgroundColor="Transparent"
                     TextColor="{StaticResource Primary}"
-                    Command="{Binding TogglePlaceSearchCommand}"
-                    IsVisible="{Binding IsTripSheetShowingOverview}" />
+                    Command="{Binding TripSheet.TogglePlaceSearchCommand}"
+                    IsVisible="{Binding TripSheet.IsTripSheetShowingOverview}" />
 
             <!-- Close Button -->
             <Button Grid.Column="3"
@@ -75,7 +75,7 @@
                     CornerRadius="18"
                     BackgroundColor="Transparent"
                     TextColor="{StaticResource TextSecondary}"
-                    Command="{Binding CloseTripSheetCommand}" />
+                    Command="{Binding TripSheet.CloseTripSheetCommand}" />
         </Grid>
 
         <!-- Search Bar Header (replaces header when search is active) -->
@@ -83,10 +83,10 @@
               Padding="8,8,8,8"
               ColumnDefinitions="*,Auto"
               ColumnSpacing="8"
-              IsVisible="{Binding IsPlaceSearchVisible}">
+              IsVisible="{Binding TripSheet.IsPlaceSearchVisible}">
             <SearchBar Grid.Column="0"
                        Placeholder="Search places..."
-                       Text="{Binding PlaceSearchQuery, Mode=TwoWay}"
+                       Text="{Binding TripSheet.PlaceSearchQuery, Mode=TwoWay}"
                        FontSize="14"
                        HeightRequest="44"
                        BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}" />
@@ -99,19 +99,19 @@
                     CornerRadius="18"
                     BackgroundColor="Transparent"
                     TextColor="{StaticResource TextSecondary}"
-                    Command="{Binding TogglePlaceSearchCommand}" />
+                    Command="{Binding TripSheet.TogglePlaceSearchCommand}" />
         </Grid>
 
         <!-- Content Area - ScrollView for Overview/Area/Segment modes (hidden for Place and TripNotes detail views) -->
         <ScrollView Grid.Row="1"
-                    IsVisible="{Binding IsTripSheetShowingScrollableContent}">
+                    IsVisible="{Binding TripSheet.IsTripSheetShowingScrollableContent}">
             <Grid>
                 <!-- Overview Mode -->
-                <VerticalStackLayout IsVisible="{Binding IsTripSheetShowingOverview}"
+                <VerticalStackLayout IsVisible="{Binding TripSheet.IsTripSheetShowingOverview}"
                                      Spacing="0">
 
                     <!-- Search Results (shown when searching) -->
-                    <VerticalStackLayout IsVisible="{Binding IsPlaceSearchVisible}"
+                    <VerticalStackLayout IsVisible="{Binding TripSheet.IsPlaceSearchVisible}"
                                          Spacing="0"
                                          Padding="8">
                         <!-- No results message -->
@@ -120,10 +120,10 @@
                                TextColor="{StaticResource TextSecondary}"
                                HorizontalOptions="Center"
                                Margin="0,20"
-                               IsVisible="{Binding HasPlaceSearchResults, Converter={StaticResource InvertedBoolConverter}}" />
+                               IsVisible="{Binding TripSheet.HasPlaceSearchResults, Converter={StaticResource InvertedBoolConverter}}" />
 
                         <!-- Search results list -->
-                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding PlaceSearchResults}"
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding TripSheet.PlaceSearchResults}"
                                              Spacing="1">
                             <BindableLayout.ItemTemplate>
                                 <DataTemplate x:DataType="models:TripPlace">
@@ -133,7 +133,7 @@
                                             <RoundRectangle CornerRadius="8" />
                                         </Border.StrokeShape>
                                         <Border.GestureRecognizers>
-                                            <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=SelectTripPlaceCommand}"
+                                            <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.SelectTripPlaceCommand}"
                                                                   CommandParameter="{Binding .}" />
                                         </Border.GestureRecognizers>
                                         <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
@@ -155,7 +155,7 @@
                     </VerticalStackLayout>
 
                     <!-- Normal Overview Content (hidden when searching) -->
-                    <VerticalStackLayout IsVisible="{Binding IsPlaceSearchVisible, Converter={StaticResource InvertedBoolConverter}}"
+                    <VerticalStackLayout IsVisible="{Binding TripSheet.IsPlaceSearchVisible, Converter={StaticResource InvertedBoolConverter}}"
                                          Spacing="0">
 
                     <!-- Trip Info Section -->
@@ -163,16 +163,16 @@
                         <!-- Cover Image (if exists) -->
                         <Border StrokeThickness="0"
                                 HeightRequest="150"
-                                IsVisible="{Binding LoadedTrip.HasCoverImage}">
+                                IsVisible="{Binding TripSheet.LoadedTrip.HasCoverImage}">
                             <Border.StrokeShape>
                                 <RoundRectangle CornerRadius="8" />
                             </Border.StrokeShape>
-                            <Image Source="{Binding LoadedTrip.CleanCoverImageUrl}"
+                            <Image Source="{Binding TripSheet.LoadedTrip.CleanCoverImageUrl}"
                                    Aspect="AspectFill" />
                         </Border>
 
                         <!-- Updated At -->
-                        <Label Text="{Binding LoadedTrip.UpdatedAt, StringFormat='Last updated: {0:MMM d, yyyy}'}"
+                        <Label Text="{Binding TripSheet.LoadedTrip.UpdatedAt, StringFormat='Last updated: {0:MMM d, yyyy}'}"
                                FontSize="12"
                                TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
 
@@ -181,12 +181,12 @@
                                 BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}"
                                 Margin="-8,0,-8,0"
                                 Padding="16,10"
-                                IsVisible="{Binding LoadedTrip.HasNotes}">
+                                IsVisible="{Binding TripSheet.LoadedTrip.HasNotes}">
                             <Border.StrokeShape>
                                 <RoundRectangle CornerRadius="0" />
                             </Border.StrokeShape>
                             <Border.GestureRecognizers>
-                                <TapGestureRecognizer Command="{Binding ShowTripNotesCommand}" />
+                                <TapGestureRecognizer Command="{Binding TripSheet.ShowTripNotesCommand}" />
                             </Border.GestureRecognizers>
                             <Grid ColumnDefinitions="*,Auto">
                                 <Label Grid.Column="0"
@@ -204,7 +204,7 @@
                     </VerticalStackLayout>
 
                     <!-- Regions with Places and Areas -->
-                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding LoadedTrip.SortedRegions}">
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding TripSheet.LoadedTrip.SortedRegions}">
                         <BindableLayout.ItemTemplate>
                             <DataTemplate x:DataType="models:TripRegion">
                                 <sfExpander:SfExpander IsExpanded="True"
@@ -225,7 +225,7 @@
                                                     IsVisible="{Binding IsUnassignedRegion, Converter={StaticResource InvertedBoolConverter}}"
                                                     VerticalOptions="Center">
                                                 <Border.GestureRecognizers>
-                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=EditRegionCommand}"
+                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.EditRegionCommand}"
                                                                           CommandParameter="{Binding .}" />
                                                 </Border.GestureRecognizers>
                                                 <Image Source="edit.png" WidthRequest="20" HeightRequest="20" VerticalOptions="Center" HorizontalOptions="Center" />
@@ -243,7 +243,7 @@
                                                     <RoundRectangle CornerRadius="12" />
                                                 </Border.StrokeShape>
                                                 <Border.GestureRecognizers>
-                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=DeleteRegionCommand}"
+                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.DeleteRegionCommand}"
                                                                           CommandParameter="{Binding .}" />
                                                 </Border.GestureRecognizers>
                                                 <Image Source="delete.png" WidthRequest="20" HeightRequest="20" VerticalOptions="Center" HorizontalOptions="Center" />
@@ -260,7 +260,7 @@
                                                                    IsVisible="{Binding IsUnassignedRegion, Converter={StaticResource InvertedBoolConverter}}">
                                                 <Button Text="▲"
                                                         FontSize="10"
-                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=MoveRegionUpCommand}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.MoveRegionUpCommand}"
                                                         CommandParameter="{Binding .}"
                                                         WidthRequest="28"
                                                         HeightRequest="28"
@@ -269,7 +269,7 @@
                                                         TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
                                                 <Button Text="▼"
                                                         FontSize="10"
-                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=MoveRegionDownCommand}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.MoveRegionDownCommand}"
                                                         CommandParameter="{Binding .}"
                                                         WidthRequest="28"
                                                         HeightRequest="28"
@@ -297,7 +297,7 @@
                                                     <RoundRectangle CornerRadius="0" />
                                                 </Border.StrokeShape>
                                                 <Border.GestureRecognizers>
-                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=ShowRegionNotesCommand}"
+                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.ShowRegionNotesCommand}"
                                                                           CommandParameter="{Binding .}" />
                                                 </Border.GestureRecognizers>
                                                 <Grid ColumnDefinitions="*,Auto">
@@ -320,7 +320,7 @@
                                                         <Border Padding="8,8" Margin="0,0,0,1" StrokeThickness="0"
                                                                 BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
                                                             <Border.GestureRecognizers>
-                                                                <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=SelectTripPlaceCommand}"
+                                                                <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.SelectTripPlaceCommand}"
                                                                                       CommandParameter="{Binding .}" />
                                                             </Border.GestureRecognizers>
                                                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="4">
@@ -332,7 +332,7 @@
                                                                 <HorizontalStackLayout Grid.Column="2" Spacing="-8" VerticalOptions="Center">
                                                                     <Button Text="▲"
                                                                             FontSize="10"
-                                                                            Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=MovePlaceUpCommand}"
+                                                                            Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.MovePlaceUpCommand}"
                                                                             CommandParameter="{Binding .}"
                                                                             WidthRequest="28"
                                                                             HeightRequest="28"
@@ -341,7 +341,7 @@
                                                                             TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
                                                                     <Button Text="▼"
                                                                             FontSize="10"
-                                                                            Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=MovePlaceDownCommand}"
+                                                                            Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.MovePlaceDownCommand}"
                                                                             CommandParameter="{Binding .}"
                                                                             WidthRequest="28"
                                                                             HeightRequest="28"
@@ -361,7 +361,7 @@
                                                         <Border Padding="8,8" Margin="0,0,0,1" StrokeThickness="0"
                                                                 BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
                                                             <Border.GestureRecognizers>
-                                                                <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=SelectTripAreaCommand}"
+                                                                <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.SelectTripAreaCommand}"
                                                                                       CommandParameter="{Binding .}" />
                                                             </Border.GestureRecognizers>
                                                             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
@@ -388,15 +388,15 @@
                     <!-- Segments -->
                     <Label Text="Segments" FontSize="14" FontAttributes="Bold" Padding="8,10,8,6"
                            BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}"
-                           IsVisible="{Binding HasTripSegments}" />
-                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding LoadedTrip.Segments}"
-                                         IsVisible="{Binding HasTripSegments}">
+                           IsVisible="{Binding TripSheet.HasTripSegments}" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding TripSheet.LoadedTrip.Segments}"
+                                         IsVisible="{Binding TripSheet.HasTripSegments}">
                         <BindableLayout.ItemTemplate>
                             <DataTemplate x:DataType="models:TripSegment">
                                 <Border Padding="8,8" Margin="0,0,0,1" StrokeThickness="0"
                                         BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
                                     <Border.GestureRecognizers>
-                                        <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=SelectTripSegmentCommand}"
+                                        <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.SelectTripSegmentCommand}"
                                                               CommandParameter="{Binding .}" />
                                     </Border.GestureRecognizers>
                                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
@@ -438,27 +438,27 @@
                 <!-- End Overview Mode -->
 
                 <!-- Area Details Mode (hidden when showing area notes) -->
-                <VerticalStackLayout IsVisible="{Binding IsTripSheetShowingArea}" Spacing="8" Padding="8,0,8,8">
+                <VerticalStackLayout IsVisible="{Binding TripSheet.IsTripSheetShowingArea}" Spacing="8" Padding="8,0,8,8">
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
                         <Border Grid.Column="0" WidthRequest="32" HeightRequest="32" StrokeThickness="2"
-                                Stroke="{Binding SelectedTripArea.StrokeColor, TargetNullValue='#4CAF50'}"
-                                BackgroundColor="{Binding SelectedTripArea.FillColor, TargetNullValue='#4CAF5040'}"
+                                Stroke="{Binding TripSheet.SelectedTripArea.StrokeColor, TargetNullValue='#4CAF50'}"
+                                BackgroundColor="{Binding TripSheet.SelectedTripArea.FillColor, TargetNullValue='#4CAF5040'}"
                                 VerticalOptions="Start">
                             <Border.StrokeShape><RoundRectangle CornerRadius="4" /></Border.StrokeShape>
                         </Border>
-                        <Label Grid.Column="1" Text="{Binding SelectedTripArea.Name}" FontSize="18" FontAttributes="Bold"
+                        <Label Grid.Column="1" Text="{Binding TripSheet.SelectedTripArea.Name}" FontSize="18" FontAttributes="Bold"
                                VerticalOptions="Center" LineBreakMode="WordWrap" />
                     </Grid>
                     <!-- Area Notes (tappable to open detail view) -->
                     <Border StrokeThickness="0"
                             BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}"
                             Padding="8,10"
-                            IsVisible="{Binding SelectedTripArea.HasNotes}">
+                            IsVisible="{Binding TripSheet.SelectedTripArea.HasNotes}">
                         <Border.StrokeShape>
                             <RoundRectangle CornerRadius="6" />
                         </Border.StrokeShape>
                         <Border.GestureRecognizers>
-                            <TapGestureRecognizer Command="{Binding ShowAreaNotesCommand}" />
+                            <TapGestureRecognizer Command="{Binding TripSheet.ShowAreaNotesCommand}" />
                         </Border.GestureRecognizers>
                         <Grid ColumnDefinitions="*,Auto">
                             <Label Grid.Column="0"
@@ -476,44 +476,44 @@
                 </VerticalStackLayout>
 
                 <!-- Segment Details Mode (hidden when showing segment notes) -->
-                <VerticalStackLayout IsVisible="{Binding IsTripSheetShowingSegment}" Spacing="10" Padding="8,0,8,8">
+                <VerticalStackLayout IsVisible="{Binding TripSheet.IsTripSheetShowingSegment}" Spacing="10" Padding="8,0,8,8">
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
                         <Label Grid.Column="0" Text="━━" FontSize="20" VerticalOptions="Start" TextColor="{StaticResource Primary}" />
-                        <Label Grid.Column="1" Text="{Binding SelectedTripSegment.TransportMode}" FontSize="20" FontAttributes="Bold"
+                        <Label Grid.Column="1" Text="{Binding TripSheet.SelectedTripSegment.TransportMode}" FontSize="20" FontAttributes="Bold"
                                LineBreakMode="WordWrap" />
                     </Grid>
                     <HorizontalStackLayout Spacing="16">
-                        <Label Text="{Binding SelectedTripSegment.DistanceKm, StringFormat='{0:F1} km'}" FontSize="15"
+                        <Label Text="{Binding TripSheet.SelectedTripSegment.DistanceKm, StringFormat='{0:F1} km'}" FontSize="15"
                                TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
-                               IsVisible="{Binding SelectedTripSegment.DistanceKm, Converter={StaticResource IsNotNullConverter}}" />
-                        <Label Text="{Binding SelectedTripSegment.DurationMinutes, StringFormat='{0} minutes'}" FontSize="15"
+                               IsVisible="{Binding TripSheet.SelectedTripSegment.DistanceKm, Converter={StaticResource IsNotNullConverter}}" />
+                        <Label Text="{Binding TripSheet.SelectedTripSegment.DurationMinutes, StringFormat='{0} minutes'}" FontSize="15"
                                TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
-                               IsVisible="{Binding SelectedTripSegment.DurationMinutes, Converter={StaticResource IsNotNullConverter}}" />
+                               IsVisible="{Binding TripSheet.SelectedTripSegment.DurationMinutes, Converter={StaticResource IsNotNullConverter}}" />
                     </HorizontalStackLayout>
                     <!-- From -->
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8"
-                          IsVisible="{Binding SelectedTripSegment.OriginName, Converter={StaticResource IsNotNullConverter}}">
+                          IsVisible="{Binding TripSheet.SelectedTripSegment.OriginName, Converter={StaticResource IsNotNullConverter}}">
                         <Label Grid.Column="0" Text="From:" FontSize="15" FontAttributes="Bold"
                                TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
-                        <Label Grid.Column="1" Text="{Binding SelectedTripSegment.OriginName}" FontSize="15" LineBreakMode="WordWrap" />
+                        <Label Grid.Column="1" Text="{Binding TripSheet.SelectedTripSegment.OriginName}" FontSize="15" LineBreakMode="WordWrap" />
                     </Grid>
                     <!-- To -->
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8"
-                          IsVisible="{Binding SelectedTripSegment.DestinationName, Converter={StaticResource IsNotNullConverter}}">
+                          IsVisible="{Binding TripSheet.SelectedTripSegment.DestinationName, Converter={StaticResource IsNotNullConverter}}">
                         <Label Grid.Column="0" Text="To:" FontSize="15" FontAttributes="Bold"
                                TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
-                        <Label Grid.Column="1" Text="{Binding SelectedTripSegment.DestinationName}" FontSize="15" LineBreakMode="WordWrap" />
+                        <Label Grid.Column="1" Text="{Binding TripSheet.SelectedTripSegment.DestinationName}" FontSize="15" LineBreakMode="WordWrap" />
                     </Grid>
                     <!-- Segment Notes (tappable to open detail view) -->
                     <Border StrokeThickness="0"
                             BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}"
                             Padding="10,12"
-                            IsVisible="{Binding SelectedTripSegment.HasNotes}">
+                            IsVisible="{Binding TripSheet.SelectedTripSegment.HasNotes}">
                         <Border.StrokeShape>
                             <RoundRectangle CornerRadius="6" />
                         </Border.StrokeShape>
                         <Border.GestureRecognizers>
-                            <TapGestureRecognizer Command="{Binding ShowSegmentNotesCommand}" />
+                            <TapGestureRecognizer Command="{Binding TripSheet.ShowSegmentNotesCommand}" />
                         </Border.GestureRecognizers>
                         <Grid ColumnDefinitions="*,Auto">
                             <Label Grid.Column="0"
@@ -537,13 +537,13 @@
               RowDefinitions="Auto,Auto,Auto,*"
               Padding="8,0,8,8"
               RowSpacing="8"
-              IsVisible="{Binding IsTripSheetShowingPlace}">
+              IsVisible="{Binding TripSheet.IsTripSheetShowingPlace}">
 
             <!-- Row 0: Place Header with Icon and Name -->
             <Grid Grid.Row="0" ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                <Image Grid.Column="0" Source="{Binding SelectedTripPlace.IconPath, Converter={StaticResource MauiAssetImageConverter}}"
+                <Image Grid.Column="0" Source="{Binding TripSheet.SelectedTripPlace.IconPath, Converter={StaticResource MauiAssetImageConverter}}"
                        WidthRequest="36" HeightRequest="36" VerticalOptions="Start" />
-                <Label Grid.Column="1" Text="{Binding SelectedTripPlace.Name}" FontSize="18" FontAttributes="Bold"
+                <Label Grid.Column="1" Text="{Binding TripSheet.SelectedTripPlace.Name}" FontSize="18" FontAttributes="Bold"
                        VerticalOptions="Center" LineBreakMode="WordWrap" />
             </Grid>
 
@@ -551,31 +551,31 @@
             <HorizontalStackLayout Grid.Row="1" Spacing="12">
                 <HorizontalStackLayout Spacing="4">
                     <Label Text="Lat:" FontSize="14" FontAttributes="Bold" TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
-                    <Label Text="{Binding SelectedTripPlace.Latitude, StringFormat='{0:F6}'}" FontSize="14" />
+                    <Label Text="{Binding TripSheet.SelectedTripPlace.Latitude, StringFormat='{0:F6}'}" FontSize="14" />
                 </HorizontalStackLayout>
                 <HorizontalStackLayout Spacing="4">
                     <Label Text="Lon:" FontSize="14" FontAttributes="Bold" TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
-                    <Label Text="{Binding SelectedTripPlace.Longitude, StringFormat='{0:F6}'}" FontSize="14" />
+                    <Label Text="{Binding TripSheet.SelectedTripPlace.Longitude, StringFormat='{0:F6}'}" FontSize="14" />
                 </HorizontalStackLayout>
             </HorizontalStackLayout>
 
             <!-- Row 2: Address (if present) -->
             <Grid Grid.Row="2" ColumnDefinitions="Auto,*" ColumnSpacing="4"
-                  IsVisible="{Binding SelectedTripPlace.Address, Converter={StaticResource IsNotNullConverter}}">
+                  IsVisible="{Binding TripSheet.SelectedTripPlace.Address, Converter={StaticResource IsNotNullConverter}}">
                 <Label Grid.Column="0" Text="Address:" FontSize="14" FontAttributes="Bold"
                        TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
-                <Label Grid.Column="1" Text="{Binding SelectedTripPlace.Address}" FontSize="14" LineBreakMode="WordWrap" />
+                <Label Grid.Column="1" Text="{Binding TripSheet.SelectedTripPlace.Address}" FontSize="14" LineBreakMode="WordWrap" />
             </Grid>
 
             <!-- Row 3: Notes WebView - fills remaining space, scrolls independently -->
             <Border Grid.Row="3" Padding="0" StrokeThickness="0"
                     BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}"
-                    IsVisible="{Binding SelectedTripPlace.Notes, Converter={StaticResource IsNotNullConverter}}">
+                    IsVisible="{Binding TripSheet.SelectedTripPlace.Notes, Converter={StaticResource IsNotNullConverter}}">
                 <Border.StrokeShape>
                     <RoundRectangle CornerRadius="6" />
                 </Border.StrokeShape>
                 <WebView x:Name="NotesWebView"
-                         Source="{Binding SelectedTripPlaceNotesHtml}"
+                         Source="{Binding TripSheet.SelectedTripPlaceNotesHtml}"
                          VerticalOptions="Fill"
                          HorizontalOptions="Fill"
                          Navigating="OnNotesWebViewNavigating" />
@@ -586,13 +586,13 @@
         <Grid Grid.Row="1"
               RowDefinitions="*"
               Padding="8,0,8,8"
-              IsVisible="{Binding IsTripSheetShowingTripNotes}">
+              IsVisible="{Binding TripSheet.IsTripSheetShowingTripNotes}">
             <Border Padding="0" StrokeThickness="0"
                     BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}">
                 <Border.StrokeShape>
                     <RoundRectangle CornerRadius="6" />
                 </Border.StrokeShape>
-                <WebView Source="{Binding TripNotesHtml}"
+                <WebView Source="{Binding TripSheet.TripNotesHtml}"
                          VerticalOptions="Fill"
                          HorizontalOptions="Fill"
                          Navigating="OnNotesWebViewNavigating" />
@@ -603,13 +603,13 @@
         <Grid Grid.Row="1"
               RowDefinitions="*"
               Padding="8,0,8,8"
-              IsVisible="{Binding IsTripSheetShowingAreaNotes}">
+              IsVisible="{Binding TripSheet.IsTripSheetShowingAreaNotes}">
             <Border Padding="0" StrokeThickness="0"
                     BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}">
                 <Border.StrokeShape>
                     <RoundRectangle CornerRadius="6" />
                 </Border.StrokeShape>
-                <WebView Source="{Binding SelectedTripAreaNotesHtml}"
+                <WebView Source="{Binding TripSheet.SelectedTripAreaNotesHtml}"
                          VerticalOptions="Fill"
                          HorizontalOptions="Fill"
                          Navigating="OnNotesWebViewNavigating" />
@@ -620,13 +620,13 @@
         <Grid Grid.Row="1"
               RowDefinitions="*"
               Padding="8,0,8,8"
-              IsVisible="{Binding IsTripSheetShowingSegmentNotes}">
+              IsVisible="{Binding TripSheet.IsTripSheetShowingSegmentNotes}">
             <Border Padding="0" StrokeThickness="0"
                     BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}">
                 <Border.StrokeShape>
                     <RoundRectangle CornerRadius="6" />
                 </Border.StrokeShape>
-                <WebView Source="{Binding SelectedTripSegmentNotesHtml}"
+                <WebView Source="{Binding TripSheet.SelectedTripSegmentNotesHtml}"
                          VerticalOptions="Fill"
                          HorizontalOptions="Fill"
                          Navigating="OnNotesWebViewNavigating" />
@@ -637,13 +637,13 @@
         <Grid Grid.Row="1"
               RowDefinitions="*"
               Padding="8,0,8,8"
-              IsVisible="{Binding IsTripSheetShowingRegionNotes}">
+              IsVisible="{Binding TripSheet.IsTripSheetShowingRegionNotes}">
             <Border Padding="0" StrokeThickness="0"
                     BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray800}}">
                 <Border.StrokeShape>
                     <RoundRectangle CornerRadius="6" />
                 </Border.StrokeShape>
-                <WebView Source="{Binding SelectedTripRegionNotesHtml}"
+                <WebView Source="{Binding TripSheet.SelectedTripRegionNotesHtml}"
                          VerticalOptions="Fill"
                          HorizontalOptions="Fill"
                          Navigating="OnNotesWebViewNavigating" />
@@ -656,11 +656,11 @@
 
             <!-- Overview Mode Action Buttons -->
             <Grid ColumnDefinitions="*,*,*" ColumnSpacing="6" Padding="8,4,8,8"
-                  IsVisible="{Binding IsTripSheetShowingOverview}">
+                  IsVisible="{Binding TripSheet.IsTripSheetShowingOverview}">
                 <!-- Add Region/Place Button -->
                 <Button Grid.Column="0"
                         Text="+ Add"
-                        Command="{Binding AddToTripCommand}"
+                        Command="{Binding TripSheet.AddToTripCommand}"
                         BackgroundColor="{StaticResource Gray900}"
                         TextColor="{StaticResource White}"
                         CornerRadius="8"
@@ -668,7 +668,7 @@
                 <!-- Edit Trip Button -->
                 <Button Grid.Column="1"
                         Text="Edit Trip"
-                        Command="{Binding EditLoadedTripCommand}"
+                        Command="{Binding TripSheet.EditLoadedTripCommand}"
                         BackgroundColor="{StaticResource Gray900}"
                         TextColor="{StaticResource White}"
                         CornerRadius="8"
@@ -676,7 +676,7 @@
                 <!-- Unload Trip Button -->
                 <Button Grid.Column="2"
                         Text="Unload"
-                        Command="{Binding ClearLoadedTripCommand}"
+                        Command="{Binding TripSheet.ClearLoadedTripCommand}"
                         BackgroundColor="{StaticResource Gray900}"
                         TextColor="{StaticResource White}"
                         CornerRadius="8"
@@ -687,42 +687,42 @@
             <HorizontalStackLayout Spacing="12"
                                    Padding="8,6,8,12"
                                    HorizontalOptions="Center"
-                                   IsVisible="{Binding IsTripSheetShowingPlace}">
-                <ImageButton Source="copy.png" Command="{Binding CopyTripPlaceCoordsCommand}"
+                                   IsVisible="{Binding TripSheet.IsTripSheetShowingPlace}">
+                <ImageButton Source="copy.png" Command="{Binding TripSheet.CopyTripPlaceCoordsCommand}"
                              BackgroundColor="{StaticResource Gray900}"
                              WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="10" />
-                <ImageButton Source="share_icon.png" Command="{Binding ShareTripPlaceCommand}"
+                <ImageButton Source="share_icon.png" Command="{Binding TripSheet.ShareTripPlaceCommand}"
                              BackgroundColor="{StaticResource Gray900}"
                              WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="10" />
-                <ImageButton Source="edit.png" Command="{Binding EditTripPlaceCommand}"
+                <ImageButton Source="edit.png" Command="{Binding TripSheet.EditTripPlaceCommand}"
                              BackgroundColor="{StaticResource Gray900}"
                              WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="10" />
-                <ImageButton Source="wikipedia.png" Command="{Binding OpenTripPlaceWikipediaCommand}"
+                <ImageButton Source="wikipedia.png" Command="{Binding TripSheet.OpenTripPlaceWikipediaCommand}"
                              BackgroundColor="{StaticResource Gray900}"
                              WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="10" />
-                <ImageButton Source="maps_google.png" Command="{Binding OpenTripPlaceInMapsCommand}"
+                <ImageButton Source="maps_google.png" Command="{Binding TripSheet.OpenTripPlaceInMapsCommand}"
                              BackgroundColor="{StaticResource Gray900}"
                              WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="10" />
-                <ImageButton Source="navigate.png" Command="{Binding NavigateToTripPlaceCommand}"
+                <ImageButton Source="navigate.png" Command="{Binding TripSheet.NavigateToTripPlaceCommand}"
                              BackgroundColor="{StaticResource Gray900}"
                              WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="10" />
             </HorizontalStackLayout>
 
             <!-- Area Action Buttons -->
             <Grid ColumnDefinitions="*,*,*" ColumnSpacing="6" Padding="8,6,8,12"
-                  IsVisible="{Binding IsTripSheetShowingArea}">
+                  IsVisible="{Binding TripSheet.IsTripSheetShowingArea}">
                 <Button Grid.Column="0" ImageSource="edit.png" Text=" Edit" ContentLayout="Left,4"
-                        Command="{Binding EditAreaCommand}"
+                        Command="{Binding TripSheet.EditAreaCommand}"
                         BackgroundColor="{StaticResource Gray900}"
                         TextColor="{StaticResource White}"
                         CornerRadius="6" HeightRequest="40" />
                 <Button Grid.Column="1" ImageSource="maps_google.png" Text=" Maps" ContentLayout="Left,4"
-                        Command="{Binding OpenTripAreaInMapsCommand}"
+                        Command="{Binding TripSheet.OpenTripAreaInMapsCommand}"
                         BackgroundColor="{StaticResource Gray900}"
                         TextColor="{StaticResource White}"
                         CornerRadius="6" HeightRequest="40" />
                 <Button Grid.Column="2" ImageSource="wikipedia.png" Text=" Wiki" ContentLayout="Left,4"
-                        Command="{Binding OpenTripAreaWikipediaCommand}"
+                        Command="{Binding TripSheet.OpenTripAreaWikipediaCommand}"
                         BackgroundColor="{StaticResource Gray900}"
                         TextColor="{StaticResource White}"
                         CornerRadius="6" HeightRequest="40" />
@@ -730,9 +730,9 @@
 
             <!-- Segment Action Buttons -->
             <Grid ColumnDefinitions="*" Padding="8,6,8,12"
-                  IsVisible="{Binding IsTripSheetShowingSegment}">
+                  IsVisible="{Binding TripSheet.IsTripSheetShowingSegment}">
                 <Button Grid.Column="0" ImageSource="edit.png" Text=" Edit Notes" ContentLayout="Left,4"
-                        Command="{Binding EditSegmentCommand}"
+                        Command="{Binding TripSheet.EditSegmentCommand}"
                         BackgroundColor="{StaticResource Gray900}"
                         TextColor="{StaticResource White}"
                         CornerRadius="6" HeightRequest="40" />

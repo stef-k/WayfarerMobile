@@ -295,4 +295,15 @@ public partial class PublicTripsViewModel : BaseViewModel
 
         await base.OnAppearingAsync();
     }
+
+    /// <summary>
+    /// Cleans up resources.
+    /// </summary>
+    protected override void Cleanup()
+    {
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+        _searchCts = null;
+        base.Cleanup();
+    }
 }

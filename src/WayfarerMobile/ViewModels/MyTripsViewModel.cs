@@ -21,6 +21,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     private readonly IToastService _toastService;
     private readonly ITripNavigationService _tripNavigationService;
     private readonly ITripSyncService _tripSyncService;
+    private readonly ITripStateManager _tripStateManager;
     private readonly ILogger<MyTripsViewModel> _logger;
 
     #region Observable Properties
@@ -117,6 +118,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         IToastService toastService,
         ITripNavigationService tripNavigationService,
         ITripSyncService tripSyncService,
+        ITripStateManager tripStateManager,
         TripDownloadViewModel downloadViewModel,
         ILogger<MyTripsViewModel> logger)
     {
@@ -126,6 +128,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         _toastService = toastService;
         _tripNavigationService = tripNavigationService;
         _tripSyncService = tripSyncService;
+        _tripStateManager = tripStateManager;
         _logger = logger;
         Title = "My Trips";
 
@@ -155,7 +158,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
             var downloadedTrips = await _downloadService.GetDownloadedTripsAsync();
 
             // Check which trip is currently loaded on the map
-            var loadedTripId = MainViewModel.CurrentLoadedTripId;
+            var loadedTripId = _tripStateManager.CurrentLoadedTripId;
             _logger.LogDebug("LoadTripsAsync: CurrentLoadedTripId = {TripId}", loadedTripId);
 
             // Build grouped list
@@ -559,7 +562,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     /// </summary>
     private void RefreshLoadedTripState()
     {
-        var loadedTripId = MainViewModel.CurrentLoadedTripId;
+        var loadedTripId = _tripStateManager.CurrentLoadedTripId;
         _logger.LogDebug("RefreshLoadedTripState: CurrentLoadedTripId = {TripId}", loadedTripId);
 
         foreach (var group in Trips)

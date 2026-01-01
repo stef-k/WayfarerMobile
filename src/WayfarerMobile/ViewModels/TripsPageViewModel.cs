@@ -182,6 +182,7 @@ public partial class TripsPageViewModel : BaseViewModel
     {
         MyTrips.PropertyChanged -= OnMyTripsPropertyChanged;
         MyTrips.Dispose();
+        PublicTrips.Dispose();
         base.Cleanup();
     }
 
