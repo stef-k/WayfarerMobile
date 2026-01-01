@@ -179,6 +179,7 @@ public static class MauiProgram
         services.AddSingleton<IGroupsService, GroupsService>();
         services.AddSingleton<NavigationService>();
         services.AddSingleton<ITileDownloadService, TileDownloadService>();
+        services.AddSingleton<IDownloadStateManager, DownloadStateManager>();
         services.AddSingleton<TripDownloadService>();
         // Also register as interface for consumers that prefer interface injection
         services.AddSingleton<ITripDownloadService>(sp => sp.GetRequiredService<TripDownloadService>());
