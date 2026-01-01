@@ -2,7 +2,9 @@
 
 Issue #90 - Consolidate scattered cache status and overlay implementations
 
-## Current State (Scattered)
+**Status: COMPLETED**
+
+## Previous State (Scattered)
 
 | Component | Location | Purpose | Has Interface? |
 |-----------|----------|---------|----------------|
@@ -11,11 +13,11 @@ Issue #90 - Consolidate scattered cache status and overlay implementations
 | `ICacheStatusService` | Core/Interfaces | Status-only interface | N/A |
 
 **Problems:**
-1. MainViewModel injects TWO concrete services and orchestrates them manually
-2. Related functionality is split across services with no unified interface
-3. Test file `CacheStatusResultTests.cs` tests deleted types (`CacheStatusSummaryResult`, `DetailedCacheStatusResult`, `ZoomCoverageResult`)
+1. MainViewModel injected TWO concrete services and orchestrated them manually
+2. Related functionality was split across services with no unified interface
+3. Test file `CacheStatusResultTests.cs` tested deleted types (`CacheStatusSummaryResult`, `DetailedCacheStatusResult`, `ZoomCoverageResult`)
 
-## Target State (Consolidated)
+## Current State (Consolidated)
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
@@ -25,12 +27,12 @@ Issue #90 - Consolidate scattered cache status and overlay implementations
 ## Implementation Checklist
 
 ### Phase 1: Delete Dead Test Code
-- [ ] Delete `tests/WayfarerMobile.Tests/Unit/Models/CacheStatusResultTests.cs`
+- [x] Delete `tests/WayfarerMobile.Tests/Unit/Models/CacheStatusResultTests.cs`
   - Tests deleted types: `CacheStatusSummaryResult`, `DetailedCacheStatusResult`, `ZoomCoverageResult`
   - These types were in the old `ICacheStatusService` that was rewritten
 
 ### Phase 2: Create Unified Interface
-- [ ] Create `src/WayfarerMobile/Interfaces/ICacheVisualizationService.cs`
+- [x] Create `src/WayfarerMobile/Interfaces/ICacheVisualizationService.cs`
   ```csharp
   namespace WayfarerMobile.Interfaces;
 
@@ -55,21 +57,21 @@ Issue #90 - Consolidate scattered cache status and overlay implementations
   ```
 
 ### Phase 3: Create Facade Implementation
-- [ ] Create `src/WayfarerMobile/Services/TileCache/CacheVisualizationService.cs`
+- [x] Create `src/WayfarerMobile/Services/TileCache/CacheVisualizationService.cs`
   - Inject both `CacheStatusService` and `CacheOverlayService`
   - Delegate all calls to the appropriate underlying service
   - Forward `StatusChanged` event
 
 ### Phase 4: Update DI Registration
-- [ ] In `MauiProgram.cs`:
+- [x] In `MauiProgram.cs`:
   - Keep `CacheStatusService` registration (internal dependency)
   - Keep `CacheOverlayService` registration (internal dependency)
   - Add `CacheVisualizationService` registration
   - Add `ICacheVisualizationService` interface registration
-  - Remove `ICacheStatusService` registration (replaced by unified interface)
+  - Removed `ICacheStatusService` DI registration (replaced by unified interface)
 
 ### Phase 5: Update MainViewModel
-- [ ] Replace two service injections:
+- [x] Replace two service injections:
   ```csharp
   // Before:
   private readonly CacheStatusService _cacheStatusService;
@@ -78,31 +80,31 @@ Issue #90 - Consolidate scattered cache status and overlay implementations
   // After:
   private readonly ICacheVisualizationService _cacheService;
   ```
-- [ ] Update constructor parameter
-- [ ] Update `ShowCacheStatusAsync()` to use unified interface
-- [ ] Update `OnCacheStatusChanged` subscription
+- [x] Update constructor parameter
+- [x] Update `ShowCacheStatusAsync()` to use unified interface
+- [x] Update `OnCacheStatusChanged` subscription
 
 ### Phase 6: Cleanup Old Interface
-- [ ] Delete or deprecate `ICacheStatusService` from Core
-  - Option A: Delete entirely (breaking change for any external consumers)
-  - Option B: Keep as internal implementation detail, not for DI
+- [x] Keep `ICacheStatusService` in Core (internal implementation detail)
+  - Removed from DI registration
+  - Model types (`DetailedCacheInfo`, `ZoomLevelCoverage`) remain in Core
 
 ### Phase 7: Build and Test
-- [ ] Run `dotnet build` - expect 0 errors
-- [ ] Run `dotnet test` - expect all tests pass
-- [ ] Verify cache indicator works in app
-- [ ] Verify overlay toggle works in app
+- [x] Run `dotnet build` - 0 errors, 0 warnings
+- [x] Run `dotnet test` - all tests pass
+- [ ] Verify cache indicator works in app (manual testing)
+- [ ] Verify overlay toggle works in app (manual testing)
 
-## Files to Modify
+## Files Modified
 
 | File | Action |
 |------|--------|
-| `tests/.../CacheStatusResultTests.cs` | DELETE |
-| `src/WayfarerMobile/Interfaces/ICacheVisualizationService.cs` | CREATE |
-| `src/WayfarerMobile/Services/TileCache/CacheVisualizationService.cs` | CREATE |
-| `src/WayfarerMobile/MauiProgram.cs` | MODIFY (DI) |
-| `src/WayfarerMobile/ViewModels/MainViewModel.cs` | MODIFY |
-| `src/WayfarerMobile.Core/Interfaces/ICacheStatusService.cs` | DELETE or KEEP |
+| `tests/.../CacheStatusResultTests.cs` | DELETED |
+| `src/WayfarerMobile/Interfaces/ICacheVisualizationService.cs` | CREATED |
+| `src/WayfarerMobile/Services/TileCache/CacheVisualizationService.cs` | CREATED |
+| `src/WayfarerMobile/MauiProgram.cs` | MODIFIED (DI) |
+| `src/WayfarerMobile/ViewModels/MainViewModel.cs` | MODIFIED |
+| `src/WayfarerMobile.Core/Interfaces/ICacheStatusService.cs` | KEPT (internal) |
 
 ## Model Classes Location
 
@@ -110,7 +112,7 @@ The model classes stay in Core (they have no MAUI dependencies):
 - `DetailedCacheInfo` - in `ICacheStatusService.cs` (Core)
 - `ZoomLevelCoverage` - in `ICacheStatusService.cs` (Core)
 
-The unified interface will reference these Core types.
+The unified interface references these Core types.
 
 ## Why Facade Pattern?
 
