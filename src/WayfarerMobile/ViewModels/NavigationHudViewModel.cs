@@ -15,7 +15,7 @@ namespace WayfarerMobile.ViewModels;
 public partial class NavigationHudViewModel : ObservableObject, IDisposable
 {
     private bool _disposed;
-    private readonly TripNavigationService _navigationService;
+    private readonly ITripNavigationService _navigationService;
     private readonly INavigationAudioService _audioService;
     private readonly IWakeLockService _wakeLockService;
     private readonly ILogger<NavigationHudViewModel> _logger;
@@ -136,7 +136,7 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
     /// <param name="wakeLockService">The wake lock service.</param>
     /// <param name="logger">The logger instance.</param>
     public NavigationHudViewModel(
-        TripNavigationService navigationService,
+        ITripNavigationService navigationService,
         INavigationAudioService audioService,
         IWakeLockService wakeLockService,
         ILogger<NavigationHudViewModel> logger)

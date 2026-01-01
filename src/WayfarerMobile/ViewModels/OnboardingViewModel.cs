@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services;
 
 namespace WayfarerMobile.ViewModels;

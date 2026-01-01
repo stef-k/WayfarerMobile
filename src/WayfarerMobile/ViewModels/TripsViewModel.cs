@@ -19,7 +19,7 @@ public partial class TripsViewModel : BaseViewModel
     private readonly ISettingsService _settingsService;
     private readonly TripDownloadService _downloadService;
     private readonly IToastService _toastService;
-    private readonly TripNavigationService _tripNavigationService;
+    private readonly ITripNavigationService _tripNavigationService;
     private readonly ITripSyncService _tripSyncService;
     private readonly ILogger<TripsViewModel> _logger;
 
@@ -263,7 +263,7 @@ public partial class TripsViewModel : BaseViewModel
         ISettingsService settingsService,
         TripDownloadService downloadService,
         IToastService toastService,
-        TripNavigationService tripNavigationService,
+        ITripNavigationService tripNavigationService,
         ITripSyncService tripSyncService,
         ILogger<TripsViewModel> logger)
     {

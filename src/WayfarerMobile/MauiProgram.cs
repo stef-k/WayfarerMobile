@@ -8,6 +8,7 @@ using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Services;
 using WayfarerMobile.Data.Services;
 using WayfarerMobile.Handlers;
+using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services;
 using WayfarerMobile.Services.Security;
 using WayfarerMobile.Services.TileCache;
@@ -207,6 +208,7 @@ public static class MauiProgram
         services.AddSingleton<OsrmRoutingService>();
         services.AddSingleton<RouteCacheService>();
         services.AddSingleton<TripNavigationService>();
+        services.AddSingleton<ITripNavigationService>(sp => sp.GetRequiredService<TripNavigationService>());
 
         // Permissions Service
         services.AddSingleton<IPermissionsService, PermissionsService>();

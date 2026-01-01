@@ -19,7 +19,7 @@ namespace WayfarerMobile.Services;
 /// 3. Fetched routes (from OSRM when online)
 /// 4. Direct route (straight line with bearing/distance)
 /// </remarks>
-public class TripNavigationService
+public class TripNavigationService : ITripNavigationService
 {
     private readonly ILogger<TripNavigationService> _logger;
     private readonly OsrmRoutingService _osrmService;

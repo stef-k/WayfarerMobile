@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using Mapsui.Layers;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Interfaces;
 using WayfarerMobile.Data.Entities;
 
 namespace WayfarerMobile.ViewModels;

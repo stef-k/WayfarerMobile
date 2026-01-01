@@ -10,6 +10,7 @@ using NetTopologySuite.Geometries;
 using WayfarerMobile.Core.Algorithms;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services.TileCache;
 using Map = Mapsui.Map;
 using Color = Mapsui.Styles.Color;

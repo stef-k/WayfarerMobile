@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Interfaces;
 
 namespace WayfarerMobile.Services;
 

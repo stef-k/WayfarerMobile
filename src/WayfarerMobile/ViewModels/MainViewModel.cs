@@ -8,6 +8,7 @@ using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Services;
 using WayfarerMobile.Helpers;
+using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services;
 using WayfarerMobile.Services.TileCache;
 using Map = Mapsui.Map;
@@ -33,7 +34,7 @@ public partial class MainViewModel : BaseViewModel
 
     private readonly ILocationBridge _locationBridge;
     private readonly IPermissionsService _permissionsService;
-    private readonly TripNavigationService _tripNavigationService;
+    private readonly ITripNavigationService _tripNavigationService;
     private readonly NavigationHudViewModel _navigationHudViewModel;
     private readonly IToastService _toastService;
     private readonly CheckInViewModel _checkInViewModel;
@@ -913,7 +914,7 @@ public partial class MainViewModel : BaseViewModel
     public MainViewModel(
         ILocationBridge locationBridge,
         IPermissionsService permissionsService,
-        TripNavigationService tripNavigationService,
+        ITripNavigationService tripNavigationService,
         NavigationHudViewModel navigationHudViewModel,
         IToastService toastService,
         CheckInViewModel checkInViewModel,

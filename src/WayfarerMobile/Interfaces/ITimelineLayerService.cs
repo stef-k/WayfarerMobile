@@ -2,7 +2,7 @@ using Mapsui;
 using Mapsui.Layers;
 using WayfarerMobile.Core.Models;
 
-namespace WayfarerMobile.Core.Interfaces;
+namespace WayfarerMobile.Interfaces;
 
 /// <summary>
 /// Service for managing timeline-related map layers.
