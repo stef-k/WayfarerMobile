@@ -1594,8 +1594,8 @@ public class TripDownloadService : ITripDownloadService
 
         for (int zoom = minZoom; zoom <= effectiveMaxZoom; zoom++)
         {
-            var (minX, maxY) = LatLonToTile(bbox.North, bbox.West, zoom);
-            var (maxX, minY) = LatLonToTile(bbox.South, bbox.East, zoom);
+            var (minX, maxY) = _tileDownloadService.LatLonToTile(bbox.North, bbox.West, zoom);
+            var (maxX, minY) = _tileDownloadService.LatLonToTile(bbox.South, bbox.East, zoom);
 
             for (int x = minX; x <= maxX; x++)
             {
@@ -1632,23 +1632,6 @@ public class TripDownloadService : ITripDownloadService
             > 0.1 => 16,   // Very small area (neighborhood) - very high detail
             _ => 17        // Tiny area - maximum detail
         };
-    }
-
-    /// <summary>
-    /// Converts latitude/longitude to tile coordinates.
-    /// </summary>
-    private (int X, int Y) LatLonToTile(double lat, double lon, int zoom)
-    {
-        var n = Math.Pow(2, zoom);
-        var x = (int)Math.Floor((lon + 180.0) / 360.0 * n);
-        var latRad = lat * Math.PI / 180.0;
-        var y = (int)Math.Floor((1.0 - Math.Log(Math.Tan(latRad) + 1.0 / Math.Cos(latRad)) / Math.PI) / 2.0 * n);
-
-        // Clamp to valid range
-        x = Math.Max(0, Math.Min((int)n - 1, x));
-        y = Math.Max(0, Math.Min((int)n - 1, y));
-
-        return (x, y);
     }
 
     /// <summary>
@@ -2231,60 +2214,8 @@ public class TripDownloadService : ITripDownloadService
     public int CleanupOrphanedTempFiles()
     {
         ThrowIfDisposed();
-
-        var cleanedCount = 0;
-        try
-        {
-            var tilesRootDir = Path.Combine(FileSystem.CacheDirectory, "tiles");
-            if (!Directory.Exists(tilesRootDir))
-                return 0;
-
-            // Find all .tmp files in the tiles directory tree
-            var tempFiles = Directory.GetFiles(tilesRootDir, "*.tmp", SearchOption.AllDirectories);
-            var maxAge = DateTime.UtcNow.AddHours(-TempFileMaxAgeHours);
-
-            foreach (var tempFile in tempFiles)
-            {
-                try
-                {
-                    var fileInfo = new FileInfo(tempFile);
-
-                    // Only delete temp files older than configured age (to avoid deleting active downloads)
-                    if (fileInfo.LastWriteTimeUtc < maxAge)
-                    {
-                        File.Delete(tempFile);
-                        cleanedCount++;
-                    }
-                }
-                catch (IOException ex)
-                {
-                    _logger.LogDebug(ex, "I/O error deleting temp file: {FilePath}", tempFile);
-                }
-                catch (UnauthorizedAccessException ex)
-                {
-                    _logger.LogDebug(ex, "Access denied deleting temp file: {FilePath}", tempFile);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogDebug(ex, "Unexpected error deleting temp file: {FilePath}", tempFile);
-                }
-            }
-
-            if (cleanedCount > 0)
-            {
-                _logger.LogInformation("Cleaned up {Count} orphaned temp files", cleanedCount);
-            }
-        }
-        catch (IOException ex)
-        {
-            _logger.LogWarning(ex, "I/O error during temp file cleanup");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Unexpected error during temp file cleanup");
-        }
-
-        return cleanedCount;
+        return _tileDownloadService.CleanupOrphanedTempFilesAsync(TempFileMaxAgeHours)
+            .GetAwaiter().GetResult();
     }
 
     #endregion
