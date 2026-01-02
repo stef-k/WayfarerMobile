@@ -889,6 +889,10 @@ public class TripSyncService : ITripSyncService
 
     /// <summary>
     /// Updates a trip's metadata with optimistic UI pattern.
+    /// 1. Reads current values from offline table
+    /// 2. Updates offline table (optimistic)
+    /// 3. Stores original in queue for restoration
+    /// 4. Syncs to server
     /// </summary>
     public async Task UpdateTripAsync(
         Guid tripId,
@@ -898,6 +902,19 @@ public class TripSyncService : ITripSyncService
     {
         await EnsureInitializedAsync();
 
+        // 1. Read original from offline table for potential restoration
+        var originalTrip = await _databaseService.GetDownloadedTripByServerIdAsync(tripId);
+        string? originalName = originalTrip?.Name;
+        string? originalNotes = originalTrip?.Notes;
+
+        // 2. Apply optimistic update to offline table
+        if (originalTrip != null)
+        {
+            if (name != null) originalTrip.Name = name;
+            if (includeNotes) originalTrip.Notes = notes;
+            await _databaseService.SaveDownloadedTripAsync(originalTrip);
+        }
+
         var request = new TripUpdateRequest
         {
             Name = name,
@@ -906,7 +923,7 @@ public class TripSyncService : ITripSyncService
 
         if (!IsConnected)
         {
-            await EnqueueTripMutationAsync(tripId, name, notes, includeNotes);
+            await EnqueueTripMutationAsync(tripId, name, notes, includeNotes, originalName, originalNotes);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tripId, Message = "Updated offline - will sync when online" });
             return;
         }
@@ -921,26 +938,33 @@ public class TripSyncService : ITripSyncService
                 return;
             }
 
-            await EnqueueTripMutationAsync(tripId, name, notes, includeNotes);
+            await EnqueueTripMutationAsync(tripId, name, notes, includeNotes, originalName, originalNotes);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tripId, Message = "Sync failed - will retry" });
         }
         catch (HttpRequestException ex) when (IsClientError(ex))
         {
+            // Revert optimistic update on server rejection
+            if (originalTrip != null)
+            {
+                originalTrip.Name = originalName ?? originalTrip.Name;
+                if (includeNotes) originalTrip.Notes = originalNotes;
+                await _databaseService.SaveDownloadedTripAsync(originalTrip);
+            }
             SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = tripId, ErrorMessage = $"Server rejected: {ex.Message}", IsClientError = true });
         }
         catch (HttpRequestException ex)
         {
-            await EnqueueTripMutationAsync(tripId, name, notes, includeNotes);
+            await EnqueueTripMutationAsync(tripId, name, notes, includeNotes, originalName, originalNotes);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tripId, Message = $"Network error: {ex.Message} - will retry" });
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
         {
-            await EnqueueTripMutationAsync(tripId, name, notes, includeNotes);
+            await EnqueueTripMutationAsync(tripId, name, notes, includeNotes, originalName, originalNotes);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tripId, Message = "Request timed out - will retry" });
         }
         catch (Exception ex)
         {
-            await EnqueueTripMutationAsync(tripId, name, notes, includeNotes);
+            await EnqueueTripMutationAsync(tripId, name, notes, includeNotes, originalName, originalNotes);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = tripId, Message = $"Unexpected error: {ex.Message} - will retry" });
         }
     }
@@ -949,7 +973,9 @@ public class TripSyncService : ITripSyncService
         Guid tripId,
         string? name,
         string? notes,
-        bool includeNotes)
+        bool includeNotes,
+        string? originalName,
+        string? originalNotes)
     {
         var existing = await _database!.Table<PendingTripMutation>()
             .Where(m => m.EntityId == tripId && m.EntityType == "Trip" && !m.IsRejected)
@@ -957,6 +983,7 @@ public class TripSyncService : ITripSyncService
 
         if (existing != null)
         {
+            // Update new values but preserve original values from first mutation
             if (name != null) existing.Name = name;
             if (includeNotes) { existing.Notes = notes; existing.IncludeNotes = true; }
             existing.CreatedAt = DateTime.UtcNow;
@@ -973,6 +1000,8 @@ public class TripSyncService : ITripSyncService
             Name = name,
             Notes = notes,
             IncludeNotes = includeNotes,
+            OriginalName = originalName,
+            OriginalNotes = originalNotes,
             CreatedAt = DateTime.UtcNow
         };
         await _database!.InsertAsync(mutation);
@@ -1593,13 +1622,18 @@ public class TripSyncService : ITripSyncService
     /// <summary>
     /// Cancel all pending mutations (discard changes).
     /// Restores original values in offline tables before deleting mutations.
+    /// Uses ID-based deletion to prevent race conditions with newly added mutations.
     /// </summary>
     public async Task CancelPendingMutationsAsync()
     {
         await EnsureInitializedAsync();
 
-        // Get all pending mutations
+        // Get all pending mutations and capture their IDs
         var mutations = await _database!.Table<PendingTripMutation>().ToListAsync();
+        var mutationIds = mutations.Select(m => m.Id).ToList();
+
+        if (mutationIds.Count == 0)
+            return;
 
         // Restore original values for each mutation before deleting
         foreach (var mutation in mutations)
@@ -1607,8 +1641,11 @@ public class TripSyncService : ITripSyncService
             await RestoreOriginalValuesAsync(mutation);
         }
 
-        // Delete all mutations
-        await _database.Table<PendingTripMutation>().DeleteAsync();
+        // Delete only the mutations we queried (prevents race condition with newly added mutations)
+        foreach (var id in mutationIds)
+        {
+            await _database.DeleteAsync<PendingTripMutation>(id);
+        }
     }
 
     /// <summary>
@@ -1670,15 +1707,20 @@ public class TripSyncService : ITripSyncService
     /// <summary>
     /// Cancels pending mutations for a specific trip (discards unsynced changes).
     /// Also restores original values in offline tables.
+    /// Uses ID-based deletion to prevent race conditions with newly added mutations.
     /// </summary>
     public async Task CancelPendingMutationsForTripAsync(Guid tripId)
     {
         await EnsureInitializedAsync();
 
-        // Get all pending mutations for this trip
+        // Get all pending mutations for this trip and capture their IDs
         var mutations = await _database!.Table<PendingTripMutation>()
             .Where(m => m.TripId == tripId)
             .ToListAsync();
+        var mutationIds = mutations.Select(m => m.Id).ToList();
+
+        if (mutationIds.Count == 0)
+            return;
 
         // Restore original values for each mutation
         foreach (var mutation in mutations)
@@ -1686,10 +1728,11 @@ public class TripSyncService : ITripSyncService
             await RestoreOriginalValuesAsync(mutation);
         }
 
-        // Delete all mutations for this trip
-        await _database.Table<PendingTripMutation>()
-            .Where(m => m.TripId == tripId)
-            .DeleteAsync();
+        // Delete only the mutations we queried (prevents race condition with newly added mutations)
+        foreach (var id in mutationIds)
+        {
+            await _database.DeleteAsync<PendingTripMutation>(id);
+        }
     }
 
     /// <summary>
@@ -1802,14 +1845,38 @@ public class TripSyncService : ITripSyncService
                     }
                 }
                 break;
+
+            case "Trip":
+                if (mutation.OperationType == "Update")
+                {
+                    var trip = await _databaseService.GetDownloadedTripByServerIdAsync(mutation.EntityId);
+                    if (trip != null)
+                    {
+                        if (mutation.OriginalName != null) trip.Name = mutation.OriginalName;
+                        if (mutation.IncludeNotes) trip.Notes = mutation.OriginalNotes;
+                        await _databaseService.SaveDownloadedTripAsync(trip);
+                    }
+                }
+                break;
         }
     }
 
+    /// <summary>
+    /// Determines if the HTTP error is a permanent client error (should not be retried).
+    /// Excludes 429 Too Many Requests which is temporary and should be retried.
+    /// </summary>
     private static bool IsClientError(HttpRequestException ex)
     {
-        return ex.StatusCode.HasValue &&
-               (int)ex.StatusCode.Value >= 400 &&
-               (int)ex.StatusCode.Value < 500;
+        if (!ex.StatusCode.HasValue)
+            return false;
+
+        var statusCode = (int)ex.StatusCode.Value;
+
+        // 429 Too Many Requests is NOT a permanent client error - it should be retried
+        if (statusCode == 429)
+            return false;
+
+        return statusCode >= 400 && statusCode < 500;
     }
 
     #endregion
