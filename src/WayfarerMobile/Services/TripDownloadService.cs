@@ -25,6 +25,7 @@ public class TripDownloadService : ITripDownloadService
     private readonly IDownloadStateManager _downloadStateManager;
     private readonly ICacheLimitEnforcer _cacheLimitEnforcer;
     private readonly ITripMetadataBuilder _metadataBuilder;
+    private readonly ITripContentService _contentService;
     private readonly ILogger<TripDownloadService> _logger;
 
     #region Constants
@@ -174,6 +175,7 @@ public class TripDownloadService : ITripDownloadService
         IDownloadStateManager downloadStateManager,
         ICacheLimitEnforcer cacheLimitEnforcer,
         ITripMetadataBuilder metadataBuilder,
+        ITripContentService contentService,
         ILogger<TripDownloadService> logger)
     {
         _apiClient = apiClient;
@@ -184,6 +186,7 @@ public class TripDownloadService : ITripDownloadService
         _downloadStateManager = downloadStateManager;
         _cacheLimitEnforcer = cacheLimitEnforcer;
         _metadataBuilder = metadataBuilder;
+        _contentService = contentService;
         _logger = logger;
 
         // Initialize shared HttpClient with appropriate timeout
@@ -494,26 +497,8 @@ public class TripDownloadService : ITripDownloadService
     /// <summary>
     /// Gets offline places for a downloaded trip.
     /// </summary>
-    public async Task<List<TripPlace>> GetOfflinePlacesAsync(Guid tripServerId)
-    {
-        var trip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
-        if (trip == null)
-            return new List<TripPlace>();
-
-        var entities = await _databaseService.GetOfflinePlacesAsync(trip.Id);
-        return entities.Select(e => new TripPlace
-        {
-            Id = e.ServerId,
-            Name = e.Name,
-            Latitude = e.Latitude,
-            Longitude = e.Longitude,
-            Notes = e.Notes,
-            Icon = e.IconName,
-            MarkerColor = e.MarkerColor,
-            Address = e.Address,
-            SortOrder = e.SortOrder
-        }).ToList();
-    }
+    public Task<List<TripPlace>> GetOfflinePlacesAsync(Guid tripServerId)
+        => _contentService.GetOfflinePlacesAsync(tripServerId);
 
     /// <summary>
     /// Gets complete offline trip details for navigation.
@@ -521,151 +506,16 @@ public class TripDownloadService : ITripDownloadService
     /// </summary>
     /// <param name="tripServerId">The server-side trip ID.</param>
     /// <returns>Complete trip details or null if not downloaded.</returns>
-    public async Task<TripDetails?> GetOfflineTripDetailsAsync(Guid tripServerId)
-    {
-        var trip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
-        if (trip == null)
-        {
-            _logger.LogWarning("Trip not found in offline storage: {TripId}", tripServerId);
-            return null;
-        }
-
-        // Load all offline data in parallel
-        var placesTask = _databaseService.GetOfflinePlacesAsync(trip.Id);
-        var segmentsTask = _databaseService.GetOfflineSegmentsAsync(trip.Id);
-        var areasTask = _databaseService.GetOfflineAreasAsync(trip.Id);
-        var polygonsTask = _databaseService.GetOfflinePolygonsAsync(trip.Id);
-
-        await Task.WhenAll(placesTask, segmentsTask, areasTask, polygonsTask);
-
-        var placeEntities = await placesTask;
-        var segmentEntities = await segmentsTask;
-        var areaEntities = await areasTask;
-        var polygonEntities = await polygonsTask;
-
-        // Group polygons by region
-        var polygonsByRegion = polygonEntities.GroupBy(p => p.RegionId).ToDictionary(g => g.Key, g => g.ToList());
-
-        // Build regions with places and areas (polygon zones)
-        var regions = new List<TripRegion>();
-        var placesByRegion = placeEntities.GroupBy(p => p.RegionId ?? Guid.Empty);
-
-        foreach (var regionGroup in placesByRegion)
-        {
-            var area = areaEntities.FirstOrDefault(a => a.ServerId == regionGroup.Key);
-
-            // Build TripArea list for this region
-            var tripAreas = new List<TripArea>();
-            if (polygonsByRegion.TryGetValue(regionGroup.Key, out var regionPolygons))
-            {
-                tripAreas = regionPolygons.Select(p => new TripArea
-                {
-                    Id = p.ServerId,
-                    Name = p.Name,
-                    Notes = p.Notes,
-                    FillColor = p.FillColor,
-                    StrokeColor = p.StrokeColor,
-                    GeometryGeoJson = p.GeometryGeoJson,
-                    SortOrder = p.SortOrder
-                }).OrderBy(a => a.SortOrder).ToList();
-            }
-
-            var region = new TripRegion
-            {
-                Id = regionGroup.Key,
-                Name = area?.Name ?? regionGroup.First().RegionName ?? "Places",
-                Notes = area?.Notes,
-                CoverImageUrl = area?.CoverImageUrl,
-                SortOrder = area?.SortOrder ?? 0,
-                Places = regionGroup.Select(p => new TripPlace
-                {
-                    Id = p.ServerId,
-                    Name = p.Name,
-                    Latitude = p.Latitude,
-                    Longitude = p.Longitude,
-                    Notes = p.Notes,
-                    Icon = p.IconName,
-                    MarkerColor = p.MarkerColor,
-                    Address = p.Address,
-                    SortOrder = p.SortOrder
-                }).OrderBy(p => p.SortOrder).ToList(),
-                Areas = tripAreas
-            };
-            regions.Add(region);
-        }
-
-        // Build segments
-        var segments = segmentEntities.Select(s => new TripSegment
-        {
-            Id = s.ServerId,
-            OriginId = s.OriginId,
-            OriginName = s.OriginName,
-            DestinationId = s.DestinationId,
-            DestinationName = s.DestinationName,
-            TransportMode = s.TransportMode,
-            DistanceKm = s.DistanceKm,
-            DurationMinutes = s.DurationMinutes,
-            Notes = s.Notes,
-            Geometry = s.Geometry
-        }).ToList();
-
-        // Build trip details
-        var tripDetails = new TripDetails
-        {
-            Id = trip.ServerId,
-            Name = trip.Name,
-            Notes = trip.Notes,
-            CoverImageUrl = trip.CoverImageUrl,
-            UpdatedAt = trip.ServerUpdatedAt ?? trip.UpdatedAt,
-            BoundingBox = new BoundingBox
-            {
-                North = trip.BoundingBoxNorth,
-                South = trip.BoundingBoxSouth,
-                East = trip.BoundingBoxEast,
-                West = trip.BoundingBoxWest
-            },
-            Regions = regions.OrderBy(r => r.SortOrder).ToList(),
-            Segments = segments
-        };
-
-        // Debug: Log loaded data to verify SQLite storage
-        _logger.LogInformation("Loaded offline trip: {TripName} ({PlaceCount} places, {SegmentCount} segments)",
-            trip.Name, placeEntities.Count, segmentEntities.Count);
-        foreach (var place in tripDetails.AllPlaces.Take(3))
-        {
-            _logger.LogDebug("  Loaded place '{Name}': Lat={Lat}, Lon={Lon}",
-                place.Name, place.Latitude, place.Longitude);
-        }
-
-        return tripDetails;
-    }
+    public Task<TripDetails?> GetOfflineTripDetailsAsync(Guid tripServerId)
+        => _contentService.GetOfflineTripDetailsAsync(tripServerId);
 
     /// <summary>
     /// Gets offline segments for a downloaded trip.
     /// </summary>
     /// <param name="tripServerId">The server-side trip ID.</param>
     /// <returns>List of trip segments.</returns>
-    public async Task<List<TripSegment>> GetOfflineSegmentsAsync(Guid tripServerId)
-    {
-        var trip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
-        if (trip == null)
-            return new List<TripSegment>();
-
-        var entities = await _databaseService.GetOfflineSegmentsAsync(trip.Id);
-        return entities.Select(s => new TripSegment
-        {
-            Id = s.ServerId,
-            OriginId = s.OriginId,
-            OriginName = s.OriginName,
-            DestinationId = s.DestinationId,
-            DestinationName = s.DestinationName,
-            TransportMode = s.TransportMode,
-            DistanceKm = s.DistanceKm,
-            DurationMinutes = s.DurationMinutes,
-            Notes = s.Notes,
-            Geometry = s.Geometry
-        }).ToList();
-    }
+    public Task<List<TripSegment>> GetOfflineSegmentsAsync(Guid tripServerId)
+        => _contentService.GetOfflineSegmentsAsync(tripServerId);
 
     /// <summary>
     /// Deletes a downloaded trip and clears any pending mutations.
@@ -1084,40 +934,11 @@ public class TripDownloadService : ITripDownloadService
     /// </summary>
     /// <param name="tripServerId">The server-side trip ID.</param>
     /// <returns>True if update is available, false otherwise.</returns>
-    public async Task<bool> CheckTripUpdateNeededAsync(Guid tripServerId)
-    {
-        try
-        {
-            var localTrip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
-            if (localTrip == null)
-                return false;
-
-            if (!_tileDownloadService.IsNetworkAvailable())
-                return false;
-
-            // Fetch current trip summary from server
-            var serverTrip = await _apiClient.GetTripDetailsAsync(tripServerId);
-            if (serverTrip == null)
-                return false;
-
-            var needsUpdate = serverTrip.Version > localTrip.Version;
-            if (needsUpdate)
-            {
-                _logger.LogInformation("Trip {TripName} needs update: local v{LocalVersion} < server v{ServerVersion}",
-                    localTrip.Name, localTrip.Version, serverTrip.Version);
-            }
-
-            return needsUpdate;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to check update for trip {TripId}", tripServerId);
-            return false;
-        }
-    }
+    public Task<bool> CheckTripUpdateNeededAsync(Guid tripServerId)
+        => _contentService.CheckTripUpdateNeededAsync(tripServerId);
 
     /// <summary>
-    /// Syncs a downloaded trip with the server (updates places, segments, areas without re-downloading tiles).
+    /// Syncs a downloaded trip with the server (updates places, segments, areas and re-downloads tiles if bounding box changed).
     /// </summary>
     /// <param name="tripServerId">The server-side trip ID.</param>
     /// <param name="forceSync">If true, sync regardless of version.</param>
@@ -1130,80 +951,25 @@ public class TripDownloadService : ITripDownloadService
     {
         try
         {
-            var localTrip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
-            if (localTrip == null)
+            // Delegate metadata sync to content service
+            var progress = new Progress<DownloadProgressEventArgs>(args =>
             {
-                _logger.LogWarning("Cannot sync trip {TripId} - not downloaded", tripServerId);
+                // Scale content service progress (0-100) to our range (5-75)
+                var scaledPercent = 5 + (int)(args.ProgressPercent * 0.7);
+                RaiseProgress(args.TripId, scaledPercent, args.StatusMessage ?? "Syncing...");
+            });
+
+            var (syncedTrip, boundingBoxChanged) = await _contentService.SyncTripMetadataAsync(
+                tripServerId, forceSync, progress, cancellationToken);
+
+            if (syncedTrip == null)
+            {
                 return null;
             }
 
-            if (!_tileDownloadService.IsNetworkAvailable())
-            {
-                _logger.LogWarning("Cannot sync trip - no network connection");
-                return null;
-            }
-
-            _logger.LogInformation("Starting sync for trip: {TripName}", localTrip.Name);
-            RaiseProgress(localTrip.Id, 5, "Checking for updates...");
-
-            // Fetch full trip details from server
-            var serverTrip = await _apiClient.GetTripDetailsAsync(tripServerId, cancellationToken);
-            if (serverTrip == null)
-            {
-                _logger.LogWarning("Failed to fetch trip details for sync: {TripId}", tripServerId);
-                return null;
-            }
-
-            // Check if update is needed (unless force sync)
-            if (!forceSync && serverTrip.Version <= localTrip.Version)
-            {
-                _logger.LogInformation("Trip {TripName} is already up to date (v{Version})", localTrip.Name, localTrip.Version);
-                return localTrip;
-            }
-
-            RaiseProgress(localTrip.Id, 15, "Updating regions...");
-
-            // Update areas/regions using metadata builder
-            var areas = _metadataBuilder.BuildAreas(serverTrip);
-            await _databaseService.SaveOfflineAreasAsync(localTrip.Id, areas);
-            localTrip.RegionCount = areas.Count;
-
-            RaiseProgress(localTrip.Id, 35, "Updating places...");
-
-            // Update places with region info
-            var places = _metadataBuilder.BuildPlaces(serverTrip);
-            await _databaseService.SaveOfflinePlacesAsync(localTrip.Id, places);
-            localTrip.PlaceCount = places.Count;
-
-            RaiseProgress(localTrip.Id, 55, "Updating segments...");
-
-            // Update segments with place names
-            var segments = _metadataBuilder.BuildSegments(serverTrip);
-            await _databaseService.SaveOfflineSegmentsAsync(localTrip.Id, segments);
-            localTrip.SegmentCount = segments.Count;
-
-            RaiseProgress(localTrip.Id, 65, "Updating polygon zones...");
-
-            // Update polygon zones (TripArea) from each region
-            var polygons = _metadataBuilder.BuildPolygons(serverTrip);
-            await _databaseService.SaveOfflinePolygonsAsync(localTrip.Id, polygons);
-            localTrip.AreaCount = polygons.Count;
-
-            RaiseProgress(localTrip.Id, 75, "Checking map coverage...");
-
-            // Check if bounding box changed significantly (needs tile re-download)
-            var boundingBoxChanged = serverTrip.BoundingBox != null && HasBoundingBoxChangedSignificantly(
-                localTrip.BoundingBoxNorth, localTrip.BoundingBoxSouth, localTrip.BoundingBoxEast, localTrip.BoundingBoxWest,
-                serverTrip.BoundingBox);
-
+            // If bounding box changed, re-download tiles
             if (boundingBoxChanged)
             {
-                // Always update bounding box metadata from server (independent of tile download)
-                localTrip.BoundingBoxNorth = serverTrip.BoundingBox!.North;
-                localTrip.BoundingBoxSouth = serverTrip.BoundingBox.South;
-                localTrip.BoundingBoxEast = serverTrip.BoundingBox.East;
-                localTrip.BoundingBoxWest = serverTrip.BoundingBox.West;
-
                 // Guard against concurrent tile downloads for the same trip
                 if (!_activeDownloads.TryAdd(tripServerId, true))
                 {
@@ -1215,37 +981,46 @@ public class TripDownloadService : ITripDownloadService
 
                 try
                 {
-                    _logger.LogInformation("Bounding box changed for trip {TripName}, re-downloading tiles", localTrip.Name);
-                    RaiseProgress(localTrip.Id, 80, "Downloading new map tiles...");
+                    _logger.LogInformation("Bounding box changed for trip {TripId}, re-downloading tiles", tripServerId);
+                    RaiseProgress(syncedTrip.Id, 80, "Downloading new map tiles...");
 
                     // Re-download tiles for new bounding box using unified download path
-                    // This respects cache limits and supports pause/resume during sync
-                    var tileCoords = CalculateTilesForBoundingBox(serverTrip.BoundingBox);
+                    var boundingBox = new BoundingBox
+                    {
+                        North = syncedTrip.BoundingBoxNorth,
+                        South = syncedTrip.BoundingBoxSouth,
+                        East = syncedTrip.BoundingBoxEast,
+                        West = syncedTrip.BoundingBoxWest
+                    };
+
+                    var tileCoords = CalculateTilesForBoundingBox(boundingBox);
                     if (tileCoords.Count > 0)
                     {
                         // Initialize per-trip warning state for sync download
-                        _tripWarningStates[localTrip.Id] = new TripWarningState();
+                        _tripWarningStates[syncedTrip.Id] = new TripWarningState();
 
                         var downloadResult = await DownloadTilesWithStateAsync(
-                            localTrip,
+                            syncedTrip,
                             tileCoords,
                             initialCompleted: 0,
                             totalTiles: tileCoords.Count,
                             initialBytes: 0,
                             cancellationToken);
 
-                        localTrip.TileCount = downloadResult.TilesDownloaded;
-                        localTrip.TotalSizeBytes = downloadResult.TotalBytes;
+                        syncedTrip.TileCount = downloadResult.TilesDownloaded;
+                        syncedTrip.TotalSizeBytes = downloadResult.TotalBytes;
 
                         // Clean up warning state
-                        _tripWarningStates.TryRemove(localTrip.Id, out _);
+                        _tripWarningStates.TryRemove(syncedTrip.Id, out _);
 
-                        // If paused or limit reached, don't mark as complete
+                        // Save updated tile counts
+                        await _databaseService.SaveDownloadedTripAsync(syncedTrip);
+
+                        // If paused or limit reached, log but don't fail
                         if (downloadResult.WasPaused || downloadResult.WasLimitReached)
                         {
-                            _logger.LogWarning("Sync tile download stopped for trip {TripName}: Paused={Paused}, LimitReached={LimitReached}",
-                                localTrip.Name, downloadResult.WasPaused, downloadResult.WasLimitReached);
-                            // Trip remains in current state, tiles partially downloaded
+                            _logger.LogWarning("Sync tile download stopped for trip {TripId}: Paused={Paused}, LimitReached={LimitReached}",
+                                tripServerId, downloadResult.WasPaused, downloadResult.WasLimitReached);
                         }
                     }
                 }
@@ -1255,19 +1030,8 @@ public class TripDownloadService : ITripDownloadService
                 }
             }
 
-            // Update version and timestamps
-            localTrip.Version = serverTrip.Version;
-            localTrip.ServerUpdatedAt = DateTime.UtcNow;
-            localTrip.UpdatedAt = DateTime.UtcNow;
-            localTrip.Name = serverTrip.Name; // In case name changed
-
-            await _databaseService.SaveDownloadedTripAsync(localTrip);
-
-            RaiseProgress(localTrip.Id, 100, "Sync complete");
-            _logger.LogInformation("Trip synced: {TripName} (v{Version}, {PlaceCount} places, {SegmentCount} segments)",
-                localTrip.Name, localTrip.Version, places.Count, segments.Count);
-
-            return localTrip;
+            RaiseProgress(syncedTrip.Id, 100, "Sync complete");
+            return syncedTrip;
         }
         catch (OperationCanceledException)
         {
@@ -1285,33 +1049,8 @@ public class TripDownloadService : ITripDownloadService
     /// Gets all downloaded trips that need syncing.
     /// </summary>
     /// <returns>List of trip entities that have updates available.</returns>
-    public async Task<List<DownloadedTripEntity>> GetTripsNeedingUpdateAsync()
-    {
-        var tripsNeedingUpdate = new List<DownloadedTripEntity>();
-
-        if (!_tileDownloadService.IsNetworkAvailable())
-            return tripsNeedingUpdate;
-
-        var downloadedTrips = await _databaseService.GetDownloadedTripsAsync();
-
-        foreach (var trip in downloadedTrips.Where(t =>
-            t.Status == TripDownloadStatus.Complete || t.Status == TripDownloadStatus.MetadataOnly))
-        {
-            try
-            {
-                if (await CheckTripUpdateNeededAsync(trip.ServerId))
-                {
-                    tripsNeedingUpdate.Add(trip);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to check update for trip {TripName}", trip.Name);
-            }
-        }
-
-        return tripsNeedingUpdate;
-    }
+    public Task<List<DownloadedTripEntity>> GetTripsNeedingUpdateAsync()
+        => _contentService.GetTripsNeedingUpdateAsync();
 
     /// <summary>
     /// Syncs all downloaded trips that have updates available.
@@ -1363,21 +1102,6 @@ public class TripDownloadService : ITripDownloadService
 
         _logger.LogInformation("Sync complete: {SyncedCount}/{TotalCount} trips updated", syncedCount, completedTrips.Count);
         return syncedCount;
-    }
-
-    /// <summary>
-    /// Checks if bounding box has changed significantly (more than ~1km at equator).
-    /// </summary>
-    private static bool HasBoundingBoxChangedSignificantly(
-        double oldNorth, double oldSouth, double oldEast, double oldWest,
-        BoundingBox newBox)
-    {
-        const double threshold = 0.01; // ~1km at equator
-
-        return Math.Abs(oldNorth - newBox.North) > threshold ||
-               Math.Abs(oldSouth - newBox.South) > threshold ||
-               Math.Abs(oldEast - newBox.East) > threshold ||
-               Math.Abs(oldWest - newBox.West) > threshold;
     }
 
     #endregion

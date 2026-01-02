@@ -183,6 +183,7 @@ public static class MauiProgram
         services.AddSingleton<IDownloadStateManager, DownloadStateManager>();
         services.AddSingleton<ICacheLimitEnforcer, CacheLimitEnforcer>();
         services.AddSingleton<ITripMetadataBuilder, TripMetadataBuilder>();
+        services.AddSingleton<ITripContentService, TripContentService>();
         services.AddSingleton<TripDownloadService>();
         // Also register as interface for consumers that prefer interface injection
         services.AddSingleton<ITripDownloadService>(sp => sp.GetRequiredService<TripDownloadService>());
