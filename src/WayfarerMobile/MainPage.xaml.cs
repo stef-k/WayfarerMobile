@@ -4,6 +4,7 @@ using Mapsui.Nts;
 using Mapsui.Projections;
 using Mapsui.Styles;
 using Mapsui.UI.Maui;
+using Microsoft.Extensions.Logging;
 using NetTopologySuite.Geometries;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.ViewModels;
@@ -22,6 +23,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
 {
     private const string TempMarkerLayerName = "PlaceCoordinateEditTempMarker";
     private readonly MainViewModel _viewModel;
+    private readonly ILogger<MainPage> _logger;
     private TripDetails? _pendingTrip;
     private WritableLayer? _tempMarkerLayer;
 
@@ -29,10 +31,12 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// Creates a new instance of MainPage.
     /// </summary>
     /// <param name="viewModel">The view model for this page.</param>
-    public MainPage(MainViewModel viewModel)
+    /// <param name="logger">Logger for diagnostic output.</param>
+    public MainPage(MainViewModel viewModel, ILogger<MainPage> logger)
     {
         InitializeComponent();
         _viewModel = viewModel;
+        _logger = logger;
         BindingContext = viewModel;
 
         // Subscribe to map info events for tap handling
@@ -48,6 +52,9 @@ public partial class MainPage : ContentPage, IQueryAttributable
 
         // Subscribe to ViewModel property changes to reset sheet state
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+
+        // Subscribe to TripSheet property changes for coordinate editing mode
+        _viewModel.TripSheet.PropertyChanged += OnTripSheetPropertyChanged;
 
         // Wire up bottom sheet StateChanged event (done in code-behind for XamlC compatibility)
         // SfBottomSheet uses StateChanged, not Closed - we detect closure via Hidden state
@@ -130,9 +137,9 @@ public partial class MainPage : ContentPage, IQueryAttributable
             var lonLat = SphericalMercator.ToLonLat(worldPos.X, worldPos.Y);
 
             // Handle place coordinate editing mode first (takes priority)
-            if (_viewModel.IsPlaceCoordinateEditMode)
+            if (_viewModel.TripSheet.IsPlaceCoordinateEditMode)
             {
-                _viewModel.SetPendingPlaceCoordinates(lonLat.lat, lonLat.lon);
+                _viewModel.TripSheet.SetPendingPlaceCoordinates(lonLat.lat, lonLat.lon);
                 UpdateTempMarker(lonLat.lat, lonLat.lon);
                 return;
             }
@@ -166,7 +173,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MainPage] Error in OnMapInfo: {ex.Message}");
+            _logger.LogError(ex, "Error in OnMapInfo");
         }
     }
 
@@ -178,7 +185,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
     private bool HandleTripFeatureTap(Mapsui.MapInfo mapInfo)
     {
         // Check if a trip is loaded
-        if (!_viewModel.HasLoadedTrip || _viewModel.LoadedTrip == null)
+        if (!_viewModel.HasLoadedTrip || _viewModel.TripSheet.LoadedTrip == null)
             return false;
 
         // Get the feature that was tapped
@@ -189,11 +196,11 @@ public partial class MainPage : ContentPage, IQueryAttributable
         // Check for place tap
         if (feature["PlaceId"] is Guid placeId)
         {
-            var place = _viewModel.LoadedTrip.AllPlaces.FirstOrDefault(p => p.Id == placeId);
+            var place = _viewModel.TripSheet.LoadedTrip.AllPlaces.FirstOrDefault(p => p.Id == placeId);
             if (place != null)
             {
-                _viewModel.SelectTripPlaceCommand.Execute(place);
-                _viewModel.IsTripSheetOpen = true;
+                _viewModel.TripSheet.SelectTripPlaceCommand.Execute(place);
+                _viewModel.TripSheet.IsTripSheetOpen = true;
                 return true;
             }
         }
@@ -201,11 +208,11 @@ public partial class MainPage : ContentPage, IQueryAttributable
         // Check for area tap
         if (feature["AreaId"] is Guid areaId)
         {
-            var area = _viewModel.LoadedTrip.AllAreas.FirstOrDefault(a => a.Id == areaId);
+            var area = _viewModel.TripSheet.LoadedTrip.AllAreas.FirstOrDefault(a => a.Id == areaId);
             if (area != null)
             {
-                _viewModel.SelectTripAreaCommand.Execute(area);
-                _viewModel.IsTripSheetOpen = true;
+                _viewModel.TripSheet.SelectTripAreaCommand.Execute(area);
+                _viewModel.TripSheet.IsTripSheetOpen = true;
                 return true;
             }
         }
@@ -213,11 +220,11 @@ public partial class MainPage : ContentPage, IQueryAttributable
         // Check for segment tap
         if (feature["SegmentId"] is Guid segmentId)
         {
-            var segment = _viewModel.LoadedTrip.Segments.FirstOrDefault(s => s.Id == segmentId);
+            var segment = _viewModel.TripSheet.LoadedTrip.Segments.FirstOrDefault(s => s.Id == segmentId);
             if (segment != null)
             {
-                _viewModel.SelectTripSegmentCommand.Execute(segment);
-                _viewModel.IsTripSheetOpen = true;
+                _viewModel.TripSheet.SelectTripSegmentCommand.Execute(segment);
+                _viewModel.TripSheet.IsTripSheetOpen = true;
                 return true;
             }
         }
@@ -301,26 +308,24 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// </summary>
     private async void OnMainSheetStateChanged(object? sender, Syncfusion.Maui.Toolkit.BottomSheet.StateChangedEventArgs e)
     {
-        Console.WriteLine($"[MainPage] SheetStateChanged: {e.OldState} -> {e.NewState}, " +
-            $"IsNavigatingToSubEditor={_viewModel.IsNavigatingToSubEditor}, " +
-            $"IsTripSheetOpen={_viewModel.IsTripSheetOpen}, " +
-            $"SelectedPlace={_viewModel.SelectedTripPlace?.Name ?? "null"}");
+        _logger.LogDebug("SheetStateChanged: {OldState} -> {NewState}, IsNavigatingToSubEditor={IsNavigatingToSubEditor}, IsTripSheetOpen={IsTripSheetOpen}, SelectedPlace={SelectedPlace}",
+            e.OldState, e.NewState, _viewModel.TripSheet.IsNavigatingToSubEditor, _viewModel.IsTripSheetOpen, _viewModel.TripSheet.SelectedTripPlace?.Name ?? "null");
 
         // Only handle when sheet becomes hidden (closed)
         if (e.NewState == Syncfusion.Maui.Toolkit.BottomSheet.BottomSheetState.Hidden)
         {
             // Don't run cleanup if navigating to sub-editor (notes, marker, etc.)
             // The sheet goes hidden during navigation but we want to preserve selection
-            if (_viewModel.IsNavigatingToSubEditor)
+            if (_viewModel.TripSheet.IsNavigatingToSubEditor)
             {
-                Console.WriteLine("[MainPage] Skipping cleanup - navigating to sub-editor");
+                _logger.LogDebug("Skipping cleanup - navigating to sub-editor");
                 return;
             }
 
             // Handle check-in sheet cleanup if it was open
             if (_viewModel.IsCheckInSheetOpen)
             {
-                Console.WriteLine("[MainPage] Running check-in sheet cleanup");
+                _logger.LogDebug("Running check-in sheet cleanup");
                 _viewModel.IsCheckInSheetOpen = false;
                 await _viewModel.OnCheckInSheetClosedAsync();
             }
@@ -328,9 +333,9 @@ public partial class MainPage : ContentPage, IQueryAttributable
             // Handle trip sheet cleanup if it was open
             if (_viewModel.IsTripSheetOpen)
             {
-                Console.WriteLine("[MainPage] Running trip sheet cleanup - calling TripSheetBackCommand");
+                _logger.LogDebug("Running trip sheet cleanup - calling TripSheetBackCommand");
                 _viewModel.IsTripSheetOpen = false;
-                _viewModel.TripSheetBackCommand.Execute(null);
+                _viewModel.TripSheet.TripSheetBackCommand.Execute(null);
             }
         }
     }
@@ -364,7 +369,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MainPage] Failed to share location: {ex.Message}");
+            _logger.LogError(ex, "Failed to share location");
         }
     }
 
@@ -385,7 +390,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MainPage] Failed to copy coordinates: {ex.Message}");
+            _logger.LogError(ex, "Failed to copy coordinates");
         }
     }
 
@@ -405,7 +410,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
     }
 
     /// <summary>
-    /// Handles ViewModel property changes to manage sheet state and coordinate editing.
+    /// Handles ViewModel property changes to manage sheet state.
     /// </summary>
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -419,17 +424,23 @@ public partial class MainPage : ContentPage, IQueryAttributable
         {
             MainBottomSheet.State = Syncfusion.Maui.Toolkit.BottomSheet.BottomSheetState.FullExpanded;
         }
+    }
 
+    /// <summary>
+    /// Handles TripSheet property changes for coordinate editing mode.
+    /// </summary>
+    private void OnTripSheetPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
         // Handle place coordinate editing mode changes
-        if (e.PropertyName == nameof(MainViewModel.IsPlaceCoordinateEditMode))
+        if (e.PropertyName == nameof(TripSheetViewModel.IsPlaceCoordinateEditMode))
         {
-            if (_viewModel.IsPlaceCoordinateEditMode)
+            if (_viewModel.TripSheet.IsPlaceCoordinateEditMode)
             {
                 // Entering edit mode - show temp marker at current place location
                 EnsureTempMarkerLayer();
-                if (_viewModel.PendingPlaceLatitude.HasValue && _viewModel.PendingPlaceLongitude.HasValue)
+                if (_viewModel.TripSheet.PendingPlaceLatitude.HasValue && _viewModel.TripSheet.PendingPlaceLongitude.HasValue)
                 {
-                    UpdateTempMarker(_viewModel.PendingPlaceLatitude.Value, _viewModel.PendingPlaceLongitude.Value);
+                    UpdateTempMarker(_viewModel.TripSheet.PendingPlaceLatitude.Value, _viewModel.TripSheet.PendingPlaceLongitude.Value);
                 }
             }
             else

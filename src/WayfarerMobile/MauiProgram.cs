@@ -267,17 +267,25 @@ public static class MauiProgram
         services.AddSingleton<IVisitNotificationService, VisitNotificationService>();
 
         // ViewModels
+        services.AddSingleton<MapDisplayViewModel>();  // Map display and layer management
+        services.AddSingleton<NavigationCoordinatorViewModel>();  // Navigation coordination
+        services.AddSingleton<TripSheetViewModel>();  // Trip sheet display and editing
         services.AddSingleton<MainViewModel>();
         services.AddTransient<SettingsViewModel>();
         services.AddTransient<GroupsViewModel>();
         services.AddTransient<OnboardingViewModel>();
         services.AddTransient<TimelineViewModel>();
         services.AddTransient<CheckInViewModel>();
-        services.AddSingleton<TripsViewModel>();
+
+        // Trips ViewModels (coordinator pattern)
+        services.AddSingleton<TripDownloadViewModel>();    // Download operations
+        services.AddSingleton<MyTripsViewModel>();         // My Trips tab
+        services.AddSingleton<PublicTripsViewModel>();     // Public Trips tab
+        services.AddSingleton<TripsPageViewModel>();       // Coordinator
+
         services.AddTransient<PinSecurityViewModel>();
         services.AddSingleton<NavigationHudViewModel>();
         services.AddTransient<QrScannerViewModel>();
-        services.AddTransient<PublicTripsViewModel>();
         services.AddTransient<LockScreenViewModel>();
         services.AddTransient<AboutViewModel>();
         services.AddTransient<DiagnosticsViewModel>();

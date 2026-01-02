@@ -7,7 +7,7 @@
              xmlns:offlineBanner="clr-namespace:WayfarerMobile.Views.Controls"
              xmlns:tabView="clr-namespace:Syncfusion.Maui.Toolkit.TabView;assembly=Syncfusion.Maui.Toolkit"
              x:Class="WayfarerMobile.Views.TripsPage"
-             x:DataType="viewmodels:TripsViewModel"
+             x:DataType="viewmodels:TripsPageViewModel"
              Title="Trips"
              BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}">
 
@@ -74,21 +74,21 @@
                 <!-- My Trips Tab -->
                 <tabView:SfTabItem Header="My Trips">
                     <tabView:SfTabItem.Content>
-                        <controls:MyTripsView BindingContext="{Binding}" />
+                        <controls:MyTripsView BindingContext="{Binding MyTrips}" />
                     </tabView:SfTabItem.Content>
                 </tabView:SfTabItem>
 
                 <!-- Public Trips Tab -->
                 <tabView:SfTabItem Header="Public Trips">
                     <tabView:SfTabItem.Content>
-                        <controls:PublicTripsView BindingContext="{Binding}" />
+                        <controls:PublicTripsView BindingContext="{Binding PublicTrips}" />
                     </tabView:SfTabItem.Content>
                 </tabView:SfTabItem>
 
             </tabView:SfTabView>
 
             <!-- Download Progress Overlay -->
-            <Border IsVisible="{Binding IsDownloading}"
+            <Border IsVisible="{Binding Download.IsDownloading}"
                     VerticalOptions="End"
                     Margin="16"
                     Padding="16"
@@ -100,15 +100,15 @@
                 </Border.StrokeShape>
                 <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto,Auto,Auto" RowSpacing="8">
                     <Label Grid.Row="0" Grid.Column="0"
-                           Text="{Binding DownloadingTripName, StringFormat='Downloading: {0}'}"
+                           Text="{Binding Download.DownloadingTripName, StringFormat='Downloading: {0}'}"
                            FontSize="14"
                            FontAttributes="Bold"
                            LineBreakMode="TailTruncation" />
                     <!-- Pause button (visible when not paused) -->
                     <Button Grid.Row="0" Grid.Column="1"
                             Text="Pause"
-                            Command="{Binding PauseDownloadCommand}"
-                            IsVisible="{Binding CanPauseDownload}"
+                            Command="{Binding Download.PauseDownloadCommand}"
+                            IsVisible="{Binding Download.CanPauseDownload}"
                             BackgroundColor="Transparent"
                             TextColor="{StaticResource Primary}"
                             FontSize="12"
@@ -116,25 +116,25 @@
                     <!-- Resume button (visible when paused) -->
                     <Button Grid.Row="0" Grid.Column="2"
                             Text="Resume"
-                            Command="{Binding ResumeDownloadCommand}"
-                            IsVisible="{Binding CanResumeDownload}"
+                            Command="{Binding Download.ResumeDownloadCommand}"
+                            IsVisible="{Binding Download.CanResumeDownload}"
                             BackgroundColor="Transparent"
                             TextColor="{StaticResource Primary}"
                             FontSize="12"
                             Padding="8,0" />
                     <Button Grid.Row="0" Grid.Column="3"
                             Text="Cancel"
-                            Command="{Binding CancelDownloadCommand}"
+                            Command="{Binding Download.CancelDownloadCommand}"
                             BackgroundColor="Transparent"
                             TextColor="{StaticResource Error}"
                             FontSize="12"
                             Padding="8,0" />
                     <ProgressBar Grid.Row="1" Grid.ColumnSpan="4"
-                                 Progress="{Binding DownloadProgress}"
+                                 Progress="{Binding Download.DownloadProgress}"
                                  ProgressColor="{StaticResource Primary}"
                                  HeightRequest="6" />
                     <Label Grid.Row="2" Grid.ColumnSpan="4"
-                           Text="{Binding DownloadStatusMessage}"
+                           Text="{Binding Download.DownloadStatusMessage}"
                            FontSize="12"
                            TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
                 </Grid>
