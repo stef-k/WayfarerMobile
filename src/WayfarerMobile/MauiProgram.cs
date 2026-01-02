@@ -162,6 +162,7 @@ public static class MauiProgram
         services.AddSingleton<ITripStateManager, TripStateManager>();
         services.AddSingleton<IDownloadProgressAggregator, DownloadProgressAggregator>();
         services.AddSingleton<ISyncEventBus, SyncEventBus>();
+        services.AddSingleton<IMutationQueueService, MutationQueueService>();
 
         // MAUI Essentials Services (for DI injection)
         services.AddSingleton<IConnectivity>(Connectivity.Current);
