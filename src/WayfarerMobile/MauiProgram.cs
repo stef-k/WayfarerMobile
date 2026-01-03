@@ -286,7 +286,29 @@ public static class MauiProgram
         services.AddSingleton<MemberDetailsViewModel>();
         services.AddTransient<GroupsViewModel>();
         services.AddTransient<OnboardingViewModel>();
-        services.AddTransient<TimelineViewModel>();
+
+        // Timeline ViewModels with factory pattern for child VMs
+        services.AddTransient<TimelineViewModel>(sp => new TimelineViewModel(
+            sp.GetRequiredService<IApiClient>(),
+            sp.GetRequiredService<DatabaseService>(),
+            sp.GetRequiredService<ITimelineSyncService>(),
+            sp.GetRequiredService<IToastService>(),
+            sp.GetRequiredService<ISettingsService>(),
+            sp.GetRequiredService<IMapBuilder>(),
+            sp.GetRequiredService<ITimelineLayerService>(),
+            sp.GetRequiredService<TimelineDataService>(),
+            callbacks => new CoordinateEditorViewModel(
+                callbacks,
+                sp.GetRequiredService<ITimelineSyncService>(),
+                sp.GetRequiredService<IToastService>(),
+                sp.GetRequiredService<ILogger<CoordinateEditorViewModel>>()),
+            callbacks => new DateTimeEditorViewModel(
+                callbacks,
+                sp.GetRequiredService<ITimelineSyncService>(),
+                sp.GetRequiredService<IToastService>(),
+                sp.GetRequiredService<ILogger<DateTimeEditorViewModel>>()),
+            sp.GetRequiredService<ILogger<TimelineViewModel>>()));
+
         services.AddTransient<CheckInViewModel>();
 
         // Trips ViewModels (coordinator pattern)

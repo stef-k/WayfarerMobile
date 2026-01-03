@@ -47,9 +47,9 @@
 
                     <!-- SfDateTimePicker for editing location date/time (NO Grid.Row to work as modal) -->
                     <picker:SfDateTimePicker x:Name="EditDateTimePicker"
-                                             IsOpen="{Binding IsEditDateTimePickerOpen, Mode=TwoWay}"
+                                             IsOpen="{Binding DateTimeEditor.IsEditDateTimePickerOpen, Mode=TwoWay}"
                                              Mode="Dialog"
-                                             SelectedDate="{Binding EditDateTime, Mode=TwoWay}"
+                                             SelectedDate="{Binding DateTimeEditor.EditDateTime, Mode=TwoWay}"
                                              DateFormat="dd_MMM_yyyy"
                                              TimeFormat="hh_mm_ss_tt"
                                              OkButtonClicked="OnEditDateTimePickerOkClicked"
@@ -123,7 +123,7 @@
 
                     <!-- Coordinate Picking Overlay -->
                     <Border Grid.Row="1"
-                            IsVisible="{Binding IsCoordinatePickingMode}"
+                            IsVisible="{Binding CoordinateEditor.IsCoordinatePickingMode}"
                             VerticalOptions="Start"
                             HorizontalOptions="Fill"
                             Margin="16,16"
@@ -140,7 +140,7 @@
                                    HorizontalTextAlignment="Center"
                                    TextColor="{StaticResource Primary}" />
                             <Label Grid.Row="1"
-                                   Text="{Binding PendingCoordinatesText}"
+                                   Text="{Binding CoordinateEditor.PendingCoordinatesText}"
                                    FontSize="12"
                                    HorizontalTextAlignment="Center"
                                    TextColor="{StaticResource TextSecondary}" />
@@ -152,7 +152,7 @@
                                         CornerRadius="8"
                                         BackgroundColor="{StaticResource Gray500}"
                                         TextColor="White"
-                                        Command="{Binding CancelCoordinatePickingCommand}" />
+                                        Command="{Binding CoordinateEditor.CancelCoordinatePickingCommand}" />
                                 <Button Text="Save"
                                         FontSize="14"
                                         HeightRequest="40"
@@ -160,8 +160,8 @@
                                         CornerRadius="8"
                                         BackgroundColor="{StaticResource Primary}"
                                         TextColor="White"
-                                        Command="{Binding SaveCoordinatesCommand}"
-                                        IsEnabled="{Binding HasPendingCoordinates}" />
+                                        Command="{Binding CoordinateEditor.SaveCoordinatesCommand}"
+                                        IsEnabled="{Binding CoordinateEditor.HasPendingCoordinates}" />
                             </HorizontalStackLayout>
                         </Grid>
                     </Border>
