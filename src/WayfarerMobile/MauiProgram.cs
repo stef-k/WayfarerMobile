@@ -173,6 +173,9 @@ public static class MauiProgram
         services.AddSingleton<IVisitApiClient>(sp => sp.GetRequiredService<ApiClient>());
         services.AddSingleton<LocationSyncService>();
         services.AddSingleton<QueueDrainService>(); // Drains offline queue via check-in endpoint
+        services.AddSingleton<IPlaceOperationsHandler, PlaceOperationsHandler>();
+        services.AddSingleton<IRegionOperationsHandler, RegionOperationsHandler>();
+        services.AddSingleton<ITripEntityOperationsHandler, TripEntityOperationsHandler>();
         services.AddSingleton<ITripSyncService, TripSyncService>();
         services.AddSingleton<ITimelineSyncService, TimelineSyncService>();
         services.AddSingleton<IActivitySyncService, ActivitySyncService>();
@@ -184,6 +187,7 @@ public static class MauiProgram
         services.AddSingleton<ICacheLimitEnforcer, CacheLimitEnforcer>();
         services.AddSingleton<ITripMetadataBuilder, TripMetadataBuilder>();
         services.AddSingleton<ITripContentService, TripContentService>();
+        services.AddSingleton<ITileDownloadOrchestrator, TileDownloadOrchestrator>();
         services.AddSingleton<TripDownloadService>();
         // Also register as interface for consumers that prefer interface injection
         services.AddSingleton<ITripDownloadService>(sp => sp.GetRequiredService<TripDownloadService>());
@@ -270,9 +274,16 @@ public static class MauiProgram
         // ViewModels
         services.AddSingleton<MapDisplayViewModel>();  // Map display and layer management
         services.AddSingleton<NavigationCoordinatorViewModel>();  // Navigation coordination
-        services.AddSingleton<TripSheetViewModel>();  // Trip sheet display and editing
+        services.AddSingleton<TripItemEditorViewModel>();  // Trip item editing operations
+        services.AddSingleton<TripSheetViewModel>();  // Trip sheet display and selection
+        services.AddSingleton<ContextMenuViewModel>();  // Context menu and dropped pin operations
+        services.AddSingleton<TrackingCoordinatorViewModel>();  // Tracking lifecycle management
         services.AddSingleton<MainViewModel>();
         services.AddTransient<SettingsViewModel>();
+        // Groups child ViewModels (singletons for state sharing)
+        services.AddSingleton<SseManagementViewModel>();
+        services.AddSingleton<DateNavigationViewModel>();
+        services.AddSingleton<MemberDetailsViewModel>();
         services.AddTransient<GroupsViewModel>();
         services.AddTransient<OnboardingViewModel>();
         services.AddTransient<TimelineViewModel>();
