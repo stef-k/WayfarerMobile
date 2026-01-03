@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
+using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services;
 using WayfarerMobile.Shared.Collections;
 
@@ -18,6 +19,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     private readonly IApiClient _apiClient;
     private readonly ISettingsService _settingsService;
     private readonly TripDownloadService _downloadService;
+    private readonly ITripEditingService _tripEditingService;
     private readonly IToastService _toastService;
     private readonly ITripNavigationService _tripNavigationService;
     private readonly ITripSyncService _tripSyncService;
@@ -115,6 +117,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         IApiClient apiClient,
         ISettingsService settingsService,
         TripDownloadService downloadService,
+        ITripEditingService tripEditingService,
         IToastService toastService,
         ITripNavigationService tripNavigationService,
         ITripSyncService tripSyncService,
@@ -125,6 +128,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         _apiClient = apiClient;
         _settingsService = settingsService;
         _downloadService = downloadService;
+        _tripEditingService = tripEditingService;
         _toastService = toastService;
         _tripNavigationService = tripNavigationService;
         _tripSyncService = tripSyncService;
@@ -418,7 +422,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
             var oldName = item.Name;
 
             // Update local storage first
-            await _downloadService.UpdateTripNameAsync(item.ServerId, newName);
+            await _tripEditingService.UpdateTripNameAsync(item.ServerId, newName);
 
             // Sync with server
             await _tripSyncService.UpdateTripAsync(item.ServerId, name: newName);

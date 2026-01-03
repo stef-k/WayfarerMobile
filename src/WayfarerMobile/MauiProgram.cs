@@ -211,6 +211,10 @@ public static class MauiProgram
         // Also register as interface for consumers that prefer interface injection
         services.AddSingleton<ITripDownloadService>(sp => sp.GetRequiredService<TripDownloadService>());
 
+        // Trip editing and sync coordination (extracted from TripDownloadService)
+        services.AddSingleton<ITripEditingService, TripEditingService>();
+        services.AddSingleton<ITripSyncCoordinator, TripSyncCoordinator>();
+
         // Local Timeline Services (offline-first timeline storage)
         services.AddSingleton<LocalTimelineFilter>();
         services.AddSingleton<LocalTimelineStorageService>();

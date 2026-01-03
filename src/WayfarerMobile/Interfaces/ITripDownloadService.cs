@@ -110,18 +110,6 @@ public interface ITripDownloadService : IDisposable
     Task<List<TripDownloadStateEntity>> GetPausedDownloadsAsync();
 
     /// <summary>
-    /// Syncs a downloaded trip with the server.
-    /// </summary>
-    /// <param name="tripServerId">The server-side trip ID.</param>
-    /// <param name="forceSync">If true, sync regardless of version.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The updated trip entity or null if sync failed.</returns>
-    Task<DownloadedTripEntity?> SyncTripAsync(
-        Guid tripServerId,
-        bool forceSync = false,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Checks the current trip cache limit.
     /// </summary>
     /// <returns>Result with current usage and limit information.</returns>
@@ -168,20 +156,6 @@ public interface ITripDownloadService : IDisposable
     /// <param name="tripServerId">The server-side trip ID.</param>
     /// <returns>List of trip segments.</returns>
     Task<List<TripSegment>> GetOfflineSegmentsAsync(Guid tripServerId);
-
-    /// <summary>
-    /// Updates the name of a downloaded trip.
-    /// </summary>
-    /// <param name="tripServerId">The server-side trip ID.</param>
-    /// <param name="newName">The new name.</param>
-    Task UpdateTripNameAsync(Guid tripServerId, string newName);
-
-    /// <summary>
-    /// Updates the notes of a downloaded trip.
-    /// </summary>
-    /// <param name="tripServerId">The server-side trip ID.</param>
-    /// <param name="notes">The new notes (HTML).</param>
-    Task UpdateTripNotesAsync(Guid tripServerId, string? notes);
 
     /// <summary>
     /// Checks if a download is paused for a specific trip.

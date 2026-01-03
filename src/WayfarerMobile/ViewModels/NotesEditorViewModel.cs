@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WayfarerMobile.Core.Helpers;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services;
 
 namespace WayfarerMobile.ViewModels;
@@ -35,7 +36,7 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
 {
     private readonly ITimelineSyncService _timelineSyncService;
     private readonly ITripSyncService _tripSyncService;
-    private readonly TripDownloadService _downloadService;
+    private readonly ITripEditingService _tripEditingService;
     private readonly IToastService _toastService;
     private readonly ISettingsService _settingsService;
     private string? _originalNotesHtml;
@@ -94,13 +95,13 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     public NotesEditorViewModel(
         ITimelineSyncService timelineSyncService,
         ITripSyncService tripSyncService,
-        TripDownloadService downloadService,
+        ITripEditingService tripEditingService,
         IToastService toastService,
         ISettingsService settingsService)
     {
         _timelineSyncService = timelineSyncService;
         _tripSyncService = tripSyncService;
-        _downloadService = downloadService;
+        _tripEditingService = tripEditingService;
         _toastService = toastService;
         _settingsService = settingsService;
         Title = "Edit Notes";
@@ -323,7 +324,7 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     private async Task SaveTripNotesAsync(string? notes)
     {
         // Update local database optimistically
-        await _downloadService.UpdateTripNotesAsync(EntityId, notes);
+        await _tripEditingService.UpdateTripNotesAsync(EntityId, notes);
 
         // Queue server sync (includeNotes: true ensures notes are sent to server)
         await _tripSyncService.UpdateTripAsync(EntityId, name: null, notes: notes, includeNotes: true);
