@@ -13,6 +13,7 @@ using WayfarerMobile.Services;
 using WayfarerMobile.Services.Security;
 using WayfarerMobile.Services.TileCache;
 using WayfarerMobile.ViewModels;
+using WayfarerMobile.ViewModels.Settings;
 using WayfarerMobile.Views;
 using WayfarerMobile.Views.Onboarding;
 using SkiaSharp.Views.Maui.Controls.Hosting;
@@ -279,6 +280,13 @@ public static class MauiProgram
         services.AddSingleton<ContextMenuViewModel>();  // Context menu and dropped pin operations
         services.AddSingleton<TrackingCoordinatorViewModel>();  // Tracking lifecycle management
         services.AddSingleton<MainViewModel>();
+
+        // Settings child ViewModels
+        services.AddTransient<NavigationSettingsViewModel>();
+        services.AddTransient<CacheSettingsViewModel>();
+        services.AddTransient<VisitNotificationSettingsViewModel>();
+        services.AddTransient<AppearanceSettingsViewModel>();
+        services.AddTransient<TimelineDataViewModel>();
         services.AddTransient<SettingsViewModel>();
         // Groups child ViewModels (singletons for state sharing)
         services.AddSingleton<SseManagementViewModel>();

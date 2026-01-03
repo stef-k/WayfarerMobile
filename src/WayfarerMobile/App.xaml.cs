@@ -4,6 +4,7 @@ using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services;
 using WayfarerMobile.ViewModels;
+using WayfarerMobile.ViewModels.Settings;
 
 namespace WayfarerMobile;
 
@@ -129,7 +130,7 @@ public partial class App : Application
                 return;
 
             // Apply theme preference
-            SettingsViewModel.ApplyTheme(settings.ThemePreference);
+            AppearanceSettingsViewModel.ApplyTheme(settings.ThemePreference);
             _logger.LogDebug("Applied theme: {Theme}", settings.ThemePreference);
 
             // Apply keep screen on setting

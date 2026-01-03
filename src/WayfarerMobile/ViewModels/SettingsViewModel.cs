@@ -1,17 +1,14 @@
-using System.Globalization;
-using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Data.Services;
 using WayfarerMobile.Services;
+using WayfarerMobile.ViewModels.Settings;
 
 namespace WayfarerMobile.ViewModels;
 
 /// <summary>
 /// Represents a language option for the navigation voice guidance settings picker.
-/// This is used for turn-by-turn voice navigation, not for changing the app display language.
 /// </summary>
 /// <param name="Code">The culture code (e.g., "en", "fr") or "System" for device default.</param>
 /// <param name="DisplayName">The display name shown in the picker.</param>
@@ -25,6 +22,7 @@ public record LanguageOption(string Code, string DisplayName)
 
 /// <summary>
 /// ViewModel for the settings page.
+/// Delegates domain-specific settings to focused child ViewModels.
 /// </summary>
 public partial class SettingsViewModel : BaseViewModel
 {
@@ -33,20 +31,44 @@ public partial class SettingsViewModel : BaseViewModel
     private readonly ISettingsService _settingsService;
     private readonly IAppLockService _appLockService;
     private readonly DatabaseService _databaseService;
-    private readonly TimelineExportService _exportService;
-    private readonly TimelineImportService _importService;
-    private readonly TimelineDataService _timelineDataService;
-    private readonly IToastService _toastService;
-    private readonly IVisitNotificationService _visitNotificationService;
 
     #endregion
 
-    #region Properties
+    #region Child ViewModels
+
+    /// <summary>
+    /// Gets the navigation settings view model.
+    /// </summary>
+    public NavigationSettingsViewModel NavigationSettings { get; }
+
+    /// <summary>
+    /// Gets the cache settings view model.
+    /// </summary>
+    public CacheSettingsViewModel CacheSettings { get; }
+
+    /// <summary>
+    /// Gets the visit notification settings view model.
+    /// </summary>
+    public VisitNotificationSettingsViewModel VisitNotificationSettings { get; }
+
+    /// <summary>
+    /// Gets the appearance settings view model.
+    /// </summary>
+    public AppearanceSettingsViewModel AppearanceSettings { get; }
+
+    /// <summary>
+    /// Gets the timeline data view model.
+    /// </summary>
+    public TimelineDataViewModel TimelineData { get; }
 
     /// <summary>
     /// Gets the PIN security view model for the security section.
     /// </summary>
     public PinSecurityViewModel PinSecurity { get; }
+
+    #endregion
+
+    #region Properties - Account & Core Settings (kept in parent)
 
     /// <summary>
     /// Gets or sets whether timeline tracking is enabled.
@@ -73,186 +95,6 @@ public partial class SettingsViewModel : BaseViewModel
     private int _locationDistanceThreshold;
 
     /// <summary>
-    /// Gets or sets the theme preference: "System", "Light", or "Dark".
-    /// </summary>
-    [ObservableProperty]
-    private string _themePreference = "System";
-
-    /// <summary>
-    /// Gets or sets whether to keep the screen on while the app is in the foreground.
-    /// </summary>
-    [ObservableProperty]
-    private bool _keepScreenOn = false;
-
-    /// <summary>
-    /// Gets the available theme options.
-    /// </summary>
-    public List<string> ThemeOptions { get; } = ["System", "Light", "Dark"];
-
-    /// <summary>
-    /// Gets or sets the navigation voice guidance language preference.
-    /// This is used for turn-by-turn voice guidance, not the app display language.
-    /// </summary>
-    [ObservableProperty]
-    private string _languagePreference = "System";
-
-    /// <summary>
-    /// Gets the available language options for navigation voice guidance,
-    /// dynamically retrieved from device-supported cultures.
-    /// </summary>
-    public List<LanguageOption> LanguageOptions { get; } = BuildLanguageOptions();
-
-    /// <summary>
-    /// Builds the list of available language options from device-supported cultures.
-    /// These are used for navigation voice guidance language selection.
-    /// </summary>
-    private static List<LanguageOption> BuildLanguageOptions()
-    {
-        var options = new List<LanguageOption>
-        {
-            new("System", "System Default")
-        };
-
-        // Get all neutral cultures (languages without region specifics)
-        var cultures = CultureInfo.GetCultures(CultureTypes.NeutralCultures)
-            .Where(c => !string.IsNullOrEmpty(c.Name) && c.Name != "iv") // Exclude invariant culture
-            .OrderBy(c => c.NativeName)
-            .ToList();
-
-        foreach (var culture in cultures)
-        {
-            // Use native name for display (e.g., "Deutsch" for German, "Japanese" for Japanese)
-            // Include English name in parentheses for clarity
-            var displayName = culture.NativeName == culture.EnglishName
-                ? culture.NativeName
-                : $"{culture.NativeName} ({culture.EnglishName})";
-
-            options.Add(new LanguageOption(culture.Name, displayName));
-        }
-
-        return options;
-    }
-
-    /// <summary>
-    /// Gets or sets the selected language option for navigation voice guidance.
-    /// </summary>
-    [ObservableProperty]
-    private LanguageOption? _selectedLanguageOption;
-
-    /// <summary>
-    /// Gets or sets whether offline map cache is enabled.
-    /// </summary>
-    [ObservableProperty]
-    private bool _mapOfflineCacheEnabled;
-
-    /// <summary>
-    /// Gets or sets whether navigation audio is enabled.
-    /// </summary>
-    [ObservableProperty]
-    private bool _navigationAudioEnabled;
-
-    /// <summary>
-    /// Gets or sets whether navigation vibration is enabled.
-    /// </summary>
-    [ObservableProperty]
-    private bool _navigationVibrationEnabled;
-
-    /// <summary>
-    /// Gets or sets whether auto-reroute is enabled.
-    /// </summary>
-    [ObservableProperty]
-    private bool _autoRerouteEnabled;
-
-    /// <summary>
-    /// Gets or sets the navigation voice volume (0.0-1.0).
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(NavigationVolumePercent))]
-    private float _navigationVolume = 1.0f;
-
-    /// <summary>
-    /// Gets the navigation volume as a percentage for display.
-    /// </summary>
-    public int NavigationVolumePercent => (int)(NavigationVolume * 100);
-
-    /// <summary>
-    /// Gets or sets the distance units (kilometers or miles).
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsKilometers))]
-    [NotifyPropertyChangedFor(nameof(IsMiles))]
-    private string _distanceUnits = "kilometers";
-
-    /// <summary>
-    /// Gets whether kilometers is selected.
-    /// </summary>
-    public bool IsKilometers => DistanceUnits == "kilometers";
-
-    /// <summary>
-    /// Gets whether miles is selected.
-    /// </summary>
-    public bool IsMiles => DistanceUnits == "miles";
-
-    #region Visit Notification Properties
-
-    /// <summary>
-    /// Gets or sets whether visit notifications are enabled.
-    /// </summary>
-    [ObservableProperty]
-    private bool _visitNotificationsEnabled;
-
-    /// <summary>
-    /// Gets or sets the visit notification style (notification, voice, both).
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsVisitStyleNotification))]
-    [NotifyPropertyChangedFor(nameof(IsVisitStyleVoice))]
-    [NotifyPropertyChangedFor(nameof(IsVisitStyleBoth))]
-    [NotifyPropertyChangedFor(nameof(ShowVisitVoiceOption))]
-    private string _visitNotificationStyle = "notification";
-
-    /// <summary>
-    /// Gets or sets whether voice announcements are enabled for visit notifications.
-    /// </summary>
-    [ObservableProperty]
-    private bool _visitVoiceAnnouncementEnabled;
-
-    /// <summary>
-    /// Gets whether notification style is selected.
-    /// </summary>
-    public bool IsVisitStyleNotification => VisitNotificationStyle == "notification";
-
-    /// <summary>
-    /// Gets whether voice style is selected.
-    /// </summary>
-    public bool IsVisitStyleVoice => VisitNotificationStyle == "voice";
-
-    /// <summary>
-    /// Gets whether both style is selected.
-    /// </summary>
-    public bool IsVisitStyleBoth => VisitNotificationStyle == "both";
-
-    /// <summary>
-    /// Gets whether to show voice announcement option (when style includes voice).
-    /// </summary>
-    public bool ShowVisitVoiceOption => VisitNotificationsEnabled &&
-        (VisitNotificationStyle == "voice" || VisitNotificationStyle == "both");
-
-    #endregion
-
-    /// <summary>
-    /// Gets or sets whether to show battery warnings during tracking.
-    /// </summary>
-    [ObservableProperty]
-    private bool _showBatteryWarnings;
-
-    /// <summary>
-    /// Gets or sets whether to auto-pause tracking on critical battery.
-    /// </summary>
-    [ObservableProperty]
-    private bool _autoPauseTrackingOnCriticalBattery;
-
-    /// <summary>
     /// Gets whether the user is logged in.
     /// </summary>
     [ObservableProperty]
@@ -269,88 +111,6 @@ public partial class SettingsViewModel : BaseViewModel
     /// </summary>
     public string AppVersion => $"Version {AppInfo.VersionString} ({AppInfo.BuildString})";
 
-    /// <summary>
-    /// Gets or sets a description of the current tracking mode based on BackgroundTrackingEnabled setting.
-    /// </summary>
-    [ObservableProperty]
-    private string _trackingModeDescription = string.Empty;
-
-    #endregion
-
-    #region Cache Settings Properties
-
-    /// <summary>
-    /// Gets or sets the prefetch radius (1-10).
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(PrefetchRadiusGridSize))]
-    private int _liveCachePrefetchRadius;
-
-    /// <summary>
-    /// Gets the grid size description for the current prefetch radius.
-    /// </summary>
-    public string PrefetchRadiusGridSize => $"{2 * LiveCachePrefetchRadius + 1}×{2 * LiveCachePrefetchRadius + 1} tiles";
-
-    /// <summary>
-    /// Gets or sets the maximum live cache size in MB.
-    /// </summary>
-    [ObservableProperty]
-    private int _maxLiveCacheSizeMB;
-
-    /// <summary>
-    /// Gets or sets the maximum trip cache size in MB.
-    /// </summary>
-    [ObservableProperty]
-    private int _maxTripCacheSizeMB;
-
-    /// <summary>
-    /// Gets or sets the maximum concurrent tile downloads (1-4).
-    /// </summary>
-    [ObservableProperty]
-    private int _maxConcurrentTileDownloads;
-
-    /// <summary>
-    /// Gets or sets the minimum delay between tile requests in ms (50-5000).
-    /// </summary>
-    [ObservableProperty]
-    private int _minTileRequestDelayMs;
-
-    /// <summary>
-    /// Gets or sets the prefetch distance threshold in meters.
-    /// </summary>
-    [ObservableProperty]
-    private int _prefetchDistanceThresholdMeters;
-
-    /// <summary>
-    /// Gets or sets the custom tile server URL.
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsDefaultTileServer))]
-    private string _tileServerUrl = string.Empty;
-
-    /// <summary>
-    /// Gets whether the current tile server URL is the default OSM server.
-    /// </summary>
-    public bool IsDefaultTileServer => TileServerUrl == SettingsService.DefaultTileServerUrl;
-
-    /// <summary>
-    /// Gets or sets the pending queue count.
-    /// </summary>
-    [ObservableProperty]
-    private int _pendingQueueCount;
-
-    /// <summary>
-    /// Gets or sets the local timeline entry count.
-    /// </summary>
-    [ObservableProperty]
-    private int _localTimelineCount;
-
-    /// <summary>
-    /// Gets or sets whether the queue is being cleared.
-    /// </summary>
-    [ObservableProperty]
-    private bool _isClearingQueue;
-
     #endregion
 
     #region Constructor
@@ -358,32 +118,40 @@ public partial class SettingsViewModel : BaseViewModel
     /// <summary>
     /// Creates a new instance of SettingsViewModel.
     /// </summary>
-    /// <param name="settingsService">The settings service.</param>
-    /// <param name="appLockService">The app lock service.</param>
-    /// <param name="databaseService">The database service.</param>
-    /// <param name="exportService">The timeline export service.</param>
-    /// <param name="importService">The timeline import service.</param>
-    /// <param name="timelineDataService">The timeline data service.</param>
-    /// <param name="toastService">The toast service.</param>
     public SettingsViewModel(
         ISettingsService settingsService,
         IAppLockService appLockService,
         DatabaseService databaseService,
-        TimelineExportService exportService,
-        TimelineImportService importService,
-        TimelineDataService timelineDataService,
-        IToastService toastService,
-        IVisitNotificationService visitNotificationService)
+        NavigationSettingsViewModel navigationSettings,
+        CacheSettingsViewModel cacheSettings,
+        VisitNotificationSettingsViewModel visitNotificationSettings,
+        AppearanceSettingsViewModel appearanceSettings,
+        TimelineDataViewModel timelineData)
     {
         _settingsService = settingsService;
         _appLockService = appLockService;
         _databaseService = databaseService;
-        _exportService = exportService;
-        _importService = importService;
-        _timelineDataService = timelineDataService;
-        _toastService = toastService;
-        _visitNotificationService = visitNotificationService;
+
+        // Child ViewModels
+        NavigationSettings = navigationSettings;
+        CacheSettings = cacheSettings;
+        VisitNotificationSettings = visitNotificationSettings;
+        AppearanceSettings = appearanceSettings;
+        TimelineData = timelineData;
         PinSecurity = new PinSecurityViewModel(appLockService);
+
+        // Wire up property change forwarding for XAML bindings
+        NavigationSettings.PropertyChanged += (s, e) =>
+            OnPropertyChanged($"NavigationSettings.{e.PropertyName}");
+        CacheSettings.PropertyChanged += (s, e) =>
+            OnPropertyChanged($"CacheSettings.{e.PropertyName}");
+        VisitNotificationSettings.PropertyChanged += (s, e) =>
+            OnPropertyChanged($"VisitNotificationSettings.{e.PropertyName}");
+        AppearanceSettings.PropertyChanged += (s, e) =>
+            OnPropertyChanged($"AppearanceSettings.{e.PropertyName}");
+        TimelineData.PropertyChanged += (s, e) =>
+            OnPropertyChanged($"TimelineData.{e.PropertyName}");
+
         Title = "Settings";
         LoadSettings();
     }
@@ -397,46 +165,11 @@ public partial class SettingsViewModel : BaseViewModel
     /// </summary>
     private void LoadSettings()
     {
+        // Core settings (kept in parent)
         TimelineTrackingEnabled = _settingsService.TimelineTrackingEnabled;
         ServerUrl = _settingsService.ServerUrl ?? string.Empty;
         LocationTimeThreshold = _settingsService.LocationTimeThresholdMinutes;
         LocationDistanceThreshold = _settingsService.LocationDistanceThresholdMeters;
-        MapOfflineCacheEnabled = _settingsService.MapOfflineCacheEnabled;
-
-        // Theme and language settings
-        // Use the string instance from ThemeOptions list to ensure Picker binding works correctly
-        var savedTheme = _settingsService.ThemePreference;
-        ThemePreference = ThemeOptions.Find(t => t == savedTheme) ?? ThemeOptions[0]; // Default to "System"
-
-        KeepScreenOn = _settingsService.KeepScreenOn;
-        LanguagePreference = _settingsService.LanguagePreference;
-        SelectedLanguageOption = LanguageOptions.Find(l => l.Code == LanguagePreference)
-            ?? LanguageOptions[0]; // Default to "System"
-
-        // Navigation settings
-        NavigationAudioEnabled = _settingsService.NavigationAudioEnabled;
-        NavigationVibrationEnabled = _settingsService.NavigationVibrationEnabled;
-        NavigationVolume = _settingsService.NavigationVolume;
-        AutoRerouteEnabled = _settingsService.AutoRerouteEnabled;
-        DistanceUnits = _settingsService.DistanceUnits;
-
-        // Battery settings
-        ShowBatteryWarnings = _settingsService.ShowBatteryWarnings;
-        AutoPauseTrackingOnCriticalBattery = _settingsService.AutoPauseTrackingOnCriticalBattery;
-
-        // Visit notification settings
-        VisitNotificationsEnabled = _settingsService.VisitNotificationsEnabled;
-        VisitNotificationStyle = _settingsService.VisitNotificationStyle;
-        VisitVoiceAnnouncementEnabled = _settingsService.VisitVoiceAnnouncementEnabled;
-
-        // Cache settings
-        LiveCachePrefetchRadius = _settingsService.LiveCachePrefetchRadius;
-        MaxLiveCacheSizeMB = _settingsService.MaxLiveCacheSizeMB;
-        MaxTripCacheSizeMB = _settingsService.MaxTripCacheSizeMB;
-        MaxConcurrentTileDownloads = _settingsService.MaxConcurrentTileDownloads;
-        MinTileRequestDelayMs = _settingsService.MinTileRequestDelayMs;
-        PrefetchDistanceThresholdMeters = _settingsService.PrefetchDistanceThresholdMeters;
-        TileServerUrl = _settingsService.TileServerUrl;
 
         IsLoggedIn = _settingsService.IsConfigured;
 
@@ -445,10 +178,11 @@ public partial class SettingsViewModel : BaseViewModel
             ? lastSync.Value.ToLocalTime().ToString("g")
             : "Never";
 
-        // Tracking mode description based on user's onboarding choice
-        TrackingModeDescription = _settingsService.BackgroundTrackingEnabled
-            ? "24/7 Background Tracking - Your location is tracked even when the app is closed."
-            : "Foreground Only - Location is only tracked while the app is open.";
+        // Delegate to child ViewModels
+        NavigationSettings.LoadSettings();
+        CacheSettings.LoadSettings();
+        VisitNotificationSettings.LoadSettings();
+        AppearanceSettings.LoadSettings();
     }
 
     /// <summary>
@@ -459,239 +193,9 @@ public partial class SettingsViewModel : BaseViewModel
         _settingsService.TimelineTrackingEnabled = value;
     }
 
-    /// <summary>
-    /// Saves theme preference setting and applies it immediately.
-    /// </summary>
-    partial void OnThemePreferenceChanged(string value)
-    {
-        _settingsService.ThemePreference = value;
-        ApplyTheme(value);
-    }
-
-    /// <summary>
-    /// Saves keep screen on setting and applies it immediately via wake lock service.
-    /// </summary>
-    partial void OnKeepScreenOnChanged(bool value)
-    {
-        _settingsService.KeepScreenOn = value;
-        // The wake lock will be applied/released by AppLifecycleService on next resume
-        // or immediately by the WakeLockService if we inject it here
-        ApplyKeepScreenOn(value);
-    }
-
-    /// <summary>
-    /// Applies the keep screen on setting immediately using MAUI's DeviceDisplay API.
-    /// </summary>
-    private static void ApplyKeepScreenOn(bool keepScreenOn)
-    {
-        MainThread.BeginInvokeOnMainThread(() =>
-        {
-            DeviceDisplay.Current.KeepScreenOn = keepScreenOn;
-        });
-    }
-
-    /// <summary>
-    /// Saves language preference setting when the selected option changes.
-    /// </summary>
-    partial void OnSelectedLanguageOptionChanged(LanguageOption? value)
-    {
-        if (value != null)
-        {
-            LanguagePreference = value.Code;
-            _settingsService.LanguagePreference = value.Code;
-            ApplyLanguage(value.Code);
-        }
-    }
-
-    /// <summary>
-    /// Saves offline cache setting.
-    /// </summary>
-    partial void OnMapOfflineCacheEnabledChanged(bool value)
-    {
-        _settingsService.MapOfflineCacheEnabled = value;
-    }
-
-    /// <summary>
-    /// Saves navigation audio setting.
-    /// </summary>
-    partial void OnNavigationAudioEnabledChanged(bool value)
-    {
-        _settingsService.NavigationAudioEnabled = value;
-    }
-
-    /// <summary>
-    /// Saves navigation vibration setting.
-    /// </summary>
-    partial void OnNavigationVibrationEnabledChanged(bool value)
-    {
-        _settingsService.NavigationVibrationEnabled = value;
-    }
-
-    /// <summary>
-    /// Saves auto-reroute setting.
-    /// </summary>
-    partial void OnAutoRerouteEnabledChanged(bool value)
-    {
-        _settingsService.AutoRerouteEnabled = value;
-    }
-
-    /// <summary>
-    /// Saves distance units setting.
-    /// </summary>
-    partial void OnDistanceUnitsChanged(string value)
-    {
-        _settingsService.DistanceUnits = value;
-    }
-
-    /// <summary>
-    /// Saves show battery warnings setting.
-    /// </summary>
-    partial void OnShowBatteryWarningsChanged(bool value)
-    {
-        _settingsService.ShowBatteryWarnings = value;
-    }
-
-    /// <summary>
-    /// Saves auto-pause on critical battery setting.
-    /// </summary>
-    partial void OnAutoPauseTrackingOnCriticalBatteryChanged(bool value)
-    {
-        _settingsService.AutoPauseTrackingOnCriticalBattery = value;
-    }
-
-    /// <summary>
-    /// Saves prefetch radius setting.
-    /// </summary>
-    partial void OnLiveCachePrefetchRadiusChanged(int value)
-    {
-        _settingsService.LiveCachePrefetchRadius = value;
-    }
-
-    /// <summary>
-    /// Saves max live cache size setting.
-    /// </summary>
-    partial void OnMaxLiveCacheSizeMBChanged(int value)
-    {
-        _settingsService.MaxLiveCacheSizeMB = value;
-    }
-
-    /// <summary>
-    /// Saves max trip cache size setting.
-    /// </summary>
-    partial void OnMaxTripCacheSizeMBChanged(int value)
-    {
-        _settingsService.MaxTripCacheSizeMB = value;
-    }
-
-    /// <summary>
-    /// Saves max concurrent tile downloads setting.
-    /// </summary>
-    partial void OnMaxConcurrentTileDownloadsChanged(int value)
-    {
-        _settingsService.MaxConcurrentTileDownloads = value;
-    }
-
-    /// <summary>
-    /// Saves min tile request delay setting.
-    /// </summary>
-    partial void OnMinTileRequestDelayMsChanged(int value)
-    {
-        _settingsService.MinTileRequestDelayMs = value;
-    }
-
-    /// <summary>
-    /// Saves prefetch distance threshold setting.
-    /// </summary>
-    partial void OnPrefetchDistanceThresholdMetersChanged(int value)
-    {
-        _settingsService.PrefetchDistanceThresholdMeters = value;
-    }
-
-    /// <summary>
-    /// Saves tile server URL setting.
-    /// </summary>
-    partial void OnTileServerUrlChanged(string value)
-    {
-        _settingsService.TileServerUrl = value;
-    }
-
-    /// <summary>
-    /// Saves navigation volume setting.
-    /// </summary>
-    partial void OnNavigationVolumeChanged(float value)
-    {
-        _settingsService.NavigationVolume = value;
-    }
-
-    /// <summary>
-    /// Saves visit notifications enabled setting, updates UI, and starts/stops the service.
-    /// </summary>
-    partial void OnVisitNotificationsEnabledChanged(bool value)
-    {
-        _settingsService.VisitNotificationsEnabled = value;
-        OnPropertyChanged(nameof(ShowVisitVoiceOption));
-
-        // Start or stop the visit notification service immediately
-        if (value)
-        {
-            _ = _visitNotificationService.StartAsync();
-        }
-        else
-        {
-            _visitNotificationService.Stop();
-        }
-    }
-
-    /// <summary>
-    /// Saves visit notification style setting.
-    /// </summary>
-    partial void OnVisitNotificationStyleChanged(string value)
-    {
-        _settingsService.VisitNotificationStyle = value;
-    }
-
-    /// <summary>
-    /// Saves visit voice announcement setting.
-    /// </summary>
-    partial void OnVisitVoiceAnnouncementEnabledChanged(bool value)
-    {
-        _settingsService.VisitVoiceAnnouncementEnabled = value;
-    }
-
-    /// <summary>
-    /// Applies the theme change based on preference.
-    /// </summary>
-    /// <param name="themePreference">The theme preference: "System", "Light", or "Dark".</param>
-    public static void ApplyTheme(string themePreference)
-    {
-        if (Application.Current == null)
-            return;
-
-        Application.Current.UserAppTheme = themePreference switch
-        {
-            "Light" => AppTheme.Light,
-            "Dark" => AppTheme.Dark,
-            _ => AppTheme.Unspecified // "System" - follows device theme
-        };
-    }
-
-    /// <summary>
-    /// Stores the navigation language preference. This setting is used for turn-by-turn
-    /// voice guidance only, not for changing the app's display language.
-    /// The actual voice synthesis uses this preference when generating navigation instructions.
-    /// </summary>
-    /// <param name="languageCode">The language code (e.g., "en", "fr") or "System" for device default.</param>
-    private static void ApplyLanguage(string languageCode)
-    {
-        // Note: This preference is stored and will be used by the navigation voice service
-        // when generating turn-by-turn instructions. We do NOT change CultureInfo here
-        // as this setting is only for navigation voice guidance, not the app UI.
-        Console.WriteLine($"[SettingsViewModel] Navigation voice language set to: {languageCode}");
-    }
-
     #endregion
 
-    #region Commands
+    #region Commands - Account & Navigation
 
     /// <summary>
     /// Opens the QR scanner to configure the server.
@@ -699,7 +203,6 @@ public partial class SettingsViewModel : BaseViewModel
     [RelayCommand]
     private async Task ScanQrCodeAsync()
     {
-        // Navigate to QR scanner page
         await Shell.Current.GoToAsync("QrScanner");
     }
 
@@ -744,34 +247,7 @@ public partial class SettingsViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Sets the distance units.
-    /// </summary>
-    [RelayCommand]
-    private void SetDistanceUnits(string units)
-    {
-        DistanceUnits = units;
-    }
-
-    /// <summary>
-    /// Sets the visit notification style.
-    /// </summary>
-    [RelayCommand]
-    private void SetVisitNotificationStyle(string style)
-    {
-        VisitNotificationStyle = style;
-    }
-
-    /// <summary>
-    /// Resets the tile server URL to the default OSM server.
-    /// </summary>
-    [RelayCommand]
-    private void ResetTileServerUrl()
-    {
-        TileServerUrl = SettingsService.DefaultTileServerUrl;
-    }
-
-    /// <summary>
-    /// Opens the about page or shows app info.
+    /// Opens the about page.
     /// </summary>
     [RelayCommand]
     private async Task ShowAboutAsync()
@@ -789,7 +265,7 @@ public partial class SettingsViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Reruns the onboarding setup wizard to change permissions or tracking mode.
+    /// Reruns the onboarding setup wizard.
     /// </summary>
     [RelayCommand]
     private async Task RerunSetupAsync()
@@ -802,235 +278,8 @@ public partial class SettingsViewModel : BaseViewModel
 
         if (confirm)
         {
-            // Mark as first run so onboarding shows all steps
             _settingsService.IsFirstRun = true;
-
-            // Navigate to onboarding
             await Shell.Current.GoToAsync("//onboarding");
-        }
-    }
-
-    /// <summary>
-    /// Clears the pending location queue.
-    /// </summary>
-    [RelayCommand]
-    private async Task ClearQueueAsync()
-    {
-        if (PendingQueueCount == 0)
-        {
-            await Shell.Current.DisplayAlertAsync("Queue Empty", "There are no pending locations to clear.", "OK");
-            return;
-        }
-
-        var confirm = await Shell.Current.DisplayAlertAsync(
-            "Clear Queue",
-            $"This will delete {PendingQueueCount} pending locations that haven't been synced to the server. This cannot be undone.",
-            "Clear",
-            "Cancel");
-
-        if (confirm)
-        {
-            IsClearingQueue = true;
-            try
-            {
-                var deleted = await _databaseService.ClearPendingQueueAsync();
-                PendingQueueCount = 0;
-                await Shell.Current.DisplayAlertAsync("Queue Cleared", $"{deleted} pending locations have been deleted.", "OK");
-            }
-            finally
-            {
-                IsClearingQueue = false;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Exports the location queue to a CSV file and opens the share dialog.
-    /// </summary>
-    [RelayCommand]
-    private async Task ExportQueueAsync()
-    {
-        try
-        {
-            var locations = await _databaseService.GetAllQueuedLocationsAsync();
-
-            if (locations.Count == 0)
-            {
-                await Shell.Current.DisplayAlertAsync("No Data", "There are no locations to export.", "OK");
-                return;
-            }
-
-            // Build CSV content
-            var csv = new StringBuilder();
-
-            // Header row
-            csv.AppendLine("Id,Timestamp,Latitude,Longitude,Altitude,Accuracy,Speed,Bearing,Provider,SyncStatus,SyncAttempts,LastSyncAttempt,IsRejected,RejectionReason,LastError,Notes");
-
-            // Data rows
-            foreach (var loc in locations)
-            {
-                var status = loc.SyncStatus switch
-                {
-                    SyncStatus.Pending => loc.IsRejected ? "Rejected" :
-                                         loc.SyncAttempts > 0 ? $"Retrying({loc.SyncAttempts})" : "Pending",
-                    SyncStatus.Synced => "Synced",
-                    SyncStatus.Failed => "Failed", // Legacy status
-                    _ => "Unknown"
-                };
-
-                // Use invariant culture for numeric formatting to avoid comma decimal separators
-                var inv = CultureInfo.InvariantCulture;
-                csv.AppendLine(
-                    $"{loc.Id}," +
-                    $"{loc.Timestamp:yyyy-MM-dd HH:mm:ss}," +
-                    $"{loc.Latitude.ToString("F6", inv)}," +
-                    $"{loc.Longitude.ToString("F6", inv)}," +
-                    $"{loc.Altitude?.ToString("F1", inv) ?? ""}," +
-                    $"{loc.Accuracy?.ToString("F1", inv) ?? ""}," +
-                    $"{loc.Speed?.ToString("F1", inv) ?? ""}," +
-                    $"{loc.Bearing?.ToString("F1", inv) ?? ""}," +
-                    $"\"{loc.Provider ?? ""}\"," +
-                    $"{status}," +
-                    $"{loc.SyncAttempts}," +
-                    $"{(loc.LastSyncAttempt.HasValue ? loc.LastSyncAttempt.Value.ToString("yyyy-MM-dd HH:mm:ss") : "")}," +
-                    $"{loc.IsRejected}," +
-                    $"\"{loc.RejectionReason?.Replace("\"", "\"\"") ?? ""}\"," +
-                    $"\"{loc.LastError?.Replace("\"", "\"\"") ?? ""}\"," +
-                    $"\"{loc.Notes?.Replace("\"", "\"\"") ?? ""}\"");
-            }
-
-            // Save to temp file
-            var fileName = $"wayfarer_locations_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
-            var tempPath = Path.Combine(FileSystem.CacheDirectory, fileName);
-            await File.WriteAllTextAsync(tempPath, csv.ToString());
-
-            // Share the file
-            await Share.Default.RequestAsync(new ShareFileRequest
-            {
-                Title = "Export Location Queue",
-                File = new ShareFile(tempPath)
-            });
-        }
-        catch (Exception ex)
-        {
-            await Shell.Current.DisplayAlertAsync("Export Failed", $"Failed to export locations: {ex.Message}", "OK");
-        }
-    }
-
-    /// <summary>
-    /// Refreshes the pending queue count.
-    /// </summary>
-    [RelayCommand]
-    private async Task RefreshQueueCountAsync()
-    {
-        PendingQueueCount = await _databaseService.GetPendingCountAsync();
-    }
-
-    /// <summary>
-    /// Refreshes the local timeline count.
-    /// </summary>
-    [RelayCommand]
-    private async Task RefreshTimelineCountAsync()
-    {
-        LocalTimelineCount = await _timelineDataService.GetEntryCountAsync();
-    }
-
-    /// <summary>
-    /// Exports timeline data to CSV format.
-    /// </summary>
-    [RelayCommand]
-    private async Task ExportCsvAsync()
-    {
-        try
-        {
-            var result = await _exportService.ShareExportAsync("csv");
-            if (result != null)
-            {
-                await _toastService.ShowSuccessAsync("Timeline exported successfully");
-            }
-        }
-        catch (Exception ex)
-        {
-            await _toastService.ShowErrorAsync($"Export failed: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Exports timeline data to GeoJSON format.
-    /// </summary>
-    [RelayCommand]
-    private async Task ExportGeoJsonAsync()
-    {
-        try
-        {
-            var result = await _exportService.ShareExportAsync("geojson");
-            if (result != null)
-            {
-                await _toastService.ShowSuccessAsync("Timeline exported successfully");
-            }
-        }
-        catch (Exception ex)
-        {
-            await _toastService.ShowErrorAsync($"Export failed: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Imports timeline data from a file.
-    /// </summary>
-    [RelayCommand]
-    private async Task ImportTimelineAsync()
-    {
-        try
-        {
-            var fileTypes = new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
-            {
-                { DevicePlatform.Android, new[] { "text/csv", "application/json", "application/geo+json", "*/*" } },
-                { DevicePlatform.iOS, new[] { "public.comma-separated-values-text", "public.json" } }
-            });
-
-            var result = await FilePicker.Default.PickAsync(new PickOptions
-            {
-                PickerTitle = "Select timeline file to import",
-                FileTypes = fileTypes
-            });
-
-            if (result == null)
-                return;
-
-            using var stream = await result.OpenReadAsync();
-
-            ImportResult importResult;
-            if (result.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
-            {
-                importResult = await _importService.ImportFromCsvAsync(stream);
-            }
-            else if (result.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ||
-                     result.FileName.EndsWith(".geojson", StringComparison.OrdinalIgnoreCase))
-            {
-                importResult = await _importService.ImportFromGeoJsonAsync(stream);
-            }
-            else
-            {
-                await _toastService.ShowWarningAsync("Unsupported file format. Use CSV or GeoJSON.");
-                return;
-            }
-
-            // Show result
-            var message = $"Imported: {importResult.Imported}, Updated: {importResult.Updated}, Skipped: {importResult.Skipped}";
-            if (importResult.Errors.Any())
-            {
-                message += $"\nErrors: {importResult.Errors.Count}";
-            }
-
-            await Shell.Current.DisplayAlertAsync("Import Complete", message, "OK");
-
-            // Refresh count
-            await RefreshTimelineCountAsync();
-        }
-        catch (Exception ex)
-        {
-            await _toastService.ShowErrorAsync($"Import failed: {ex.Message}");
         }
     }
 
@@ -1045,8 +294,8 @@ public partial class SettingsViewModel : BaseViewModel
     {
         LoadSettings();
         await PinSecurity.LoadSettingsAsync();
-        await RefreshQueueCountAsync();
-        await RefreshTimelineCountAsync();
+        await TimelineData.RefreshQueueCountAsync();
+        await TimelineData.RefreshTimelineCountAsync();
         await base.OnAppearingAsync();
     }
 
