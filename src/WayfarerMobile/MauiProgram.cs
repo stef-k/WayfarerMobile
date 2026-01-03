@@ -6,6 +6,7 @@ using Syncfusion.Maui.Toolkit.Hosting;
 using WayfarerMobile.Core.Algorithms;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Services;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Data.Services;
 using WayfarerMobile.Handlers;
 using WayfarerMobile.Interfaces;
@@ -18,6 +19,7 @@ using WayfarerMobile.Views;
 using WayfarerMobile.Views.Onboarding;
 using SkiaSharp.Views.Maui.Controls.Hosting;
 using ZXing.Net.Maui.Controls;
+using SQLite;
 
 namespace WayfarerMobile;
 
@@ -159,6 +161,16 @@ public static class MauiProgram
 
         // Infrastructure Services
         services.AddSingleton<DatabaseService>();
+
+        // Database connection factory for repositories
+        services.AddSingleton<Func<Task<SQLiteAsyncConnection>>>(sp =>
+            () => sp.GetRequiredService<DatabaseService>().GetConnectionAsync());
+
+        // Repositories (all singletons - shared connection)
+        services.AddSingleton<ILocationQueueRepository, LocationQueueRepository>();
+        services.AddSingleton<ITimelineRepository, TimelineRepository>();
+        services.AddSingleton<ILiveTileCacheRepository, LiveTileCacheRepository>();
+
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<ITripStateManager, TripStateManager>();
         services.AddSingleton<IDownloadProgressAggregator, DownloadProgressAggregator>();

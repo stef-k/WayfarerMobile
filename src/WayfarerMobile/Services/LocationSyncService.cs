@@ -4,7 +4,7 @@ using SQLite;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
-using WayfarerMobile.Data.Services;
+using WayfarerMobile.Data.Repositories;
 
 namespace WayfarerMobile.Services;
 
@@ -17,7 +17,7 @@ public class LocationSyncService : IDisposable
     #region Fields
 
     private readonly IApiClient _apiClient;
-    private readonly DatabaseService _database;
+    private readonly ILocationQueueRepository _locationQueue;
     private readonly ISettingsService _settings;
     private readonly ILogger<LocationSyncService> _logger;
     private readonly ResiliencePipeline _retryPipeline;
@@ -76,22 +76,22 @@ public class LocationSyncService : IDisposable
     /// Creates a new instance of LocationSyncService.
     /// </summary>
     /// <param name="apiClient">API client for server communication.</param>
-    /// <param name="database">Database service for location queue.</param>
+    /// <param name="locationQueue">Repository for location queue operations.</param>
     /// <param name="settings">Settings service for configuration.</param>
     /// <param name="logger">Logger instance.</param>
     public LocationSyncService(
         IApiClient apiClient,
-        DatabaseService database,
+        ILocationQueueRepository locationQueue,
         ISettingsService settings,
         ILogger<LocationSyncService> logger)
     {
         ArgumentNullException.ThrowIfNull(apiClient);
-        ArgumentNullException.ThrowIfNull(database);
+        ArgumentNullException.ThrowIfNull(locationQueue);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(logger);
 
         _apiClient = apiClient;
-        _database = database;
+        _locationQueue = locationQueue;
         _settings = settings;
         _logger = logger;
 
@@ -132,7 +132,7 @@ public class LocationSyncService : IDisposable
     /// </summary>
     public async Task<int> GetPendingCountAsync()
     {
-        return await _database.GetPendingCountAsync();
+        return await _locationQueue.GetPendingCountAsync();
     }
 
     #endregion
@@ -321,7 +321,7 @@ public class LocationSyncService : IDisposable
     /// </summary>
     private async Task<int> SyncPendingLocationsAsync()
     {
-        var pending = await _database.GetPendingLocationsAsync(BatchSize);
+        var pending = await _locationQueue.GetPendingLocationsAsync(BatchSize);
         if (pending.Count == 0)
         {
             _logger.LogDebug("No pending locations to sync");
@@ -351,7 +351,7 @@ public class LocationSyncService : IDisposable
         // Batch update all successful syncs in one database operation
         if (successfulIds.Count > 0)
         {
-            await _database.MarkLocationsSyncedAsync(successfulIds);
+            await _locationQueue.MarkLocationsSyncedAsync(successfulIds);
             _logger.LogDebug("Batch marked {Count} locations as synced", successfulIds.Count);
 
             // Update last sync time in settings for UI display
@@ -399,7 +399,7 @@ public class LocationSyncService : IDisposable
                 {
                     // Server received but did NOT store - mark as rejected, not synced
                     // These won't appear on server timeline
-                    await _database.MarkLocationRejectedAsync(location.Id, "Server: distance/time threshold not met");
+                    await _locationQueue.MarkLocationRejectedAsync(location.Id, "Server: distance/time threshold not met");
                     _logger.LogDebug("Location {Id} skipped by server (thresholds) - not marking as synced", location.Id);
 
                     // Notify listeners that location was skipped (for local timeline cleanup)
@@ -433,7 +433,7 @@ public class LocationSyncService : IDisposable
                 case FailureType.ServerRejection:
                     // Server explicitly rejected - mark as rejected, don't retry
                     // Lesson learned: Use dedicated field instead of MarkLocationFailedAsync
-                    await _database.MarkLocationRejectedAsync(location.Id, $"Server: {result.Message ?? "rejected"}");
+                    await _locationQueue.MarkLocationRejectedAsync(location.Id, $"Server: {result.Message ?? "rejected"}");
                     _logger.LogWarning(
                         "Server rejected location {Id}: {Message} (HTTP {StatusCode})",
                         location.Id, result.Message, result.StatusCode);
@@ -441,7 +441,7 @@ public class LocationSyncService : IDisposable
 
                 case FailureType.AuthenticationError:
                     // Auth error - stop all syncing
-                    await _database.MarkLocationFailedAsync(location.Id, "Authentication failed");
+                    await _locationQueue.MarkLocationFailedAsync(location.Id, "Authentication failed");
                     _logger.LogWarning(
                         "Authentication error for location {Id}, stopping sync (HTTP {StatusCode})",
                         location.Id, result.StatusCode);
@@ -456,14 +456,14 @@ public class LocationSyncService : IDisposable
 
                 case FailureType.ServerError:
                     // Server error - might be temporary, continue with next
-                    await _database.IncrementRetryCountAsync(location.Id);
+                    await _locationQueue.IncrementRetryCountAsync(location.Id);
                     _logger.LogWarning(
                         "Server error for location {Id}: {Message} (HTTP {StatusCode})",
                         location.Id, result.Message, result.StatusCode);
                     return (false, true); // Continue with next location
 
                 default:
-                    await _database.MarkLocationFailedAsync(location.Id, result.Message ?? "Unknown error");
+                    await _locationQueue.MarkLocationFailedAsync(location.Id, result.Message ?? "Unknown error");
                     _logger.LogWarning(
                         "Failed to sync location {Id}: {Message}",
                         location.Id, result.Message);
@@ -473,19 +473,19 @@ public class LocationSyncService : IDisposable
         catch (HttpRequestException ex)
         {
             // Network error after all retries exhausted
-            await _database.IncrementRetryCountAsync(location.Id);
+            await _locationQueue.IncrementRetryCountAsync(location.Id);
             _logger.LogError(ex, "Network error syncing location {Id} after retries", location.Id);
             return (false, true); // Continue with next
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
         {
-            await _database.IncrementRetryCountAsync(location.Id);
+            await _locationQueue.IncrementRetryCountAsync(location.Id);
             _logger.LogWarning(ex, "Timeout syncing location {Id}", location.Id);
             return (false, true);
         }
         catch (Exception ex)
         {
-            await _database.MarkLocationFailedAsync(location.Id, $"Unexpected: {ex.Message}");
+            await _locationQueue.MarkLocationFailedAsync(location.Id, $"Unexpected: {ex.Message}");
             _logger.LogError(ex, "Unexpected error syncing location {Id}", location.Id);
             return (false, true);
         }
@@ -498,7 +498,7 @@ public class LocationSyncService : IDisposable
     {
         try
         {
-            var purged = await _database.PurgeSyncedLocationsAsync(daysOld: 7);
+            var purged = await _locationQueue.PurgeSyncedLocationsAsync(daysOld: 7);
             if (purged > 0)
             {
                 _logger.LogDebug("Purged {Count} old synced locations", purged);

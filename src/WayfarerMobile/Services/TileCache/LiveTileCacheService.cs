@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 using SQLite;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Data.Entities;
-using WayfarerMobile.Data.Services;
+using WayfarerMobile.Data.Repositories;
 
 namespace WayfarerMobile.Services.TileCache;
 
@@ -19,7 +19,7 @@ public class LiveTileCacheService
 
     #region Fields
 
-    private readonly DatabaseService _databaseService;
+    private readonly ILiveTileCacheRepository _liveTileCache;
     private readonly ISettingsService _settingsService;
     private readonly ILogger<LiveTileCacheService> _logger;
     private readonly HttpClient _httpClient;
@@ -47,15 +47,15 @@ public class LiveTileCacheService
     /// <summary>
     /// Creates a new instance of LiveTileCacheService.
     /// </summary>
-    /// <param name="databaseService">Database service for tile metadata.</param>
+    /// <param name="liveTileCache">Repository for live tile cache operations.</param>
     /// <param name="settingsService">Settings service.</param>
     /// <param name="logger">Logger instance.</param>
     public LiveTileCacheService(
-        DatabaseService databaseService,
+        ILiveTileCacheRepository liveTileCache,
         ISettingsService settingsService,
         ILogger<LiveTileCacheService> logger)
     {
-        _databaseService = databaseService;
+        _liveTileCache = liveTileCache;
         _settingsService = settingsService;
         _logger = logger;
         _cacheDirectory = Path.Combine(FileSystem.CacheDirectory, "tiles", "live");
@@ -273,7 +273,7 @@ public class LiveTileCacheService
     /// </summary>
     public async Task<int> GetTotalCachedFilesAsync()
     {
-        return await _databaseService.GetLiveTileCountAsync();
+        return await _liveTileCache.GetLiveTileCountAsync();
     }
 
     /// <summary>
@@ -281,7 +281,7 @@ public class LiveTileCacheService
     /// </summary>
     public async Task<long> GetTotalCacheSizeBytesAsync()
     {
-        return await _databaseService.GetLiveCacheSizeAsync();
+        return await _liveTileCache.GetLiveCacheSizeAsync();
     }
 
     /// <summary>
@@ -299,7 +299,7 @@ public class LiveTileCacheService
             }
 
             // Clear database
-            await _databaseService.ClearLiveTilesAsync();
+            await _liveTileCache.ClearLiveTilesAsync();
             _logger.LogDebug("Cache cleared");
         }
         catch (IOException ex)
@@ -329,7 +329,7 @@ public class LiveTileCacheService
             return;
 
         // Get oldest tiles to evict
-        var tilesToEvict = await _databaseService.GetOldestLiveTilesAsync(100);
+        var tilesToEvict = await _liveTileCache.GetOldestLiveTilesAsync(100);
         foreach (var tile in tilesToEvict)
         {
             try
@@ -337,7 +337,7 @@ public class LiveTileCacheService
                 if (File.Exists(tile.FilePath))
                     File.Delete(tile.FilePath);
 
-                await _databaseService.DeleteLiveTileAsync(tile.Id);
+                await _liveTileCache.DeleteLiveTileAsync(tile.Id);
                 currentSize -= tile.FileSizeBytes;
 
                 if (currentSize <= maxSizeBytes * 0.8) // Evict to 80% of max
@@ -407,7 +407,7 @@ public class LiveTileCacheService
                 CachedAt = DateTime.UtcNow,
                 LastAccessedAt = DateTime.UtcNow
             };
-            await _databaseService.SaveLiveTileAsync(tileEntity);
+            await _liveTileCache.SaveLiveTileAsync(tileEntity);
 
             // Trigger LRU eviction if needed
             _ = EvictLruTilesAsync();
@@ -453,7 +453,7 @@ public class LiveTileCacheService
     {
         try
         {
-            await _databaseService.UpdateLiveTileAccessAsync($"{z}/{x}/{y}");
+            await _liveTileCache.UpdateLiveTileAccessAsync($"{z}/{x}/{y}");
         }
         catch (SQLiteException)
         {

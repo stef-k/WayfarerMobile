@@ -3,6 +3,7 @@ using SQLite;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Data.Services;
 
 namespace WayfarerMobile.Services;
@@ -23,6 +24,7 @@ namespace WayfarerMobile.Services;
 public class TimelineSyncService : ITimelineSyncService
 {
     private readonly IApiClient _apiClient;
+    private readonly ITimelineRepository _timelineRepository;
     private readonly DatabaseService _databaseService;
     private SQLiteAsyncConnection? _database;
     private bool _initialized;
@@ -46,11 +48,16 @@ public class TimelineSyncService : ITimelineSyncService
     /// <summary>
     /// Creates a new instance of TimelineSyncService.
     /// </summary>
+    /// <param name="apiClient">API client for server communication.</param>
+    /// <param name="timelineRepository">Repository for timeline operations.</param>
+    /// <param name="databaseService">Database service for connection access.</param>
     public TimelineSyncService(
         IApiClient apiClient,
+        ITimelineRepository timelineRepository,
         DatabaseService databaseService)
     {
         _apiClient = apiClient;
+        _timelineRepository = timelineRepository;
         _databaseService = databaseService;
     }
 
@@ -376,7 +383,7 @@ public class TimelineSyncService : ITimelineSyncService
     /// </summary>
     private async Task<(int? localEntryId, double? lat, double? lng, DateTime? timestamp, string? notes)> GetOriginalValuesAsync(int locationId)
     {
-        var localEntry = await _databaseService.GetLocalTimelineEntryByServerIdAsync(locationId);
+        var localEntry = await _timelineRepository.GetLocalTimelineEntryByServerIdAsync(locationId);
         if (localEntry == null)
             return (null, null, null, null, null);
 
@@ -394,7 +401,7 @@ public class TimelineSyncService : ITimelineSyncService
         string? notes,
         bool includeNotes)
     {
-        var localEntry = await _databaseService.GetLocalTimelineEntryByServerIdAsync(locationId);
+        var localEntry = await _timelineRepository.GetLocalTimelineEntryByServerIdAsync(locationId);
         if (localEntry == null) return;
 
         // Apply optimistic update
@@ -403,7 +410,7 @@ public class TimelineSyncService : ITimelineSyncService
         if (localTimestamp.HasValue) localEntry.Timestamp = localTimestamp.Value;
         if (includeNotes) localEntry.Notes = notes;
 
-        await _databaseService.UpdateLocalTimelineEntryAsync(localEntry);
+        await _timelineRepository.UpdateLocalTimelineEntryAsync(localEntry);
     }
 
     /// <summary>
@@ -469,7 +476,7 @@ public class TimelineSyncService : ITimelineSyncService
     {
         if (!originalValues.localEntryId.HasValue) return;
 
-        var localEntry = await _databaseService.GetLocalTimelineEntryByServerIdAsync(locationId);
+        var localEntry = await _timelineRepository.GetLocalTimelineEntryByServerIdAsync(locationId);
         if (localEntry == null) return;
 
         if (originalValues.lat.HasValue) localEntry.Latitude = originalValues.lat.Value;
@@ -477,7 +484,7 @@ public class TimelineSyncService : ITimelineSyncService
         if (originalValues.timestamp.HasValue) localEntry.Timestamp = originalValues.timestamp.Value;
         localEntry.Notes = originalValues.notes;
 
-        await _databaseService.UpdateLocalTimelineEntryAsync(localEntry);
+        await _timelineRepository.UpdateLocalTimelineEntryAsync(localEntry);
     }
 
     /// <summary>
@@ -485,7 +492,7 @@ public class TimelineSyncService : ITimelineSyncService
     /// </summary>
     private async Task<string?> GetDeletedEntryJsonAsync(int locationId)
     {
-        var localEntry = await _databaseService.GetLocalTimelineEntryByServerIdAsync(locationId);
+        var localEntry = await _timelineRepository.GetLocalTimelineEntryByServerIdAsync(locationId);
         if (localEntry == null) return null;
 
         return JsonSerializer.Serialize(localEntry);
@@ -496,10 +503,10 @@ public class TimelineSyncService : ITimelineSyncService
     /// </summary>
     private async Task ApplyLocalEntryDeleteAsync(int locationId)
     {
-        var localEntry = await _databaseService.GetLocalTimelineEntryByServerIdAsync(locationId);
+        var localEntry = await _timelineRepository.GetLocalTimelineEntryByServerIdAsync(locationId);
         if (localEntry == null) return;
 
-        await _databaseService.DeleteLocalTimelineEntryAsync(localEntry.Id);
+        await _timelineRepository.DeleteLocalTimelineEntryAsync(localEntry.Id);
     }
 
     /// <summary>
@@ -535,7 +542,7 @@ public class TimelineSyncService : ITimelineSyncService
             if (entry == null) return;
 
             entry.Id = 0; // Reset ID for new insert
-            await _databaseService.InsertLocalTimelineEntryAsync(entry);
+            await _timelineRepository.InsertLocalTimelineEntryAsync(entry);
         }
         catch (JsonException)
         {
@@ -558,7 +565,7 @@ public class TimelineSyncService : ITimelineSyncService
             // Revert updated fields
             if (!mutation.HasRollbackData) return;
 
-            var localEntry = await _databaseService.GetLocalTimelineEntryByServerIdAsync(mutation.LocationId);
+            var localEntry = await _timelineRepository.GetLocalTimelineEntryByServerIdAsync(mutation.LocationId);
             if (localEntry == null) return;
 
             if (mutation.OriginalLatitude.HasValue) localEntry.Latitude = mutation.OriginalLatitude.Value;
@@ -566,7 +573,7 @@ public class TimelineSyncService : ITimelineSyncService
             if (mutation.OriginalTimestamp.HasValue) localEntry.Timestamp = mutation.OriginalTimestamp.Value;
             localEntry.Notes = mutation.OriginalNotes;
 
-            await _databaseService.UpdateLocalTimelineEntryAsync(localEntry);
+            await _timelineRepository.UpdateLocalTimelineEntryAsync(localEntry);
         }
     }
 

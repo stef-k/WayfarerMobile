@@ -3,7 +3,7 @@ using SQLite;
 using WayfarerMobile.Core.Algorithms;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
-using WayfarerMobile.Data.Services;
+using WayfarerMobile.Data.Repositories;
 
 namespace WayfarerMobile.Services;
 
@@ -24,7 +24,7 @@ namespace WayfarerMobile.Services;
 /// </remarks>
 public class LocalTimelineStorageService : IDisposable
 {
-    private readonly DatabaseService _databaseService;
+    private readonly ITimelineRepository _timelineRepository;
     private readonly LocalTimelineFilter _filter;
     private readonly ILogger<LocalTimelineStorageService> _logger;
     private bool _isInitialized;
@@ -33,15 +33,15 @@ public class LocalTimelineStorageService : IDisposable
     /// <summary>
     /// Creates a new instance of LocalTimelineStorageService.
     /// </summary>
-    /// <param name="databaseService">Database service for persistence.</param>
+    /// <param name="timelineRepository">Repository for timeline operations.</param>
     /// <param name="filter">Local timeline filter with AND logic.</param>
     /// <param name="logger">Logger instance.</param>
     public LocalTimelineStorageService(
-        DatabaseService databaseService,
+        ITimelineRepository timelineRepository,
         LocalTimelineFilter filter,
         ILogger<LocalTimelineStorageService> logger)
     {
-        _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
+        _timelineRepository = timelineRepository ?? throw new ArgumentNullException(nameof(timelineRepository));
         _filter = filter ?? throw new ArgumentNullException(nameof(filter));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -61,7 +61,7 @@ public class LocalTimelineStorageService : IDisposable
         try
         {
             // Load the most recent stored location to initialize the filter
-            var lastEntry = await _databaseService.GetMostRecentLocalTimelineEntryAsync();
+            var lastEntry = await _timelineRepository.GetMostRecentLocalTimelineEntryAsync();
             if (lastEntry != null)
             {
                 var lastLocation = new LocationData
@@ -158,7 +158,7 @@ public class LocalTimelineStorageService : IDisposable
                 CreatedAt = DateTime.UtcNow
             };
 
-            await _databaseService.InsertLocalTimelineEntryAsync(entry);
+            await _timelineRepository.InsertLocalTimelineEntryAsync(entry);
             _filter.MarkAsStored(location);
 
             _logger.LogDebug(
@@ -184,7 +184,7 @@ public class LocalTimelineStorageService : IDisposable
     {
         try
         {
-            var updated = await _databaseService.UpdateLocalTimelineServerIdAsync(
+            var updated = await _timelineRepository.UpdateLocalTimelineServerIdAsync(
                 e.Timestamp,
                 e.ServerId);
 
@@ -220,7 +220,7 @@ public class LocalTimelineStorageService : IDisposable
     {
         try
         {
-            var deleted = await _databaseService.DeleteLocalTimelineEntryByTimestampAsync(e.Timestamp);
+            var deleted = await _timelineRepository.DeleteLocalTimelineEntryByTimestampAsync(e.Timestamp);
 
             if (deleted > 0)
             {

@@ -3,7 +3,7 @@ using SQLite;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
-using WayfarerMobile.Data.Services;
+using WayfarerMobile.Data.Repositories;
 
 namespace WayfarerMobile.Services;
 
@@ -61,7 +61,7 @@ public sealed class QueueDrainService : IDisposable
     #region Fields
 
     private readonly IApiClient _apiClient;
-    private readonly DatabaseService _database;
+    private readonly ILocationQueueRepository _locationQueue;
     private readonly ISettingsService _settings;
     private readonly IConnectivity _connectivity;
     private readonly ILogger<QueueDrainService> _logger;
@@ -85,15 +85,20 @@ public sealed class QueueDrainService : IDisposable
     /// <summary>
     /// Creates a new instance of QueueDrainService.
     /// </summary>
+    /// <param name="apiClient">API client for server communication.</param>
+    /// <param name="locationQueue">Repository for location queue operations.</param>
+    /// <param name="settings">Settings service for configuration.</param>
+    /// <param name="connectivity">Connectivity service for network state.</param>
+    /// <param name="logger">Logger instance.</param>
     public QueueDrainService(
         IApiClient apiClient,
-        DatabaseService database,
+        ILocationQueueRepository locationQueue,
         ISettingsService settings,
         IConnectivity connectivity,
         ILogger<QueueDrainService> logger)
     {
         _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
-        _database = database ?? throw new ArgumentNullException(nameof(database));
+        _locationQueue = locationQueue ?? throw new ArgumentNullException(nameof(locationQueue));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _connectivity = connectivity ?? throw new ArgumentNullException(nameof(connectivity));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -215,7 +220,7 @@ public sealed class QueueDrainService : IDisposable
             }
 
             // Clean orphaned "Syncing" states from crash
-            var resetCount = await _database.ResetStuckLocationsAsync();
+            var resetCount = await _locationQueue.ResetStuckLocationsAsync();
             if (resetCount > 0)
             {
                 _logger.LogInformation(
@@ -350,7 +355,7 @@ public sealed class QueueDrainService : IDisposable
         try
         {
             // Get oldest pending location
-            location = await _database.GetOldestPendingForDrainAsync();
+            location = await _locationQueue.GetOldestPendingForDrainAsync();
             if (location == null)
             {
                 _logger.LogInformation("QueueDrain: No pending locations in queue");
@@ -363,7 +368,7 @@ public sealed class QueueDrainService : IDisposable
 
             // CRITICAL FIX: Mark location as Syncing BEFORE releasing lock
             // This prevents duplicate processing if another drain cycle starts
-            await _database.MarkLocationSyncingAsync(location.Id);
+            await _locationQueue.MarkLocationSyncingAsync(location.Id);
 
             // CRITICAL FIX: Record rate limit BEFORE making API call
             // This prevents race conditions in rate limiting
@@ -406,7 +411,7 @@ public sealed class QueueDrainService : IDisposable
             if (!filterResult.ShouldSync)
             {
                 // Mark as rejected and continue to next
-                await _database.MarkLocationRejectedAsync(location.Id, $"Client: {filterResult.Reason}");
+                await _locationQueue.MarkLocationRejectedAsync(location.Id, $"Client: {filterResult.Reason}");
                 _logger.LogInformation(
                     "QueueDrain: Location {Id} rejected: {Reason}",
                     location.Id, filterResult.Reason);
@@ -437,7 +442,7 @@ public sealed class QueueDrainService : IDisposable
             if (result.Success)
             {
                 // Mark synced and update reference point with location's actual timestamp
-                await _database.MarkLocationSyncedAsync(location.Id);
+                await _locationQueue.MarkLocationSyncedAsync(location.Id);
                 _settings.UpdateLastSyncedLocation(
                     location.Latitude,
                     location.Longitude,
@@ -451,7 +456,7 @@ public sealed class QueueDrainService : IDisposable
             else if (result.Skipped)
             {
                 // Server skipped due to its own thresholds - mark as rejected
-                await _database.MarkLocationRejectedAsync(
+                await _locationQueue.MarkLocationRejectedAsync(
                     location.Id,
                     $"Server: {result.Message ?? "skipped"}");
                 _consecutiveFailures = 0;
@@ -462,7 +467,7 @@ public sealed class QueueDrainService : IDisposable
             else if (result.StatusCode.HasValue && result.StatusCode >= 400 && result.StatusCode < 500)
             {
                 // Client error (4xx) - server rejection, don't retry
-                await _database.MarkLocationRejectedAsync(
+                await _locationQueue.MarkLocationRejectedAsync(
                     location.Id,
                     $"Server: {result.Message ?? $"HTTP {result.StatusCode}"}");
                 _consecutiveFailures = 0;
@@ -473,7 +478,7 @@ public sealed class QueueDrainService : IDisposable
             else
             {
                 // Technical failure (5xx, network) - reset to pending for retry
-                await _database.ResetLocationToPendingAsync(location.Id);
+                await _locationQueue.ResetLocationToPendingAsync(location.Id);
                 _consecutiveFailures++;
                 _logger.LogWarning(
                     "Location {Id} sync failed (attempt {Attempts}): {Message}",
@@ -483,27 +488,27 @@ public sealed class QueueDrainService : IDisposable
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             // Service shutdown - reset to pending so it can be retried
-            await _database.ResetLocationToPendingAsync(location.Id);
+            await _locationQueue.ResetLocationToPendingAsync(location.Id);
             throw; // Re-throw to propagate cancellation
         }
         catch (OperationCanceledException)
         {
             // Timeout - reset to pending for retry
-            await _database.ResetLocationToPendingAsync(location.Id);
+            await _locationQueue.ResetLocationToPendingAsync(location.Id);
             _consecutiveFailures++;
             _logger.LogWarning("Location {Id} sync timed out", location.Id);
         }
         catch (HttpRequestException ex)
         {
             // Network error - reset to pending for retry
-            await _database.ResetLocationToPendingAsync(location.Id);
+            await _locationQueue.ResetLocationToPendingAsync(location.Id);
             _consecutiveFailures++;
             _logger.LogWarning(ex, "Network error syncing location {Id}", location.Id);
         }
         catch (Exception ex)
         {
             // Unexpected error - mark as failed
-            await _database.MarkLocationFailedAsync(location.Id, $"Unexpected: {ex.Message}");
+            await _locationQueue.MarkLocationFailedAsync(location.Id, $"Unexpected: {ex.Message}");
             _consecutiveFailures++;
             _logger.LogError(ex, "Unexpected error processing location {Id}", location.Id);
         }
