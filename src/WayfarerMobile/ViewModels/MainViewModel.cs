@@ -15,7 +15,7 @@ namespace WayfarerMobile.ViewModels;
 /// ViewModel for the main page showing current location and tracking status.
 /// Coordinates between MapDisplayViewModel, NavigationCoordinatorViewModel, TripSheetViewModel, and CheckInViewModel.
 /// </summary>
-public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavigationCallbacks, ITripSheetCallbacks
+public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavigationCallbacks, ITripSheetCallbacks, IContextMenuCallbacks, ITrackingCallbacks
 {
     #region Fields
 
@@ -47,6 +47,16 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     /// </summary>
     public TripSheetViewModel TripSheet { get; }
 
+    /// <summary>
+    /// Gets the context menu ViewModel for dropped pin and location actions.
+    /// </summary>
+    public ContextMenuViewModel ContextMenu { get; }
+
+    /// <summary>
+    /// Gets the tracking coordinator ViewModel for location tracking lifecycle.
+    /// </summary>
+    public TrackingCoordinatorViewModel Tracking { get; }
+
     #endregion
 
     #region Properties
@@ -56,18 +66,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     /// Forwards to MapDisplayViewModel.
     /// </summary>
     public Map Map => MapDisplay.Map;
-
-    /// <summary>
-    /// Gets or sets the current tracking state.
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsTracking))]
-    [NotifyPropertyChangedFor(nameof(TrackingButtonText))]
-    [NotifyPropertyChangedFor(nameof(TrackingButtonIcon))]
-    [NotifyPropertyChangedFor(nameof(TrackingButtonImage))]
-    [NotifyPropertyChangedFor(nameof(TrackingButtonColor))]
-    [NotifyPropertyChangedFor(nameof(StatusText))]
-    private TrackingState _trackingState = TrackingState.NotInitialized;
 
     /// <summary>
     /// Gets or sets the current location data.
@@ -83,18 +81,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     private LocationData? _currentLocation;
 
     /// <summary>
-    /// Gets or sets the current performance mode.
-    /// </summary>
-    [ObservableProperty]
-    private PerformanceMode _performanceMode = PerformanceMode.Normal;
-
-    /// <summary>
-    /// Gets or sets the location update count.
-    /// </summary>
-    [ObservableProperty]
-    private int _locationCount;
-
-    /// <summary>
     /// Gets or sets whether to follow location on map.
     /// </summary>
     [ObservableProperty]
@@ -107,55 +93,115 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     public bool IsNavigating => Navigation.IsNavigating;
 
     /// <summary>
-    /// Gets or sets whether drop pin mode is active.
-    /// When active, tapping the map shows a context menu at that location.
-    /// </summary>
-    [ObservableProperty]
-    private bool _isDropPinModeActive;
-
-    /// <summary>
-    /// Gets or sets whether the context menu is visible.
-    /// </summary>
-    [ObservableProperty]
-    private bool _isContextMenuVisible;
-
-    /// <summary>
     /// Gets or sets whether the check-in sheet is open.
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsAnySheetOpen))]
     private bool _isCheckInSheetOpen;
 
-    /// <summary>
-    /// Gets or sets the context menu latitude.
-    /// </summary>
-    [ObservableProperty]
-    private double _contextMenuLatitude;
+    #region Tracking Forwarding Properties
 
     /// <summary>
-    /// Gets or sets the context menu longitude.
+    /// Gets the current tracking state.
+    /// Forwards to TrackingCoordinatorViewModel.
     /// </summary>
-    [ObservableProperty]
-    private double _contextMenuLongitude;
+    public TrackingState TrackingState => Tracking.TrackingState;
 
     /// <summary>
-    /// Gets or sets whether a dropped pin is visible on the map.
-    /// Pin persists after context menu closes and can be tapped to reopen menu.
+    /// Gets the current performance mode.
+    /// Forwards to TrackingCoordinatorViewModel.
     /// </summary>
-    [ObservableProperty]
-    private bool _hasDroppedPin;
+    public PerformanceMode PerformanceMode => Tracking.PerformanceMode;
 
     /// <summary>
-    /// Gets or sets the dropped pin latitude.
+    /// Gets the location update count.
+    /// Forwards to TrackingCoordinatorViewModel.
     /// </summary>
-    [ObservableProperty]
-    private double _droppedPinLatitude;
+    public int LocationCount => Tracking.LocationCount;
 
     /// <summary>
-    /// Gets or sets the dropped pin longitude.
+    /// Gets whether tracking is currently active.
+    /// Forwards to TrackingCoordinatorViewModel.
     /// </summary>
-    [ObservableProperty]
-    private double _droppedPinLongitude;
+    public bool IsTracking => Tracking.IsTracking;
+
+    /// <summary>
+    /// Gets the tracking button text based on current state.
+    /// Forwards to TrackingCoordinatorViewModel.
+    /// </summary>
+    public string TrackingButtonText => Tracking.TrackingButtonText;
+
+    /// <summary>
+    /// Gets the tracking button icon based on current state.
+    /// Forwards to TrackingCoordinatorViewModel.
+    /// </summary>
+    public string TrackingButtonIcon => Tracking.TrackingButtonIcon;
+
+    /// <summary>
+    /// Gets the tracking button image source based on current state.
+    /// Forwards to TrackingCoordinatorViewModel.
+    /// </summary>
+    public string TrackingButtonImage => Tracking.TrackingButtonImage;
+
+    /// <summary>
+    /// Gets the tracking button color based on current state.
+    /// Forwards to TrackingCoordinatorViewModel.
+    /// </summary>
+    public Color TrackingButtonColor => Tracking.TrackingButtonColor;
+
+    /// <summary>
+    /// Gets the status text based on current state.
+    /// Forwards to TrackingCoordinatorViewModel.
+    /// </summary>
+    public string StatusText => Tracking.StatusText;
+
+    #endregion
+
+    #region Context Menu Forwarding Properties
+
+    /// <summary>
+    /// Gets whether drop pin mode is active.
+    /// Forwards to ContextMenuViewModel.
+    /// </summary>
+    public bool IsDropPinModeActive => ContextMenu.IsDropPinModeActive;
+
+    /// <summary>
+    /// Gets whether the context menu is visible.
+    /// Forwards to ContextMenuViewModel.
+    /// </summary>
+    public bool IsContextMenuVisible => ContextMenu.IsContextMenuVisible;
+
+    /// <summary>
+    /// Gets the context menu latitude.
+    /// Forwards to ContextMenuViewModel.
+    /// </summary>
+    public double ContextMenuLatitude => ContextMenu.ContextMenuLatitude;
+
+    /// <summary>
+    /// Gets the context menu longitude.
+    /// Forwards to ContextMenuViewModel.
+    /// </summary>
+    public double ContextMenuLongitude => ContextMenu.ContextMenuLongitude;
+
+    /// <summary>
+    /// Gets whether a dropped pin is visible on the map.
+    /// Forwards to ContextMenuViewModel.
+    /// </summary>
+    public bool HasDroppedPin => ContextMenu.HasDroppedPin;
+
+    /// <summary>
+    /// Gets the dropped pin latitude.
+    /// Forwards to ContextMenuViewModel.
+    /// </summary>
+    public double DroppedPinLatitude => ContextMenu.DroppedPinLatitude;
+
+    /// <summary>
+    /// Gets the dropped pin longitude.
+    /// Forwards to ContextMenuViewModel.
+    /// </summary>
+    public double DroppedPinLongitude => ContextMenu.DroppedPinLongitude;
+
+    #endregion
 
     /// <summary>
     /// Gets whether the trip sheet is open.
@@ -169,9 +215,9 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
 
     /// <summary>
     /// Gets whether place coordinate editing mode is active.
-    /// Forwards to TripSheetViewModel.
+    /// Forwards to TripItemEditorViewModel.
     /// </summary>
-    public bool IsPlaceCoordinateEditMode => TripSheet.IsPlaceCoordinateEditMode;
+    public bool IsPlaceCoordinateEditMode => TripSheet.Editor.IsPlaceCoordinateEditMode;
 
     /// <summary>
     /// Tracks whether we're navigating to a sub-editor page (notes, marker, etc.).
@@ -201,68 +247,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     /// Gets the check-in view model for binding.
     /// </summary>
     public CheckInViewModel CheckInViewModel => _checkInViewModel;
-
-    /// <summary>
-    /// Gets whether tracking is currently active.
-    /// </summary>
-    public bool IsTracking => TrackingState == TrackingState.Active;
-
-    /// <summary>
-    /// Gets the tracking button text based on current state.
-    /// </summary>
-    public string TrackingButtonText => TrackingState switch
-    {
-        TrackingState.Active => "Stop Tracking",
-        TrackingState.Paused => "Resume Tracking",
-        _ => "Start Tracking"
-    };
-
-    /// <summary>
-    /// Gets the tracking button icon based on current state.
-    /// </summary>
-    public string TrackingButtonIcon => TrackingState switch
-    {
-        TrackingState.Active => "⏹",
-        TrackingState.Paused => "▶",
-        _ => "▶"
-    };
-
-    /// <summary>
-    /// Gets the tracking button image source based on current state.
-    /// </summary>
-    public string TrackingButtonImage => TrackingState switch
-    {
-        TrackingState.Active => "stop.png",
-        TrackingState.Paused => "play_start.png",
-        _ => "play_start.png"
-    };
-
-    /// <summary>
-    /// Gets the tracking button color based on current state.
-    /// </summary>
-    public Color TrackingButtonColor => TrackingState switch
-    {
-        TrackingState.Active => Colors.Red,
-        TrackingState.Paused => Colors.Orange,
-        _ => Application.Current?.Resources["Primary"] as Color ?? Colors.Blue
-    };
-
-    /// <summary>
-    /// Gets the status text based on current state.
-    /// </summary>
-    public string StatusText => TrackingState switch
-    {
-        TrackingState.NotInitialized => "Ready",
-        TrackingState.PermissionsNeeded => "Permissions required",
-        TrackingState.PermissionsDenied => "Permissions denied",
-        TrackingState.Ready => "Ready",
-        TrackingState.Starting => "Starting...",
-        TrackingState.Active => "Tracking",
-        TrackingState.Paused => "Paused",
-        TrackingState.Stopping => "Stopping...",
-        TrackingState.Error => "Error",
-        _ => "Ready"
-    };
 
     /// <summary>
     /// Gets the location text to display.
@@ -391,15 +375,15 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
 
     /// <summary>
     /// Gets whether place coordinate editing mode is active (alias for binding).
-    /// Forwards to TripSheetViewModel.
+    /// Forwards to TripItemEditorViewModel.
     /// </summary>
-    public bool IsEditingPlaceCoordinates => TripSheet.IsEditingPlaceCoordinates;
+    public bool IsEditingPlaceCoordinates => TripSheet.Editor.IsEditingPlaceCoordinates;
 
     /// <summary>
     /// Gets whether any edit mode is currently active.
-    /// Forwards to TripSheetViewModel.
+    /// Forwards to TripItemEditorViewModel.
     /// </summary>
-    public bool IsAnyEditModeActive => TripSheet.IsAnyEditModeActive;
+    public bool IsAnyEditModeActive => TripSheet.Editor.IsAnyEditModeActive;
 
     /// <summary>
     /// Stores entity info for selection restoration after sub-editor navigation.
@@ -419,15 +403,15 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
 
     /// <summary>
     /// Gets whether there are pending place coordinates to save.
-    /// Forwards to TripSheetViewModel.
+    /// Forwards to TripItemEditorViewModel.
     /// </summary>
-    public bool HasPendingPlaceCoordinates => TripSheet.HasPendingPlaceCoordinates;
+    public bool HasPendingPlaceCoordinates => TripSheet.Editor.HasPendingPlaceCoordinates;
 
     /// <summary>
     /// Gets the pending place coordinates text for display.
-    /// Forwards to TripSheetViewModel.
+    /// Forwards to TripItemEditorViewModel.
     /// </summary>
-    public string PendingPlaceCoordinatesText => TripSheet.PendingPlaceCoordinatesText;
+    public string PendingPlaceCoordinatesText => TripSheet.Editor.PendingPlaceCoordinatesText;
 
     /// <summary>
     /// Gets the page title (trip name when loaded, "Map" otherwise).
@@ -456,8 +440,11 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     /// <param name="locationBridge">The location bridge service.</param>
     /// <param name="permissionsService">The permissions service.</param>
     /// <param name="tripNavigationService">The trip navigation service.</param>
+    /// <param name="tripStateManager">The trip state manager.</param>
     /// <param name="navigationCoordinator">The navigation coordinator view model.</param>
     /// <param name="tripSheetViewModel">The trip sheet view model.</param>
+    /// <param name="contextMenuViewModel">The context menu view model.</param>
+    /// <param name="trackingCoordinatorViewModel">The tracking coordinator view model.</param>
     /// <param name="toastService">The toast notification service.</param>
     /// <param name="checkInViewModel">The check-in view model.</param>
     /// <param name="tileCacheService">The tile cache service.</param>
@@ -470,6 +457,8 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         ITripStateManager tripStateManager,
         NavigationCoordinatorViewModel navigationCoordinator,
         TripSheetViewModel tripSheetViewModel,
+        ContextMenuViewModel contextMenuViewModel,
+        TrackingCoordinatorViewModel trackingCoordinatorViewModel,
         IToastService toastService,
         CheckInViewModel checkInViewModel,
         UnifiedTileCacheService tileCacheService,
@@ -482,6 +471,8 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         _tripStateManager = tripStateManager;
         Navigation = navigationCoordinator;
         TripSheet = tripSheetViewModel;
+        ContextMenu = contextMenuViewModel;
+        Tracking = trackingCoordinatorViewModel;
         _toastService = toastService;
         _checkInViewModel = checkInViewModel;
         _tileCacheService = tileCacheService;
@@ -493,10 +484,11 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         MapDisplay.SetCallbacks(this);
         Navigation.SetCallbacks(this);
         TripSheet.SetCallbacks(this);
+        ContextMenu.SetCallbacks(this);
+        Tracking.SetCallbacks(this);
 
         // Subscribe to location events
         _locationBridge.LocationReceived += OnLocationReceived;
-        _locationBridge.StateChanged += OnStateChanged;
 
         // Subscribe to navigation shell navigation requests and property changes
         Navigation.NavigateToSourcePageRequested += OnNavigateToSourcePageRequested;
@@ -507,6 +499,11 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
 
         // Subscribe to trip sheet events for static state management
         TripSheet.PropertyChanged += OnTripSheetPropertyChanged;
+        TripSheet.Editor.PropertyChanged += OnEditorPropertyChanged;
+
+        // Subscribe to tracking and context menu property changes
+        Tracking.PropertyChanged += OnTrackingPropertyChanged;
+        ContextMenu.PropertyChanged += OnContextMenuPropertyChanged;
     }
 
     #endregion
@@ -623,6 +620,98 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
 
     #endregion
 
+    #region IContextMenuCallbacks Implementation
+
+    /// <inheritdoc/>
+    LocationData? IContextMenuCallbacks.CurrentLocation => CurrentLocation;
+
+    /// <inheritdoc/>
+    ILocationBridge IContextMenuCallbacks.LocationBridge => _locationBridge;
+
+    /// <inheritdoc/>
+    void IContextMenuCallbacks.ShowDroppedPin(double latitude, double longitude)
+        => MapDisplay.ShowDroppedPin(latitude, longitude);
+
+    /// <inheritdoc/>
+    void IContextMenuCallbacks.ClearDroppedPinFromMap()
+        => MapDisplay.ClearDroppedPin();
+
+    /// <inheritdoc/>
+    Task<NavigationRoute> IContextMenuCallbacks.CalculateRouteToCoordinatesAsync(
+        double fromLat, double fromLon, double toLat, double toLon,
+        string destinationName, string profile)
+        => Navigation.CalculateRouteToCoordinatesAsync(fromLat, fromLon, toLat, toLon, destinationName, profile);
+
+    /// <inheritdoc/>
+    Task IContextMenuCallbacks.StartNavigationWithRouteAsync(NavigationRoute route)
+        => Navigation.StartNavigationWithRouteAsync(route);
+
+    /// <inheritdoc/>
+    IToastService IContextMenuCallbacks.ToastService => _toastService;
+
+    /// <inheritdoc/>
+    async Task<Views.Controls.NavigationMethod?> IContextMenuCallbacks.ShowNavigationPickerAsync()
+    {
+        var page = Application.Current?.Windows.FirstOrDefault()?.Page;
+        if (page == null) return null;
+
+        var mainPage = page as MainPage ?? (Shell.Current?.CurrentPage as MainPage);
+
+        if (mainPage != null)
+        {
+            return await mainPage.ShowNavigationPickerAsync();
+        }
+
+        // Fallback to action sheet if page reference not available
+        var result = await page.DisplayActionSheet(
+            "Navigate by", "Cancel", null,
+            "🚶 Walk", "🚗 Drive", "🚴 Bike", "📍 External Maps");
+
+        return result switch
+        {
+            "🚶 Walk" => Views.Controls.NavigationMethod.Walk,
+            "🚗 Drive" => Views.Controls.NavigationMethod.Drive,
+            "🚴 Bike" => Views.Controls.NavigationMethod.Bike,
+            "📍 External Maps" => Views.Controls.NavigationMethod.ExternalMaps,
+            _ => null
+        };
+    }
+
+    /// <inheritdoc/>
+    bool IContextMenuCallbacks.IsBusy
+    {
+        get => IsBusy;
+        set => IsBusy = value;
+    }
+
+    #endregion
+
+    #region ITrackingCallbacks Implementation
+
+    /// <inheritdoc/>
+    ILocationBridge ITrackingCallbacks.LocationBridge => _locationBridge;
+
+    /// <inheritdoc/>
+    IPermissionsService ITrackingCallbacks.PermissionsService => _permissionsService;
+
+    /// <inheritdoc/>
+    void ITrackingCallbacks.ClearLocationIndicator()
+        => MapDisplay.ClearLocationIndicator();
+
+    /// <inheritdoc/>
+    Task<bool> ITrackingCallbacks.DisplayAlertAsync(string title, string message, string accept, string cancel)
+    {
+        var page = Application.Current?.Windows.FirstOrDefault()?.Page;
+        if (page == null) return Task.FromResult(false);
+        return page.DisplayAlert(title, message, accept, cancel);
+    }
+
+    /// <inheritdoc/>
+    void ITrackingCallbacks.OpenAppSettings()
+        => _permissionsService.OpenAppSettings();
+
+    #endregion
+
     #region Map Helpers
 
     /// <summary>
@@ -680,7 +769,7 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     private void OnLocationReceived(object? sender, LocationData location)
     {
         CurrentLocation = location;
-        LocationCount++;
+        Tracking.IncrementLocationCount();
 
         // Update location indicator on map
         MapDisplay.UpdateLocationIndicator(location);
@@ -733,20 +822,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     }
 
     /// <summary>
-    /// Handles state changes from the service.
-    /// </summary>
-    private void OnStateChanged(object? sender, TrackingState state)
-    {
-        TrackingState = state;
-
-        // Clear location indicator when stopping
-        if (state == TrackingState.Ready || state == TrackingState.NotInitialized)
-        {
-            MapDisplay.ClearLocationIndicator();
-        }
-    }
-
-    /// <summary>
     /// Handles property changes from NavigationCoordinatorViewModel.
     /// Forwards property change notifications for UI bindings.
     /// </summary>
@@ -783,23 +858,98 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
                 OnPropertyChanged(nameof(IsAnySheetOpen));
                 break;
 
-            case nameof(TripSheetViewModel.IsPlaceCoordinateEditMode):
+            case nameof(TripSheetViewModel.SelectedTripPlace):
+                OnPropertyChanged(nameof(SelectedTripPlace));
+                OnPropertyChanged(nameof(SelectedPlace));
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Handles Editor property changes for forwarding coordinate editing state.
+    /// </summary>
+    private void OnEditorPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(TripItemEditorViewModel.IsPlaceCoordinateEditMode):
                 OnPropertyChanged(nameof(IsPlaceCoordinateEditMode));
                 OnPropertyChanged(nameof(IsEditingPlaceCoordinates));
                 OnPropertyChanged(nameof(IsAnyEditModeActive));
                 break;
 
-            case nameof(TripSheetViewModel.SelectedTripPlace):
-                OnPropertyChanged(nameof(SelectedTripPlace));
-                OnPropertyChanged(nameof(SelectedPlace));
-                break;
-
-            case nameof(TripSheetViewModel.HasPendingPlaceCoordinates):
+            case nameof(TripItemEditorViewModel.HasPendingPlaceCoordinates):
                 OnPropertyChanged(nameof(HasPendingPlaceCoordinates));
                 break;
 
-            case nameof(TripSheetViewModel.PendingPlaceCoordinatesText):
+            case nameof(TripItemEditorViewModel.PendingPlaceCoordinatesText):
                 OnPropertyChanged(nameof(PendingPlaceCoordinatesText));
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Handles property changes from TrackingCoordinatorViewModel.
+    /// Forwards property change notifications for UI bindings.
+    /// </summary>
+    private void OnTrackingPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(TrackingCoordinatorViewModel.TrackingState):
+                OnPropertyChanged(nameof(TrackingState));
+                OnPropertyChanged(nameof(IsTracking));
+                OnPropertyChanged(nameof(TrackingButtonText));
+                OnPropertyChanged(nameof(TrackingButtonIcon));
+                OnPropertyChanged(nameof(TrackingButtonImage));
+                OnPropertyChanged(nameof(TrackingButtonColor));
+                OnPropertyChanged(nameof(StatusText));
+                break;
+
+            case nameof(TrackingCoordinatorViewModel.PerformanceMode):
+                OnPropertyChanged(nameof(PerformanceMode));
+                break;
+
+            case nameof(TrackingCoordinatorViewModel.LocationCount):
+                OnPropertyChanged(nameof(LocationCount));
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Handles property changes from ContextMenuViewModel.
+    /// Forwards property change notifications for UI bindings.
+    /// </summary>
+    private void OnContextMenuPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(ContextMenuViewModel.IsDropPinModeActive):
+                OnPropertyChanged(nameof(IsDropPinModeActive));
+                break;
+
+            case nameof(ContextMenuViewModel.IsContextMenuVisible):
+                OnPropertyChanged(nameof(IsContextMenuVisible));
+                break;
+
+            case nameof(ContextMenuViewModel.ContextMenuLatitude):
+                OnPropertyChanged(nameof(ContextMenuLatitude));
+                break;
+
+            case nameof(ContextMenuViewModel.ContextMenuLongitude):
+                OnPropertyChanged(nameof(ContextMenuLongitude));
+                break;
+
+            case nameof(ContextMenuViewModel.HasDroppedPin):
+                OnPropertyChanged(nameof(HasDroppedPin));
+                break;
+
+            case nameof(ContextMenuViewModel.DroppedPinLatitude):
+                OnPropertyChanged(nameof(DroppedPinLatitude));
+                break;
+
+            case nameof(ContextMenuViewModel.DroppedPinLongitude):
+                OnPropertyChanged(nameof(DroppedPinLongitude));
                 break;
         }
     }
@@ -807,132 +957,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     #endregion
 
     #region Commands
-
-    /// <summary>
-    /// Toggles tracking on/off.
-    /// </summary>
-    [RelayCommand]
-    private async Task ToggleTrackingAsync()
-    {
-        if (IsBusy)
-            return;
-
-        try
-        {
-            IsBusy = true;
-
-            if (TrackingState == TrackingState.Active)
-            {
-                await _locationBridge.StopAsync();
-            }
-            else if (TrackingState == TrackingState.Paused)
-            {
-                await _locationBridge.ResumeAsync();
-            }
-            else
-            {
-                // Check and request permissions before starting
-                var permissionsGranted = await CheckAndRequestPermissionsAsync();
-                if (!permissionsGranted)
-                {
-                    TrackingState = TrackingState.PermissionsDenied;
-                    return;
-                }
-
-                // CRITICAL: Use MainThread.BeginInvokeOnMainThread to ensure we're at the end of
-                // any queued main thread work. This prevents Android's 5-second foreground service
-                // timeout from expiring if the main thread has pending work.
-                var tcs = new TaskCompletionSource();
-                MainThread.BeginInvokeOnMainThread(async () =>
-                {
-                    try
-                    {
-                        await _locationBridge.StartAsync();
-                        tcs.SetResult();
-                    }
-                    catch (Exception ex)
-                    {
-                        tcs.SetException(ex);
-                    }
-                });
-                await tcs.Task;
-            }
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
-
-    /// <summary>
-    /// Checks and requests required permissions.
-    /// </summary>
-    /// <returns>True if all required permissions are granted.</returns>
-    private async Task<bool> CheckAndRequestPermissionsAsync()
-    {
-        // Check if already granted
-        if (await _permissionsService.AreTrackingPermissionsGrantedAsync())
-        {
-            return true;
-        }
-
-        // Request permissions
-        var result = await _permissionsService.RequestTrackingPermissionsAsync();
-
-        if (!result.LocationGranted)
-        {
-            // Show alert about required permissions
-            var page = Application.Current?.Windows.FirstOrDefault()?.Page;
-            if (page != null)
-            {
-                var openSettings = await page.DisplayAlertAsync(
-                    "Location Permission Required",
-                    "WayfarerMobile needs location permission to track your movements. Please grant permission in Settings.",
-                    "Open Settings",
-                    "Cancel");
-
-                if (openSettings)
-                {
-                    _permissionsService.OpenAppSettings();
-                }
-            }
-            return false;
-        }
-
-        return result.AllGranted || result.LocationGranted;
-    }
-
-    /// <summary>
-    /// Opens app settings for permission management.
-    /// </summary>
-    [RelayCommand]
-    private void OpenSettings()
-    {
-        _permissionsService.OpenAppSettings();
-    }
-
-    /// <summary>
-    /// Pauses tracking.
-    /// </summary>
-    [RelayCommand]
-    private async Task PauseTrackingAsync()
-    {
-        if (TrackingState == TrackingState.Active)
-        {
-            await _locationBridge.PauseAsync();
-        }
-    }
-
-    /// <summary>
-    /// Sets the performance mode.
-    /// </summary>
-    /// <param name="mode">The mode to set.</param>
-    [RelayCommand]
-    private async Task SetPerformanceModeAsync(PerformanceMode mode)
-    {
-        PerformanceMode = mode;
-        await _locationBridge.SetPerformanceModeAsync(mode);
-    }
 
     /// <summary>
     /// Copies current location coordinates to clipboard.
@@ -950,285 +974,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         await Clipboard.SetTextAsync(coords);
         await _toastService.ShowAsync("Coordinates copied");
     }
-
-    #region Context Menu Commands
-
-    /// <summary>
-    /// Shows the context menu at the specified coordinates with a visual pin marker.
-    /// </summary>
-    /// <param name="latitude">The latitude.</param>
-    /// <param name="longitude">The longitude.</param>
-    public void ShowContextMenu(double latitude, double longitude)
-    {
-        ContextMenuLatitude = latitude;
-        ContextMenuLongitude = longitude;
-        IsContextMenuVisible = true;
-        IsDropPinModeActive = false;
-
-        // Store pin location and show visual marker on map
-        DroppedPinLatitude = latitude;
-        DroppedPinLongitude = longitude;
-        HasDroppedPin = true;
-
-        MapDisplay.ShowDroppedPin(latitude, longitude);
-    }
-
-    /// <summary>
-    /// Reopens the context menu at the dropped pin location.
-    /// Called when user taps on an existing dropped pin.
-    /// </summary>
-    public void ReopenContextMenuFromPin()
-    {
-        if (!HasDroppedPin)
-            return;
-
-        ContextMenuLatitude = DroppedPinLatitude;
-        ContextMenuLongitude = DroppedPinLongitude;
-        IsContextMenuVisible = true;
-    }
-
-    /// <summary>
-    /// Checks if the specified coordinates are near the dropped pin.
-    /// </summary>
-    /// <param name="latitude">The latitude to check.</param>
-    /// <param name="longitude">The longitude to check.</param>
-    /// <param name="toleranceMeters">Distance tolerance in meters (default 50m).</param>
-    /// <returns>True if within tolerance of the dropped pin.</returns>
-    public bool IsNearDroppedPin(double latitude, double longitude, double toleranceMeters = 50)
-    {
-        if (!HasDroppedPin)
-            return false;
-
-        // Simple distance calculation (Haversine for accuracy)
-        const double earthRadiusMeters = 6371000;
-        var dLat = (latitude - DroppedPinLatitude) * Math.PI / 180;
-        var dLon = (longitude - DroppedPinLongitude) * Math.PI / 180;
-
-        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
-                Math.Cos(DroppedPinLatitude * Math.PI / 180) * Math.Cos(latitude * Math.PI / 180) *
-                Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
-
-        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
-        var distance = earthRadiusMeters * c;
-
-        return distance <= toleranceMeters;
-    }
-
-    /// <summary>
-    /// Hides the context menu but keeps the dropped pin visible.
-    /// The pin remains tappable to reopen the context menu.
-    /// </summary>
-    [RelayCommand]
-    private void HideContextMenu()
-    {
-        IsContextMenuVisible = false;
-        // Pin stays visible - user can tap it to reopen context menu
-    }
-
-    /// <summary>
-    /// Clears the dropped pin from the map and hides the context menu.
-    /// </summary>
-    [RelayCommand]
-    private void ClearDroppedPin()
-    {
-        IsContextMenuVisible = false;
-        HasDroppedPin = false;
-        DroppedPinLatitude = 0;
-        DroppedPinLongitude = 0;
-
-        MapDisplay.ClearDroppedPin();
-    }
-
-    /// <summary>
-    /// Navigates to the context menu location with choice of internal or external navigation.
-    /// </summary>
-    [RelayCommand]
-    private async Task NavigateToContextLocationAsync()
-    {
-        // Ask user for navigation method using the styled picker
-        var page = Application.Current?.Windows.FirstOrDefault()?.Page;
-        if (page == null) return;
-
-        // Get the MainPage to access the navigation picker
-        var mainPage = page as MainPage ?? (Shell.Current?.CurrentPage as MainPage);
-
-        Views.Controls.NavigationMethod? navMethod = null;
-        if (mainPage != null)
-        {
-            navMethod = await mainPage.ShowNavigationPickerAsync();
-        }
-        else
-        {
-            // Fallback to action sheet if page reference not available
-            var result = await page.DisplayActionSheetAsync(
-                "Navigate by", "Cancel", null,
-                "🚶 Walk", "🚗 Drive", "🚴 Bike", "📍 External Maps");
-
-            navMethod = result switch
-            {
-                "🚶 Walk" => Views.Controls.NavigationMethod.Walk,
-                "🚗 Drive" => Views.Controls.NavigationMethod.Drive,
-                "🚴 Bike" => Views.Controls.NavigationMethod.Bike,
-                "📍 External Maps" => Views.Controls.NavigationMethod.ExternalMaps,
-                _ => null
-            };
-        }
-
-        if (navMethod == null)
-            return;
-
-        HideContextMenu();
-
-        // Handle external maps
-        if (navMethod == Views.Controls.NavigationMethod.ExternalMaps)
-        {
-            await OpenExternalMapsAsync(ContextMenuLatitude, ContextMenuLongitude);
-            return;
-        }
-
-        // Get current location for internal navigation
-        var currentLocation = CurrentLocation ?? _locationBridge.LastLocation;
-        if (currentLocation == null)
-        {
-            await _toastService.ShowWarningAsync("Waiting for your location...");
-            return;
-        }
-
-        // Map selection to OSRM profile
-        var osrmProfile = navMethod switch
-        {
-            Views.Controls.NavigationMethod.Walk => "foot",
-            Views.Controls.NavigationMethod.Drive => "car",
-            Views.Controls.NavigationMethod.Bike => "bike",
-            _ => "foot"
-        };
-
-        try
-        {
-            IsBusy = true;
-
-            // Calculate route using OSRM with straight line fallback
-            var route = await Navigation.CalculateRouteToCoordinatesAsync(
-                currentLocation.Latitude,
-                currentLocation.Longitude,
-                ContextMenuLatitude,
-                ContextMenuLongitude,
-                "Dropped Pin",
-                osrmProfile);
-
-            // Clear dropped pin and start navigation
-            ClearDroppedPin();
-
-            // Start navigation via coordinator
-            await Navigation.StartNavigationWithRouteAsync(route);
-
-            _logger.LogInformation("Started navigation to dropped pin: {Distance:F1}km", route.TotalDistanceMeters / 1000);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Network error calculating route");
-            await _toastService.ShowErrorAsync("Network error. Please check your connection.");
-        }
-        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-        {
-            _logger.LogError(ex, "Route calculation timed out");
-            await _toastService.ShowErrorAsync("Request timed out. Please try again.");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to start navigation");
-            await _toastService.ShowErrorAsync("Failed to start navigation");
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
-
-    /// <summary>
-    /// Opens external maps app for navigation.
-    /// </summary>
-    private async Task OpenExternalMapsAsync(double lat, double lon)
-    {
-        try
-        {
-            var location = new Location(lat, lon);
-            var options = new MapLaunchOptions { NavigationMode = NavigationMode.Walking };
-
-            await Microsoft.Maui.ApplicationModel.Map.Default.OpenAsync(location, options);
-        }
-        catch (FeatureNotSupportedException)
-        {
-            // Fallback to Google Maps URL
-            try
-            {
-                var url = $"https://www.google.com/maps/dir/?api=1&destination={lat},{lon}&travelmode=walking";
-                await Launcher.OpenAsync(new Uri(url));
-            }
-            catch (Exception fallbackEx)
-            {
-                _logger.LogError(fallbackEx, "Failed to open external maps via fallback URL");
-                await _toastService.ShowErrorAsync("Unable to open maps");
-            }
-        }
-        catch (Exception ex)
-        {
-            // Fallback to Google Maps URL
-            try
-            {
-                var url = $"https://www.google.com/maps/dir/?api=1&destination={lat},{lon}&travelmode=walking";
-                await Launcher.OpenAsync(new Uri(url));
-            }
-            catch (Exception fallbackEx)
-            {
-                _logger.LogError(ex, "Failed to open external maps");
-                _logger.LogError(fallbackEx, "Fallback URL also failed");
-                await _toastService.ShowErrorAsync($"Unable to open maps: {ex.Message}");
-            }
-        }
-    }
-
-    /// <summary>
-    /// Shares the context menu location.
-    /// </summary>
-    [RelayCommand]
-    private async Task ShareContextLocationAsync()
-    {
-        var text = $"Location: {ContextMenuLatitude:F6}, {ContextMenuLongitude:F6}\n" +
-                   $"https://maps.google.com/?q={ContextMenuLatitude},{ContextMenuLongitude}";
-
-        await Share.RequestAsync(new ShareTextRequest
-        {
-            Title = "Share Location",
-            Text = text
-        });
-
-        HideContextMenu();
-    }
-
-    /// <summary>
-    /// Searches Wikipedia for articles near the context menu location.
-    /// </summary>
-    [RelayCommand]
-    private async Task SearchWikipediaAsync()
-    {
-        var url = $"https://en.wikipedia.org/wiki/Special:Nearby#/coord/{ContextMenuLatitude},{ContextMenuLongitude}";
-        await Launcher.OpenAsync(new Uri(url));
-        HideContextMenu();
-    }
-
-    /// <summary>
-    /// Opens the context menu location in Google Maps.
-    /// </summary>
-    [RelayCommand]
-    private async Task OpenInGoogleMapsAsync()
-    {
-        var url = $"https://www.google.com/maps/search/?api=1&query={ContextMenuLatitude},{ContextMenuLongitude}";
-        await Launcher.OpenAsync(new Uri(url));
-        HideContextMenu();
-    }
-
-    #endregion
 
     /// <summary>
     /// Opens the check-in sheet to record current location.
@@ -1253,6 +998,35 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         // Properly clean up the check-in view model
         await _checkInViewModel.OnDisappearingAsync();
     }
+
+    #endregion
+
+    #region Context Menu Forwarding Methods
+
+    /// <summary>
+    /// Shows the context menu at the specified coordinates with a visual pin marker.
+    /// Forwards to ContextMenuViewModel.
+    /// </summary>
+    public void ShowContextMenu(double latitude, double longitude)
+        => ContextMenu.ShowContextMenu(latitude, longitude);
+
+    /// <summary>
+    /// Reopens the context menu at the dropped pin location.
+    /// Forwards to ContextMenuViewModel.
+    /// </summary>
+    public void ReopenContextMenuFromPin()
+        => ContextMenu.ReopenContextMenuFromPin();
+
+    /// <summary>
+    /// Checks if the specified coordinates are near the dropped pin.
+    /// Forwards to ContextMenuViewModel.
+    /// </summary>
+    public bool IsNearDroppedPin(double latitude, double longitude, double toleranceMeters = 50)
+        => ContextMenu.IsNearDroppedPin(latitude, longitude, toleranceMeters);
+
+    #endregion
+
+    #region Trip Management
 
     /// <summary>
     /// Loads a trip for navigation.
@@ -1366,12 +1140,11 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         // Ensure map is initialized
         EnsureMapInitialized();
 
-        // Update state from bridge
-        TrackingState = _locationBridge.CurrentState;
+        // Update location from bridge
         CurrentLocation = _locationBridge.LastLocation;
 
-        // Check permissions state
-        await CheckPermissionsStateAsync();
+        // Check permissions state via Tracking child VM
+        await Tracking.CheckPermissionsStateAsync();
 
         // Update map if we have a location
         if (CurrentLocation != null)
@@ -1390,10 +1163,9 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         // Cache health is updated by CacheStatusService when location changes - NOT here on startup
 
         // Set high performance mode for real-time updates when map is visible
-        if (TrackingState == TrackingState.Active)
+        if (Tracking.TrackingState == TrackingState.Active)
         {
-            await _locationBridge.SetPerformanceModeAsync(PerformanceMode.HighPerformance);
-            PerformanceMode = PerformanceMode.HighPerformance;
+            await Tracking.SetPerformanceModeCommand.ExecuteAsync(PerformanceMode.HighPerformance);
         }
 
         await base.OnAppearingAsync();
@@ -1414,10 +1186,9 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         }
 
         // Set normal mode to conserve battery when map is not visible
-        if (TrackingState == TrackingState.Active)
+        if (Tracking.TrackingState == TrackingState.Active)
         {
-            await _locationBridge.SetPerformanceModeAsync(PerformanceMode.Normal);
-            PerformanceMode = PerformanceMode.Normal;
+            await Tracking.SetPerformanceModeCommand.ExecuteAsync(PerformanceMode.Normal);
         }
 
         await base.OnDisappearingAsync();
@@ -1430,7 +1201,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     {
         // Unsubscribe from location bridge events
         _locationBridge.LocationReceived -= OnLocationReceived;
-        _locationBridge.StateChanged -= OnStateChanged;
 
         // Unsubscribe from child ViewModel events and dispose
         Navigation.NavigateToSourcePageRequested -= OnNavigateToSourcePageRequested;
@@ -1443,31 +1213,18 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
 
         // Dispose trip sheet ViewModel
         TripSheet.PropertyChanged -= OnTripSheetPropertyChanged;
+        TripSheet.Editor.PropertyChanged -= OnEditorPropertyChanged;
         TripSheet.Dispose();
 
+        // Dispose tracking coordinator ViewModel
+        Tracking.PropertyChanged -= OnTrackingPropertyChanged;
+        Tracking.Dispose();
+
+        // Dispose context menu ViewModel
+        ContextMenu.PropertyChanged -= OnContextMenuPropertyChanged;
+        ContextMenu.Dispose();
+
         base.Cleanup();
-    }
-
-    /// <summary>
-    /// Checks the current permissions state and updates TrackingState accordingly.
-    /// </summary>
-    private async Task CheckPermissionsStateAsync()
-    {
-        // Only update state if not actively tracking
-        if (TrackingState == TrackingState.Active || TrackingState == TrackingState.Paused)
-            return;
-
-        var hasPermissions = await _permissionsService.AreTrackingPermissionsGrantedAsync();
-
-        if (!hasPermissions)
-        {
-            TrackingState = TrackingState.PermissionsNeeded;
-        }
-        else if (TrackingState == TrackingState.PermissionsNeeded || TrackingState == TrackingState.PermissionsDenied)
-        {
-            // Permissions were granted, update to ready state
-            TrackingState = TrackingState.Ready;
-        }
     }
 
     #endregion
