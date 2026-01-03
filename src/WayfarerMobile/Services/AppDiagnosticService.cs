@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using SQLite;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Data.Services;
 using WayfarerMobile.Services.TileCache;
 
@@ -17,6 +18,7 @@ public class AppDiagnosticService
     private readonly ILocationBridge _locationBridge;
     private readonly ISettingsService _settingsService;
     private readonly DatabaseService _databaseService;
+    private readonly ITripTileRepository _tripTileRepository;
     private readonly LiveTileCacheService _liveTileCache;
     private readonly IPermissionsService _permissionsService;
     private readonly RouteCacheService _routeCacheService;
@@ -29,6 +31,7 @@ public class AppDiagnosticService
         ILocationBridge locationBridge,
         ISettingsService settingsService,
         DatabaseService databaseService,
+        ITripTileRepository tripTileRepository,
         LiveTileCacheService liveTileCache,
         IPermissionsService permissionsService,
         RouteCacheService routeCacheService)
@@ -37,6 +40,7 @@ public class AppDiagnosticService
         _locationBridge = locationBridge;
         _settingsService = settingsService;
         _databaseService = databaseService;
+        _tripTileRepository = tripTileRepository;
         _liveTileCache = liveTileCache;
         _permissionsService = permissionsService;
         _routeCacheService = routeCacheService;
@@ -105,9 +109,9 @@ public class AppDiagnosticService
             var liveTileCount = await _liveTileCache.GetTotalCachedFilesAsync();
             var liveCacheSize = await _liveTileCache.GetTotalCacheSizeBytesAsync();
 
-            // Get trip tile cache info from database
-            var tripTileCount = await _databaseService.GetTripTileCountAsync();
-            var tripCacheSize = await _databaseService.GetTripCacheSizeAsync();
+            // Get trip tile cache info from repository
+            var tripTileCount = await _tripTileRepository.GetTotalTripTileCountAsync();
+            var tripCacheSize = await _tripTileRepository.GetTripCacheSizeAsync();
             var downloadedTrips = await _databaseService.GetDownloadedTripsAsync();
 
             return new TileCacheDiagnostics

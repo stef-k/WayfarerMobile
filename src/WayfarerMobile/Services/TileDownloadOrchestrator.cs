@@ -5,7 +5,7 @@ using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using BatchDownloadResult = WayfarerMobile.Core.Interfaces.BatchDownloadResult;
 using WayfarerMobile.Data.Entities;
-using WayfarerMobile.Data.Services;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Services.TileCache;
 
 namespace WayfarerMobile.Services;
@@ -20,7 +20,8 @@ public sealed class TileDownloadOrchestrator : ITileDownloadOrchestrator
     #region Dependencies
 
     private readonly ITileDownloadService _tileDownloadService;
-    private readonly DatabaseService _databaseService;
+    private readonly ITripTileRepository _tripTileRepository;
+    private readonly IDownloadStateRepository _downloadStateRepository;
     private readonly ICacheLimitEnforcer _cacheLimitEnforcer;
     private readonly IDownloadStateManager _downloadStateManager;
     private readonly ISettingsService _settingsService;
@@ -109,16 +110,25 @@ public sealed class TileDownloadOrchestrator : ITileDownloadOrchestrator
     /// <summary>
     /// Creates a new instance of TileDownloadOrchestrator.
     /// </summary>
+    /// <param name="tileDownloadService">Service for downloading individual tiles.</param>
+    /// <param name="tripTileRepository">Repository for trip tile operations.</param>
+    /// <param name="downloadStateRepository">Repository for download state operations.</param>
+    /// <param name="cacheLimitEnforcer">Cache limit enforcer.</param>
+    /// <param name="downloadStateManager">Download state manager.</param>
+    /// <param name="settingsService">Settings service.</param>
+    /// <param name="logger">Logger instance.</param>
     public TileDownloadOrchestrator(
         ITileDownloadService tileDownloadService,
-        DatabaseService databaseService,
+        ITripTileRepository tripTileRepository,
+        IDownloadStateRepository downloadStateRepository,
         ICacheLimitEnforcer cacheLimitEnforcer,
         IDownloadStateManager downloadStateManager,
         ISettingsService settingsService,
         ILogger<TileDownloadOrchestrator> logger)
     {
         _tileDownloadService = tileDownloadService;
-        _databaseService = databaseService;
+        _tripTileRepository = tripTileRepository;
+        _downloadStateRepository = downloadStateRepository;
         _cacheLimitEnforcer = cacheLimitEnforcer;
         _downloadStateManager = downloadStateManager;
         _settingsService = settingsService;
@@ -457,7 +467,7 @@ public sealed class TileDownloadOrchestrator : ITileDownloadOrchestrator
         }
 
         // Clean up download state on successful completion
-        await _databaseService.DeleteDownloadStateAsync(tripId);
+        await _downloadStateRepository.DeleteDownloadStateAsync(tripId);
 
         return new BatchDownloadResult(
             TotalBytes: Interlocked.Read(ref totalBytes),
@@ -587,7 +597,7 @@ public sealed class TileDownloadOrchestrator : ITileDownloadOrchestrator
                 FileSizeBytes = bytes.Length,
                 DownloadedAt = DateTime.UtcNow
             };
-            await _databaseService.SaveTripTileAsync(tileEntity);
+            await _tripTileRepository.SaveTripTileAsync(tileEntity);
 
             return bytes.Length;
         }
@@ -728,7 +738,7 @@ public sealed class TileDownloadOrchestrator : ITileDownloadOrchestrator
             PausedAt = DateTime.UtcNow
         };
 
-        await _databaseService.SaveDownloadStateAsync(state);
+        await _downloadStateRepository.SaveDownloadStateAsync(state);
         _logger.LogInformation("Saved download state for trip {TripId}: {Completed}/{Total} tiles, status: {Status}, reason: {Reason}",
             tripId, completedCount, totalCount, status, interruptionReason);
     }

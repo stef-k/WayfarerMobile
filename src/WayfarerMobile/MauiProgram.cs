@@ -170,6 +170,12 @@ public static class MauiProgram
         services.AddSingleton<ILocationQueueRepository, LocationQueueRepository>();
         services.AddSingleton<ITimelineRepository, TimelineRepository>();
         services.AddSingleton<ILiveTileCacheRepository, LiveTileCacheRepository>();
+        services.AddSingleton<ITripTileRepository, TripTileRepository>();
+        services.AddSingleton<IDownloadStateRepository, DownloadStateRepository>();
+        services.AddSingleton<IPlaceRepository, PlaceRepository>();
+        services.AddSingleton<ISegmentRepository, SegmentRepository>();
+        services.AddSingleton<IAreaRepository, AreaRepository>();
+        services.AddSingleton<ITripRepository, TripRepository>();
 
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<ITripStateManager, TripStateManager>();

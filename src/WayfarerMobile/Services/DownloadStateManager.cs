@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
-using WayfarerMobile.Data.Services;
+using WayfarerMobile.Data.Repositories;
 
 namespace WayfarerMobile.Services;
 
@@ -14,7 +14,7 @@ namespace WayfarerMobile.Services;
 /// </summary>
 public sealed class DownloadStateManager : IDownloadStateManager
 {
-    private readonly DatabaseService _databaseService;
+    private readonly IDownloadStateRepository _downloadStateRepository;
     private readonly ILogger<DownloadStateManager> _logger;
 
     // Thread-safe stop request tracking
@@ -23,11 +23,13 @@ public sealed class DownloadStateManager : IDownloadStateManager
     /// <summary>
     /// Creates a new instance of DownloadStateManager.
     /// </summary>
+    /// <param name="downloadStateRepository">Repository for download state operations.</param>
+    /// <param name="logger">Logger instance.</param>
     public DownloadStateManager(
-        DatabaseService databaseService,
+        IDownloadStateRepository downloadStateRepository,
         ILogger<DownloadStateManager> logger)
     {
-        _databaseService = databaseService;
+        _downloadStateRepository = downloadStateRepository;
         _logger = logger;
     }
 
@@ -83,7 +85,7 @@ public sealed class DownloadStateManager : IDownloadStateManager
             LastSaveTime = DateTime.UtcNow
         };
 
-        await _databaseService.SaveDownloadStateAsync(entity);
+        await _downloadStateRepository.SaveDownloadStateAsync(entity);
 
         _logger.LogInformation(
             "Saved download state for trip {TripId}: {Completed}/{Total} tiles, status: {Status}",
@@ -93,21 +95,21 @@ public sealed class DownloadStateManager : IDownloadStateManager
     /// <inheritdoc/>
     public async Task<DownloadState?> GetStateAsync(int tripId)
     {
-        var entity = await _databaseService.GetDownloadStateAsync(tripId);
+        var entity = await _downloadStateRepository.GetDownloadStateAsync(tripId);
         return entity != null ? MapToDownloadState(entity) : null;
     }
 
     /// <inheritdoc/>
     public async Task<DownloadState?> GetStateByServerIdAsync(Guid tripServerId)
     {
-        var entity = await _databaseService.GetDownloadStateByServerIdAsync(tripServerId);
+        var entity = await _downloadStateRepository.GetDownloadStateByServerIdAsync(tripServerId);
         return entity != null ? MapToDownloadState(entity) : null;
     }
 
     /// <inheritdoc/>
     public async Task DeleteStateAsync(int tripId)
     {
-        await _databaseService.DeleteDownloadStateAsync(tripId);
+        await _downloadStateRepository.DeleteDownloadStateAsync(tripId);
         _logger.LogDebug("Deleted download state for trip {TripId}", tripId);
     }
 
@@ -118,7 +120,7 @@ public sealed class DownloadStateManager : IDownloadStateManager
     /// <inheritdoc/>
     public async Task<List<DownloadState>> GetPausedDownloadsAsync()
     {
-        var entities = await _databaseService.GetPausedDownloadsAsync();
+        var entities = await _downloadStateRepository.GetPausedDownloadsAsync();
         return entities.Select(MapToDownloadState).ToList();
     }
 
@@ -140,7 +142,7 @@ public sealed class DownloadStateManager : IDownloadStateManager
     /// <inheritdoc/>
     public async Task<bool> HasStateAsync(int tripId)
     {
-        var state = await _databaseService.GetDownloadStateAsync(tripId);
+        var state = await _downloadStateRepository.GetDownloadStateAsync(tripId);
         return state != null;
     }
 

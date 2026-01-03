@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
-using WayfarerMobile.Data.Services;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Services.TileCache;
 
 namespace WayfarerMobile.Services;
@@ -13,7 +13,7 @@ namespace WayfarerMobile.Services;
 public sealed class CacheLimitEnforcer : ICacheLimitEnforcer
 {
     private readonly ISettingsService _settingsService;
-    private readonly DatabaseService _databaseService;
+    private readonly ITripTileRepository _tripTileRepository;
     private readonly ITileDownloadService _tileDownloadService;
     private readonly ILogger<CacheLimitEnforcer> _logger;
 
@@ -49,12 +49,12 @@ public sealed class CacheLimitEnforcer : ICacheLimitEnforcer
     /// </summary>
     public CacheLimitEnforcer(
         ISettingsService settingsService,
-        DatabaseService databaseService,
+        ITripTileRepository tripTileRepository,
         ITileDownloadService tileDownloadService,
         ILogger<CacheLimitEnforcer> logger)
     {
         _settingsService = settingsService;
-        _databaseService = databaseService;
+        _tripTileRepository = tripTileRepository;
         _tileDownloadService = tileDownloadService;
         _logger = logger;
     }
@@ -64,7 +64,7 @@ public sealed class CacheLimitEnforcer : ICacheLimitEnforcer
     /// <inheritdoc/>
     public async Task<CacheLimitCheckResult> CheckLimitAsync()
     {
-        var currentSize = await _databaseService.GetTripCacheSizeAsync();
+        var currentSize = await _tripTileRepository.GetTripCacheSizeAsync();
         var maxSizeMB = _settingsService.MaxTripCacheSizeMB;
         var maxSizeBytes = (long)maxSizeMB * 1024 * 1024;
         var currentSizeMB = currentSize / (1024.0 * 1024.0);
