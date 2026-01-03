@@ -6,7 +6,7 @@ using WayfarerMobile.Core.Models;
 using BatchDownloadResult = WayfarerMobile.Core.Interfaces.BatchDownloadResult;
 using WayfarerMobile.Interfaces;
 using WayfarerMobile.Data.Entities;
-using WayfarerMobile.Data.Services;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Services.TileCache;
 
 namespace WayfarerMobile.Services;
@@ -19,7 +19,12 @@ namespace WayfarerMobile.Services;
 public class TripDownloadService : ITripDownloadService
 {
     private readonly IApiClient _apiClient;
-    private readonly DatabaseService _databaseService;
+    private readonly ITripRepository _tripRepository;
+    private readonly IDownloadStateRepository _downloadStateRepository;
+    private readonly IPlaceRepository _placeRepository;
+    private readonly ISegmentRepository _segmentRepository;
+    private readonly IAreaRepository _areaRepository;
+    private readonly ITripTileRepository _tripTileRepository;
     private readonly ISettingsService _settingsService;
     private readonly ITripSyncService _tripSyncService;
     private readonly ITileDownloadService _tileDownloadService;
@@ -144,7 +149,12 @@ public class TripDownloadService : ITripDownloadService
     /// </summary>
     public TripDownloadService(
         IApiClient apiClient,
-        DatabaseService databaseService,
+        ITripRepository tripRepository,
+        IDownloadStateRepository downloadStateRepository,
+        IPlaceRepository placeRepository,
+        ISegmentRepository segmentRepository,
+        IAreaRepository areaRepository,
+        ITripTileRepository tripTileRepository,
         ISettingsService settingsService,
         ITripSyncService tripSyncService,
         ITileDownloadService tileDownloadService,
@@ -156,7 +166,12 @@ public class TripDownloadService : ITripDownloadService
         ILogger<TripDownloadService> logger)
     {
         _apiClient = apiClient;
-        _databaseService = databaseService;
+        _tripRepository = tripRepository;
+        _downloadStateRepository = downloadStateRepository;
+        _placeRepository = placeRepository;
+        _segmentRepository = segmentRepository;
+        _areaRepository = areaRepository;
+        _tripTileRepository = tripTileRepository;
         _settingsService = settingsService;
         _tripSyncService = tripSyncService;
         _tileDownloadService = tileDownloadService;
@@ -232,7 +247,7 @@ public class TripDownloadService : ITripDownloadService
             }
 
             // Check if already downloaded
-            var existing = await _databaseService.GetDownloadedTripByServerIdAsync(tripSummary.Id);
+            var existing = await _tripRepository.GetDownloadedTripByServerIdAsync(tripSummary.Id);
             if (existing != null && existing.Status == TripDownloadStatus.Complete)
             {
                 _logger.LogInformation("Trip already downloaded: {TripName}", tripSummary.Name);
@@ -259,7 +274,7 @@ public class TripDownloadService : ITripDownloadService
                 tripEntity.BoundingBoxWest = tripSummary.BoundingBox.West;
             }
 
-            await _databaseService.SaveDownloadedTripAsync(tripEntity);
+            await _tripRepository.SaveDownloadedTripAsync(tripEntity);
             localTripId = tripEntity.Id; // Capture for cleanup
             RaiseProgress(tripEntity.Id, 10, "Fetching trip details...");
 
@@ -269,7 +284,7 @@ public class TripDownloadService : ITripDownloadService
             {
                 tripEntity.Status = TripDownloadStatus.Failed;
                 tripEntity.LastError = "Failed to fetch trip details";
-                await _databaseService.SaveDownloadedTripAsync(tripEntity);
+                await _tripRepository.SaveDownloadedTripAsync(tripEntity);
                 return null;
             }
 
@@ -286,30 +301,30 @@ public class TripDownloadService : ITripDownloadService
 
             // Convert and save areas/regions using metadata builder
             var areas = _metadataBuilder.BuildAreas(tripDetails);
-            await _databaseService.SaveOfflineAreasAsync(tripEntity.Id, areas);
+            await _areaRepository.SaveOfflineAreasAsync(tripEntity.Id, areas);
             tripEntity.RegionCount = areas.Count;
 
             RaiseProgress(tripEntity.Id, 30, "Saving places...");
 
             // Convert and save places with region info
             var places = _metadataBuilder.BuildPlaces(tripDetails);
-            await _databaseService.SaveOfflinePlacesAsync(tripEntity.Id, places);
+            await _placeRepository.SaveOfflinePlacesAsync(tripEntity.Id, places);
             tripEntity.PlaceCount = places.Count;
 
             RaiseProgress(tripEntity.Id, 40, "Saving segments...");
 
             // Convert and save segments with place names
             var segments = _metadataBuilder.BuildSegments(tripDetails);
-            await _databaseService.SaveOfflineSegmentsAsync(tripEntity.Id, segments);
+            await _segmentRepository.SaveOfflineSegmentsAsync(tripEntity.Id, segments);
             tripEntity.SegmentCount = segments.Count;
 
             // Save polygon zones (TripArea) from each region
             var polygons = _metadataBuilder.BuildPolygons(tripDetails);
-            await _databaseService.SaveOfflinePolygonsAsync(tripEntity.Id, polygons);
+            await _areaRepository.SaveOfflinePolygonsAsync(tripEntity.Id, polygons);
             tripEntity.AreaCount = polygons.Count;
 
             tripEntity.ProgressPercent = 50;
-            await _databaseService.SaveDownloadedTripAsync(tripEntity);
+            await _tripRepository.SaveDownloadedTripAsync(tripEntity);
 
             RaiseProgress(tripEntity.Id, 50, $"Saved {places.Count} places, {segments.Count} segments, {polygons.Count} polygons");
 
@@ -370,7 +385,7 @@ public class TripDownloadService : ITripDownloadService
             tripEntity.Notes = tripDetails.Notes;
             tripEntity.CoverImageUrl = tripDetails.CoverImageUrl;
             tripEntity.ProgressPercent = 100;
-            await _databaseService.SaveDownloadedTripAsync(tripEntity);
+            await _tripRepository.SaveDownloadedTripAsync(tripEntity);
 
             RaiseProgress(tripEntity.Id, 100, "Download complete");
             _logger.LogInformation("Trip downloaded: {TripName} ({PlaceCount} places, {TileCount} tiles, v{Version})",
@@ -393,22 +408,22 @@ public class TripDownloadService : ITripDownloadService
             _logger.LogWarning("Trip download cancelled: {TripName}", tripSummary.Name);
 
             // Save state for potential resume if we have a trip entity
-            var tripEntityForCancel = await _databaseService.GetDownloadedTripByServerIdAsync(tripSummary.Id);
+            var tripEntityForCancel = await _tripRepository.GetDownloadedTripByServerIdAsync(tripSummary.Id);
             if (tripEntityForCancel != null)
             {
                 // Get remaining tiles from download state if available
-                var existingState = await _databaseService.GetDownloadStateAsync(tripEntityForCancel.Id);
+                var existingState = await _downloadStateRepository.GetDownloadStateAsync(tripEntityForCancel.Id);
                 if (existingState != null)
                 {
                     // State already saved by DownloadTilesWithStateAsync (periodic checkpoint)
                     existingState.Status = DownloadStateStatus.Paused;
                     existingState.InterruptionReason = DownloadPauseReason.UserCancel;
-                    await _databaseService.SaveDownloadStateAsync(existingState);
+                    await _downloadStateRepository.SaveDownloadStateAsync(existingState);
                 }
 
                 tripEntityForCancel.Status = TripDownloadStatus.Failed;
                 tripEntityForCancel.LastError = "Download cancelled by user";
-                await _databaseService.SaveDownloadedTripAsync(tripEntityForCancel);
+                await _tripRepository.SaveDownloadedTripAsync(tripEntityForCancel);
 
                 // Raise download paused event
                 DownloadPaused?.Invoke(this, new DownloadPausedEventArgs
@@ -430,12 +445,12 @@ public class TripDownloadService : ITripDownloadService
             _logger.LogError(ex, "Failed to download trip: {TripName}", tripSummary.Name);
 
             // Update status to failed
-            var tripEntity = await _databaseService.GetDownloadedTripByServerIdAsync(tripSummary.Id);
+            var tripEntity = await _tripRepository.GetDownloadedTripByServerIdAsync(tripSummary.Id);
             if (tripEntity != null)
             {
                 tripEntity.Status = TripDownloadStatus.Failed;
                 tripEntity.LastError = ex.Message;
-                await _databaseService.SaveDownloadedTripAsync(tripEntity);
+                await _tripRepository.SaveDownloadedTripAsync(tripEntity);
 
                 // Raise download failed event
                 DownloadFailed?.Invoke(this, new DownloadTerminalEventArgs
@@ -469,7 +484,7 @@ public class TripDownloadService : ITripDownloadService
     /// </summary>
     public async Task<List<DownloadedTripEntity>> GetDownloadedTripsAsync()
     {
-        return await _databaseService.GetDownloadedTripsAsync();
+        return await _tripRepository.GetDownloadedTripsAsync();
     }
 
     /// <summary>
@@ -477,7 +492,7 @@ public class TripDownloadService : ITripDownloadService
     /// </summary>
     public async Task<bool> IsTripDownloadedAsync(Guid tripId)
     {
-        var trip = await _databaseService.GetDownloadedTripByServerIdAsync(tripId);
+        var trip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripId);
         return trip != null &&
                (trip.Status == TripDownloadStatus.Complete ||
                 trip.Status == TripDownloadStatus.MetadataOnly);
@@ -511,13 +526,13 @@ public class TripDownloadService : ITripDownloadService
     /// </summary>
     public async Task DeleteTripAsync(Guid tripServerId)
     {
-        var trip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
+        var trip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripServerId);
         if (trip != null)
         {
             // Clear pending mutations for this trip first
             await _tripSyncService.ClearPendingMutationsForTripAsync(tripServerId);
 
-            await _databaseService.DeleteDownloadedTripAsync(trip.Id);
+            await _tripRepository.DeleteDownloadedTripAsync(trip.Id);
             _logger.LogInformation("Deleted trip and cleared pending mutations: {TripId}", tripServerId);
         }
     }
@@ -530,7 +545,7 @@ public class TripDownloadService : ITripDownloadService
     /// <returns>Number of tiles deleted.</returns>
     public async Task<int> DeleteTripTilesAsync(Guid tripServerId)
     {
-        var trip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
+        var trip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripServerId);
         if (trip == null)
         {
             _logger.LogWarning("Cannot delete tiles - trip {TripId} not found", tripServerId);
@@ -538,7 +553,7 @@ public class TripDownloadService : ITripDownloadService
         }
 
         // Get file paths and delete from database
-        var filePaths = await _databaseService.DeleteTripTilesAsync(trip.Id);
+        var filePaths = await _tripTileRepository.DeleteTripTilesAsync(trip.Id);
 
         // Delete actual tile files
         var deletedCount = 0;
@@ -570,7 +585,7 @@ public class TripDownloadService : ITripDownloadService
         trip.TileCount = 0;
         trip.TotalSizeBytes = 0;
         trip.Status = TripDownloadStatus.MetadataOnly;
-        await _databaseService.SaveDownloadedTripAsync(trip);
+        await _tripRepository.SaveDownloadedTripAsync(trip);
 
         _logger.LogInformation("Deleted {Count} tiles for trip {TripId}", deletedCount, tripServerId);
         return deletedCount;
@@ -585,7 +600,7 @@ public class TripDownloadService : ITripDownloadService
     /// <param name="newName">The new trip name.</param>
     public async Task UpdateTripNameAsync(Guid tripServerId, string newName)
     {
-        var trip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
+        var trip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripServerId);
         if (trip == null)
         {
             _logger.LogWarning("Cannot update trip name - trip {TripId} not found", tripServerId);
@@ -593,7 +608,7 @@ public class TripDownloadService : ITripDownloadService
         }
 
         trip.Name = newName;
-        await _databaseService.SaveDownloadedTripAsync(trip);
+        await _tripRepository.SaveDownloadedTripAsync(trip);
         _logger.LogInformation("Updated trip name to '{NewName}' for trip {TripId}", newName, tripServerId);
     }
 
@@ -604,7 +619,7 @@ public class TripDownloadService : ITripDownloadService
     /// <param name="newNotes">The new trip notes (HTML).</param>
     public async Task UpdateTripNotesAsync(Guid tripServerId, string? newNotes)
     {
-        var trip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
+        var trip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripServerId);
         if (trip == null)
         {
             _logger.LogWarning("Cannot update trip notes - trip {TripId} not found", tripServerId);
@@ -612,7 +627,7 @@ public class TripDownloadService : ITripDownloadService
         }
 
         trip.Notes = newNotes;
-        await _databaseService.SaveDownloadedTripAsync(trip);
+        await _tripRepository.SaveDownloadedTripAsync(trip);
         _logger.LogInformation("Updated trip notes for trip {TripId}", tripServerId);
     }
 
@@ -628,7 +643,7 @@ public class TripDownloadService : ITripDownloadService
     /// <returns>True if pause was initiated, false if download not found.</returns>
     public async Task<bool> PauseDownloadAsync(int tripId)
     {
-        var trip = await _databaseService.GetDownloadedTripAsync(tripId);
+        var trip = await _tripRepository.GetDownloadedTripAsync(tripId);
         if (trip == null || trip.Status != TripDownloadStatus.Downloading)
         {
             _logger.LogWarning("Cannot pause - trip {TripId} not downloading", tripId);
@@ -651,14 +666,14 @@ public class TripDownloadService : ITripDownloadService
     {
         ThrowIfDisposed();
 
-        var state = await _databaseService.GetDownloadStateAsync(tripId);
+        var state = await _downloadStateRepository.GetDownloadStateAsync(tripId);
         if (state == null)
         {
             _logger.LogWarning("Cannot resume - no saved state for trip {TripId}", tripId);
             return false;
         }
 
-        var trip = await _databaseService.GetDownloadedTripAsync(tripId);
+        var trip = await _tripRepository.GetDownloadedTripAsync(tripId);
         if (trip == null)
         {
             _logger.LogWarning("Cannot resume - trip {TripId} not found", tripId);
@@ -682,11 +697,11 @@ public class TripDownloadService : ITripDownloadService
             // Update state to in progress
             state.Status = DownloadStateStatus.InProgress;
             state.InterruptionReason = string.Empty;
-            await _databaseService.SaveDownloadStateAsync(state);
+            await _downloadStateRepository.SaveDownloadStateAsync(state);
 
             // Update trip status
             trip.Status = TripDownloadStatus.Downloading;
-            await _databaseService.SaveDownloadedTripAsync(trip);
+            await _tripRepository.SaveDownloadedTripAsync(trip);
 
             _logger.LogInformation("Resuming download for trip {TripId}: {Completed}/{Total} tiles",
                 tripId, state.CompletedTileCount, state.TotalTileCount);
@@ -701,10 +716,10 @@ public class TripDownloadService : ITripDownloadService
             catch (JsonException ex)
             {
                 _logger.LogError(ex, "Failed to deserialize remaining tiles for trip {TripId}, clearing corrupt state", tripId);
-                await _databaseService.DeleteDownloadStateAsync(tripId);
+                await _downloadStateRepository.DeleteDownloadStateAsync(tripId);
                 trip.Status = TripDownloadStatus.Failed;
                 trip.LastError = "Corrupt download state - please restart download";
-                await _databaseService.SaveDownloadedTripAsync(trip);
+                await _tripRepository.SaveDownloadedTripAsync(trip);
                 return false;
             }
 
@@ -712,8 +727,8 @@ public class TripDownloadService : ITripDownloadService
             {
                 // All tiles already downloaded
                 trip.Status = TripDownloadStatus.Complete;
-                await _databaseService.SaveDownloadedTripAsync(trip);
-                await _databaseService.DeleteDownloadStateAsync(tripId);
+                await _tripRepository.SaveDownloadedTripAsync(trip);
+                await _downloadStateRepository.DeleteDownloadStateAsync(tripId);
                 return true;
             }
 
@@ -741,7 +756,7 @@ public class TripDownloadService : ITripDownloadService
             trip.TileCount = state.CompletedTileCount + downloadResult.TilesDownloaded;
             trip.TotalSizeBytes = downloadResult.TotalBytes;
             trip.ProgressPercent = 100;
-            await _databaseService.SaveDownloadedTripAsync(trip);
+            await _tripRepository.SaveDownloadedTripAsync(trip);
             // Note: DownloadTilesWithStateAsync already deletes state on successful completion
 
             RaiseProgress(tripId, 100, "Download complete");
@@ -769,10 +784,10 @@ public class TripDownloadService : ITripDownloadService
             _logger.LogError(ex, "Error resuming download for trip {TripId}", tripId);
             trip.Status = TripDownloadStatus.Failed;
             trip.LastError = ex.Message;
-            await _databaseService.SaveDownloadedTripAsync(trip);
+            await _tripRepository.SaveDownloadedTripAsync(trip);
 
             // Delete orphaned download state to avoid stale resume attempts
-            await _databaseService.DeleteDownloadStateAsync(tripId);
+            await _downloadStateRepository.DeleteDownloadStateAsync(tripId);
 
             // Raise download failed event
             DownloadFailed?.Invoke(this, new DownloadTerminalEventArgs
@@ -810,7 +825,7 @@ public class TripDownloadService : ITripDownloadService
         // The flag will be cleaned up when starting a new download for this trip
         _downloadStateManager.RequestStop(tripId, DownloadStopReason.UserCancel);
 
-        var trip = await _databaseService.GetDownloadedTripAsync(tripId);
+        var trip = await _tripRepository.GetDownloadedTripAsync(tripId);
         if (trip == null)
         {
             _logger.LogWarning("Cannot cancel - trip {TripId} not found", tripId);
@@ -820,12 +835,12 @@ public class TripDownloadService : ITripDownloadService
         }
 
         // Delete the download state - cancelled downloads are not resumable
-        await _databaseService.DeleteDownloadStateAsync(tripId);
+        await _downloadStateRepository.DeleteDownloadStateAsync(tripId);
 
         if (cleanup)
         {
             // Delete trip and all associated data
-            await _databaseService.DeleteDownloadedTripAsync(tripId);
+            await _tripRepository.DeleteDownloadedTripAsync(tripId);
             _logger.LogInformation("Cancelled and cleaned up trip {TripId}", tripId);
 
             // Clean up stop request and warning state since trip is deleted
@@ -837,7 +852,7 @@ public class TripDownloadService : ITripDownloadService
             // Keep partial download but mark as cancelled (distinct from failed)
             trip.Status = TripDownloadStatus.Cancelled;
             trip.LastError = "Download cancelled by user";
-            await _databaseService.SaveDownloadedTripAsync(trip);
+            await _tripRepository.SaveDownloadedTripAsync(trip);
             _logger.LogInformation("Cancelled trip {TripId}, keeping partial data", tripId);
 
             // Clean up warning state but keep stop request until download loop exits
@@ -853,7 +868,7 @@ public class TripDownloadService : ITripDownloadService
     /// <returns>List of download states that can be resumed.</returns>
     public async Task<List<TripDownloadStateEntity>> GetPausedDownloadsAsync()
     {
-        return await _databaseService.GetPausedDownloadsAsync();
+        return await _downloadStateRepository.GetPausedDownloadsAsync();
     }
 
     /// <summary>
@@ -873,7 +888,7 @@ public class TripDownloadService : ITripDownloadService
         }
 
         // Check persisted state (for pauses from previous sessions)
-        var state = await _databaseService.GetDownloadStateAsync(tripId);
+        var state = await _downloadStateRepository.GetDownloadStateAsync(tripId);
         return state?.Status == DownloadStateStatus.Paused ||
                state?.Status == DownloadStateStatus.LimitReached;
     }
@@ -911,7 +926,7 @@ public class TripDownloadService : ITripDownloadService
             PausedAt = DateTime.UtcNow
         };
 
-        await _databaseService.SaveDownloadStateAsync(state);
+        await _downloadStateRepository.SaveDownloadStateAsync(state);
         _logger.LogInformation("Saved download state for trip {TripId}: {Completed}/{Total} tiles, status: {Status}, reason: {Reason}",
             trip.Id, completedCount, totalCount, status, interruptionReason);
     }
@@ -1007,7 +1022,7 @@ public class TripDownloadService : ITripDownloadService
                         _tileDownloadOrchestrator.ClearWarningState(syncedTrip.Id);
 
                         // Save updated tile counts
-                        await _databaseService.SaveDownloadedTripAsync(syncedTrip);
+                        await _tripRepository.SaveDownloadedTripAsync(syncedTrip);
 
                         // If paused or limit reached, log but don't fail
                         if (downloadResult.WasPaused || downloadResult.WasLimitReached)
@@ -1058,7 +1073,7 @@ public class TripDownloadService : ITripDownloadService
             return 0;
         }
 
-        var downloadedTrips = await _databaseService.GetDownloadedTripsAsync();
+        var downloadedTrips = await _tripRepository.GetDownloadedTripsAsync();
         var completedTrips = downloadedTrips.Where(t =>
             t.Status == TripDownloadStatus.Complete || t.Status == TripDownloadStatus.MetadataOnly).ToList();
 
@@ -1104,7 +1119,7 @@ public class TripDownloadService : ITripDownloadService
     /// </summary>
     public async Task<long> GetTotalCacheSizeAsync()
     {
-        return await _databaseService.GetTotalTripCacheSizeAsync();
+        return await _tripRepository.GetTotalTripCacheSizeAsync();
     }
 
     /// <summary>

@@ -2,6 +2,7 @@ using SQLite;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Data.Services;
 using WayfarerMobile.Interfaces;
 
@@ -15,6 +16,9 @@ public class TripEntityOperationsHandler : ITripEntityOperationsHandler
 {
     private readonly IApiClient _apiClient;
     private readonly DatabaseService _databaseService;
+    private readonly ITripRepository _tripRepository;
+    private readonly ISegmentRepository _segmentRepository;
+    private readonly IAreaRepository _areaRepository;
     private readonly IConnectivity _connectivity;
     private readonly SemaphoreSlim _initLock = new(1, 1);
     private SQLiteAsyncConnection? _database;
@@ -26,10 +30,16 @@ public class TripEntityOperationsHandler : ITripEntityOperationsHandler
     public TripEntityOperationsHandler(
         IApiClient apiClient,
         DatabaseService databaseService,
+        ITripRepository tripRepository,
+        ISegmentRepository segmentRepository,
+        IAreaRepository areaRepository,
         IConnectivity connectivity)
     {
         _apiClient = apiClient;
         _databaseService = databaseService;
+        _tripRepository = tripRepository;
+        _segmentRepository = segmentRepository;
+        _areaRepository = areaRepository;
         _connectivity = connectivity;
     }
 
@@ -74,7 +84,7 @@ public class TripEntityOperationsHandler : ITripEntityOperationsHandler
         await EnsureInitializedAsync();
 
         // 1. Read original from offline table for potential restoration
-        var originalTrip = await _databaseService.GetDownloadedTripByServerIdAsync(tripId);
+        var originalTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripId);
         string? originalName = originalTrip?.Name;
         string? originalNotes = originalTrip?.Notes;
 
@@ -83,7 +93,7 @@ public class TripEntityOperationsHandler : ITripEntityOperationsHandler
         {
             if (name != null) originalTrip.Name = name;
             if (includeNotes) originalTrip.Notes = notes;
-            await _databaseService.SaveDownloadedTripAsync(originalTrip);
+            await _tripRepository.SaveDownloadedTripAsync(originalTrip);
         }
 
         var request = new TripUpdateRequest
@@ -117,7 +127,7 @@ public class TripEntityOperationsHandler : ITripEntityOperationsHandler
             {
                 originalTrip.Name = originalName ?? originalTrip.Name;
                 if (includeNotes) originalTrip.Notes = originalNotes;
-                await _databaseService.SaveDownloadedTripAsync(originalTrip);
+                await _tripRepository.SaveDownloadedTripAsync(originalTrip);
             }
             return EntityOperationResult.Rejected($"Server rejected: {ex.Message}");
         }
@@ -189,14 +199,14 @@ public class TripEntityOperationsHandler : ITripEntityOperationsHandler
         await EnsureInitializedAsync();
 
         // 1. Read original from offline table
-        var offlineSegment = await _databaseService.GetOfflineSegmentByServerIdAsync(segmentId);
+        var offlineSegment = await _segmentRepository.GetOfflineSegmentByServerIdAsync(segmentId);
         string? originalNotes = offlineSegment?.Notes;
 
         // 2. Update offline table (optimistic)
         if (offlineSegment != null)
         {
             offlineSegment.Notes = notes;
-            await _databaseService.UpdateOfflineSegmentAsync(offlineSegment);
+            await _segmentRepository.UpdateOfflineSegmentAsync(offlineSegment);
         }
 
         var request = new SegmentNotesUpdateRequest { Notes = notes };
@@ -226,7 +236,7 @@ public class TripEntityOperationsHandler : ITripEntityOperationsHandler
             if (offlineSegment != null)
             {
                 offlineSegment.Notes = originalNotes;
-                await _databaseService.UpdateOfflineSegmentAsync(offlineSegment);
+                await _segmentRepository.UpdateOfflineSegmentAsync(offlineSegment);
             }
             return EntityOperationResult.Rejected($"Server rejected: {ex.Message}");
         }
@@ -294,14 +304,14 @@ public class TripEntityOperationsHandler : ITripEntityOperationsHandler
         await EnsureInitializedAsync();
 
         // 1. Read original from offline table
-        var offlinePolygon = await _databaseService.GetOfflinePolygonByServerIdAsync(areaId);
+        var offlinePolygon = await _areaRepository.GetOfflinePolygonByServerIdAsync(areaId);
         string? originalNotes = offlinePolygon?.Notes;
 
         // 2. Update offline table (optimistic)
         if (offlinePolygon != null)
         {
             offlinePolygon.Notes = notes;
-            await _databaseService.UpdateOfflinePolygonAsync(offlinePolygon);
+            await _areaRepository.UpdateOfflinePolygonAsync(offlinePolygon);
         }
 
         var request = new AreaNotesUpdateRequest { Notes = notes };
@@ -331,7 +341,7 @@ public class TripEntityOperationsHandler : ITripEntityOperationsHandler
             if (offlinePolygon != null)
             {
                 offlinePolygon.Notes = originalNotes;
-                await _databaseService.UpdateOfflinePolygonAsync(offlinePolygon);
+                await _areaRepository.UpdateOfflinePolygonAsync(offlinePolygon);
             }
             return EntityOperationResult.Rejected($"Server rejected: {ex.Message}");
         }

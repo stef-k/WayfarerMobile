@@ -2,6 +2,7 @@ using SQLite;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Data.Services;
 using WayfarerMobile.Interfaces;
 
@@ -15,6 +16,7 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
 {
     private readonly IApiClient _apiClient;
     private readonly DatabaseService _databaseService;
+    private readonly IPlaceRepository _placeRepository;
     private readonly IConnectivity _connectivity;
     private readonly SemaphoreSlim _initLock = new(1, 1);
     private SQLiteAsyncConnection? _database;
@@ -26,10 +28,12 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
     public PlaceOperationsHandler(
         IApiClient apiClient,
         DatabaseService databaseService,
+        IPlaceRepository placeRepository,
         IConnectivity connectivity)
     {
         _apiClient = apiClient;
         _databaseService = databaseService;
+        _placeRepository = placeRepository;
         _connectivity = connectivity;
     }
 
@@ -145,7 +149,7 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
         await EnsureInitializedAsync();
 
         // 1. Read current value from offline table (for restoration if needed)
-        var offlinePlace = await _databaseService.GetOfflinePlaceByServerIdAsync(placeId);
+        var offlinePlace = await _placeRepository.GetOfflinePlaceByServerIdAsync(placeId);
         string? originalName = offlinePlace?.Name;
         double? originalLatitude = offlinePlace?.Latitude;
         double? originalLongitude = offlinePlace?.Longitude;
@@ -164,7 +168,7 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
             if (iconName != null) offlinePlace.IconName = iconName;
             if (markerColor != null) offlinePlace.MarkerColor = markerColor;
             if (displayOrder.HasValue) offlinePlace.SortOrder = displayOrder.Value;
-            await _databaseService.UpdateOfflinePlaceAsync(offlinePlace);
+            await _placeRepository.UpdateOfflinePlaceAsync(offlinePlace);
         }
 
         var request = new PlaceUpdateRequest
@@ -214,7 +218,7 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
                 offlinePlace.IconName = originalIconName;
                 offlinePlace.MarkerColor = originalMarkerColor;
                 if (originalDisplayOrder.HasValue) offlinePlace.SortOrder = originalDisplayOrder.Value;
-                await _databaseService.UpdateOfflinePlaceAsync(offlinePlace);
+                await _placeRepository.UpdateOfflinePlaceAsync(offlinePlace);
             }
             return PlaceOperationResult.Rejected($"Server rejected: {ex.Message}");
         }
@@ -250,10 +254,10 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
         await EnsureInitializedAsync();
 
         // 1. Read full place data for restoration
-        var offlinePlace = await _databaseService.GetOfflinePlaceByServerIdAsync(placeId);
+        var offlinePlace = await _placeRepository.GetOfflinePlaceByServerIdAsync(placeId);
 
         // 2. Delete from offline table (optimistic)
-        await _databaseService.DeleteOfflinePlaceByServerIdAsync(placeId);
+        await _placeRepository.DeleteOfflinePlaceByServerIdAsync(placeId);
 
         if (!IsConnected)
         {
@@ -280,7 +284,7 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
             if (offlinePlace != null)
             {
                 offlinePlace.Id = 0; // Reset for insert
-                await _databaseService.InsertOfflinePlaceAsync(offlinePlace);
+                await _placeRepository.InsertOfflinePlaceAsync(offlinePlace);
             }
             return PlaceOperationResult.Rejected($"Server rejected: {ex.Message}");
         }

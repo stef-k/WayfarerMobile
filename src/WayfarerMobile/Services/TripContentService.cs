@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
-using WayfarerMobile.Data.Services;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Interfaces;
 
 // Using DownloadProgressEventArgs from Core.Interfaces
@@ -16,7 +16,10 @@ namespace WayfarerMobile.Services;
 public class TripContentService : ITripContentService
 {
     private readonly IApiClient _apiClient;
-    private readonly DatabaseService _databaseService;
+    private readonly ITripRepository _tripRepository;
+    private readonly IPlaceRepository _placeRepository;
+    private readonly ISegmentRepository _segmentRepository;
+    private readonly IAreaRepository _areaRepository;
     private readonly ITripMetadataBuilder _metadataBuilder;
     private readonly IConnectivity _connectivity;
     private readonly ILogger<TripContentService> _logger;
@@ -26,13 +29,19 @@ public class TripContentService : ITripContentService
     /// </summary>
     public TripContentService(
         IApiClient apiClient,
-        DatabaseService databaseService,
+        ITripRepository tripRepository,
+        IPlaceRepository placeRepository,
+        ISegmentRepository segmentRepository,
+        IAreaRepository areaRepository,
         ITripMetadataBuilder metadataBuilder,
         IConnectivity connectivity,
         ILogger<TripContentService> logger)
     {
         _apiClient = apiClient;
-        _databaseService = databaseService;
+        _tripRepository = tripRepository;
+        _placeRepository = placeRepository;
+        _segmentRepository = segmentRepository;
+        _areaRepository = areaRepository;
         _metadataBuilder = metadataBuilder;
         _connectivity = connectivity;
         _logger = logger;
@@ -43,7 +52,7 @@ public class TripContentService : ITripContentService
     {
         try
         {
-            var localTrip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
+            var localTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripServerId);
             if (localTrip == null)
                 return false;
 
@@ -79,7 +88,7 @@ public class TripContentService : ITripContentService
         if (!IsNetworkAvailable())
             return tripsNeedingUpdate;
 
-        var downloadedTrips = await _databaseService.GetDownloadedTripsAsync();
+        var downloadedTrips = await _tripRepository.GetDownloadedTripsAsync();
 
         foreach (var trip in downloadedTrips.Where(t =>
             t.Status == TripDownloadStatus.Complete || t.Status == TripDownloadStatus.MetadataOnly))
@@ -109,7 +118,7 @@ public class TripContentService : ITripContentService
     {
         try
         {
-            var localTrip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
+            var localTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripServerId);
             if (localTrip == null)
             {
                 _logger.LogWarning("Cannot sync trip {TripId} - not downloaded", tripServerId);
@@ -144,28 +153,28 @@ public class TripContentService : ITripContentService
 
             // Update areas/regions using metadata builder
             var areas = _metadataBuilder.BuildAreas(serverTrip);
-            await _databaseService.SaveOfflineAreasAsync(localTrip.Id, areas);
+            await _areaRepository.SaveOfflineAreasAsync(localTrip.Id, areas);
             localTrip.RegionCount = areas.Count;
 
             RaiseProgress(progress, localTrip.Id, 35, "Updating places...");
 
             // Update places with region info
             var places = _metadataBuilder.BuildPlaces(serverTrip);
-            await _databaseService.SaveOfflinePlacesAsync(localTrip.Id, places);
+            await _placeRepository.SaveOfflinePlacesAsync(localTrip.Id, places);
             localTrip.PlaceCount = places.Count;
 
             RaiseProgress(progress, localTrip.Id, 55, "Updating segments...");
 
             // Update segments with place names
             var segments = _metadataBuilder.BuildSegments(serverTrip);
-            await _databaseService.SaveOfflineSegmentsAsync(localTrip.Id, segments);
+            await _segmentRepository.SaveOfflineSegmentsAsync(localTrip.Id, segments);
             localTrip.SegmentCount = segments.Count;
 
             RaiseProgress(progress, localTrip.Id, 65, "Updating polygon zones...");
 
             // Update polygon zones (TripArea) from each region
             var polygons = _metadataBuilder.BuildPolygons(serverTrip);
-            await _databaseService.SaveOfflinePolygonsAsync(localTrip.Id, polygons);
+            await _areaRepository.SaveOfflinePolygonsAsync(localTrip.Id, polygons);
             localTrip.AreaCount = polygons.Count;
 
             RaiseProgress(progress, localTrip.Id, 75, "Checking map coverage...");
@@ -191,7 +200,7 @@ public class TripContentService : ITripContentService
             localTrip.UpdatedAt = DateTime.UtcNow;
             localTrip.Name = serverTrip.Name; // In case name changed
 
-            await _databaseService.SaveDownloadedTripAsync(localTrip);
+            await _tripRepository.SaveDownloadedTripAsync(localTrip);
 
             RaiseProgress(progress, localTrip.Id, 100, "Metadata sync complete");
             _logger.LogInformation("Trip metadata synced: {TripName} (v{Version}, {PlaceCount} places, {SegmentCount} segments)",
@@ -220,7 +229,7 @@ public class TripContentService : ITripContentService
             return 0;
         }
 
-        var downloadedTrips = await _databaseService.GetDownloadedTripsAsync();
+        var downloadedTrips = await _tripRepository.GetDownloadedTripsAsync();
         var completedTrips = downloadedTrips.Where(t =>
             t.Status == TripDownloadStatus.Complete || t.Status == TripDownloadStatus.MetadataOnly).ToList();
 
@@ -262,7 +271,7 @@ public class TripContentService : ITripContentService
     /// <inheritdoc/>
     public async Task<TripDetails?> GetOfflineTripDetailsAsync(Guid tripServerId)
     {
-        var trip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
+        var trip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripServerId);
         if (trip == null)
         {
             _logger.LogWarning("Trip not found in offline storage: {TripId}", tripServerId);
@@ -270,10 +279,10 @@ public class TripContentService : ITripContentService
         }
 
         // Load all offline data in parallel
-        var placesTask = _databaseService.GetOfflinePlacesAsync(trip.Id);
-        var segmentsTask = _databaseService.GetOfflineSegmentsAsync(trip.Id);
-        var areasTask = _databaseService.GetOfflineAreasAsync(trip.Id);
-        var polygonsTask = _databaseService.GetOfflinePolygonsAsync(trip.Id);
+        var placesTask = _placeRepository.GetOfflinePlacesAsync(trip.Id);
+        var segmentsTask = _segmentRepository.GetOfflineSegmentsAsync(trip.Id);
+        var areasTask = _areaRepository.GetOfflineAreasAsync(trip.Id);
+        var polygonsTask = _areaRepository.GetOfflinePolygonsAsync(trip.Id);
 
         await Task.WhenAll(placesTask, segmentsTask, areasTask, polygonsTask);
 
@@ -382,11 +391,11 @@ public class TripContentService : ITripContentService
     /// <inheritdoc/>
     public async Task<List<TripPlace>> GetOfflinePlacesAsync(Guid tripServerId)
     {
-        var trip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
+        var trip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripServerId);
         if (trip == null)
             return new List<TripPlace>();
 
-        var entities = await _databaseService.GetOfflinePlacesAsync(trip.Id);
+        var entities = await _placeRepository.GetOfflinePlacesAsync(trip.Id);
         return entities.Select(e => new TripPlace
         {
             Id = e.ServerId,
@@ -404,11 +413,11 @@ public class TripContentService : ITripContentService
     /// <inheritdoc/>
     public async Task<List<TripSegment>> GetOfflineSegmentsAsync(Guid tripServerId)
     {
-        var trip = await _databaseService.GetDownloadedTripByServerIdAsync(tripServerId);
+        var trip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripServerId);
         if (trip == null)
             return new List<TripSegment>();
 
-        var entities = await _databaseService.GetOfflineSegmentsAsync(trip.Id);
+        var entities = await _segmentRepository.GetOfflineSegmentsAsync(trip.Id);
         return entities.Select(s => new TripSegment
         {
             Id = s.ServerId,

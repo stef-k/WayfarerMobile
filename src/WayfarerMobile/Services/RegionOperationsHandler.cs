@@ -2,6 +2,7 @@ using SQLite;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Data.Services;
 using WayfarerMobile.Interfaces;
 
@@ -15,6 +16,7 @@ public class RegionOperationsHandler : IRegionOperationsHandler
 {
     private readonly IApiClient _apiClient;
     private readonly DatabaseService _databaseService;
+    private readonly IAreaRepository _areaRepository;
     private readonly IConnectivity _connectivity;
     private readonly SemaphoreSlim _initLock = new(1, 1);
     private SQLiteAsyncConnection? _database;
@@ -26,10 +28,12 @@ public class RegionOperationsHandler : IRegionOperationsHandler
     public RegionOperationsHandler(
         IApiClient apiClient,
         DatabaseService databaseService,
+        IAreaRepository areaRepository,
         IConnectivity connectivity)
     {
         _apiClient = apiClient;
         _databaseService = databaseService;
+        _areaRepository = areaRepository;
         _connectivity = connectivity;
     }
 
@@ -140,7 +144,7 @@ public class RegionOperationsHandler : IRegionOperationsHandler
         await EnsureInitializedAsync();
 
         // 1. Read current value from offline table (for restoration if needed)
-        var offlineArea = await _databaseService.GetOfflineAreaByServerIdAsync(regionId);
+        var offlineArea = await _areaRepository.GetOfflineAreaByServerIdAsync(regionId);
         string? originalName = offlineArea?.Name;
         string? originalNotes = offlineArea?.Notes;
         int? originalDisplayOrder = offlineArea?.SortOrder;
@@ -155,7 +159,7 @@ public class RegionOperationsHandler : IRegionOperationsHandler
             if (displayOrder.HasValue) offlineArea.SortOrder = displayOrder.Value;
             if (centerLatitude.HasValue) offlineArea.CenterLatitude = centerLatitude;
             if (centerLongitude.HasValue) offlineArea.CenterLongitude = centerLongitude;
-            await _databaseService.UpdateOfflineAreaAsync(offlineArea);
+            await _areaRepository.UpdateOfflineAreaAsync(offlineArea);
         }
 
         var request = new RegionUpdateRequest
@@ -199,7 +203,7 @@ public class RegionOperationsHandler : IRegionOperationsHandler
                 if (originalDisplayOrder.HasValue) offlineArea.SortOrder = originalDisplayOrder.Value;
                 if (originalCenterLatitude.HasValue) offlineArea.CenterLatitude = originalCenterLatitude;
                 if (originalCenterLongitude.HasValue) offlineArea.CenterLongitude = originalCenterLongitude;
-                await _databaseService.UpdateOfflineAreaAsync(offlineArea);
+                await _areaRepository.UpdateOfflineAreaAsync(offlineArea);
             }
             return RegionOperationResult.Rejected($"Server rejected: {ex.Message}");
         }
@@ -232,10 +236,10 @@ public class RegionOperationsHandler : IRegionOperationsHandler
         await EnsureInitializedAsync();
 
         // 1. Read full region data for restoration
-        var offlineArea = await _databaseService.GetOfflineAreaByServerIdAsync(regionId);
+        var offlineArea = await _areaRepository.GetOfflineAreaByServerIdAsync(regionId);
 
         // 2. Delete from offline table (optimistic)
-        await _databaseService.DeleteOfflineAreaByServerIdAsync(regionId);
+        await _areaRepository.DeleteOfflineAreaByServerIdAsync(regionId);
 
         if (!IsConnected)
         {
@@ -262,7 +266,7 @@ public class RegionOperationsHandler : IRegionOperationsHandler
             if (offlineArea != null)
             {
                 offlineArea.Id = 0; // Reset for insert
-                await _databaseService.InsertOfflineAreaAsync(offlineArea);
+                await _areaRepository.InsertOfflineAreaAsync(offlineArea);
             }
             return RegionOperationResult.Rejected($"Server rejected: {ex.Message}");
         }
