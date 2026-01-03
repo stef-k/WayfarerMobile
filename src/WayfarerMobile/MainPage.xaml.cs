@@ -53,8 +53,8 @@ public partial class MainPage : ContentPage, IQueryAttributable
         // Subscribe to ViewModel property changes to reset sheet state
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
 
-        // Subscribe to TripSheet property changes for coordinate editing mode
-        _viewModel.TripSheet.PropertyChanged += OnTripSheetPropertyChanged;
+        // Subscribe to Editor property changes for coordinate editing mode
+        _viewModel.TripSheet.Editor.PropertyChanged += OnEditorPropertyChanged;
 
         // Wire up bottom sheet StateChanged event (done in code-behind for XamlC compatibility)
         // SfBottomSheet uses StateChanged, not Closed - we detect closure via Hidden state
@@ -68,7 +68,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// </summary>
     private void OnContextMenuNavigateTo(object? sender, EventArgs e)
     {
-        _viewModel.NavigateToContextLocationCommand.Execute(null);
+        _viewModel.ContextMenu.NavigateToContextLocationCommand.Execute(null);
     }
 
     /// <summary>
@@ -76,7 +76,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// </summary>
     private void OnContextMenuShare(object? sender, EventArgs e)
     {
-        _viewModel.ShareContextLocationCommand.Execute(null);
+        _viewModel.ContextMenu.ShareContextLocationCommand.Execute(null);
     }
 
     /// <summary>
@@ -84,7 +84,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// </summary>
     private void OnContextMenuWikiSearch(object? sender, EventArgs e)
     {
-        _viewModel.SearchWikipediaCommand.Execute(null);
+        _viewModel.ContextMenu.SearchWikipediaCommand.Execute(null);
     }
 
     /// <summary>
@@ -93,7 +93,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
     private void OnContextMenuNavigateGoogleMaps(object? sender, EventArgs e)
     {
         // This is only called if PlaceContextMenu's direct launch fails
-        _viewModel.OpenInGoogleMapsCommand.Execute(null);
+        _viewModel.ContextMenu.OpenInGoogleMapsCommand.Execute(null);
     }
 
     /// <summary>
@@ -101,7 +101,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// </summary>
     private void OnContextMenuClose(object? sender, EventArgs e)
     {
-        _viewModel.HideContextMenuCommand.Execute(null);
+        _viewModel.ContextMenu.HideContextMenuCommand.Execute(null);
     }
 
     /// <summary>
@@ -109,7 +109,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// </summary>
     private void OnContextMenuDeletePin(object? sender, EventArgs e)
     {
-        _viewModel.ClearDroppedPinCommand.Execute(null);
+        _viewModel.ContextMenu.ClearDroppedPinCommand.Execute(null);
     }
 
     #endregion
@@ -137,7 +137,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
             var lonLat = SphericalMercator.ToLonLat(worldPos.X, worldPos.Y);
 
             // Handle place coordinate editing mode first (takes priority)
-            if (_viewModel.TripSheet.IsPlaceCoordinateEditMode)
+            if (_viewModel.TripSheet.Editor.IsPlaceCoordinateEditMode)
             {
                 _viewModel.TripSheet.SetPendingPlaceCoordinates(lonLat.lat, lonLat.lon);
                 UpdateTempMarker(lonLat.lat, lonLat.lon);
@@ -151,24 +151,23 @@ public partial class MainPage : ContentPage, IQueryAttributable
             }
 
             // Check if tapping on existing dropped pin (when not in drop pin mode)
-            if (!_viewModel.IsDropPinModeActive && _viewModel.HasDroppedPin)
+            if (!_viewModel.ContextMenu.IsDropPinModeActive && _viewModel.ContextMenu.HasDroppedPin)
             {
-                if (_viewModel.IsNearDroppedPin(lonLat.lat, lonLat.lon))
+                if (_viewModel.ContextMenu.IsNearDroppedPin(lonLat.lat, lonLat.lon))
                 {
                     // Reopen context menu for the existing pin
-                    _viewModel.ReopenContextMenuFromPin();
+                    _viewModel.ContextMenu.ReopenContextMenuFromPin();
                     return;
                 }
             }
 
             // If drop pin mode is active, create new pin
-            if (_viewModel.IsDropPinModeActive)
+            if (_viewModel.ContextMenu.IsDropPinModeActive)
             {
                 // Show context menu at tapped location
-                _viewModel.ShowContextMenu(lonLat.lat, lonLat.lon);
+                _viewModel.ContextMenu.ShowContextMenu(lonLat.lat, lonLat.lon);
 
-                // Deactivate drop pin mode after successful tap
-                _viewModel.IsDropPinModeActive = false;
+                // Deactivate drop pin mode after successful tap (done by ShowContextMenu)
             }
         }
         catch (Exception ex)
@@ -291,9 +290,9 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// </summary>
     private async void OnDropPinClicked(object? sender, EventArgs e)
     {
-        _viewModel.IsDropPinModeActive = !_viewModel.IsDropPinModeActive;
+        _viewModel.ContextMenu.IsDropPinModeActive = !_viewModel.ContextMenu.IsDropPinModeActive;
 
-        if (_viewModel.IsDropPinModeActive)
+        if (_viewModel.ContextMenu.IsDropPinModeActive)
         {
             await this.DisplayAlertAsync("Drop Pin Mode",
                 "Tap anywhere on the map to show options for that location.\n\n" +
@@ -427,20 +426,20 @@ public partial class MainPage : ContentPage, IQueryAttributable
     }
 
     /// <summary>
-    /// Handles TripSheet property changes for coordinate editing mode.
+    /// Handles Editor property changes for coordinate editing mode.
     /// </summary>
-    private void OnTripSheetPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    private void OnEditorPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         // Handle place coordinate editing mode changes
-        if (e.PropertyName == nameof(TripSheetViewModel.IsPlaceCoordinateEditMode))
+        if (e.PropertyName == nameof(TripItemEditorViewModel.IsPlaceCoordinateEditMode))
         {
-            if (_viewModel.TripSheet.IsPlaceCoordinateEditMode)
+            if (_viewModel.TripSheet.Editor.IsPlaceCoordinateEditMode)
             {
                 // Entering edit mode - show temp marker at current place location
                 EnsureTempMarkerLayer();
-                if (_viewModel.TripSheet.PendingPlaceLatitude.HasValue && _viewModel.TripSheet.PendingPlaceLongitude.HasValue)
+                if (_viewModel.TripSheet.Editor.PendingPlaceLatitude.HasValue && _viewModel.TripSheet.Editor.PendingPlaceLongitude.HasValue)
                 {
-                    UpdateTempMarker(_viewModel.TripSheet.PendingPlaceLatitude.Value, _viewModel.TripSheet.PendingPlaceLongitude.Value);
+                    UpdateTempMarker(_viewModel.TripSheet.Editor.PendingPlaceLatitude.Value, _viewModel.TripSheet.Editor.PendingPlaceLongitude.Value);
                 }
             }
             else

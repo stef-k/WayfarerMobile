@@ -225,7 +225,7 @@
                                                     IsVisible="{Binding IsUnassignedRegion, Converter={StaticResource InvertedBoolConverter}}"
                                                     VerticalOptions="Center">
                                                 <Border.GestureRecognizers>
-                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.EditRegionCommand}"
+                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.Editor.EditRegionCommand}"
                                                                           CommandParameter="{Binding .}" />
                                                 </Border.GestureRecognizers>
                                                 <Image Source="edit.png" WidthRequest="20" HeightRequest="20" VerticalOptions="Center" HorizontalOptions="Center" />
@@ -243,7 +243,7 @@
                                                     <RoundRectangle CornerRadius="12" />
                                                 </Border.StrokeShape>
                                                 <Border.GestureRecognizers>
-                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.DeleteRegionCommand}"
+                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.Editor.DeleteRegionCommand}"
                                                                           CommandParameter="{Binding .}" />
                                                 </Border.GestureRecognizers>
                                                 <Image Source="delete.png" WidthRequest="20" HeightRequest="20" VerticalOptions="Center" HorizontalOptions="Center" />
@@ -260,7 +260,7 @@
                                                                    IsVisible="{Binding IsUnassignedRegion, Converter={StaticResource InvertedBoolConverter}}">
                                                 <Button Text="▲"
                                                         FontSize="10"
-                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.MoveRegionUpCommand}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.Editor.MoveRegionUpCommand}"
                                                         CommandParameter="{Binding .}"
                                                         WidthRequest="28"
                                                         HeightRequest="28"
@@ -269,7 +269,7 @@
                                                         TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
                                                 <Button Text="▼"
                                                         FontSize="10"
-                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.MoveRegionDownCommand}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.Editor.MoveRegionDownCommand}"
                                                         CommandParameter="{Binding .}"
                                                         WidthRequest="28"
                                                         HeightRequest="28"
@@ -332,7 +332,7 @@
                                                                 <HorizontalStackLayout Grid.Column="2" Spacing="-8" VerticalOptions="Center">
                                                                     <Button Text="▲"
                                                                             FontSize="10"
-                                                                            Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.MovePlaceUpCommand}"
+                                                                            Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.Editor.MovePlaceUpCommand}"
                                                                             CommandParameter="{Binding .}"
                                                                             WidthRequest="28"
                                                                             HeightRequest="28"
@@ -341,7 +341,7 @@
                                                                             TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
                                                                     <Button Text="▼"
                                                                             FontSize="10"
-                                                                            Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.MovePlaceDownCommand}"
+                                                                            Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.Editor.MovePlaceDownCommand}"
                                                                             CommandParameter="{Binding .}"
                                                                             WidthRequest="28"
                                                                             HeightRequest="28"
@@ -660,7 +660,7 @@
                 <!-- Add Region/Place Button -->
                 <Button Grid.Column="0"
                         Text="+ Add"
-                        Command="{Binding TripSheet.AddToTripCommand}"
+                        Command="{Binding TripSheet.Editor.AddToTripCommand}"
                         BackgroundColor="{StaticResource Gray900}"
                         TextColor="{StaticResource White}"
                         CornerRadius="8"
@@ -668,7 +668,7 @@
                 <!-- Edit Trip Button -->
                 <Button Grid.Column="1"
                         Text="Edit Trip"
-                        Command="{Binding TripSheet.EditLoadedTripCommand}"
+                        Command="{Binding TripSheet.Editor.EditLoadedTripCommand}"
                         BackgroundColor="{StaticResource Gray900}"
                         TextColor="{StaticResource White}"
                         CornerRadius="8"
@@ -676,7 +676,7 @@
                 <!-- Unload Trip Button -->
                 <Button Grid.Column="2"
                         Text="Unload"
-                        Command="{Binding TripSheet.ClearLoadedTripCommand}"
+                        Command="{Binding TripSheet.Editor.ClearLoadedTripCommand}"
                         BackgroundColor="{StaticResource Gray900}"
                         TextColor="{StaticResource White}"
                         CornerRadius="8"
@@ -688,22 +688,22 @@
                                    Padding="8,6,8,12"
                                    HorizontalOptions="Center"
                                    IsVisible="{Binding TripSheet.IsTripSheetShowingPlace}">
-                <ImageButton Source="copy.png" Command="{Binding TripSheet.CopyTripPlaceCoordsCommand}"
+                <ImageButton Source="copy.png" Command="{Binding TripSheet.Editor.CopyTripPlaceCoordsCommand}"
                              BackgroundColor="{StaticResource Gray900}"
                              WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="10" />
-                <ImageButton Source="share_icon.png" Command="{Binding TripSheet.ShareTripPlaceCommand}"
+                <ImageButton Source="share_icon.png" Command="{Binding TripSheet.Editor.ShareTripPlaceCommand}"
                              BackgroundColor="{StaticResource Gray900}"
                              WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="10" />
-                <ImageButton Source="edit.png" Command="{Binding TripSheet.EditTripPlaceCommand}"
+                <ImageButton Source="edit.png" Command="{Binding TripSheet.Editor.EditTripPlaceCommand}"
                              BackgroundColor="{StaticResource Gray900}"
                              WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="10" />
-                <ImageButton Source="wikipedia.png" Command="{Binding TripSheet.OpenTripPlaceWikipediaCommand}"
+                <ImageButton Source="wikipedia.png" Command="{Binding TripSheet.Editor.OpenTripPlaceWikipediaCommand}"
                              BackgroundColor="{StaticResource Gray900}"
                              WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="10" />
-                <ImageButton Source="maps_google.png" Command="{Binding TripSheet.OpenTripPlaceInMapsCommand}"
+                <ImageButton Source="maps_google.png" Command="{Binding TripSheet.Editor.OpenTripPlaceInMapsCommand}"
                              BackgroundColor="{StaticResource Gray900}"
                              WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="10" />
-                <ImageButton Source="navigate.png" Command="{Binding TripSheet.NavigateToTripPlaceCommand}"
+                <ImageButton Source="navigate.png" Command="{Binding TripSheet.Editor.NavigateToTripPlaceCommand}"
                              BackgroundColor="{StaticResource Gray900}"
                              WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="10" />
             </HorizontalStackLayout>
@@ -712,7 +712,7 @@
             <Grid ColumnDefinitions="*,*,*" ColumnSpacing="6" Padding="8,6,8,12"
                   IsVisible="{Binding TripSheet.IsTripSheetShowingArea}">
                 <Button Grid.Column="0" ImageSource="edit.png" Text=" Edit" ContentLayout="Left,4"
-                        Command="{Binding TripSheet.EditAreaCommand}"
+                        Command="{Binding TripSheet.Editor.EditAreaCommand}"
                         BackgroundColor="{StaticResource Gray900}"
                         TextColor="{StaticResource White}"
                         CornerRadius="6" HeightRequest="40" />
@@ -732,7 +732,7 @@
             <Grid ColumnDefinitions="*" Padding="8,6,8,12"
                   IsVisible="{Binding TripSheet.IsTripSheetShowingSegment}">
                 <Button Grid.Column="0" ImageSource="edit.png" Text=" Edit Notes" ContentLayout="Left,4"
-                        Command="{Binding TripSheet.EditSegmentCommand}"
+                        Command="{Binding TripSheet.Editor.EditSegmentCommand}"
                         BackgroundColor="{StaticResource Gray900}"
                         TextColor="{StaticResource White}"
                         CornerRadius="6" HeightRequest="40" />
