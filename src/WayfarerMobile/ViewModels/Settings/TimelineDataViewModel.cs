@@ -4,7 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
-using WayfarerMobile.Data.Services;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Services;
 
 namespace WayfarerMobile.ViewModels.Settings;
@@ -14,7 +14,7 @@ namespace WayfarerMobile.ViewModels.Settings;
 /// </summary>
 public partial class TimelineDataViewModel : ObservableObject
 {
-    private readonly DatabaseService _databaseService;
+    private readonly ILocationQueueRepository _locationQueueRepository;
     private readonly TimelineExportService _exportService;
     private readonly TimelineImportService _importService;
     private readonly TimelineDataService _timelineDataService;
@@ -47,19 +47,19 @@ public partial class TimelineDataViewModel : ObservableObject
     /// <summary>
     /// Creates a new instance of TimelineDataViewModel.
     /// </summary>
-    /// <param name="databaseService">The database service.</param>
+    /// <param name="locationQueueRepository">The location queue repository.</param>
     /// <param name="exportService">The timeline export service.</param>
     /// <param name="importService">The timeline import service.</param>
     /// <param name="timelineDataService">The timeline data service.</param>
     /// <param name="toastService">The toast service.</param>
     public TimelineDataViewModel(
-        DatabaseService databaseService,
+        ILocationQueueRepository locationQueueRepository,
         TimelineExportService exportService,
         TimelineImportService importService,
         TimelineDataService timelineDataService,
         IToastService toastService)
     {
-        _databaseService = databaseService;
+        _locationQueueRepository = locationQueueRepository;
         _exportService = exportService;
         _importService = importService;
         _timelineDataService = timelineDataService;
@@ -76,7 +76,7 @@ public partial class TimelineDataViewModel : ObservableObject
     [RelayCommand]
     public async Task RefreshQueueCountAsync()
     {
-        PendingQueueCount = await _databaseService.GetPendingCountAsync();
+        PendingQueueCount = await _locationQueueRepository.GetPendingCountAsync();
     }
 
     /// <summary>
@@ -111,7 +111,7 @@ public partial class TimelineDataViewModel : ObservableObject
             IsClearingQueue = true;
             try
             {
-                var deleted = await _databaseService.ClearPendingQueueAsync();
+                var deleted = await _locationQueueRepository.ClearPendingQueueAsync();
                 PendingQueueCount = 0;
                 await Shell.Current.DisplayAlertAsync("Queue Cleared", $"{deleted} pending locations have been deleted.", "OK");
             }
@@ -130,7 +130,7 @@ public partial class TimelineDataViewModel : ObservableObject
     {
         try
         {
-            var locations = await _databaseService.GetAllQueuedLocationsAsync();
+            var locations = await _locationQueueRepository.GetAllQueuedLocationsAsync();
 
             if (locations.Count == 0)
             {

@@ -3,7 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
-using WayfarerMobile.Data.Services;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 
@@ -28,7 +28,9 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
 
     #region Fields
 
-    private readonly DatabaseService _databaseService;
+    private readonly IPlaceRepository _placeRepository;
+    private readonly ISegmentRepository _segmentRepository;
+    private readonly IAreaRepository _areaRepository;
     private readonly ISettingsService _settingsService;
     private readonly ILogger<TripSheetViewModel> _logger;
 
@@ -490,12 +492,16 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
     /// </summary>
     public TripSheetViewModel(
         TripItemEditorViewModel editor,
-        DatabaseService databaseService,
+        IPlaceRepository placeRepository,
+        ISegmentRepository segmentRepository,
+        IAreaRepository areaRepository,
         ISettingsService settingsService,
         ILogger<TripSheetViewModel> logger)
     {
         Editor = editor;
-        _databaseService = databaseService;
+        _placeRepository = placeRepository;
+        _segmentRepository = segmentRepository;
+        _areaRepository = areaRepository;
         _settingsService = settingsService;
         _logger = logger;
 
@@ -875,7 +881,7 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
         switch (entityType)
         {
             case "place":
-                var place = await _databaseService.GetOfflinePlaceByServerIdAsync(entityId);
+                var place = await _placeRepository.GetOfflinePlaceByServerIdAsync(entityId);
                 if (place != null)
                 {
                     // Find and update the place in loaded trip
@@ -893,7 +899,7 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
                 break;
 
             case "area":
-                var area = await _databaseService.GetOfflineAreaByServerIdAsync(entityId);
+                var area = await _areaRepository.GetOfflineAreaByServerIdAsync(entityId);
                 if (area != null)
                 {
                     var tripArea = LoadedTrip.AllAreas.FirstOrDefault(a => a.Id == entityId);
@@ -906,7 +912,7 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
                 break;
 
             case "segment":
-                var segment = await _databaseService.GetOfflineSegmentByServerIdAsync(entityId);
+                var segment = await _segmentRepository.GetOfflineSegmentByServerIdAsync(entityId);
                 if (segment != null)
                 {
                     var tripSegment = LoadedTrip.Segments.FirstOrDefault(s => s.Id == entityId);

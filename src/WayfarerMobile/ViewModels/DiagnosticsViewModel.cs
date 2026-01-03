@@ -7,7 +7,7 @@ using SQLite;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
-using WayfarerMobile.Data.Services;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Services;
 
 namespace WayfarerMobile.ViewModels;
@@ -24,7 +24,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
     private readonly AppDiagnosticService _appDiagnosticService;
     private readonly PerformanceMonitorService _performanceService;
     private readonly IToastService _toastService;
-    private readonly DatabaseService _databaseService;
+    private readonly ILocationQueueRepository _locationQueueRepository;
     private readonly ISettingsService _settingsService;
     private bool _isSubscribed;
 
@@ -38,7 +38,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
         AppDiagnosticService appDiagnosticService,
         PerformanceMonitorService performanceService,
         IToastService toastService,
-        DatabaseService databaseService,
+        ILocationQueueRepository locationQueueRepository,
         ISettingsService settingsService)
     {
         _logger = logger;
@@ -47,7 +47,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
         _appDiagnosticService = appDiagnosticService;
         _performanceService = performanceService;
         _toastService = toastService;
-        _databaseService = databaseService;
+        _locationQueueRepository = locationQueueRepository;
         _settingsService = settingsService;
         Title = "Diagnostics";
 
@@ -647,7 +647,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
         {
             try
             {
-                var deleted = await _databaseService.ClearSyncedQueueAsync();
+                var deleted = await _locationQueueRepository.ClearSyncedQueueAsync();
                 await _toastService.ShowSuccessAsync($"{deleted} synced locations cleared");
                 await LoadDataAsync();
             }
@@ -687,7 +687,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
         {
             try
             {
-                var deleted = await _databaseService.ClearAllQueueAsync();
+                var deleted = await _locationQueueRepository.ClearAllQueueAsync();
                 await _toastService.ShowSuccessAsync($"{deleted} locations cleared");
                 await LoadDataAsync();
             }
@@ -712,7 +712,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
     {
         try
         {
-            var locations = await _databaseService.GetAllQueuedLocationsAsync();
+            var locations = await _locationQueueRepository.GetAllQueuedLocationsAsync();
 
             if (locations.Count == 0)
             {
@@ -818,7 +818,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
     {
         try
         {
-            var locations = await _databaseService.GetAllQueuedLocationsAsync();
+            var locations = await _locationQueueRepository.GetAllQueuedLocationsAsync();
 
             if (locations.Count == 0)
             {

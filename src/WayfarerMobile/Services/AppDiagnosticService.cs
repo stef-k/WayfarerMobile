@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 using SQLite;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Data.Repositories;
-using WayfarerMobile.Data.Services;
 using WayfarerMobile.Services.TileCache;
 
 namespace WayfarerMobile.Services;
@@ -17,7 +16,8 @@ public class AppDiagnosticService
     private readonly ILogger<AppDiagnosticService> _logger;
     private readonly ILocationBridge _locationBridge;
     private readonly ISettingsService _settingsService;
-    private readonly DatabaseService _databaseService;
+    private readonly ILocationQueueRepository _locationQueueRepository;
+    private readonly ITripRepository _tripRepository;
     private readonly ITripTileRepository _tripTileRepository;
     private readonly LiveTileCacheService _liveTileCache;
     private readonly IPermissionsService _permissionsService;
@@ -30,7 +30,8 @@ public class AppDiagnosticService
         ILogger<AppDiagnosticService> logger,
         ILocationBridge locationBridge,
         ISettingsService settingsService,
-        DatabaseService databaseService,
+        ILocationQueueRepository locationQueueRepository,
+        ITripRepository tripRepository,
         ITripTileRepository tripTileRepository,
         LiveTileCacheService liveTileCache,
         IPermissionsService permissionsService,
@@ -39,7 +40,8 @@ public class AppDiagnosticService
         _logger = logger;
         _locationBridge = locationBridge;
         _settingsService = settingsService;
-        _databaseService = databaseService;
+        _locationQueueRepository = locationQueueRepository;
+        _tripRepository = tripRepository;
         _tripTileRepository = tripTileRepository;
         _liveTileCache = liveTileCache;
         _permissionsService = permissionsService;
@@ -55,12 +57,12 @@ public class AppDiagnosticService
     {
         try
         {
-            var pendingCount = await _databaseService.GetPendingLocationCountAsync();
-            var syncedCount = await _databaseService.GetSyncedLocationCountAsync();
-            var rejectedCount = await _databaseService.GetRejectedLocationCountAsync();
-            var failedCount = await _databaseService.GetFailedLocationCountAsync();
-            var oldestPending = await _databaseService.GetOldestPendingLocationAsync();
-            var lastSynced = await _databaseService.GetLastSyncedLocationAsync();
+            var pendingCount = await _locationQueueRepository.GetPendingLocationCountAsync();
+            var syncedCount = await _locationQueueRepository.GetSyncedLocationCountAsync();
+            var rejectedCount = await _locationQueueRepository.GetRejectedLocationCountAsync();
+            var failedCount = await _locationQueueRepository.GetFailedLocationCountAsync();
+            var oldestPending = await _locationQueueRepository.GetOldestPendingLocationAsync();
+            var lastSynced = await _locationQueueRepository.GetLastSyncedLocationAsync();
 
             return new LocationQueueDiagnostics
             {
@@ -112,7 +114,7 @@ public class AppDiagnosticService
             // Get trip tile cache info from repository
             var tripTileCount = await _tripTileRepository.GetTotalTripTileCountAsync();
             var tripCacheSize = await _tripTileRepository.GetTripCacheSizeAsync();
-            var downloadedTrips = await _databaseService.GetDownloadedTripsAsync();
+            var downloadedTrips = await _tripRepository.GetDownloadedTripsAsync();
 
             return new TileCacheDiagnostics
             {

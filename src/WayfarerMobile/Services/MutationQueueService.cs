@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using SQLite;
 using WayfarerMobile.Data.Entities;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Data.Services;
 using WayfarerMobile.Interfaces;
 
@@ -14,6 +15,10 @@ namespace WayfarerMobile.Services;
 public class MutationQueueService : IMutationQueueService
 {
     private readonly DatabaseService _databaseService;
+    private readonly ITripRepository _tripRepository;
+    private readonly IPlaceRepository _placeRepository;
+    private readonly ISegmentRepository _segmentRepository;
+    private readonly IAreaRepository _areaRepository;
     private readonly ILogger<MutationQueueService> _logger;
     private readonly SemaphoreSlim _initLock = new(1, 1);
     private SQLiteAsyncConnection? _database;
@@ -24,9 +29,17 @@ public class MutationQueueService : IMutationQueueService
     /// </summary>
     public MutationQueueService(
         DatabaseService databaseService,
+        ITripRepository tripRepository,
+        IPlaceRepository placeRepository,
+        ISegmentRepository segmentRepository,
+        IAreaRepository areaRepository,
         ILogger<MutationQueueService> logger)
     {
         _databaseService = databaseService;
+        _tripRepository = tripRepository;
+        _placeRepository = placeRepository;
+        _segmentRepository = segmentRepository;
+        _areaRepository = areaRepository;
         _logger = logger;
     }
 
@@ -324,12 +337,12 @@ public class MutationQueueService : IMutationQueueService
         if (mutation.OperationType == "Create")
         {
             // Delete offline-created place (it was never synced to server)
-            await _databaseService.DeleteOfflinePlaceByServerIdAsync(mutation.EntityId);
+            await _placeRepository.DeleteOfflinePlaceByServerIdAsync(mutation.EntityId);
         }
         else if (mutation.OperationType == "Delete" && mutation.OriginalName != null)
         {
             // Restore deleted place
-            var downloadedTrip = await _databaseService.GetDownloadedTripByServerIdAsync(mutation.TripId);
+            var downloadedTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(mutation.TripId);
             var place = new OfflinePlaceEntity
             {
                 ServerId = mutation.EntityId,
@@ -343,11 +356,11 @@ public class MutationQueueService : IMutationQueueService
                 MarkerColor = mutation.OriginalMarkerColor,
                 SortOrder = mutation.OriginalDisplayOrder ?? 0
             };
-            await _databaseService.InsertOfflinePlaceAsync(place);
+            await _placeRepository.InsertOfflinePlaceAsync(place);
         }
         else if (mutation.OperationType == "Update")
         {
-            var existingPlace = await _databaseService.GetOfflinePlaceByServerIdAsync(mutation.EntityId);
+            var existingPlace = await _placeRepository.GetOfflinePlaceByServerIdAsync(mutation.EntityId);
             if (existingPlace != null)
             {
                 if (mutation.OriginalName != null) existingPlace.Name = mutation.OriginalName;
@@ -357,7 +370,7 @@ public class MutationQueueService : IMutationQueueService
                 if (mutation.OriginalIconName != null) existingPlace.IconName = mutation.OriginalIconName;
                 if (mutation.OriginalMarkerColor != null) existingPlace.MarkerColor = mutation.OriginalMarkerColor;
                 if (mutation.OriginalDisplayOrder.HasValue) existingPlace.SortOrder = mutation.OriginalDisplayOrder.Value;
-                await _databaseService.UpdateOfflinePlaceAsync(existingPlace);
+                await _placeRepository.UpdateOfflinePlaceAsync(existingPlace);
             }
         }
     }
@@ -367,12 +380,12 @@ public class MutationQueueService : IMutationQueueService
         if (mutation.OperationType == "Create")
         {
             // Delete offline-created region
-            await _databaseService.DeleteOfflineAreaByServerIdAsync(mutation.EntityId);
+            await _areaRepository.DeleteOfflineAreaByServerIdAsync(mutation.EntityId);
         }
         else if (mutation.OperationType == "Delete" && mutation.OriginalName != null)
         {
             // Restore deleted region
-            var downloadedTrip = await _databaseService.GetDownloadedTripByServerIdAsync(mutation.TripId);
+            var downloadedTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(mutation.TripId);
             var area = new OfflineAreaEntity
             {
                 ServerId = mutation.EntityId,
@@ -383,11 +396,11 @@ public class MutationQueueService : IMutationQueueService
                 CenterLongitude = mutation.OriginalCenterLongitude,
                 SortOrder = mutation.OriginalDisplayOrder ?? 0
             };
-            await _databaseService.InsertOfflineAreaAsync(area);
+            await _areaRepository.InsertOfflineAreaAsync(area);
         }
         else if (mutation.OperationType == "Update")
         {
-            var existingArea = await _databaseService.GetOfflineAreaByServerIdAsync(mutation.EntityId);
+            var existingArea = await _areaRepository.GetOfflineAreaByServerIdAsync(mutation.EntityId);
             if (existingArea != null)
             {
                 if (mutation.OriginalName != null) existingArea.Name = mutation.OriginalName;
@@ -395,7 +408,7 @@ public class MutationQueueService : IMutationQueueService
                 if (mutation.OriginalCenterLatitude.HasValue) existingArea.CenterLatitude = mutation.OriginalCenterLatitude;
                 if (mutation.OriginalCenterLongitude.HasValue) existingArea.CenterLongitude = mutation.OriginalCenterLongitude;
                 if (mutation.OriginalDisplayOrder.HasValue) existingArea.SortOrder = mutation.OriginalDisplayOrder.Value;
-                await _databaseService.UpdateOfflineAreaAsync(existingArea);
+                await _areaRepository.UpdateOfflineAreaAsync(existingArea);
             }
         }
     }
@@ -404,11 +417,11 @@ public class MutationQueueService : IMutationQueueService
     {
         if (mutation.OperationType == "Update")
         {
-            var segment = await _databaseService.GetOfflineSegmentByServerIdAsync(mutation.EntityId);
+            var segment = await _segmentRepository.GetOfflineSegmentByServerIdAsync(mutation.EntityId);
             if (segment != null)
             {
                 segment.Notes = mutation.OriginalNotes;
-                await _databaseService.UpdateOfflineSegmentAsync(segment);
+                await _segmentRepository.UpdateOfflineSegmentAsync(segment);
             }
         }
     }
@@ -417,11 +430,11 @@ public class MutationQueueService : IMutationQueueService
     {
         if (mutation.OperationType == "Update")
         {
-            var polygon = await _databaseService.GetOfflinePolygonByServerIdAsync(mutation.EntityId);
+            var polygon = await _areaRepository.GetOfflinePolygonByServerIdAsync(mutation.EntityId);
             if (polygon != null)
             {
                 polygon.Notes = mutation.OriginalNotes;
-                await _databaseService.UpdateOfflinePolygonAsync(polygon);
+                await _areaRepository.UpdateOfflinePolygonAsync(polygon);
             }
         }
     }
@@ -430,12 +443,12 @@ public class MutationQueueService : IMutationQueueService
     {
         if (mutation.OperationType == "Update")
         {
-            var trip = await _databaseService.GetDownloadedTripByServerIdAsync(mutation.EntityId);
+            var trip = await _tripRepository.GetDownloadedTripByServerIdAsync(mutation.EntityId);
             if (trip != null)
             {
                 if (mutation.OriginalName != null) trip.Name = mutation.OriginalName;
                 if (mutation.IncludeNotes) trip.Notes = mutation.OriginalNotes;
-                await _databaseService.SaveDownloadedTripAsync(trip);
+                await _tripRepository.SaveDownloadedTripAsync(trip);
             }
         }
     }
