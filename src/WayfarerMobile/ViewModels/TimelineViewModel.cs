@@ -238,10 +238,8 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
         DateTimeEditor = dateTimeEditorFactory(this);
 
         // Wire up property change forwarding for XAML bindings
-        CoordinateEditor.PropertyChanged += (s, e) =>
-            OnPropertyChanged($"CoordinateEditor.{e.PropertyName}");
-        DateTimeEditor.PropertyChanged += (s, e) =>
-            OnPropertyChanged($"DateTimeEditor.{e.PropertyName}");
+        CoordinateEditor.PropertyChanged += OnCoordinateEditorPropertyChanged;
+        DateTimeEditor.PropertyChanged += OnDateTimeEditorPropertyChanged;
 
         // Subscribe to sync events
         _timelineSyncService.SyncCompleted += OnSyncCompleted;
@@ -821,6 +819,12 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
         _timelineSyncService.SyncQueued -= OnSyncQueued;
         _timelineSyncService.SyncRejected -= OnSyncRejected;
 
+        // Unsubscribe from child ViewModel property changes
+        // Note: Child VMs inherit from ObservableObject, not BaseViewModel,
+        // so they don't need Dispose() - only event unsubscription matters.
+        CoordinateEditor.PropertyChanged -= OnCoordinateEditorPropertyChanged;
+        DateTimeEditor.PropertyChanged -= OnDateTimeEditorPropertyChanged;
+
         // Unsubscribe from connectivity events
         Connectivity.ConnectivityChanged -= OnConnectivityChanged;
 
@@ -829,6 +833,22 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
         _map = null;
 
         base.Cleanup();
+    }
+
+    /// <summary>
+    /// Forwards CoordinateEditor property changes for XAML binding.
+    /// </summary>
+    private void OnCoordinateEditorPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        OnPropertyChanged($"CoordinateEditor.{e.PropertyName}");
+    }
+
+    /// <summary>
+    /// Forwards DateTimeEditor property changes for XAML binding.
+    /// </summary>
+    private void OnDateTimeEditorPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        OnPropertyChanged($"DateTimeEditor.{e.PropertyName}");
     }
 
     #endregion

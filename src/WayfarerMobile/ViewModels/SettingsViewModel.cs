@@ -141,16 +141,11 @@ public partial class SettingsViewModel : BaseViewModel
         PinSecurity = new PinSecurityViewModel(appLockService);
 
         // Wire up property change forwarding for XAML bindings
-        NavigationSettings.PropertyChanged += (s, e) =>
-            OnPropertyChanged($"NavigationSettings.{e.PropertyName}");
-        CacheSettings.PropertyChanged += (s, e) =>
-            OnPropertyChanged($"CacheSettings.{e.PropertyName}");
-        VisitNotificationSettings.PropertyChanged += (s, e) =>
-            OnPropertyChanged($"VisitNotificationSettings.{e.PropertyName}");
-        AppearanceSettings.PropertyChanged += (s, e) =>
-            OnPropertyChanged($"AppearanceSettings.{e.PropertyName}");
-        TimelineData.PropertyChanged += (s, e) =>
-            OnPropertyChanged($"TimelineData.{e.PropertyName}");
+        NavigationSettings.PropertyChanged += OnNavigationSettingsPropertyChanged;
+        CacheSettings.PropertyChanged += OnCacheSettingsPropertyChanged;
+        VisitNotificationSettings.PropertyChanged += OnVisitNotificationSettingsPropertyChanged;
+        AppearanceSettings.PropertyChanged += OnAppearanceSettingsPropertyChanged;
+        TimelineData.PropertyChanged += OnTimelineDataPropertyChanged;
 
         Title = "Settings";
         LoadSettings();
@@ -298,6 +293,42 @@ public partial class SettingsViewModel : BaseViewModel
         await TimelineData.RefreshTimelineCountAsync();
         await base.OnAppearingAsync();
     }
+
+    /// <summary>
+    /// Cleans up event subscriptions to prevent memory leaks.
+    /// </summary>
+    protected override void Cleanup()
+    {
+        // Unsubscribe from child ViewModel property changes
+        // Note: Child VMs inherit from ObservableObject, not BaseViewModel,
+        // so they don't need Dispose() - only event unsubscription matters.
+        NavigationSettings.PropertyChanged -= OnNavigationSettingsPropertyChanged;
+        CacheSettings.PropertyChanged -= OnCacheSettingsPropertyChanged;
+        VisitNotificationSettings.PropertyChanged -= OnVisitNotificationSettingsPropertyChanged;
+        AppearanceSettings.PropertyChanged -= OnAppearanceSettingsPropertyChanged;
+        TimelineData.PropertyChanged -= OnTimelineDataPropertyChanged;
+
+        base.Cleanup();
+    }
+
+    #endregion
+
+    #region Property Change Handlers
+
+    private void OnNavigationSettingsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        => OnPropertyChanged($"NavigationSettings.{e.PropertyName}");
+
+    private void OnCacheSettingsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        => OnPropertyChanged($"CacheSettings.{e.PropertyName}");
+
+    private void OnVisitNotificationSettingsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        => OnPropertyChanged($"VisitNotificationSettings.{e.PropertyName}");
+
+    private void OnAppearanceSettingsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        => OnPropertyChanged($"AppearanceSettings.{e.PropertyName}");
+
+    private void OnTimelineDataPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        => OnPropertyChanged($"TimelineData.{e.PropertyName}");
 
     #endregion
 }
