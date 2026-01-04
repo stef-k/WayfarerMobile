@@ -160,6 +160,16 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
             NotesHtml = notesObj?.ToString();
             _originalNotesHtml = NotesHtml;
         }
+
+        // Parse entity name for title
+        if (query.TryGetValue("entityName", out var entityNameObj))
+        {
+            var entityName = entityNameObj?.ToString();
+            if (!string.IsNullOrEmpty(entityName))
+            {
+                Title = $"Edit {entityName}";
+            }
+        }
     }
 
     /// <summary>
@@ -408,12 +418,14 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     private async Task NavigateBackWithRestoreAsync()
     {
         // For entity types that need selection restoration, pass the info back
+        // Use lowercase to match ProcessPendingSelectionRestoreAsync switch cases
         var query = EntityType switch
         {
-            NotesEntityType.Place => $"..?restoreEntityType=Place&restoreEntityId={EntityId}",
-            NotesEntityType.Area => $"..?restoreEntityType=Area&restoreEntityId={EntityId}",
-            NotesEntityType.Segment => $"..?restoreEntityType=Segment&restoreEntityId={EntityId}",
-            NotesEntityType.Region => $"..?restoreEntityType=Region&restoreEntityId={EntityId}",
+            NotesEntityType.Place => $"..?restoreEntityType=place&restoreEntityId={EntityId}",
+            NotesEntityType.Area => $"..?restoreEntityType=area&restoreEntityId={EntityId}",
+            NotesEntityType.Segment => $"..?restoreEntityType=segment&restoreEntityId={EntityId}",
+            NotesEntityType.Region => $"..?restoreEntityType=region&restoreEntityId={EntityId}",
+            NotesEntityType.Trip => $"..?restoreEntityType=trip&restoreEntityId={EntityId}",
             _ => ".."
         };
 

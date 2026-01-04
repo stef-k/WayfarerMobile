@@ -643,6 +643,83 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     }
 
     /// <summary>
+    /// Deletes a timeline location.
+    /// </summary>
+    /// <param name="locationId">The location ID to delete.</param>
+    public async Task DeleteLocationAsync(int locationId)
+    {
+        // Check online status
+        if (!IsOnline)
+        {
+            await _toastService.ShowWarningAsync("You're offline. Deletion will sync when online.");
+        }
+
+        try
+        {
+            IsBusy = true;
+
+            // Close the location sheet first
+            IsLocationSheetOpen = false;
+            SelectedLocation = null;
+
+            // Update UI immediately (optimistic delete)
+            var locationToRemove = _allLocations.FirstOrDefault(l => l.Id == locationId);
+            if (locationToRemove != null)
+            {
+                _allLocations.Remove(locationToRemove);
+
+                // Re-group the remaining locations
+                if (_allLocations.Any())
+                {
+                    var groups = _allLocations
+                        .GroupBy(l => l.LocalTimestamp.Hour)
+                        .OrderByDescending(g => g.Key)
+                        .Select(g => new TimelineGroup(
+                            $"{g.Key:00}:00 - {g.Key:00}:59",
+                            g.OrderByDescending(l => l.LocalTimestamp).ToList()))
+                        .ToList();
+                    TimelineGroups = new ObservableCollection<TimelineGroup>(groups);
+                    TotalCount = _allLocations.Count;
+                    IsEmpty = false;
+                    StatsText = $"{TotalCount} location{(TotalCount == 1 ? "" : "s")}";
+                }
+                else
+                {
+                    TimelineGroups = new ObservableCollection<TimelineGroup>();
+                    TotalCount = 0;
+                    IsEmpty = true;
+                    StatsText = "No locations";
+                }
+
+                // Update map
+                UpdateMapLocations();
+            }
+
+            // Delete via sync service (handles offline queueing)
+            await _timelineSyncService.DeleteLocationAsync(locationId);
+
+            await _toastService.ShowSuccessAsync("Location deleted");
+        }
+        catch (HttpRequestException)
+        {
+            await _toastService.ShowWarningAsync("Network error. Deletion will sync when online.");
+            // Reload to restore UI if local delete failed
+            await LoadDataAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting location {LocationId}", locationId);
+            await _toastService.ShowErrorAsync($"Failed to delete: {ex.Message}");
+            // Reload to restore UI state
+            await LoadDataAsync();
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>
     /// Saves notes for the selected location.
     /// </summary>
     /// <param name="notesHtml">The notes HTML content.</param>

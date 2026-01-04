@@ -317,9 +317,9 @@ public class TripNavigationService : ITripNavigationService
             _logger.LogWarning(ex, "OSRM routing failed, falling back to direct route");
         }
 
-        // Fallback to direct route (straight line)
-        _logger.LogInformation("Using direct route to {Name}", destName);
-        var directRoute = _routeBuilder.BuildDirectRouteToCoordinates(currentLat, currentLon, destLat, destLon, destName);
+        // Fallback to direct route (straight line) with profile-aware ETA
+        _logger.LogInformation("Using direct route to {Name} with profile {Profile}", destName, profile);
+        var directRoute = _routeBuilder.BuildDirectRouteToCoordinates(currentLat, currentLon, destLat, destLon, destName, profile);
         _activeRoute = directRoute;
         return directRoute;
     }

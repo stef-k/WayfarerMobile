@@ -34,6 +34,12 @@ public partial class GroupsViewModel : BaseViewModel,
     private readonly NavigationHudViewModel _navigationHudViewModel;
     private readonly IMapBuilder _mapBuilder;
     private readonly IGroupLayerService _groupLayerService;
+    private readonly MarkerPulseAnimator _pulseAnimator;
+
+    /// <summary>
+    /// Current pulse scale for live marker animation (1.0 to 1.35).
+    /// </summary>
+    private double _currentPulseScale = 1.0;
 
     /// <summary>
     /// This ViewModel's private map instance.
@@ -96,6 +102,7 @@ public partial class GroupsViewModel : BaseViewModel,
     [NotifyPropertyChangedFor(nameof(HasSelectedGroup))]
     [NotifyPropertyChangedFor(nameof(SelectedGroupName))]
     [NotifyPropertyChangedFor(nameof(IsFriendsGroup))]
+    [NotifyPropertyChangedFor(nameof(ShowPeerVisibilityToggle))]
     private GroupSummary? _selectedGroup;
 
     /// <summary>
@@ -136,6 +143,8 @@ public partial class GroupsViewModel : BaseViewModel,
     /// Gets or sets whether the current user's peer visibility is disabled.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PeerVisibilityLabel))]
+    [NotifyPropertyChangedFor(nameof(PeerVisibilityDescription))]
     private bool _myPeerVisibilityDisabled;
 
     #endregion
@@ -298,9 +307,29 @@ public partial class GroupsViewModel : BaseViewModel,
     public string SelectedGroupName => SelectedGroup?.Name ?? "Select a group";
 
     /// <summary>
-    /// Gets whether the selected group is a Friends group (shows peer visibility toggle).
+    /// Gets whether the selected group is a Friends group.
     /// </summary>
     public bool IsFriendsGroup => string.Equals(SelectedGroup?.GroupType, "Friends", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Gets whether to show the peer visibility toggle.
+    /// Only visible for organization groups with OrgPeerVisibilityEnabled.
+    /// </summary>
+    public bool ShowPeerVisibilityToggle => SelectedGroup?.OrgPeerVisibilityEnabled == true;
+
+    /// <summary>
+    /// Gets the label text for peer visibility based on current state.
+    /// </summary>
+    public string PeerVisibilityLabel => MyPeerVisibilityDisabled
+        ? "I'm Hidden from Peers"
+        : "I'm Visible to Peers";
+
+    /// <summary>
+    /// Gets the description text for peer visibility toggle.
+    /// </summary>
+    public string PeerVisibilityDescription => MyPeerVisibilityDisabled
+        ? "Toggle to let group members see your location"
+        : "Toggle to hide your location from group members";
 
     #endregion
 
@@ -313,6 +342,7 @@ public partial class GroupsViewModel : BaseViewModel,
     // IDateNavigationCallbacks
     GroupSummary? IDateNavigationCallbacks.SelectedGroup => SelectedGroup;
     ObservableRangeCollection<GroupMember> IDateNavigationCallbacks.Members => Members;
+    bool IDateNavigationCallbacks.IsMapView => IsMapView;
     WritableLayer? IDateNavigationCallbacks.HistoricalLocationsLayer => _historicalLocationsLayer;
     (double MinLon, double MinLat, double MaxLon, double MaxLat, double ZoomLevel)? IDateNavigationCallbacks.CachedViewportBounds => _cachedViewportBounds;
 
@@ -336,6 +366,7 @@ public partial class GroupsViewModel : BaseViewModel,
         NavigationHudViewModel navigationHudViewModel,
         IMapBuilder mapBuilder,
         IGroupLayerService groupLayerService,
+        MarkerPulseAnimator pulseAnimator,
         SseManagementViewModel sseManagement,
         DateNavigationViewModel dateNav,
         MemberDetailsViewModel memberDetails,
@@ -349,6 +380,7 @@ public partial class GroupsViewModel : BaseViewModel,
         _navigationHudViewModel = navigationHudViewModel;
         _mapBuilder = mapBuilder;
         _groupLayerService = groupLayerService;
+        _pulseAnimator = pulseAnimator;
         _logger = logger;
         Title = "Groups";
 
@@ -784,6 +816,14 @@ public partial class GroupsViewModel : BaseViewModel,
     }
 
     /// <summary>
+    /// Shows member details for a historical location (called when tapping historical marker).
+    /// </summary>
+    public void ShowHistoricalMemberDetails(string userId, double latitude, double longitude, DateTime timestamp)
+    {
+        MemberDetails.ShowHistoricalMemberDetails(userId, latitude, longitude, timestamp);
+    }
+
+    /// <summary>
     /// Updates the cached viewport bounds. Called from page when map viewport changes.
     /// </summary>
     public void UpdateCachedViewportBounds()
@@ -842,7 +882,7 @@ public partial class GroupsViewModel : BaseViewModel,
             .ToList();
 
         _logger.LogDebug("[Groups] Passing {Count} member locations to map", memberLocations.Count);
-        var points = _groupLayerService.UpdateGroupMemberMarkers(_groupMembersLayer, memberLocations);
+        var points = _groupLayerService.UpdateGroupMemberMarkers(_groupMembersLayer, memberLocations, _currentPulseScale);
 
         // Auto-zoom to fit all members if there are multiple
         if (points.Count > 1 && _map != null)
@@ -991,6 +1031,10 @@ public partial class GroupsViewModel : BaseViewModel,
 
         OnPropertyChanged(nameof(IsConfigured));
 
+        // Start pulse animation for live markers
+        _pulseAnimator.PulseScaleChanged += OnPulseScaleChanged;
+        _pulseAnimator.Start();
+
         // Initialize cached viewport bounds on first appearance
         if (!_cachedViewportBounds.HasValue)
         {
@@ -1018,10 +1062,29 @@ public partial class GroupsViewModel : BaseViewModel,
     }
 
     /// <summary>
+    /// Handles pulse scale changes to animate live marker rings.
+    /// </summary>
+    private void OnPulseScaleChanged(object? sender, double scale)
+    {
+        _currentPulseScale = scale;
+
+        // Only update map if we're in map view and have live members
+        if (IsMapView && _groupMembersLayer != null && Members.Any(m => m.LastLocation?.IsLive == true))
+        {
+            UpdateMapMarkers();
+        }
+    }
+
+    /// <summary>
     /// Called when the view disappears.
     /// </summary>
     public override Task OnDisappearingAsync()
     {
+        // Stop pulse animation to save resources
+        _pulseAnimator.PulseScaleChanged -= OnPulseScaleChanged;
+        _pulseAnimator.Stop();
+        _currentPulseScale = 1.0;
+
         // Groups owns its own map - no shared layer conflicts with other pages
         ClearGroupMembers();
         ClearHistoricalLocations();

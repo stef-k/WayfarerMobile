@@ -240,6 +240,7 @@ public static class MauiProgram
 
         // Feature-specific Layer Services
         services.AddSingleton<IGroupLayerService, GroupLayerService>(); // Stateless rendering
+        services.AddSingleton<MarkerPulseAnimator>(); // Shared animation timing for live markers
         services.AddSingleton<ILocationLayerService, LocationLayerService>(); // Stateful (animation)
         services.AddSingleton<IDroppedPinLayerService, DroppedPinLayerService>(); // Stateless rendering
         services.AddSingleton<ITripLayerService, TripLayerService>(); // Has icon cache
@@ -313,10 +314,11 @@ public static class MauiProgram
         services.AddTransient<AppearanceSettingsViewModel>();
         services.AddTransient<TimelineDataViewModel>();
         services.AddTransient<SettingsViewModel>();
-        // Groups child ViewModels (singletons for state sharing)
-        services.AddSingleton<SseManagementViewModel>();
-        services.AddSingleton<DateNavigationViewModel>();
-        services.AddSingleton<MemberDetailsViewModel>();
+        // Groups child ViewModels (transient to match parent lifetime)
+        // These must be transient because they hold callbacks to the transient GroupsViewModel
+        services.AddTransient<SseManagementViewModel>();
+        services.AddTransient<DateNavigationViewModel>();
+        services.AddTransient<MemberDetailsViewModel>();
         services.AddTransient<GroupsViewModel>();
         services.AddTransient<OnboardingViewModel>();
 

@@ -83,9 +83,11 @@ public interface INavigationRouteBuilder
     /// <param name="destLat">Destination latitude.</param>
     /// <param name="destLon">Destination longitude.</param>
     /// <param name="destName">Destination name for display.</param>
+    /// <param name="profile">Routing profile for ETA calculation (foot, car, bike). Default is foot.</param>
     /// <returns>The constructed navigation route.</returns>
     NavigationRoute BuildDirectRouteToCoordinates(
         double startLat, double startLon,
         double destLat, double destLon,
-        string destName);
+        string destName,
+        string profile = "foot");
 }

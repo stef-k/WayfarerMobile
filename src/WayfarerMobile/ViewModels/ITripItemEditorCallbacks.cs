@@ -59,6 +59,11 @@ public interface ITripItemEditorCallbacks
     /// </summary>
     void ClearSelection();
 
+    /// <summary>
+    /// Unloads the current trip from the map and clears all trip state.
+    /// </summary>
+    void UnloadTrip();
+
     #endregion
 
     #region Sheet Control
@@ -124,6 +129,25 @@ public interface ITripItemEditorCallbacks
     /// Navigates to a page using Shell navigation.
     /// </summary>
     Task NavigateToPageAsync(string route, IDictionary<string, object>? parameters = null);
+
+    #endregion
+
+    #region UI Refresh Notifications
+
+    /// <summary>
+    /// Notifies that the trip header (name) has changed.
+    /// </summary>
+    void NotifyTripHeaderChanged();
+
+    /// <summary>
+    /// Notifies that the trip places list has changed (add/remove/reorder).
+    /// </summary>
+    void NotifyTripPlacesChanged();
+
+    /// <summary>
+    /// Notifies that the trip regions list has changed (add/remove/reorder).
+    /// </summary>
+    void NotifyTripRegionsChanged();
 
     #endregion
 }

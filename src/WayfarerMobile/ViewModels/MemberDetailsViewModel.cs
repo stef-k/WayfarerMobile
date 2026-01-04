@@ -108,6 +108,34 @@ public partial class MemberDetailsViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Shows member details for a historical location (called when tapping historical marker).
+    /// Updates the member's LastLocation to show the historical timestamp.
+    /// </summary>
+    /// <param name="userId">The user ID.</param>
+    /// <param name="latitude">The historical latitude.</param>
+    /// <param name="longitude">The historical longitude.</param>
+    /// <param name="timestamp">The historical timestamp.</param>
+    public void ShowHistoricalMemberDetails(string userId, double latitude, double longitude, DateTime timestamp)
+    {
+        if (_callbacks == null)
+            return;
+
+        var member = _callbacks.Members.FirstOrDefault(m => m.UserId == userId);
+        if (member != null)
+        {
+            // Update the member's LastLocation with the historical data
+            member.LastLocation = new MemberLocation
+            {
+                Latitude = latitude,
+                Longitude = longitude,
+                Timestamp = timestamp,
+                IsLive = false
+            };
+            ShowMemberDetails(member);
+        }
+    }
+
     #endregion
 
     #region Commands

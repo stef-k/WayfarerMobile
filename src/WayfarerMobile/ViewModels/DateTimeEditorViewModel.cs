@@ -119,6 +119,9 @@ public partial class DateTimeEditorViewModel : ObservableObject
             // Close picker
             IsEditDateTimePickerOpen = false;
 
+            // Clear IsBusy BEFORE reload - LoadDataAsync has an IsBusy guard that would skip reload
+            _callbacks.IsBusy = false;
+
             // Reload data to reflect changes on map and groupings
             await _callbacks.ReloadTimelineAsync();
 
@@ -130,14 +133,12 @@ public partial class DateTimeEditorViewModel : ObservableObject
         {
             _logger.LogError(ex, "Network error saving datetime");
             await _toastService.ShowErrorAsync("Network error. Changes will sync when online.");
+            _callbacks.IsBusy = false;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error saving datetime");
             await _toastService.ShowErrorAsync($"Failed to save: {ex.Message}");
-        }
-        finally
-        {
             _callbacks.IsBusy = false;
         }
     }

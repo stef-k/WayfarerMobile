@@ -272,7 +272,25 @@
                                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                                             </VerticalStackLayout>
                                             <Switch Grid.Column="1"
-                                                    IsToggled="{Binding ShowHistoricalLocations}"
+                                                    IsToggled="{Binding ShowHistoricalLocations, Mode=TwoWay}"
+                                                    OnColor="{StaticResource Primary}" />
+                                        </Grid>
+
+                                        <!-- Peer Visibility Toggle (only visible for org groups with peer visibility enabled) -->
+                                        <Grid ColumnDefinitions="*,Auto"
+                                              IsVisible="{Binding ShowPeerVisibilityToggle}"
+                                              Padding="0,4">
+                                            <VerticalStackLayout VerticalOptions="Center">
+                                                <Label Text="{Binding PeerVisibilityLabel}"
+                                                       FontSize="14"
+                                                       TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource White}}" />
+                                                <Label Text="{Binding PeerVisibilityDescription}"
+                                                       FontSize="11"
+                                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                            </VerticalStackLayout>
+                                            <Switch x:Name="PeerVisibilitySwitch"
+                                                    Grid.Column="1"
+                                                    Toggled="OnPeerVisibilityToggled"
                                                     OnColor="{StaticResource Primary}" />
                                         </Grid>
                                     </VerticalStackLayout>

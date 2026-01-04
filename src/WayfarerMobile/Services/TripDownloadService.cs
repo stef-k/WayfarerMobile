@@ -199,13 +199,15 @@ public class TripDownloadService : ITripDownloadService
     }
 
     /// <summary>
-    /// Downloads a trip for offline access (metadata and places).
+    /// Downloads a trip for offline access (metadata and optionally tiles).
     /// </summary>
     /// <param name="tripSummary">The trip summary to download.</param>
+    /// <param name="includeTiles">Whether to download map tiles. If false, only metadata is downloaded.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The downloaded trip entity.</returns>
     public async Task<DownloadedTripEntity?> DownloadTripAsync(
         TripSummary tripSummary,
+        bool includeTiles = true,
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -329,8 +331,28 @@ public class TripDownloadService : ITripDownloadService
             RaiseProgress(tripEntity.Id, 50, $"Saved {places.Count} places, {segments.Count} segments, {polygons.Count} polygons");
 
             // Get bounding box for tile download
+            // Priority: tripSummary (rarely has it) -> tripDetails (rarely has it) -> boundary API
             var boundingBox = tripSummary.BoundingBox ?? tripDetails.BoundingBox;
-            if (boundingBox != null)
+            if (boundingBox == null)
+            {
+                // Fetch boundary from dedicated endpoint (server calculates from geographic data)
+                RaiseProgress(tripEntity.Id, 52, "Fetching trip boundary...");
+                var boundaryResponse = await _apiClient.GetTripBoundaryAsync(tripSummary.Id, cancellationToken);
+                if (boundaryResponse?.BoundingBox != null)
+                {
+                    boundingBox = boundaryResponse.BoundingBox;
+                    _logger.LogDebug("Fetched bounding box from boundary API for {TripName}", tripSummary.Name);
+
+                    // Store the fetched bounding box in the entity
+                    tripEntity.BoundingBoxNorth = boundingBox.North;
+                    tripEntity.BoundingBoxSouth = boundingBox.South;
+                    tripEntity.BoundingBoxEast = boundingBox.East;
+                    tripEntity.BoundingBoxWest = boundingBox.West;
+                    await _tripRepository.SaveDownloadedTripAsync(tripEntity);
+                }
+            }
+
+            if (boundingBox != null && includeTiles)
             {
                 // Download tiles for offline map
                 RaiseProgress(tripEntity.Id, 55, "Calculating tiles...");
@@ -374,9 +396,16 @@ public class TripDownloadService : ITripDownloadService
             }
             else
             {
-                // No bounding box - metadata only
+                // No bounding box or metadata-only requested - skip tiles
                 tripEntity.Status = TripDownloadStatus.MetadataOnly;
-                _logger.LogWarning("No bounding box for trip {TripName}, skipping tiles", tripSummary.Name);
+                if (!includeTiles)
+                {
+                    _logger.LogInformation("Metadata-only download for trip {TripName}, skipping tiles", tripSummary.Name);
+                }
+                else
+                {
+                    _logger.LogWarning("No bounding box for trip {TripName}, skipping tiles", tripSummary.Name);
+                }
             }
 
             // Store version and trip details for sync tracking

@@ -274,6 +274,14 @@ public partial class MainPage : ContentPage, IQueryAttributable
                 _viewModel.RestoreSelectionFromSubEditor(entityType, entityId);
             }
         }
+
+        // Handle NavigationRoute from groups page (navigate to member)
+        if (query.TryGetValue("NavigationRoute", out var routeObj) &&
+            routeObj is NavigationRoute route)
+        {
+            // Start navigation with the provided route
+            _ = _viewModel.Navigation.StartNavigationWithRouteAsync(route);
+        }
     }
 
     /// <summary>

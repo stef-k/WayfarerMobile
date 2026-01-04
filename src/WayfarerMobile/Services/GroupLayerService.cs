@@ -41,14 +41,14 @@ public class GroupLayerService : IGroupLayerService
     public string HistoricalLocationsLayerName => "HistoricalLocations";
 
     /// <inheritdoc />
-    public List<MPoint> UpdateGroupMemberMarkers(WritableLayer layer, IEnumerable<GroupMemberLocation> members)
+    public List<MPoint> UpdateGroupMemberMarkers(WritableLayer layer, IEnumerable<GroupMemberLocation> members, double liveMarkerPulseScale = 1.0)
     {
         layer.Clear();
 
         var points = new List<MPoint>();
         var memberList = members.ToList();
 
-        _logger.LogDebug("UpdateGroupMemberMarkers called with {MemberCount} members", memberList.Count);
+        _logger.LogDebug("UpdateGroupMemberMarkers called with {MemberCount} members, pulse scale {Scale:F2}", memberList.Count, liveMarkerPulseScale);
 
         foreach (var member in memberList)
         {
@@ -67,7 +67,7 @@ public class GroupLayerService : IGroupLayerService
 
             // Create compound marker styles based on live status
             var styles = member.IsLive
-                ? CreateLiveMarkerStyles(color)
+                ? CreateLiveMarkerStyles(color, liveMarkerPulseScale)
                 : CreateLatestMarkerStyles(color);
 
             // Add marker with properties for tap handling
@@ -94,12 +94,25 @@ public class GroupLayerService : IGroupLayerService
     /// <summary>
     /// Creates marker styles for a live (currently sharing) member.
     /// RED outer ring indicates "live/actively sharing".
+    /// The outer ring pulses with the provided scale to indicate active sharing.
     /// </summary>
-    private static IStyle[] CreateLiveMarkerStyles(Color memberColor)
+    /// <param name="memberColor">The member's assigned color.</param>
+    /// <param name="pulseScale">Scale multiplier for pulse animation (1.0 to 1.35).</param>
+    private static IStyle[] CreateLiveMarkerStyles(Color memberColor, double pulseScale = 1.0)
     {
+        // Calculate opacity for pulse effect (fades slightly at max scale)
+        var pulseOpacity = (byte)(255 - (pulseScale - 1.0) * 200); // 255 at 1.0, ~185 at 1.35
+
         return new IStyle[]
         {
-            // Outer ring (RED for live status)
+            // Pulsing outer glow (semi-transparent, scales with animation)
+            new SymbolStyle
+            {
+                SymbolScale = 0.8 * pulseScale,
+                Fill = new Brush(Color.FromArgb(pulseOpacity, 244, 67, 54)), // Material Red with pulse opacity
+                SymbolType = SymbolType.Ellipse
+            },
+            // Outer ring (RED for live status - static)
             new SymbolStyle
             {
                 SymbolScale = 0.8,
@@ -200,6 +213,9 @@ public class GroupLayerService : IGroupLayerService
             feature["UserId"] = location.UserId ?? "";
             feature["LocationId"] = location.Id;
             feature["Timestamp"] = location.LocalTimestamp.ToString("g");
+            feature["TimestampUtc"] = location.Timestamp; // Use UTC timestamp directly from server
+            feature["Latitude"] = location.Latitude;
+            feature["Longitude"] = location.Longitude;
             feature["IsHistorical"] = true;
 
             layer.Add(feature);

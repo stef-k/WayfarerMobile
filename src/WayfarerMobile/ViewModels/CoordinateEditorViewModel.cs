@@ -162,6 +162,9 @@ public partial class CoordinateEditorViewModel : ObservableObject
             // Exit picking mode
             ExitCoordinatePickingMode();
 
+            // Clear IsBusy BEFORE reload - LoadDataAsync has an IsBusy guard that would skip reload
+            _callbacks.IsBusy = false;
+
             // Reload data to reflect changes on map
             await _callbacks.ReloadTimelineAsync();
 
@@ -173,14 +176,12 @@ public partial class CoordinateEditorViewModel : ObservableObject
         {
             _logger.LogError(ex, "Network error saving coordinates");
             await _toastService.ShowErrorAsync("Network error. Changes will sync when online.");
+            _callbacks.IsBusy = false;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error saving coordinates");
             await _toastService.ShowErrorAsync($"Failed to save: {ex.Message}");
-        }
-        finally
-        {
             _callbacks.IsBusy = false;
         }
     }

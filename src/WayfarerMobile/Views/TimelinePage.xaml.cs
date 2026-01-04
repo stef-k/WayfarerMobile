@@ -74,7 +74,7 @@ public partial class TimelinePage : ContentPage
         var action = await DisplayActionSheetAsync(
             "Edit Location",
             "Cancel",
-            null,
+            "Delete",
             "Adjust Coordinates",
             "Edit Date/Time",
             "Edit Notes");
@@ -90,6 +90,25 @@ public partial class TimelinePage : ContentPage
             case "Edit Notes":
                 await NavigateToNotesEditor();
                 break;
+            case "Delete":
+                await DeleteLocationAsync();
+                break;
+        }
+    }
+
+    private async Task DeleteLocationAsync()
+    {
+        if (_viewModel.SelectedLocation == null) return;
+
+        var confirm = await DisplayAlertAsync(
+            "Delete Location",
+            "Are you sure you want to delete this location? This cannot be undone.",
+            "Delete",
+            "Cancel");
+
+        if (confirm)
+        {
+            await _viewModel.DeleteLocationAsync(_viewModel.SelectedLocation.LocationId);
         }
     }
 

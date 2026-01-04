@@ -48,10 +48,12 @@ public interface ITripDownloadService : IDisposable
     /// Downloads a trip for offline access (metadata and places).
     /// </summary>
     /// <param name="tripSummary">The trip summary to download.</param>
+    /// <param name="includeTiles">Whether to download map tiles (true) or metadata only (false).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The downloaded trip entity or null if failed.</returns>
     Task<DownloadedTripEntity?> DownloadTripAsync(
         TripSummary tripSummary,
+        bool includeTiles = true,
         CancellationToken cancellationToken = default);
 
     /// <summary>

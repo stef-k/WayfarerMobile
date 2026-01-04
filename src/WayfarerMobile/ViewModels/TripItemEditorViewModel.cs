@@ -282,9 +282,14 @@ public partial class TripItemEditorViewModel : BaseViewModel
         if (selectedPlace == null)
             return;
 
-        await _wikipediaService.OpenNearbyArticleAsync(
+        var found = await _wikipediaService.OpenNearbyArticleAsync(
             selectedPlace.Latitude,
             selectedPlace.Longitude);
+
+        if (!found)
+        {
+            await _toastService.ShowWarningAsync("No Wikipedia article found nearby");
+        }
     }
 
     /// <summary>
@@ -465,6 +470,9 @@ public partial class TripItemEditorViewModel : BaseViewModel
         // Remove from loaded trip
         loadedTrip.Regions.Remove(region);
 
+        // Notify UI to refresh regions list
+        _callbacks?.NotifyTripRegionsChanged();
+
         // Refresh map layers
         await (_callbacks?.RefreshTripLayersAsync(loadedTrip) ?? Task.CompletedTask);
 
@@ -493,6 +501,12 @@ public partial class TripItemEditorViewModel : BaseViewModel
         var prevRegion = regions[index - 1];
         (region.SortOrder, prevRegion.SortOrder) = (prevRegion.SortOrder, region.SortOrder);
 
+        // Notify UI to refresh regions list
+        _callbacks?.NotifyTripRegionsChanged();
+
+        // Refresh map layers
+        await (_callbacks?.RefreshTripLayersAsync(loadedTrip) ?? Task.CompletedTask);
+
         // Sync to server
         await _tripSyncService.UpdateRegionAsync(region.Id, loadedTrip.Id, displayOrder: region.SortOrder);
         await _tripSyncService.UpdateRegionAsync(prevRegion.Id, loadedTrip.Id, displayOrder: prevRegion.SortOrder);
@@ -516,6 +530,12 @@ public partial class TripItemEditorViewModel : BaseViewModel
         // Swap sort orders
         var nextRegion = regions[index + 1];
         (region.SortOrder, nextRegion.SortOrder) = (nextRegion.SortOrder, region.SortOrder);
+
+        // Notify UI to refresh regions list
+        _callbacks?.NotifyTripRegionsChanged();
+
+        // Refresh map layers
+        await (_callbacks?.RefreshTripLayersAsync(loadedTrip) ?? Task.CompletedTask);
 
         // Sync to server
         await _tripSyncService.UpdateRegionAsync(region.Id, loadedTrip.Id, displayOrder: region.SortOrder);
@@ -550,6 +570,12 @@ public partial class TripItemEditorViewModel : BaseViewModel
         var prevPlace = places[index - 1];
         (place.SortOrder, prevPlace.SortOrder) = (prevPlace.SortOrder, place.SortOrder);
 
+        // Notify UI to refresh places list
+        _callbacks?.NotifyTripPlacesChanged();
+
+        // Refresh map layers
+        await (_callbacks?.RefreshTripLayersAsync(loadedTrip) ?? Task.CompletedTask);
+
         // Sync to server
         await _tripSyncService.UpdatePlaceAsync(place.Id, loadedTrip.Id, displayOrder: place.SortOrder);
         await _tripSyncService.UpdatePlaceAsync(prevPlace.Id, loadedTrip.Id, displayOrder: prevPlace.SortOrder);
@@ -579,6 +605,12 @@ public partial class TripItemEditorViewModel : BaseViewModel
         var nextPlace = places[index + 1];
         (place.SortOrder, nextPlace.SortOrder) = (nextPlace.SortOrder, place.SortOrder);
 
+        // Notify UI to refresh places list
+        _callbacks?.NotifyTripPlacesChanged();
+
+        // Refresh map layers
+        await (_callbacks?.RefreshTripLayersAsync(loadedTrip) ?? Task.CompletedTask);
+
         // Sync to server
         await _tripSyncService.UpdatePlaceAsync(place.Id, loadedTrip.Id, displayOrder: place.SortOrder);
         await _tripSyncService.UpdatePlaceAsync(nextPlace.Id, loadedTrip.Id, displayOrder: nextPlace.SortOrder);
@@ -603,7 +635,9 @@ public partial class TripItemEditorViewModel : BaseViewModel
         {
             { "tripId", loadedTrip.Id.ToString() },
             { "entityId", selectedArea.Id.ToString() },
-            { "entityType", "area" }
+            { "entityType", "area" },
+            { "entityName", selectedArea.Name ?? "Area" },
+            { "notes", selectedArea.Notes ?? string.Empty }
         }) ?? Task.CompletedTask);
     }
 
@@ -622,7 +656,9 @@ public partial class TripItemEditorViewModel : BaseViewModel
         {
             { "tripId", loadedTrip.Id.ToString() },
             { "entityId", selectedSegment.Id.ToString() },
-            { "entityType", "segment" }
+            { "entityType", "segment" },
+            { "entityName", "Segment" },
+            { "notes", selectedSegment.Notes ?? string.Empty }
         }) ?? Task.CompletedTask);
     }
 
@@ -691,12 +727,12 @@ public partial class TripItemEditorViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Clears the loaded trip.
+    /// Unloads the current trip from the map and clears all trip state.
     /// </summary>
     [RelayCommand]
     private void ClearLoadedTrip()
     {
-        _callbacks?.ClearSelection();
+        _callbacks?.UnloadTrip();
     }
 
     #endregion
@@ -718,6 +754,9 @@ public partial class TripItemEditorViewModel : BaseViewModel
 
         // Update locally
         place.Name = newName;
+
+        // Notify UI to refresh places list
+        _callbacks?.NotifyTripPlacesChanged();
 
         // Sync to server
         var loadedTrip = _callbacks?.LoadedTrip;
@@ -745,7 +784,9 @@ public partial class TripItemEditorViewModel : BaseViewModel
         {
             { "tripId", loadedTrip.Id.ToString() },
             { "entityId", place.Id.ToString() },
-            { "entityType", "place" }
+            { "entityType", "place" },
+            { "entityName", place.Name ?? "Place" },
+            { "notes", place.Notes ?? string.Empty }
         }) ?? Task.CompletedTask);
     }
 
@@ -761,7 +802,9 @@ public partial class TripItemEditorViewModel : BaseViewModel
         await (_callbacks?.NavigateToPageAsync("markerEditor", new Dictionary<string, object>
         {
             { "tripId", loadedTrip.Id.ToString() },
-            { "placeId", place.Id.ToString() }
+            { "placeId", place.Id.ToString() },
+            { "currentColor", place.MarkerColor ?? string.Empty },
+            { "currentIcon", place.Icon ?? string.Empty }
         }) ?? Task.CompletedTask);
     }
 
@@ -792,6 +835,9 @@ public partial class TripItemEditorViewModel : BaseViewModel
 
         // Clear selection
         _callbacks?.ClearSelection();
+
+        // Notify UI to refresh places list
+        _callbacks?.NotifyTripPlacesChanged();
 
         // Refresh map layers
         await (_callbacks?.RefreshTripLayersAsync(loadedTrip) ?? Task.CompletedTask);
@@ -829,6 +875,9 @@ public partial class TripItemEditorViewModel : BaseViewModel
         // Update locally
         region.Name = newName;
 
+        // Notify UI to refresh regions list
+        _callbacks?.NotifyTripRegionsChanged();
+
         // Sync to server
         var loadedTrip = _callbacks?.LoadedTrip;
         if (loadedTrip != null)
@@ -855,7 +904,9 @@ public partial class TripItemEditorViewModel : BaseViewModel
         {
             { "tripId", loadedTrip.Id.ToString() },
             { "entityId", region.Id.ToString() },
-            { "entityType", "region" }
+            { "entityType", "region" },
+            { "entityName", region.Name ?? "Region" },
+            { "notes", region.Notes ?? string.Empty }
         }) ?? Task.CompletedTask);
     }
 
@@ -986,6 +1037,9 @@ public partial class TripItemEditorViewModel : BaseViewModel
         // Update locally
         loadedTrip.Name = newName;
 
+        // Notify UI to refresh header
+        _callbacks?.NotifyTripHeaderChanged();
+
         // Sync to server
         await _tripSyncService.UpdateTripAsync(
             loadedTrip.Id,
@@ -1008,7 +1062,9 @@ public partial class TripItemEditorViewModel : BaseViewModel
         {
             { "tripId", loadedTrip.Id.ToString() },
             { "entityId", loadedTrip.Id.ToString() },
-            { "entityType", "trip" }
+            { "entityType", "trip" },
+            { "entityName", loadedTrip.Name ?? "Trip" },
+            { "notes", loadedTrip.Notes ?? string.Empty }
         }) ?? Task.CompletedTask);
     }
 

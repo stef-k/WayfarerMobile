@@ -502,7 +502,7 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
                 BoundingBox = item.BoundingBox
             };
 
-            var result = await _downloadService.DownloadTripAsync(summary, _downloadCts.Token);
+            var result = await _downloadService.DownloadTripAsync(summary, includeTiles, _downloadCts.Token);
 
             if (result != null)
             {

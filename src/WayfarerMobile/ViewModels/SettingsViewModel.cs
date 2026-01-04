@@ -31,6 +31,7 @@ public partial class SettingsViewModel : BaseViewModel
     private readonly ISettingsService _settingsService;
     private readonly IAppLockService _appLockService;
     private readonly DatabaseService _databaseService;
+    private readonly ILocationBridge _locationBridge;
 
     #endregion
 
@@ -122,6 +123,7 @@ public partial class SettingsViewModel : BaseViewModel
         ISettingsService settingsService,
         IAppLockService appLockService,
         DatabaseService databaseService,
+        ILocationBridge locationBridge,
         NavigationSettingsViewModel navigationSettings,
         CacheSettingsViewModel cacheSettings,
         VisitNotificationSettingsViewModel visitNotificationSettings,
@@ -131,6 +133,7 @@ public partial class SettingsViewModel : BaseViewModel
         _settingsService = settingsService;
         _appLockService = appLockService;
         _databaseService = databaseService;
+        _locationBridge = locationBridge;
 
         // Child ViewModels
         NavigationSettings = navigationSettings;
@@ -181,11 +184,36 @@ public partial class SettingsViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Saves timeline tracking setting.
+    /// Saves timeline tracking setting and toggles tracking service.
     /// </summary>
     partial void OnTimelineTrackingEnabledChanged(bool value)
     {
         _settingsService.TimelineTrackingEnabled = value;
+
+        // Actually start/stop the tracking service
+        _ = ToggleTrackingServiceAsync(value);
+    }
+
+    /// <summary>
+    /// Starts or stops the tracking service based on the enabled state.
+    /// </summary>
+    private async Task ToggleTrackingServiceAsync(bool enabled)
+    {
+        try
+        {
+            if (enabled)
+            {
+                await _locationBridge.StartAsync();
+            }
+            else
+            {
+                await _locationBridge.StopAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[SettingsViewModel] Failed to toggle tracking: {ex.Message}");
+        }
     }
 
     #endregion

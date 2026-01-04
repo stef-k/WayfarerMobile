@@ -187,6 +187,16 @@ public interface IApiClient
         TripUpdateRequest request,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Gets trip geographic boundary for tile download calculation.
+    /// </summary>
+    /// <param name="tripId">The trip ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Trip boundary response with bounding box, or null if not found.</returns>
+    Task<TripBoundaryResponse?> GetTripBoundaryAsync(
+        Guid tripId,
+        CancellationToken cancellationToken = default);
+
     #endregion
 
     #region Segment Operations

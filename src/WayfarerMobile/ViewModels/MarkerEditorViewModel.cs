@@ -397,7 +397,8 @@ public partial class MarkerEditorViewModel : BaseViewModel, IQueryAttributable
     {
         if (_placeId != Guid.Empty)
         {
-            await Shell.Current.GoToAsync($"..?restoreEntityType=Place&restoreEntityId={_placeId}");
+            // Use lowercase to match ProcessPendingSelectionRestoreAsync switch cases
+            await Shell.Current.GoToAsync($"..?restoreEntityType=place&restoreEntityId={_placeId}");
         }
         else
         {

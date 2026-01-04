@@ -28,6 +28,7 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
 
     #region Fields
 
+    private readonly ITripRepository _tripRepository;
     private readonly IPlaceRepository _placeRepository;
     private readonly ISegmentRepository _segmentRepository;
     private readonly IAreaRepository _areaRepository;
@@ -494,6 +495,7 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
     /// </summary>
     public TripSheetViewModel(
         TripItemEditorViewModel editor,
+        ITripRepository tripRepository,
         IPlaceRepository placeRepository,
         ISegmentRepository segmentRepository,
         IAreaRepository areaRepository,
@@ -503,6 +505,7 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
         ILogger<TripSheetViewModel> logger)
     {
         Editor = editor;
+        _tripRepository = tripRepository;
         _placeRepository = placeRepository;
         _segmentRepository = segmentRepository;
         _areaRepository = areaRepository;
@@ -941,7 +944,21 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
                         var tripPlace = region.Places.FirstOrDefault(p => p.Id == entityId);
                         if (tripPlace != null)
                         {
+                            // Check if marker appearance changed
+                            var markerChanged = tripPlace.Icon != place.IconName ||
+                                                tripPlace.MarkerColor != place.MarkerColor;
+
+                            // Update all editable properties from local database
                             tripPlace.Notes = place.Notes;
+                            tripPlace.Icon = place.IconName;
+                            tripPlace.MarkerColor = place.MarkerColor;
+
+                            // Refresh map layers if marker appearance changed
+                            if (markerChanged)
+                            {
+                                await (_callbacks?.RefreshTripLayersAsync(LoadedTrip) ?? Task.CompletedTask);
+                            }
+
                             SelectTripPlace(tripPlace);
                             break;
                         }
@@ -976,10 +993,29 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
                 break;
 
             case "region":
-                var tripRegion = LoadedTrip.Regions.FirstOrDefault(r => r.Id == entityId);
-                if (tripRegion != null)
+                // Fetch region from database to get updated notes
+                // Regions are stored in OfflineArea table
+                var regionArea = await _areaRepository.GetOfflineAreaByServerIdAsync(entityId);
+                if (regionArea != null)
                 {
-                    ShowRegionNotes(tripRegion);
+                    var tripRegion = LoadedTrip.Regions.FirstOrDefault(r => r.Id == entityId);
+                    if (tripRegion != null)
+                    {
+                        tripRegion.Notes = regionArea.Notes;
+                        ShowRegionNotes(tripRegion);
+                    }
+                }
+                break;
+
+            case "trip":
+                // Fetch trip from database to get updated notes
+                var downloadedTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(entityId);
+                if (downloadedTrip != null)
+                {
+                    LoadedTrip.Notes = downloadedTrip.Notes;
+                    // Trigger property change notification
+                    OnPropertyChanged(nameof(TripNotesPreview));
+                    OnPropertyChanged(nameof(TripNotesHtml));
                 }
                 break;
         }
@@ -1014,7 +1050,10 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
     void ITripItemEditorCallbacks.SelectPlace(TripPlace? place) => SelectTripPlace(place);
 
     /// <inheritdoc/>
-    void ITripItemEditorCallbacks.ClearSelection() => UnloadTrip();
+    void ITripItemEditorCallbacks.ClearSelection() => ClearTripSheetSelection();
+
+    /// <inheritdoc/>
+    void ITripItemEditorCallbacks.UnloadTrip() => UnloadTrip();
 
     /// <inheritdoc/>
     void ITripItemEditorCallbacks.OpenTripSheet() => IsTripSheetOpen = true;
@@ -1055,6 +1094,31 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
     {
         IsNavigatingToSubEditor = true;
         return _callbacks?.NavigateToPageAsync(route, parameters) ?? Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    void ITripItemEditorCallbacks.NotifyTripHeaderChanged()
+    {
+        // Trigger UI refresh for trip name/header
+        OnPropertyChanged(nameof(TripSheetTitle));
+        OnPropertyChanged(nameof(TripSheetSubtitle));
+    }
+
+    /// <inheritdoc/>
+    void ITripItemEditorCallbacks.NotifyTripPlacesChanged()
+    {
+        // Trigger UI refresh for places list
+        OnPropertyChanged(nameof(TripPlaceCount));
+        // Force LoadedTrip binding to refresh (causes UI to re-read regions/places)
+        OnPropertyChanged(nameof(LoadedTrip));
+    }
+
+    /// <inheritdoc/>
+    void ITripItemEditorCallbacks.NotifyTripRegionsChanged()
+    {
+        // Trigger UI refresh for regions list
+        // Force LoadedTrip binding to refresh (causes UI to re-read regions)
+        OnPropertyChanged(nameof(LoadedTrip));
     }
 
     #endregion
