@@ -246,6 +246,7 @@ public static class MauiProgram
         // Routing Services
         services.AddSingleton<OsrmRoutingService>();
         services.AddSingleton<RouteCacheService>();
+        services.AddSingleton<INavigationRouteBuilder, NavigationRouteBuilder>();
         services.AddSingleton<TripNavigationService>();
         services.AddSingleton<ITripNavigationService>(sp => sp.GetRequiredService<TripNavigationService>());
 
