@@ -116,6 +116,11 @@ public class GroupMemberManager : IGroupMemberManager
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Thread safety note: This method mutates individual member properties, not the collection itself.
+    /// Property assignment for reference types is atomic. Callers should marshal to the UI thread
+    /// after calling this method if the updated members will be accessed by UI bindings.
+    /// </remarks>
     public void MergeLocationsIntoMembers(IList<GroupMember> members, Dictionary<string, MemberLocation> locations)
     {
         foreach (var member in members)

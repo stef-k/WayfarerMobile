@@ -32,6 +32,8 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
     private readonly ISegmentRepository _segmentRepository;
     private readonly IAreaRepository _areaRepository;
     private readonly ISettingsService _settingsService;
+    private readonly IWikipediaService _wikipediaService;
+    private readonly IToastService _toastService;
     private readonly ILogger<TripSheetViewModel> _logger;
 
     // Callbacks to parent ViewModel
@@ -496,6 +498,8 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
         ISegmentRepository segmentRepository,
         IAreaRepository areaRepository,
         ISettingsService settingsService,
+        IWikipediaService wikipediaService,
+        IToastService toastService,
         ILogger<TripSheetViewModel> logger)
     {
         Editor = editor;
@@ -503,6 +507,8 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
         _segmentRepository = segmentRepository;
         _areaRepository = areaRepository;
         _settingsService = settingsService;
+        _wikipediaService = wikipediaService;
+        _toastService = toastService;
         _logger = logger;
 
         // Wire up child ViewModel callbacks
@@ -776,6 +782,51 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
     {
         SelectedTripRegion = region;
         IsShowingRegionNotes = true;
+    }
+
+    #endregion
+
+    #region Commands - Trip Area Actions
+
+    /// <summary>
+    /// Opens the selected trip area in the system maps application.
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenTripAreaInMapsAsync()
+    {
+        var center = SelectedTripArea?.Center;
+        if (center == null) return;
+
+        try
+        {
+            var location = new Location(center.Latitude, center.Longitude);
+            await Microsoft.Maui.ApplicationModel.Map.OpenAsync(location, new MapLaunchOptions
+            {
+                Name = SelectedTripArea?.Name ?? "Area",
+                NavigationMode = NavigationMode.None
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to open area in maps");
+            await _toastService.ShowErrorAsync("Failed to open maps");
+        }
+    }
+
+    /// <summary>
+    /// Searches for a Wikipedia article near the selected trip area.
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenTripAreaWikipediaAsync()
+    {
+        var center = SelectedTripArea?.Center;
+        if (center == null) return;
+
+        var found = await _wikipediaService.OpenNearbyArticleAsync(center.Latitude, center.Longitude);
+        if (!found)
+        {
+            await _toastService.ShowWarningAsync("No Wikipedia article found nearby");
+        }
     }
 
     #endregion

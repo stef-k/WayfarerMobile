@@ -22,10 +22,10 @@ public partial class DateNavigationViewModel : ObservableObject
     private IDateNavigationCallbacks? _callbacks;
 
     /// <summary>
-    /// Flag indicating a historical query is currently in progress.
-    /// Prevents overlapping queries.
+    /// Flag indicating a historical query is currently in progress (0 = not in progress, 1 = in progress).
+    /// Uses int for thread-safe Interlocked operations to prevent overlapping queries.
     /// </summary>
-    private bool _isQueryInProgress;
+    private int _isQueryInProgress;
 
     /// <summary>
     /// Date before the picker was opened (for cancel restoration).
@@ -284,13 +284,12 @@ public partial class DateNavigationViewModel : ObservableObject
         }
 
         // Prevent overlapping queries - critical for preventing UI freeze
-        if (_isQueryInProgress)
+        // Use Interlocked for thread-safe check-and-set
+        if (Interlocked.CompareExchange(ref _isQueryInProgress, 1, 0) != 0)
         {
             _logger.LogDebug("LoadHistoricalLocationsAsync - Query in progress, skipping");
             return;
         }
-
-        _isQueryInProgress = true;
 
         // Use cached viewport bounds - no Mapsui access during date navigation
         double minLng = -180, minLat = -90, maxLng = 180, maxLat = 90;
@@ -378,7 +377,7 @@ public partial class DateNavigationViewModel : ObservableObject
         }
         finally
         {
-            _isQueryInProgress = false;
+            Interlocked.Exchange(ref _isQueryInProgress, 0);
             _logger.LogDebug("LoadHistoricalLocationsAsync END");
         }
     }
@@ -475,9 +474,10 @@ public partial class DateNavigationViewModel : ObservableObject
     /// </summary>
     private async Task LoadHistoricalLocationsWithDataAsync(NavigationData data)
     {
-        if (_isQueryInProgress || _callbacks == null) return;
+        if (_callbacks == null) return;
 
-        _isQueryInProgress = true;
+        // Use Interlocked for thread-safe check-and-set
+        if (Interlocked.CompareExchange(ref _isQueryInProgress, 1, 0) != 0) return;
 
         try
         {
@@ -538,7 +538,7 @@ public partial class DateNavigationViewModel : ObservableObject
         }
         finally
         {
-            _isQueryInProgress = false;
+            Interlocked.Exchange(ref _isQueryInProgress, 0);
         }
     }
 

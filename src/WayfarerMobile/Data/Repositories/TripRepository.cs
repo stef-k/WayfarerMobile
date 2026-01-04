@@ -65,23 +65,30 @@ public class TripRepository : RepositoryBase, ITripRepository
     {
         var db = await GetConnectionAsync();
 
-        // Delete associated tiles
-        await db.ExecuteAsync("DELETE FROM TripTiles WHERE TripId = ?", tripId);
+        // Use transaction to ensure atomic cascade delete - partial failure leaves no orphaned data
+        await db.RunInTransactionAsync(conn =>
+        {
+            // Delete associated tiles
+            conn.Execute("DELETE FROM TripTiles WHERE TripId = ?", tripId);
 
-        // Delete associated places
-        await db.ExecuteAsync("DELETE FROM OfflinePlaces WHERE TripId = ?", tripId);
+            // Delete associated places
+            conn.Execute("DELETE FROM OfflinePlaces WHERE TripId = ?", tripId);
 
-        // Delete associated segments
-        await db.ExecuteAsync("DELETE FROM OfflineSegments WHERE TripId = ?", tripId);
+            // Delete associated segments
+            conn.Execute("DELETE FROM OfflineSegments WHERE TripId = ?", tripId);
 
-        // Delete associated areas
-        await db.ExecuteAsync("DELETE FROM OfflineAreas WHERE TripId = ?", tripId);
+            // Delete associated areas
+            conn.Execute("DELETE FROM OfflineAreas WHERE TripId = ?", tripId);
 
-        // Delete associated polygons
-        await db.ExecuteAsync("DELETE FROM OfflinePolygons WHERE TripId = ?", tripId);
+            // Delete associated polygons
+            conn.Execute("DELETE FROM OfflinePolygons WHERE TripId = ?", tripId);
 
-        // Delete the trip
-        await db.ExecuteAsync("DELETE FROM DownloadedTrips WHERE Id = ?", tripId);
+            // Delete associated download state (1:1 relationship)
+            conn.Execute("DELETE FROM TripDownloadStates WHERE TripId = ?", tripId);
+
+            // Delete the trip
+            conn.Execute("DELETE FROM DownloadedTrips WHERE Id = ?", tripId);
+        });
     }
 
     /// <inheritdoc />
