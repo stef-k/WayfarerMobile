@@ -74,6 +74,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     private readonly IMapBuilder _mapBuilder;
     private readonly ITimelineLayerService _timelineLayerService;
     private readonly TimelineDataService _timelineDataService;
+    private readonly ITimelineEntryManager _entryManager;
     private readonly ILogger<TimelineViewModel> _logger;
     private Map? _map;
     private WritableLayer? _timelineLayer;
@@ -202,6 +203,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     /// <param name="mapBuilder">The map builder for creating isolated map instances.</param>
     /// <param name="timelineLayerService">The timeline layer service for rendering markers.</param>
     /// <param name="timelineDataService">The timeline data service for local storage access.</param>
+    /// <param name="entryManager">The timeline entry manager for CRUD and external actions.</param>
     /// <param name="coordinateEditorFactory">Factory to create the coordinate editor ViewModel.</param>
     /// <param name="dateTimeEditorFactory">Factory to create the datetime editor ViewModel.</param>
     /// <param name="logger">The logger for diagnostic output.</param>
@@ -214,6 +216,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
         IMapBuilder mapBuilder,
         ITimelineLayerService timelineLayerService,
         TimelineDataService timelineDataService,
+        ITimelineEntryManager entryManager,
         Func<ICoordinateEditorCallbacks, CoordinateEditorViewModel> coordinateEditorFactory,
         Func<IDateTimeEditorCallbacks, DateTimeEditorViewModel> dateTimeEditorFactory,
         ILogger<TimelineViewModel> logger)
@@ -226,6 +229,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
         _mapBuilder = mapBuilder;
         _timelineLayerService = timelineLayerService;
         _timelineDataService = timelineDataService;
+        _entryManager = entryManager;
         _logger = logger;
         Title = "Timeline";
 
@@ -581,22 +585,10 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
         if (SelectedLocation == null)
             return;
 
-        try
-        {
-            var location = new Microsoft.Maui.Devices.Sensors.Location(SelectedLocation.Latitude, SelectedLocation.Longitude);
-            var options = new MapLaunchOptions { Name = $"Location at {SelectedLocation.TimeText}" };
-            await Microsoft.Maui.ApplicationModel.Map.Default.OpenAsync(location, options);
-        }
-        catch (FeatureNotSupportedException ex)
-        {
-            _logger.LogWarning(ex, "Maps feature not supported on this device");
-            await _toastService.ShowErrorAsync("Maps not available");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to open maps");
-            await _toastService.ShowErrorAsync("Could not open maps");
-        }
+        await _entryManager.OpenInMapsAsync(
+            SelectedLocation.Latitude,
+            SelectedLocation.Longitude,
+            $"Location at {SelectedLocation.TimeText}");
     }
 
     /// <summary>
@@ -608,21 +600,9 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
         if (SelectedLocation == null)
             return;
 
-        try
-        {
-            var url = $"https://en.wikipedia.org/wiki/Special:Nearby#/coord/{SelectedLocation.Latitude},{SelectedLocation.Longitude}";
-            await Launcher.OpenAsync(new Uri(url));
-        }
-        catch (UriFormatException ex)
-        {
-            _logger.LogError(ex, "Invalid Wikipedia URL");
-            await _toastService.ShowErrorAsync("Could not open Wikipedia");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to open Wikipedia");
-            await _toastService.ShowErrorAsync("Could not open Wikipedia");
-        }
+        await _entryManager.SearchWikipediaAsync(
+            SelectedLocation.Latitude,
+            SelectedLocation.Longitude);
     }
 
     /// <summary>
@@ -634,22 +614,9 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
         if (SelectedLocation == null)
             return;
 
-        try
-        {
-            var coords = $"{SelectedLocation.Latitude:F6}, {SelectedLocation.Longitude:F6}";
-            await Clipboard.SetTextAsync(coords);
-            await _toastService.ShowAsync("Coordinates copied");
-        }
-        catch (FeatureNotSupportedException ex)
-        {
-            _logger.LogWarning(ex, "Clipboard not supported on this device");
-            await _toastService.ShowErrorAsync("Clipboard not available");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to copy coordinates");
-            await _toastService.ShowErrorAsync("Could not copy coordinates");
-        }
+        await _entryManager.CopyCoordinatesAsync(
+            SelectedLocation.Latitude,
+            SelectedLocation.Longitude);
     }
 
     /// <summary>
@@ -661,27 +628,11 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
         if (SelectedLocation == null)
             return;
 
-        try
-        {
-            var googleMapsUrl = $"https://www.google.com/maps?q={SelectedLocation.Latitude:F6},{SelectedLocation.Longitude:F6}";
-            var text = $"Location from {SelectedLocation.TimeText} on {SelectedLocation.DateText}:\n{googleMapsUrl}";
-
-            await Share.Default.RequestAsync(new ShareTextRequest
-            {
-                Title = "Share Location",
-                Text = text
-            });
-        }
-        catch (FeatureNotSupportedException ex)
-        {
-            _logger.LogWarning(ex, "Share feature not supported on this device");
-            await _toastService.ShowErrorAsync("Share not available");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to share location");
-            await _toastService.ShowErrorAsync("Could not share location");
-        }
+        await _entryManager.ShareLocationAsync(
+            SelectedLocation.Latitude,
+            SelectedLocation.Longitude,
+            SelectedLocation.TimeText,
+            SelectedLocation.DateText);
     }
 
     /// <summary>
@@ -711,29 +662,14 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
         {
             IsBusy = true;
 
-            await _timelineSyncService.UpdateLocationAsync(
-                SelectedLocation.LocationId,
-                latitude: null,
-                longitude: null,
-                localTimestamp: null,
-                notes: notesHtml,
-                includeNotes: true);
+            var locationId = SelectedLocation.LocationId;
+            await _entryManager.SaveNotesAsync(locationId, notesHtml);
 
             // Reload data to reflect changes
             await LoadDataAsync();
 
             // Re-select the location to show updated details
-            ShowLocationDetails(SelectedLocation.LocationId);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Network error saving notes");
-            await _toastService.ShowErrorAsync("Network error. Changes will sync when online.");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error saving notes");
-            await _toastService.ShowErrorAsync($"Failed to save: {ex.Message}");
+            ShowLocationDetails(locationId);
         }
         finally
         {
@@ -747,20 +683,8 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     /// <param name="e">The timeline entry update event args.</param>
     public async Task SaveEntryChangesAsync(TimelineEntryUpdateEventArgs e)
     {
-        // Apply optimistic UI update
-        if (SelectedLocation != null)
-        {
-            // Reload will update the display
-        }
-
         // Sync to server (handles offline queueing automatically)
-        await _timelineSyncService.UpdateLocationAsync(
-            e.LocationId,
-            e.Latitude,
-            e.Longitude,
-            e.LocalTimestamp,
-            e.Notes,
-            includeNotes: true);
+        await _entryManager.SaveEntryChangesAsync(e);
 
         // Reload data to reflect changes
         await LoadDataAsync();

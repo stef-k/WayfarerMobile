@@ -221,6 +221,7 @@ public static class MauiProgram
         services.AddSingleton<TimelineDataService>();
         services.AddTransient<TimelineExportService>();
         services.AddTransient<TimelineImportService>();
+        services.AddSingleton<ITimelineEntryManager, TimelineEntryManager>();
 
         // Tile Cache Services (depends on TripDownloadService, ILocationBridge)
         services.AddSingleton<LiveTileCacheService>();
@@ -328,6 +329,7 @@ public static class MauiProgram
             sp.GetRequiredService<IMapBuilder>(),
             sp.GetRequiredService<ITimelineLayerService>(),
             sp.GetRequiredService<TimelineDataService>(),
+            sp.GetRequiredService<ITimelineEntryManager>(),
             callbacks => new CoordinateEditorViewModel(
                 callbacks,
                 sp.GetRequiredService<ITimelineSyncService>(),
