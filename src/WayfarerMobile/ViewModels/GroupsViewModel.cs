@@ -26,6 +26,7 @@ public partial class GroupsViewModel : BaseViewModel,
     #region Fields
 
     private readonly IGroupsService _groupsService;
+    private readonly IGroupMemberManager _memberManager;
     private readonly ISettingsService _settingsService;
     private readonly IToastService _toastService;
     private readonly ILogger<GroupsViewModel> _logger;
@@ -328,6 +329,7 @@ public partial class GroupsViewModel : BaseViewModel,
     /// </summary>
     public GroupsViewModel(
         IGroupsService groupsService,
+        IGroupMemberManager memberManager,
         ISettingsService settingsService,
         IToastService toastService,
         ILocationBridge locationBridge,
@@ -340,6 +342,7 @@ public partial class GroupsViewModel : BaseViewModel,
         ILogger<GroupsViewModel> logger)
     {
         _groupsService = groupsService;
+        _memberManager = memberManager;
         _settingsService = settingsService;
         _toastService = toastService;
         _locationBridge = locationBridge;
@@ -567,32 +570,14 @@ public partial class GroupsViewModel : BaseViewModel,
 
             var groupId = SelectedGroup.Id;
 
-            // Load members
-            var members = await _groupsService.GetGroupMembersAsync(groupId);
-            _logger.LogInformation("[Groups] Loaded {Count} members for group {GroupId}", members.Count, groupId);
+            // Load members with locations via manager
+            var (members, myPeerVisibilityDisabled) = await _memberManager.LoadMembersWithLocationsAsync(groupId);
 
-            // Load latest locations
-            var locations = await _groupsService.GetLatestLocationsAsync(groupId);
-            _logger.LogInformation("[Groups] Loaded {Count} locations for group {GroupId}", locations.Count, groupId);
+            // Update visibility state
+            MyPeerVisibilityDisabled = myPeerVisibilityDisabled;
 
-            // Find current user and update visibility state
-            var currentUser = members.FirstOrDefault(m => m.IsSelf);
-            if (currentUser != null)
-            {
-                MyPeerVisibilityDisabled = currentUser.OrgPeerVisibilityAccessDisabled;
-            }
-
-            // Merge locations into members
-            foreach (var member in members)
-            {
-                if (locations.TryGetValue(member.UserId, out var location))
-                {
-                    member.LastLocation = location;
-                }
-            }
-
-            Members.ReplaceRange(members.OrderByDescending(m => m.LastLocation?.IsLive ?? false)
-                                        .ThenBy(m => m.DisplayText));
+            // Update members collection
+            Members.ReplaceRange(members);
 
             // Update map markers if in map view
             if (IsMapView)
@@ -631,30 +616,18 @@ public partial class GroupsViewModel : BaseViewModel,
         if (SelectedGroup == null)
             return;
 
-        try
-        {
-            // Do I/O on background (safe from any thread)
-            var groupId = SelectedGroup.Id;
-            var locations = await _groupsService.GetLatestLocationsAsync(groupId).ConfigureAwait(false);
+        // Get current members snapshot for thread safety
+        var currentMembers = Members.ToList();
 
-            // Update UI on main thread to avoid cross-thread collection access
+        // Refresh locations via manager (handles errors internally)
+        var sortedMembers = await _memberManager.RefreshMemberLocationsAsync(SelectedGroup.Id, currentMembers);
+
+        if (sortedMembers != null)
+        {
+            // Update UI on main thread
             MainThread.BeginInvokeOnMainThread(() =>
             {
-                // Update existing members with new locations
-                foreach (var member in Members)
-                {
-                    if (locations.TryGetValue(member.UserId, out var location))
-                    {
-                        member.LastLocation = location;
-                    }
-                }
-
-                // Trigger UI refresh by re-sorting using batch operation
-                var sorted = Members.OrderByDescending(m => m.LastLocation?.IsLive ?? false)
-                                   .ThenBy(m => m.DisplayText)
-                                   .ToList();
-
-                Members.ReplaceRange(sorted);
+                Members.ReplaceRange(sortedMembers);
 
                 // Update map markers if in map view
                 if (IsMapView)
@@ -662,18 +635,6 @@ public partial class GroupsViewModel : BaseViewModel,
                     UpdateMapMarkers();
                 }
             });
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogWarning(ex, "Network error refreshing locations");
-        }
-        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-        {
-            _logger.LogWarning(ex, "Request timed out refreshing locations");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Unexpected error refreshing locations");
         }
     }
 
@@ -695,45 +656,23 @@ public partial class GroupsViewModel : BaseViewModel,
         if (SelectedGroup == null)
             return;
 
-        try
+        var newDisabledState = !MyPeerVisibilityDisabled;
+
+        var success = await _memberManager.UpdatePeerVisibilityAsync(SelectedGroup.Id, newDisabledState);
+
+        if (success)
         {
-            var newDisabledState = !MyPeerVisibilityDisabled;
-            _logger.LogInformation("Toggling peer visibility: disabled={Disabled}", newDisabledState);
+            MyPeerVisibilityDisabled = newDisabledState;
 
-            var success = await _groupsService.UpdatePeerVisibilityAsync(SelectedGroup.Id, newDisabledState);
-
-            if (success)
+            // Update the current user's member record
+            var currentUser = _memberManager.FindCurrentUser(Members);
+            if (currentUser != null)
             {
-                MyPeerVisibilityDisabled = newDisabledState;
-
-                // Update the current user's member record
-                var currentUser = Members.FirstOrDefault(m => m.IsSelf);
-                if (currentUser != null)
-                {
-                    currentUser.OrgPeerVisibilityAccessDisabled = newDisabledState;
-                }
-
-                _logger.LogInformation("Peer visibility updated successfully: disabled={Disabled}", newDisabledState);
-            }
-            else
-            {
-                _logger.LogWarning("Failed to update peer visibility");
-                ErrorMessage = "Failed to update peer visibility";
+                currentUser.OrgPeerVisibilityAccessDisabled = newDisabledState;
             }
         }
-        catch (HttpRequestException ex)
+        else
         {
-            _logger.LogError(ex, "Network error toggling peer visibility");
-            ErrorMessage = "Failed to update peer visibility";
-        }
-        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-        {
-            _logger.LogError(ex, "Request timed out toggling peer visibility");
-            ErrorMessage = "Request timed out";
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error toggling peer visibility");
             ErrorMessage = "Failed to update peer visibility";
         }
     }

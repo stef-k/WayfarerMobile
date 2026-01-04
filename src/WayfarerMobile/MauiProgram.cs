@@ -200,6 +200,7 @@ public static class MauiProgram
         services.AddSingleton<IActivitySyncService, ActivitySyncService>();
         services.AddSingleton<SettingsSyncService>(); // Syncs settings + activities every 6 hours
         services.AddSingleton<IGroupsService, GroupsService>();
+        services.AddSingleton<IGroupMemberManager, GroupMemberManager>();
         services.AddSingleton<NavigationService>();
         services.AddSingleton<ITileDownloadService, TileDownloadService>();
         services.AddSingleton<IDownloadStateManager, DownloadStateManager>();
