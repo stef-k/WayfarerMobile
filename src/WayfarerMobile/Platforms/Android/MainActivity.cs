@@ -36,12 +36,7 @@ public class MainActivity : MauiAppCompatActivity
             return;
         }
 
-        // WORKAROUND: Clear saved instance state to prevent MAUI Shell crash.
-        // When Android restores the app from saved state after process death,
-        // Shell tries to recreate pages using a disposed IServiceProvider scope,
-        // causing ObjectDisposedException in ContentPage.UpdateHideSoftInputOnTapped().
-        // Passing null forces MAUI to start fresh instead of attempting restoration.
-        base.OnCreate(null);
+        base.OnCreate(savedInstanceState);
 
         ConfigureStatusBar();
     }

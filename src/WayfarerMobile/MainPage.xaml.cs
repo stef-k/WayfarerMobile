@@ -39,10 +39,10 @@ public partial class MainPage : ContentPage, IQueryAttributable
         _logger = logger;
         BindingContext = viewModel;
 
-        // Subscribe to map info events for tap handling
+        // Subscribe to map info events for tap handling (page-owned control)
         MapControl.Info += OnMapInfo;
 
-        // Wire up context menu events to ViewModel commands
+        // Wire up context menu events to ViewModel commands (page-owned control)
         ContextMenu.NavigateToRequested += OnContextMenuNavigateTo;
         ContextMenu.ShareLocationRequested += OnContextMenuShare;
         ContextMenu.WikiSearchRequested += OnContextMenuWikiSearch;
@@ -50,15 +50,13 @@ public partial class MainPage : ContentPage, IQueryAttributable
         ContextMenu.CloseRequested += OnContextMenuClose;
         ContextMenu.DeletePinRequested += OnContextMenuDeletePin;
 
-        // Subscribe to ViewModel property changes to reset sheet state
-        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
-
-        // Subscribe to Editor property changes for coordinate editing mode
-        _viewModel.TripSheet.Editor.PropertyChanged += OnEditorPropertyChanged;
-
-        // Wire up bottom sheet StateChanged event (done in code-behind for XamlC compatibility)
-        // SfBottomSheet uses StateChanged, not Closed - we detect closure via Hidden state
+        // Wire up bottom sheet StateChanged event (page-owned control)
         MainBottomSheet.StateChanged += OnMainSheetStateChanged;
+
+        // Note: Singleton ViewModel subscriptions (_viewModel.PropertyChanged,
+        // _viewModel.TripSheet.Editor.PropertyChanged) are done in OnAppearing
+        // and unsubscribed in OnDisappearing to prevent event handler accumulation
+        // when this Transient page is recreated on navigation.
     }
 
     #region Context Menu Event Handlers
@@ -237,6 +235,11 @@ public partial class MainPage : ContentPage, IQueryAttributable
     protected override async void OnAppearing()
     {
         base.OnAppearing();
+
+        // Subscribe to Singleton ViewModel events (unsubscribed in OnDisappearing)
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        _viewModel.TripSheet.Editor.PropertyChanged += OnEditorPropertyChanged;
+
         await _viewModel.OnAppearingAsync();
 
         // Load pending trip if navigated with LoadTrip parameter
@@ -290,6 +293,12 @@ public partial class MainPage : ContentPage, IQueryAttributable
     protected override async void OnDisappearing()
     {
         base.OnDisappearing();
+
+        // Unsubscribe from Singleton ViewModel events (subscribed in OnAppearing)
+        // This prevents event handler accumulation when this Transient page is recreated
+        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        _viewModel.TripSheet.Editor.PropertyChanged -= OnEditorPropertyChanged;
+
         await _viewModel.OnDisappearingAsync();
     }
 
