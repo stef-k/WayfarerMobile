@@ -363,7 +363,10 @@ public static class MauiProgram
         services.AddTransient<MarkerEditorViewModel>();
 
         // Pages
-        services.AddTransient<MainPage>();
+        // MainPage is singleton to match its singleton ViewModel and prevent
+        // ObjectDisposedException when image handlers complete after navigation.
+        // This is recommended for Shell tab pages that should persist.
+        services.AddSingleton<MainPage>();
         services.AddTransient<SettingsPage>();
         services.AddTransient<GroupsPage>();
         services.AddTransient<OnboardingPage>();
