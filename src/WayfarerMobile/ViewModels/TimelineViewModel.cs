@@ -238,17 +238,16 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
         DateTimeEditor = dateTimeEditorFactory(this);
 
         // Wire up property change forwarding for XAML bindings
+        // (Child VMs are created fresh for each TimelineViewModel instance, so this is safe)
         CoordinateEditor.PropertyChanged += OnCoordinateEditorPropertyChanged;
         DateTimeEditor.PropertyChanged += OnDateTimeEditorPropertyChanged;
 
-        // Subscribe to sync events
-        _timelineSyncService.SyncCompleted += OnSyncCompleted;
-        _timelineSyncService.SyncQueued += OnSyncQueued;
-        _timelineSyncService.SyncRejected += OnSyncRejected;
+        // Note: Singleton service subscriptions (sync events, connectivity) are done in
+        // OnAppearingAsync and unsubscribed in OnDisappearingAsync to prevent event handler
+        // accumulation when this Transient ViewModel is recreated on each navigation.
 
-        // Initialize connectivity state
+        // Initialize connectivity state (but don't subscribe yet)
         UpdateConnectivityState();
-        Connectivity.ConnectivityChanged += OnConnectivityChanged;
     }
 
     #endregion
@@ -845,6 +844,12 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     /// </summary>
     public override async Task OnAppearingAsync()
     {
+        // Subscribe to Singleton service events (unsubscribed in OnDisappearingAsync)
+        _timelineSyncService.SyncCompleted += OnSyncCompleted;
+        _timelineSyncService.SyncQueued += OnSyncQueued;
+        _timelineSyncService.SyncRejected += OnSyncRejected;
+        Connectivity.ConnectivityChanged += OnConnectivityChanged;
+
         EnsureMapInitialized();
         await LoadDataAsync();
 
@@ -867,6 +872,13 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     /// </summary>
     public override Task OnDisappearingAsync()
     {
+        // Unsubscribe from Singleton service events (subscribed in OnAppearingAsync)
+        // This prevents event handler accumulation when this Transient ViewModel is recreated
+        _timelineSyncService.SyncCompleted -= OnSyncCompleted;
+        _timelineSyncService.SyncQueued -= OnSyncQueued;
+        _timelineSyncService.SyncRejected -= OnSyncRejected;
+        Connectivity.ConnectivityChanged -= OnConnectivityChanged;
+
         // Clear timeline markers to release memory
         if (_timelineLayer != null)
         {
@@ -891,19 +903,13 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     /// </summary>
     protected override void Cleanup()
     {
-        // Unsubscribe from sync events
-        _timelineSyncService.SyncCompleted -= OnSyncCompleted;
-        _timelineSyncService.SyncQueued -= OnSyncQueued;
-        _timelineSyncService.SyncRejected -= OnSyncRejected;
+        // Note: Singleton service subscriptions (sync events, connectivity) are now
+        // unsubscribed in OnDisappearingAsync to prevent accumulation during navigation.
 
         // Unsubscribe from child ViewModel property changes
-        // Note: Child VMs inherit from ObservableObject, not BaseViewModel,
-        // so they don't need Dispose() - only event unsubscription matters.
+        // (These are subscribed once in constructor to VMs created with this instance)
         CoordinateEditor.PropertyChanged -= OnCoordinateEditorPropertyChanged;
         DateTimeEditor.PropertyChanged -= OnDateTimeEditorPropertyChanged;
-
-        // Unsubscribe from connectivity events
-        Connectivity.ConnectivityChanged -= OnConnectivityChanged;
 
         // Dispose map to release native resources
         _map?.Dispose();
