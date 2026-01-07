@@ -142,14 +142,8 @@ public partial class GroupsPage : ContentPage
         var feature = mapInfo.Feature;
         Console.WriteLine($"[Groups] OnMapInfo: Feature found, checking for UserId...");
 
-        // Check if a group member marker was tapped
-        if (feature["UserId"] is string userId && !string.IsNullOrEmpty(userId))
-        {
-            Console.WriteLine($"[Groups] OnMapInfo: Tapped member {userId}");
-            _viewModel.ShowMemberDetailsByUserId(userId);
-            BottomSheet.State = BottomSheetState.FullExpanded;
-        }
-        else if (feature["IsHistorical"] is bool isHistorical && isHistorical)
+        // Check for historical location marker FIRST (both have UserId, but historical has IsHistorical=true)
+        if (feature["IsHistorical"] is bool isHistorical && isHistorical)
         {
             // Historical location marker tapped - extract all data from feature
             var historicalUserId = feature["UserId"] as string;
@@ -163,6 +157,13 @@ public partial class GroupsPage : ContentPage
                 _viewModel.ShowHistoricalMemberDetails(historicalUserId, latitude, longitude, timestamp);
                 BottomSheet.State = BottomSheetState.FullExpanded;
             }
+        }
+        // Check for live/latest group member marker
+        else if (feature["UserId"] is string userId && !string.IsNullOrEmpty(userId))
+        {
+            Console.WriteLine($"[Groups] OnMapInfo: Tapped member {userId}");
+            _viewModel.ShowMemberDetailsByUserId(userId);
+            BottomSheet.State = BottomSheetState.FullExpanded;
         }
     }
 
