@@ -365,7 +365,7 @@ public class TripDownloadService : ITripDownloadService
                 // Fallback: Fetch boundary from dedicated endpoint (server calculates from geographic data)
                 RaiseProgress(tripEntity.Id, 52, "Fetching trip boundary...");
                 var boundaryResponse = await _apiClient.GetTripBoundaryAsync(tripSummary.Id, cancellationToken);
-                if (boundaryResponse?.BoundingBox != null)
+                if (boundaryResponse?.BoundingBox != null && boundaryResponse.BoundingBox.IsValid)
                 {
                     boundingBox = boundaryResponse.BoundingBox;
                     _logger.LogDebug("Fetched bounding box from boundary API for {TripName}", tripSummary.Name);
