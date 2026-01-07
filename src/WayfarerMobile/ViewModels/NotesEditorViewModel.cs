@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WayfarerMobile.Core.Helpers;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Models;
 using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services;
 
@@ -37,6 +38,7 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     private readonly ITimelineSyncService _timelineSyncService;
     private readonly ITripSyncService _tripSyncService;
     private readonly ITripEditingService _tripEditingService;
+    private readonly ITripStateManager _tripStateManager;
     private readonly IToastService _toastService;
     private readonly ISettingsService _settingsService;
     private string? _originalNotesHtml;
@@ -96,12 +98,14 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
         ITimelineSyncService timelineSyncService,
         ITripSyncService tripSyncService,
         ITripEditingService tripEditingService,
+        ITripStateManager tripStateManager,
         IToastService toastService,
         ISettingsService settingsService)
     {
         _timelineSyncService = timelineSyncService;
         _tripSyncService = tripSyncService;
         _tripEditingService = tripEditingService;
+        _tripStateManager = tripStateManager;
         _toastService = toastService;
         _settingsService = settingsService;
         Title = "Edit Notes";
@@ -348,6 +352,13 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     /// </summary>
     private async Task SaveTripNotesAsync(string? notes)
     {
+        // Update in-memory loaded trip
+        var loadedTrip = _tripStateManager.LoadedTrip;
+        if (loadedTrip != null && loadedTrip.Id == EntityId)
+        {
+            loadedTrip.Notes = notes;
+        }
+
         // Update local database optimistically
         await _tripEditingService.UpdateTripNotesAsync(EntityId, notes);
 
@@ -360,6 +371,17 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     /// </summary>
     private async Task SaveRegionNotesAsync(string? notes)
     {
+        // Update in-memory loaded trip
+        var loadedTrip = _tripStateManager.LoadedTrip;
+        if (loadedTrip != null)
+        {
+            var region = loadedTrip.Regions.FirstOrDefault(r => r.Id == EntityId);
+            if (region != null)
+            {
+                region.Notes = notes;
+            }
+        }
+
         // Queue server sync
         await _tripSyncService.UpdateRegionAsync(
             EntityId,
@@ -373,6 +395,19 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     /// </summary>
     private async Task SavePlaceNotesAsync(string? notes)
     {
+        // Update in-memory loaded trip
+        var loadedTrip = _tripStateManager.LoadedTrip;
+        if (loadedTrip != null)
+        {
+            var place = loadedTrip.Regions
+                .SelectMany(r => r.Places)
+                .FirstOrDefault(p => p.Id == EntityId);
+            if (place != null)
+            {
+                place.Notes = notes;
+            }
+        }
+
         // Queue server sync
         await _tripSyncService.UpdatePlaceAsync(
             EntityId,
@@ -386,6 +421,17 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     /// </summary>
     private async Task SaveSegmentNotesAsync(string? notes)
     {
+        // Update in-memory loaded trip
+        var loadedTrip = _tripStateManager.LoadedTrip;
+        if (loadedTrip != null)
+        {
+            var segment = loadedTrip.Segments.FirstOrDefault(s => s.Id == EntityId);
+            if (segment != null)
+            {
+                segment.Notes = notes;
+            }
+        }
+
         // Queue server sync (segments don't have local storage)
         // Parameters: segmentId, tripId, notes
         await _tripSyncService.UpdateSegmentNotesAsync(EntityId, TripId, notes);
@@ -396,6 +442,19 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     /// </summary>
     private async Task SaveAreaNotesAsync(string? notes)
     {
+        // Update in-memory loaded trip
+        var loadedTrip = _tripStateManager.LoadedTrip;
+        if (loadedTrip != null)
+        {
+            var area = loadedTrip.Regions
+                .SelectMany(r => r.Areas)
+                .FirstOrDefault(a => a.Id == EntityId);
+            if (area != null)
+            {
+                area.Notes = notes;
+            }
+        }
+
         // Queue server sync (areas don't have local storage)
         await _tripSyncService.UpdateAreaNotesAsync(TripId, EntityId, notes);
     }
