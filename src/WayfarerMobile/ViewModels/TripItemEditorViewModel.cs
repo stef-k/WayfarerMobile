@@ -72,6 +72,19 @@ public partial class TripItemEditorViewModel : BaseViewModel
     [ObservableProperty]
     private TripPlace? _placeBeingEditedForCoordinates;
 
+    /// <summary>
+    /// Gets or sets whether a new place is being created (vs editing existing).
+    /// When true, cancellation will remove the place from the trip.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isCreatingNewPlace;
+
+    /// <summary>
+    /// Gets or sets the region for the new place being created.
+    /// </summary>
+    [ObservableProperty]
+    private TripRegion? _newPlaceTargetRegion;
+
     #endregion
 
     #region Computed Properties - Coordinate Editing
@@ -337,6 +350,8 @@ public partial class TripItemEditorViewModel : BaseViewModel
 
     /// <summary>
     /// Saves the edited place coordinates.
+    /// For new places, creates the place on the server.
+    /// For existing places, updates the coordinates.
     /// </summary>
     [RelayCommand]
     private async Task SavePlaceCoordinatesAsync()
@@ -348,6 +363,8 @@ public partial class TripItemEditorViewModel : BaseViewModel
         var newLat = PendingPlaceLatitude!.Value;
         var newLon = PendingPlaceLongitude!.Value;
         var loadedTrip = _callbacks?.LoadedTrip;
+        var isNewPlace = IsCreatingNewPlace;
+        var targetRegion = NewPlaceTargetRegion;
 
         // Update place coordinates in the loaded trip
         if (loadedTrip != null)
@@ -364,6 +381,10 @@ public partial class TripItemEditorViewModel : BaseViewModel
             }
         }
 
+        // Reset new place flags before exiting edit mode
+        IsCreatingNewPlace = false;
+        NewPlaceTargetRegion = null;
+
         // Exit edit mode
         ExitPlaceCoordinateEditMode();
 
@@ -373,34 +394,76 @@ public partial class TripItemEditorViewModel : BaseViewModel
         // Sync to server
         if (loadedTrip != null)
         {
-            await _tripSyncService.UpdatePlaceAsync(
-                place.Id,
-                loadedTrip.Id,
-                latitude: newLat,
-                longitude: newLon);
+            if (isNewPlace && targetRegion != null)
+            {
+                // Create new place on server
+                await _tripSyncService.CreatePlaceAsync(
+                    loadedTrip.Id,
+                    targetRegion.Id,
+                    place.Name ?? "New Place",
+                    newLat,
+                    newLon,
+                    displayOrder: place.SortOrder);
+
+                await _toastService.ShowSuccessAsync("Place added");
+            }
+            else
+            {
+                // Update existing place coordinates
+                await _tripSyncService.UpdatePlaceAsync(
+                    place.Id,
+                    loadedTrip.Id,
+                    latitude: newLat,
+                    longitude: newLon);
+
+                await _toastService.ShowSuccessAsync("Coordinates updated");
+            }
         }
 
-        // Reopen trip sheet with updated place
+        // Reopen trip sheet with the place
         _callbacks?.OpenTripSheet();
         _callbacks?.SelectPlace(place);
-
-        await _toastService.ShowSuccessAsync("Coordinates updated");
     }
 
     /// <summary>
     /// Cancels place coordinate editing.
+    /// If creating a new place, removes it from the trip.
     /// </summary>
     [RelayCommand]
-    private void CancelPlaceCoordinateEditing()
+    private async Task CancelPlaceCoordinateEditingAsync()
     {
         var place = PlaceBeingEditedForCoordinates;
+        var isNewPlace = IsCreatingNewPlace;
+        var targetRegion = NewPlaceTargetRegion;
+        var loadedTrip = _callbacks?.LoadedTrip;
+
+        // Reset new place flags
+        IsCreatingNewPlace = false;
+        NewPlaceTargetRegion = null;
+
         ExitPlaceCoordinateEditMode();
 
-        // Reopen trip sheet with original place
-        _callbacks?.OpenTripSheet();
-        if (place != null)
+        // If cancelling a new place creation, remove the place from the region
+        if (isNewPlace && place != null && targetRegion != null && loadedTrip != null)
         {
-            _callbacks?.SelectPlace(place);
+            targetRegion.Places.Remove(place);
+
+            // Refresh map layers to remove the marker
+            await (_callbacks?.RefreshTripLayersAsync(loadedTrip) ?? Task.CompletedTask);
+
+            await _toastService.ShowAsync("Place creation cancelled");
+
+            // Reopen trip sheet without selection
+            _callbacks?.OpenTripSheet();
+        }
+        else
+        {
+            // Reopen trip sheet with original place (for existing place editing)
+            _callbacks?.OpenTripSheet();
+            if (place != null)
+            {
+                _callbacks?.SelectPlace(place);
+            }
         }
     }
 
@@ -981,6 +1044,7 @@ public partial class TripItemEditorViewModel : BaseViewModel
 
     /// <summary>
     /// Adds a new place at the current location.
+    /// Shows region picker, prompts for name, then enters coordinate editing mode.
     /// </summary>
     private async Task AddPlaceToCurrentLocationAsync()
     {
@@ -995,6 +1059,29 @@ public partial class TripItemEditorViewModel : BaseViewModel
             return;
         }
 
+        // Step 1: Show region picker
+        var regions = loadedTrip.Regions.Where(r => !r.IsUnassignedRegion).ToList();
+        if (regions.Count == 0)
+        {
+            await _toastService.ShowErrorAsync("No regions available. Create a region first.");
+            return;
+        }
+
+        var regionNames = regions.Select(r => r.Name).ToArray();
+        var selectedRegionName = await (_callbacks?.DisplayActionSheetAsync(
+            "Select Region",
+            "Cancel",
+            null,
+            regionNames) ?? Task.FromResult<string?>(null));
+
+        if (string.IsNullOrEmpty(selectedRegionName) || selectedRegionName == "Cancel")
+            return;
+
+        var region = regions.FirstOrDefault(r => r.Name == selectedRegionName);
+        if (region == null)
+            return;
+
+        // Step 2: Prompt for place name
         var name = await (_callbacks?.DisplayPromptAsync(
             "Add Place",
             "Enter the place name:") ?? Task.FromResult<string?>(null));
@@ -1002,17 +1089,7 @@ public partial class TripItemEditorViewModel : BaseViewModel
         if (string.IsNullOrWhiteSpace(name))
             return;
 
-        // Find or create unassigned region
-        var region = loadedTrip.Regions.FirstOrDefault(r => r.Name == UnassignedRegionName)
-            ?? loadedTrip.Regions.FirstOrDefault();
-
-        if (region == null)
-        {
-            await _toastService.ShowErrorAsync("No region available");
-            return;
-        }
-
-        // Create new place with temp ID
+        // Step 3: Create new place with current location as starting point
         var newPlace = new TripPlace
         {
             Id = Guid.NewGuid(),
@@ -1022,28 +1099,19 @@ public partial class TripItemEditorViewModel : BaseViewModel
             SortOrder = region.Places.Count
         };
 
-        // Add to region
+        // Add to region locally (not synced yet)
         region.Places.Add(newPlace);
 
-        // Refresh map layers
+        // Refresh map layers to show the new place marker
         await (_callbacks?.RefreshTripLayersAsync(loadedTrip) ?? Task.CompletedTask);
 
-        // Sync to server
-        await _tripSyncService.CreatePlaceAsync(
-            loadedTrip.Id,
-            region.Id,
-            name,
-            currentLocation.Latitude,
-            currentLocation.Longitude,
-            null,
-            null,
-            null,
-            newPlace.SortOrder);
+        // Step 4: Enter coordinate editing mode
+        // Mark that we're creating a new place (affects save/cancel behavior)
+        IsCreatingNewPlace = true;
+        NewPlaceTargetRegion = region;
+        EnterPlaceCoordinateEditMode(newPlace);
 
-        await _toastService.ShowSuccessAsync("Place added");
-
-        // Select the new place
-        _callbacks?.SelectPlace(newPlace);
+        await _toastService.ShowAsync("Tap on map to adjust location, then save");
     }
 
     #endregion
