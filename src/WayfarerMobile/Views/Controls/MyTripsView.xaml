@@ -134,13 +134,16 @@
                                            TextColor="White" />
                                 </Border>
 
-                                <!-- Stats (Regions / Places) -->
-                                <HorizontalStackLayout Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
-                                                       Spacing="12">
+                                <!-- Stats + Date -->
+                                <VerticalStackLayout Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                                     Spacing="2">
                                     <Label Text="{Binding StatsText}"
                                            FontSize="12"
                                            TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-                                </HorizontalStackLayout>
+                                    <Label Text="{Binding UpdatedAtText}"
+                                           FontSize="11"
+                                           TextColor="{AppThemeBinding Light={StaticResource Gray400}, Dark={StaticResource Gray500}}" />
+                                </VerticalStackLayout>
 
                                 <!-- Actions Row -->
                                 <VerticalStackLayout Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
@@ -225,7 +228,7 @@
                                            FontSize="11"
                                            TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
                                            IsVisible="{Binding CanQuickDownload}"
-                                           LineBreakMode="TailTruncation" />
+                                           LineBreakMode="WordWrap" />
                                 </VerticalStackLayout>
 
                                 <!-- Download Progress (when downloading) -->

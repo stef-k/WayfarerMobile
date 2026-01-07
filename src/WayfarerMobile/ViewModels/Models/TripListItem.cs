@@ -39,6 +39,33 @@ public partial class TripListItem : ObservableObject
     public string Name { get; }
 
     /// <summary>
+    /// Gets the last updated date.
+    /// </summary>
+    public DateTime UpdatedAt { get; }
+
+    /// <summary>
+    /// Gets the formatted updated date text.
+    /// </summary>
+    public string UpdatedAtText
+    {
+        get
+        {
+            var local = UpdatedAt.ToLocalTime();
+            var today = DateTime.Today;
+            var yesterday = today.AddDays(-1);
+
+            if (local.Date == today)
+                return $"Updated today at {local:HH:mm}";
+            if (local.Date == yesterday)
+                return $"Updated yesterday at {local:HH:mm}";
+            if (local.Date > today.AddDays(-7))
+                return $"Updated {local:dddd} at {local:HH:mm}";
+
+            return $"Updated {local:MMM d, yyyy}";
+        }
+    }
+
+    /// <summary>
     /// Gets the stats text (dynamically calculated based on download state).
     /// Shows regions, places, segments, areas, and tiles.
     /// </summary>
@@ -223,6 +250,7 @@ public partial class TripListItem : ObservableObject
     {
         ServerId = trip.Id;
         Name = trip.Name;
+        UpdatedAt = trip.UpdatedAt;
         BoundingBox = trip.BoundingBox;
 
         // Cache server stats for fallback
