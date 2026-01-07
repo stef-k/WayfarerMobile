@@ -644,8 +644,9 @@ public sealed class TileDownloadOrchestrator : ITileDownloadOrchestrator
 
         for (int zoom = minZoom; zoom <= effectiveMaxZoom; zoom++)
         {
-            var (minX, maxY) = _tileDownloadService.LatLonToTile(bbox.North, bbox.West, zoom);
-            var (maxX, minY) = _tileDownloadService.LatLonToTile(bbox.South, bbox.East, zoom);
+            // Note: In web mercator, Y is inverted (North = lower Y, South = higher Y)
+            var (minX, minY) = _tileDownloadService.LatLonToTile(bbox.North, bbox.West, zoom);
+            var (maxX, maxY) = _tileDownloadService.LatLonToTile(bbox.South, bbox.East, zoom);
 
             for (int x = minX; x <= maxX; x++)
             {

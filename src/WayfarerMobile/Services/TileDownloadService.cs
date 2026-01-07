@@ -306,8 +306,9 @@ public sealed class TileDownloadService : ITileDownloadService, IDisposable
 
         for (int zoom = minZoom; zoom <= maxZoom; zoom++)
         {
-            var (minX, maxY) = LatLonToTile(boundingBox.North, boundingBox.West, zoom);
-            var (maxX, minY) = LatLonToTile(boundingBox.South, boundingBox.East, zoom);
+            // Note: In web mercator, Y is inverted (North = lower Y, South = higher Y)
+            var (minX, minY) = LatLonToTile(boundingBox.North, boundingBox.West, zoom);
+            var (maxX, maxY) = LatLonToTile(boundingBox.South, boundingBox.East, zoom);
 
             for (int x = minX; x <= maxX; x++)
             {
