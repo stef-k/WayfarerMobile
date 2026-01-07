@@ -135,4 +135,47 @@ public partial class NotesEditorPage : ContentPage
         base.OnDisappearing();
         _isEditorLoaded = false;
     }
+
+    /// <summary>
+    /// Handles Save button click - ensures latest content is captured before saving.
+    /// </summary>
+    private async void OnSaveClicked(object? sender, EventArgs e)
+    {
+        try
+        {
+            // Get the latest content from the WebView before saving
+            var content = await GetCurrentContentAsync();
+            _viewModel.SetCurrentContent(content);
+
+            // Execute the ViewModel's save command
+            if (_viewModel.SaveCommand.CanExecute(null))
+            {
+                await _viewModel.SaveCommand.ExecuteAsync(null);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[NotesEditorPage] Save error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Handles WebView navigation to open external links in browser.
+    /// </summary>
+    private async void OnWebViewNavigating(object? sender, WebNavigatingEventArgs e)
+    {
+        try
+        {
+            // Open external links in browser
+            if (e.Url?.StartsWith("http://") == true || e.Url?.StartsWith("https://") == true)
+            {
+                e.Cancel = true;
+                await Launcher.OpenAsync(new Uri(e.Url));
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[NotesEditorPage] Failed to open link: {ex.Message}");
+        }
+    }
 }
