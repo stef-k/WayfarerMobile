@@ -335,23 +335,17 @@ public class TripDownloadService : ITripDownloadService
             RaiseProgress(tripEntity.Id, 50, $"Saved {places.Count} places, {segments.Count} segments, {polygons.Count} polygons");
 
             // Get bounding box for tile download
-            // Priority: tripSummary -> tripDetails -> stored entity -> boundary API
-            // Use IsValid to ensure bounding box has actual coordinates, not just default zeros
-            BoundingBox? boundingBox = null;
-            if (tripSummary.BoundingBox?.IsValid == true)
-            {
-                boundingBox = tripSummary.BoundingBox;
-                _logger.LogDebug("Using bounding box from trip summary for {TripName}", tripSummary.Name);
-            }
-            else if (tripDetails.BoundingBox?.IsValid == true)
-            {
-                boundingBox = tripDetails.BoundingBox;
-                _logger.LogDebug("Using bounding box from trip details for {TripName}", tripSummary.Name);
-            }
+            // Primary sources: tripSummary or tripDetails (simple null coalescing like main branch)
+            var boundingBox = tripSummary.BoundingBox ?? tripDetails.BoundingBox;
 
-            // Check if entity already has stored bounding box (from previous metadata download)
-            if (boundingBox == null)
+            if (boundingBox != null)
             {
+                _logger.LogDebug("Using bounding box from {Source} for {TripName}",
+                    tripSummary.BoundingBox != null ? "trip summary" : "trip details", tripSummary.Name);
+            }
+            else
+            {
+                // Fallback: Check if entity already has stored bounding box (from previous metadata download)
                 var storedBbox = new BoundingBox
                 {
                     North = tripEntity.BoundingBoxNorth,
@@ -368,15 +362,15 @@ public class TripDownloadService : ITripDownloadService
 
             if (boundingBox == null)
             {
-                // Fetch boundary from dedicated endpoint (server calculates from geographic data)
+                // Fallback: Fetch boundary from dedicated endpoint (server calculates from geographic data)
                 RaiseProgress(tripEntity.Id, 52, "Fetching trip boundary...");
                 var boundaryResponse = await _apiClient.GetTripBoundaryAsync(tripSummary.Id, cancellationToken);
-                if (boundaryResponse?.BoundingBox?.IsValid == true)
+                if (boundaryResponse?.BoundingBox != null)
                 {
                     boundingBox = boundaryResponse.BoundingBox;
                     _logger.LogDebug("Fetched bounding box from boundary API for {TripName}", tripSummary.Name);
 
-                    // Store the fetched bounding box in the entity
+                    // Store the fetched bounding box in the entity for future use
                     tripEntity.BoundingBoxNorth = boundingBox.North;
                     tripEntity.BoundingBoxSouth = boundingBox.South;
                     tripEntity.BoundingBoxEast = boundingBox.East;
@@ -385,17 +379,16 @@ public class TripDownloadService : ITripDownloadService
                 }
                 else
                 {
-                    _logger.LogWarning("Boundary API returned invalid bounding box for {TripName}", tripSummary.Name);
+                    _logger.LogWarning("Boundary API returned no bounding box for {TripName}", tripSummary.Name);
                 }
             }
 
-            // Debug: Log decision point
-            _logger.LogInformation("Tile download decision: BboxNull={BboxNull}, BboxValid={BboxValid}, IncludeTiles={IncludeTiles}",
-                boundingBox == null,
-                boundingBox?.IsValid ?? false,
-                includeTiles);
+            // Log decision point for debugging
+            _logger.LogInformation("Tile download decision: BboxNull={BboxNull}, IncludeTiles={IncludeTiles}",
+                boundingBox == null, includeTiles);
 
-            if (boundingBox?.IsValid == true && includeTiles)
+            // Download tiles if we have a bounding box and tiles are requested (matching main branch logic)
+            if (boundingBox != null && includeTiles)
             {
                 // Download tiles for offline map
                 RaiseProgress(tripEntity.Id, 55, "Calculating tiles...");
