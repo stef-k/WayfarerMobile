@@ -735,6 +735,12 @@ public partial class GroupsViewModel : BaseViewModel,
         if (IsMapView)
         {
             UpdateMapMarkers();
+
+            // If historical toggle is on, load historical locations now that we're in map view
+            if (DateNav.ShowHistoricalLocations && DateNav.IsToday)
+            {
+                SafeFireAndForget(DateNav.LoadHistoricalLocationsAsync(), "LoadHistoricalLocations");
+            }
         }
     }
 
