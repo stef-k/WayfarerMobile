@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Models;
 
 namespace WayfarerMobile.Services;
 
@@ -15,6 +16,7 @@ public class TripStateManager : ITripStateManager
 
     private Guid? _currentTripId;
     private string? _currentTripName;
+    private TripDetails? _loadedTrip;
 
     /// <inheritdoc/>
     public Guid? CurrentLoadedTripId
@@ -35,7 +37,16 @@ public class TripStateManager : ITripStateManager
     }
 
     /// <inheritdoc/>
+    public TripDetails? LoadedTrip
+    {
+        get { lock (_lock) return _loadedTrip; }
+    }
+
+    /// <inheritdoc/>
     public event EventHandler<TripChangedEventArgs>? CurrentTripChanged;
+
+    /// <inheritdoc/>
+    public event EventHandler<LoadedTripChangedEventArgs>? LoadedTripChanged;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TripStateManager"/> class.
@@ -93,7 +104,70 @@ public class TripStateManager : ITripStateManager
     /// <inheritdoc/>
     public void ClearCurrentTrip()
     {
-        SetCurrentTrip(null, null);
+        SetLoadedTrip(null);
+    }
+
+    /// <inheritdoc/>
+    public void SetLoadedTrip(TripDetails? trip)
+    {
+        LoadedTripChangedEventArgs? tripEventArgs = null;
+        TripChangedEventArgs? idEventArgs = null;
+
+        lock (_lock)
+        {
+            // Capture previous state
+            var previousTrip = _loadedTrip;
+            var previousId = _currentTripId;
+            var previousName = _currentTripName;
+
+            // Determine new ID and name from trip
+            var newId = trip?.Id;
+            var newName = trip?.Name;
+
+            // Check if trip actually changed
+            var tripChanged = !ReferenceEquals(previousTrip, trip) &&
+                              (previousTrip?.Id != trip?.Id);
+
+            var idChanged = previousId != newId;
+
+            if (!tripChanged && !idChanged)
+            {
+                return;
+            }
+
+            // Update state
+            _loadedTrip = trip;
+            _currentTripId = newId;
+            _currentTripName = newName;
+
+            _logger.LogDebug(
+                "TripStateManager: LoadedTrip changed from {PreviousTripId} to {NewTripId} ({TripName})",
+                previousTrip?.Id,
+                trip?.Id,
+                trip?.Name ?? "(no trip)");
+
+            // Create event args while still holding lock
+            if (tripChanged)
+            {
+                tripEventArgs = new LoadedTripChangedEventArgs(previousTrip, trip);
+            }
+
+            if (idChanged)
+            {
+                idEventArgs = new TripChangedEventArgs(previousId, previousName, newId, newName);
+            }
+        }
+
+        // Fire events outside lock to prevent deadlocks
+        if (idEventArgs != null)
+        {
+            RaiseCurrentTripChanged(idEventArgs);
+        }
+
+        if (tripEventArgs != null)
+        {
+            RaiseLoadedTripChanged(tripEventArgs);
+        }
     }
 
     /// <summary>
@@ -121,6 +195,36 @@ public class TripStateManager : ITripStateManager
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error in CurrentTripChanged event handler");
+                }
+            });
+        }
+    }
+
+    /// <summary>
+    /// Raises the LoadedTripChanged event on the main thread.
+    /// </summary>
+    private void RaiseLoadedTripChanged(LoadedTripChangedEventArgs args)
+    {
+        var handler = LoadedTripChanged;
+        if (handler == null)
+            return;
+
+        // Always dispatch to main thread for UI safety
+        if (MainThread.IsMainThread)
+        {
+            handler.Invoke(this, args);
+        }
+        else
+        {
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                try
+                {
+                    handler.Invoke(this, args);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error in LoadedTripChanged event handler");
                 }
             });
         }

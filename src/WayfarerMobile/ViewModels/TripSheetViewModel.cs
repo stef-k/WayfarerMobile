@@ -28,6 +28,7 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
 
     #region Fields
 
+    private readonly ITripStateManager _tripStateManager;
     private readonly ITripRepository _tripRepository;
     private readonly IPlaceRepository _placeRepository;
     private readonly ISegmentRepository _segmentRepository;
@@ -64,17 +65,10 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
     private bool _isTripSheetOpen;
 
     /// <summary>
-    /// Gets or sets the currently loaded trip details.
+    /// Gets the currently loaded trip details from ITripStateManager.
+    /// This is a read-only computed property - use _tripStateManager.SetLoadedTrip() to modify.
     /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasLoadedTrip))]
-    [NotifyPropertyChangedFor(nameof(TripPlaceCount))]
-    [NotifyPropertyChangedFor(nameof(HasTripSegments))]
-    [NotifyPropertyChangedFor(nameof(TripNotesPreview))]
-    [NotifyPropertyChangedFor(nameof(TripNotesHtml))]
-    [NotifyPropertyChangedFor(nameof(TripSheetTitle))]
-    [NotifyPropertyChangedFor(nameof(TripSheetSubtitle))]
-    private TripDetails? _loadedTrip;
+    public TripDetails? LoadedTrip => _tripStateManager.LoadedTrip;
 
     #endregion
 
@@ -495,6 +489,7 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
     /// </summary>
     public TripSheetViewModel(
         TripItemEditorViewModel editor,
+        ITripStateManager tripStateManager,
         ITripRepository tripRepository,
         IPlaceRepository placeRepository,
         ISegmentRepository segmentRepository,
@@ -505,6 +500,7 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
         ILogger<TripSheetViewModel> logger)
     {
         Editor = editor;
+        _tripStateManager = tripStateManager;
         _tripRepository = tripRepository;
         _placeRepository = placeRepository;
         _segmentRepository = segmentRepository;
@@ -516,6 +512,9 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
 
         // Wire up child ViewModel callbacks
         Editor.SetCallbacks(this);
+
+        // Subscribe to trip state changes to update UI bindings
+        _tripStateManager.LoadedTripChanged += OnLoadedTripChanged;
     }
 
     #endregion
@@ -533,20 +532,34 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
 
     #endregion
 
-    #region Partial Handlers
+    #region Event Handlers
 
     /// <summary>
-    /// Called when LoadedTrip changes - resets search state.
-    /// Note: CurrentLoadedTripId is synced by MainViewModel's OnTripSheetPropertyChanged.
+    /// Called when LoadedTrip changes in ITripStateManager.
+    /// Updates UI bindings and resets search state.
     /// </summary>
-    partial void OnLoadedTripChanged(TripDetails? value)
+    private void OnLoadedTripChanged(object? sender, LoadedTripChangedEventArgs e)
     {
-        _logger.LogDebug("OnLoadedTripChanged: LoadedTrip changed to {TripId}", value?.Id);
+        _logger.LogDebug("OnLoadedTripChanged: LoadedTrip changed to {TripId}", e.NewTrip?.Id);
 
         // Reset search state when trip changes
         IsPlaceSearchVisible = false;
         PlaceSearchQuery = string.Empty;
+
+        // Notify all dependent properties that LoadedTrip has changed
+        OnPropertyChanged(nameof(LoadedTrip));
+        OnPropertyChanged(nameof(HasLoadedTrip));
+        OnPropertyChanged(nameof(TripPlaceCount));
+        OnPropertyChanged(nameof(HasTripSegments));
+        OnPropertyChanged(nameof(TripNotesPreview));
+        OnPropertyChanged(nameof(TripNotesHtml));
+        OnPropertyChanged(nameof(TripSheetTitle));
+        OnPropertyChanged(nameof(TripSheetSubtitle));
     }
+
+    #endregion
+
+    #region Partial Handlers
 
     /// <summary>
     /// Called when PlaceSearchQuery changes - updates cached results.
@@ -889,7 +902,7 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
     /// </summary>
     public void UnloadTrip()
     {
-        LoadedTrip = null;
+        _tripStateManager.SetLoadedTrip(null);
         SelectedPlace = null;
         ClearTripSheetSelection();
         IsTripSheetOpen = false;
@@ -1119,6 +1132,41 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
         // Trigger UI refresh for regions list
         // Force LoadedTrip binding to refresh (causes UI to re-read regions)
         OnPropertyChanged(nameof(LoadedTrip));
+    }
+
+    #endregion
+
+    #region Partial Methods
+
+    /// <summary>
+    /// Event raised when IsTripSheetOpen changes.
+    /// Provides explicit notification to MainViewModel for bidirectional sync.
+    /// </summary>
+    public event EventHandler<bool>? TripSheetOpenChanged;
+
+    /// <summary>
+    /// Called when IsTripSheetOpen changes.
+    /// </summary>
+    partial void OnIsTripSheetOpenChanged(bool value)
+    {
+        TripSheetOpenChanged?.Invoke(this, value);
+    }
+
+    #endregion
+
+    #region Lifecycle
+
+    /// <summary>
+    /// Cleans up event subscriptions to prevent memory leaks.
+    /// TripSheetViewModel is Transient but subscribes to Singleton ITripStateManager,
+    /// so we must unsubscribe to prevent accumulation of handlers.
+    /// </summary>
+    protected override void Cleanup()
+    {
+        // Unsubscribe from Singleton ITripStateManager events
+        _tripStateManager.LoadedTripChanged -= OnLoadedTripChanged;
+
+        base.Cleanup();
     }
 
     #endregion

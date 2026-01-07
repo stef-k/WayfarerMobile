@@ -298,14 +298,16 @@ public static class MauiProgram
         // Visit Notification Service (depends on SSE, TTS, LocalNotification, LocationSyncEventBridge)
         services.AddSingleton<IVisitNotificationService, VisitNotificationService>();
 
-        // ViewModels
+        // ViewModels - Singleton child VMs (hold expensive state like Map instance)
         services.AddSingleton<MapDisplayViewModel>();  // Map display and layer management
         services.AddSingleton<NavigationCoordinatorViewModel>();  // Navigation coordination
         services.AddSingleton<TripItemEditorViewModel>();  // Trip item editing operations
-        services.AddSingleton<TripSheetViewModel>();  // Trip sheet display and selection
         services.AddSingleton<ContextMenuViewModel>();  // Context menu and dropped pin operations
         services.AddSingleton<TrackingCoordinatorViewModel>();  // Tracking lifecycle management
-        services.AddSingleton<MainViewModel>();
+
+        // Transient VMs - same lifetime as their Page to prevent MauiContext disposal issues
+        services.AddTransient<TripSheetViewModel>();  // Trip sheet display and selection
+        services.AddTransient<MainViewModel>();  // Main page coordination
 
         // Settings child ViewModels
         services.AddTransient<NavigationSettingsViewModel>();

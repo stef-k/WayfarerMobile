@@ -329,19 +329,6 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
 
         try
         {
-            // Wait for any ongoing initialization to complete before navigating.
-            // This prevents a race condition where navigation interferes with
-            // page setup, causing ObjectDisposedException in MAUI's image handlers.
-            if (IsLoadingTrips)
-            {
-                _logger.LogDebug("LoadTripToMapAsync: Waiting for trips to finish loading");
-                var timeout = DateTime.UtcNow.AddSeconds(5);
-                while (IsLoadingTrips && DateTime.UtcNow < timeout)
-                {
-                    await Task.Delay(50);
-                }
-            }
-
             // Load trip details from local storage (only downloaded trips can be loaded)
             var tripDetails = await _downloadService.GetOfflineTripDetailsAsync(item.ServerId);
             if (tripDetails == null)

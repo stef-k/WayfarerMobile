@@ -4,7 +4,6 @@
              xmlns:viewmodels="clr-namespace:WayfarerMobile.ViewModels"
              xmlns:models="clr-namespace:WayfarerMobile.Core.Models;assembly=WayfarerMobile.Core"
              xmlns:sfExpander="clr-namespace:Syncfusion.Maui.Toolkit.Expander;assembly=Syncfusion.Maui.Toolkit"
-             xmlns:behaviors="clr-namespace:WayfarerMobile.Behaviors"
              x:Class="WayfarerMobile.Views.Controls.TripOverviewContent"
              x:DataType="viewmodels:MainViewModel"
              BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
@@ -169,11 +168,7 @@
                                 <RoundRectangle CornerRadius="8" />
                             </Border.StrokeShape>
                             <Image Source="{Binding TripSheet.LoadedTrip.CleanCoverImageUrl}"
-                                   Aspect="AspectFill">
-                                <Image.Behaviors>
-                                    <behaviors:LifecycleAwareImageBehavior />
-                                </Image.Behaviors>
-                            </Image>
+                                   Aspect="AspectFill" />
                         </Border>
 
                         <!-- Updated At -->
@@ -290,11 +285,7 @@
                                             <Border StrokeThickness="0" HeightRequest="100" Margin="8,4,8,6"
                                                     IsVisible="{Binding HasCoverImage}">
                                                 <Border.StrokeShape><RoundRectangle CornerRadius="6" /></Border.StrokeShape>
-                                                <Image Source="{Binding CleanCoverImageUrl}" Aspect="AspectFill">
-                                                    <Image.Behaviors>
-                                                        <behaviors:LifecycleAwareImageBehavior />
-                                                    </Image.Behaviors>
-                                                </Image>
+                                                <Image Source="{Binding CleanCoverImageUrl}" Aspect="AspectFill" />
                                             </Border>
                                             <!-- Region Notes (button to show details, styled like trip notes) -->
                                             <Border StrokeThickness="0"

@@ -1,3 +1,5 @@
+using WayfarerMobile.Core.Models;
+
 namespace WayfarerMobile.Core.Interfaces;
 
 /// <summary>
@@ -23,10 +25,22 @@ public interface ITripStateManager
     bool HasLoadedTrip { get; }
 
     /// <summary>
-    /// Event raised when the current trip changes.
+    /// Gets the full details of the currently loaded trip, or null if no trip is loaded.
+    /// This is the source of truth for loaded trip data across the application.
+    /// </summary>
+    TripDetails? LoadedTrip { get; }
+
+    /// <summary>
+    /// Event raised when the current trip changes (ID/name only).
     /// Always raised on the main thread.
     /// </summary>
     event EventHandler<TripChangedEventArgs>? CurrentTripChanged;
+
+    /// <summary>
+    /// Event raised when the loaded trip details change.
+    /// Always raised on the main thread.
+    /// </summary>
+    event EventHandler<LoadedTripChangedEventArgs>? LoadedTripChanged;
 
     /// <summary>
     /// Sets the currently loaded trip.
@@ -36,8 +50,15 @@ public interface ITripStateManager
     void SetCurrentTrip(Guid? tripId, string? tripName = null);
 
     /// <summary>
+    /// Sets the full loaded trip details.
+    /// Also updates CurrentLoadedTripId and CurrentLoadedTripName from the trip.
+    /// </summary>
+    /// <param name="trip">The trip details to set, or null to clear.</param>
+    void SetLoadedTrip(TripDetails? trip);
+
+    /// <summary>
     /// Clears the currently loaded trip.
-    /// Equivalent to SetCurrentTrip(null, null).
+    /// Equivalent to SetCurrentTrip(null, null) and SetLoadedTrip(null).
     /// </summary>
     void ClearCurrentTrip();
 }
@@ -104,5 +125,52 @@ public class TripChangedEventArgs : EventArgs
         PreviousTripName = previousTripName;
         NewTripId = newTripId;
         NewTripName = newTripName;
+    }
+}
+
+/// <summary>
+/// Event arguments for loaded trip changes.
+/// </summary>
+public class LoadedTripChangedEventArgs : EventArgs
+{
+    /// <summary>
+    /// Gets the previous loaded trip, or null if no trip was loaded.
+    /// </summary>
+    public TripDetails? PreviousTrip { get; }
+
+    /// <summary>
+    /// Gets the new loaded trip, or null if trip was cleared.
+    /// </summary>
+    public TripDetails? NewTrip { get; }
+
+    /// <summary>
+    /// Gets whether a trip is now loaded.
+    /// </summary>
+    public bool HasTrip => NewTrip != null;
+
+    /// <summary>
+    /// Gets whether the trip was cleared (had a trip, now doesn't).
+    /// </summary>
+    public bool WasCleared => PreviousTrip != null && NewTrip == null;
+
+    /// <summary>
+    /// Gets whether a new trip was loaded (didn't have one, now does).
+    /// </summary>
+    public bool WasLoaded => PreviousTrip == null && NewTrip != null;
+
+    /// <summary>
+    /// Gets whether the trip was switched (had a different trip before).
+    /// </summary>
+    public bool WasSwitched => PreviousTrip != null && NewTrip != null && PreviousTrip.Id != NewTrip.Id;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LoadedTripChangedEventArgs"/> class.
+    /// </summary>
+    /// <param name="previousTrip">The previous loaded trip.</param>
+    /// <param name="newTrip">The new loaded trip.</param>
+    public LoadedTripChangedEventArgs(TripDetails? previousTrip, TripDetails? newTrip)
+    {
+        PreviousTrip = previousTrip;
+        NewTrip = newTrip;
     }
 }

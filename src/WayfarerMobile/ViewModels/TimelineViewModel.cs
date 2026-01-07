@@ -97,8 +97,6 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     /// Gets or sets the selected date for filtering.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DateButtonText))]
-    [NotifyPropertyChangedFor(nameof(CanGoNext))]
     private DateTime _selectedDate = DateTime.Today;
 
     /// <summary>
@@ -159,29 +157,26 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     public Map Map => _map ??= CreateMap();
 
     /// <summary>
-    /// Gets the date button text based on current date.
+    /// Gets or sets the date button text based on current date.
+    /// Observable backing field to ensure compiled bindings update correctly.
     /// </summary>
-    public string DateButtonText
-    {
-        get
-        {
-            if (SelectedDate.Date == DateTime.Today)
-                return "Today";
-            if (SelectedDate.Date == DateTime.Today.AddDays(-1))
-                return "Yesterday";
-            return SelectedDate.ToString("ddd, MMM d");
-        }
-    }
+    [ObservableProperty]
+    private string _dateButtonText = "Today";
 
     /// <summary>
-    /// Gets whether the user can navigate to the next day (cannot go past today).
+    /// Gets or sets whether the user can navigate to the next day (cannot go past today).
+    /// Observable backing field to ensure compiled bindings update correctly.
     /// </summary>
-    public bool CanGoNext => SelectedDate.Date < DateTime.Today && CanNavigateDate;
+    [ObservableProperty]
+    private bool _canGoNext;
 
     /// <summary>
-    /// Gets whether any edit mode is currently active.
+    /// Gets or sets whether any edit mode is currently active.
+    /// Observable backing field to ensure compiled bindings update correctly.
     /// </summary>
-    public bool IsEditing => CoordinateEditor.IsEditing || DateTimeEditor.IsEditing;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanNavigateDate))]
+    private bool _isEditing;
 
     /// <summary>
     /// Gets whether date navigation is allowed (not during editing).
@@ -248,6 +243,10 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
 
         // Initialize connectivity state (but don't subscribe yet)
         UpdateConnectivityState();
+
+        // Initialize observable properties derived from SelectedDate
+        UpdateDateButtonText();
+        UpdateCanGoNext();
     }
 
     #endregion
@@ -920,18 +919,74 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
 
     /// <summary>
     /// Forwards CoordinateEditor property changes for XAML binding.
+    /// Also updates parent observable properties for IsEditing state.
     /// </summary>
     private void OnCoordinateEditorPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
+        // Forward child property changes for path-based bindings (e.g., CoordinateEditor.IsCoordinatePickingMode)
         OnPropertyChanged($"CoordinateEditor.{e.PropertyName}");
+
+        // Update parent observable properties when editing state changes
+        if (e.PropertyName == nameof(CoordinateEditorViewModel.IsEditing))
+        {
+            UpdateEditingState();
+        }
     }
 
     /// <summary>
     /// Forwards DateTimeEditor property changes for XAML binding.
+    /// Also updates parent observable properties for IsEditing state.
     /// </summary>
     private void OnDateTimeEditorPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
+        // Forward child property changes for path-based bindings (e.g., DateTimeEditor.IsEditDateTimePickerOpen)
         OnPropertyChanged($"DateTimeEditor.{e.PropertyName}");
+
+        // Update parent observable properties when editing state changes
+        if (e.PropertyName == nameof(DateTimeEditorViewModel.IsEditing))
+        {
+            UpdateEditingState();
+        }
+    }
+
+    /// <summary>
+    /// Updates the IsEditing observable property based on child editor states.
+    /// Also updates CanGoNext since it depends on editing state.
+    /// </summary>
+    private void UpdateEditingState()
+    {
+        IsEditing = CoordinateEditor.IsEditing || DateTimeEditor.IsEditing;
+        UpdateCanGoNext();
+    }
+
+    /// <summary>
+    /// Updates the CanGoNext observable property based on current state.
+    /// </summary>
+    private void UpdateCanGoNext()
+    {
+        CanGoNext = SelectedDate.Date < DateTime.Today && CanNavigateDate;
+    }
+
+    /// <summary>
+    /// Updates the DateButtonText observable property based on SelectedDate.
+    /// </summary>
+    private void UpdateDateButtonText()
+    {
+        if (SelectedDate.Date == DateTime.Today)
+            DateButtonText = "Today";
+        else if (SelectedDate.Date == DateTime.Today.AddDays(-1))
+            DateButtonText = "Yesterday";
+        else
+            DateButtonText = SelectedDate.ToString("ddd, MMM d");
+    }
+
+    /// <summary>
+    /// Called when SelectedDate changes. Updates derived observable properties.
+    /// </summary>
+    partial void OnSelectedDateChanged(DateTime value)
+    {
+        UpdateDateButtonText();
+        UpdateCanGoNext();
     }
 
     #endregion

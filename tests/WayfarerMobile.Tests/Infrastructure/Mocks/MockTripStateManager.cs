@@ -1,4 +1,5 @@
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Models;
 
 namespace WayfarerMobile.Tests.Infrastructure.Mocks;
 
@@ -10,7 +11,9 @@ public class MockTripStateManager : ITripStateManager
 {
     private Guid? _currentTripId;
     private string? _currentTripName;
+    private TripDetails? _loadedTrip;
     private readonly List<(Guid? TripId, string? TripName)> _setCurrentTripCalls = new();
+    private readonly List<TripDetails?> _setLoadedTripCalls = new();
     private int _clearCallCount;
 
     /// <inheritdoc/>
@@ -23,12 +26,23 @@ public class MockTripStateManager : ITripStateManager
     public bool HasLoadedTrip => _currentTripId.HasValue;
 
     /// <inheritdoc/>
+    public TripDetails? LoadedTrip => _loadedTrip;
+
+    /// <inheritdoc/>
     public event EventHandler<TripChangedEventArgs>? CurrentTripChanged;
+
+    /// <inheritdoc/>
+    public event EventHandler<LoadedTripChangedEventArgs>? LoadedTripChanged;
 
     /// <summary>
     /// Gets all calls to SetCurrentTrip.
     /// </summary>
     public IReadOnlyList<(Guid? TripId, string? TripName)> SetCurrentTripCalls => _setCurrentTripCalls;
+
+    /// <summary>
+    /// Gets all calls to SetLoadedTrip.
+    /// </summary>
+    public IReadOnlyList<TripDetails?> SetLoadedTripCalls => _setLoadedTripCalls;
 
     /// <summary>
     /// Gets the number of times ClearCurrentTrip was called.
@@ -51,10 +65,36 @@ public class MockTripStateManager : ITripStateManager
     }
 
     /// <inheritdoc/>
+    public void SetLoadedTrip(TripDetails? trip)
+    {
+        _setLoadedTripCalls.Add(trip);
+
+        var previousTrip = _loadedTrip;
+        var previousId = _currentTripId;
+        var previousName = _currentTripName;
+
+        _loadedTrip = trip;
+        _currentTripId = trip?.Id;
+        _currentTripName = trip?.Name;
+
+        // Fire events
+        if (previousId != _currentTripId)
+        {
+            CurrentTripChanged?.Invoke(this, new TripChangedEventArgs(
+                previousId, previousName, _currentTripId, _currentTripName));
+        }
+
+        if (previousTrip?.Id != trip?.Id)
+        {
+            LoadedTripChanged?.Invoke(this, new LoadedTripChangedEventArgs(previousTrip, trip));
+        }
+    }
+
+    /// <inheritdoc/>
     public void ClearCurrentTrip()
     {
         _clearCallCount++;
-        SetCurrentTrip(null, null);
+        SetLoadedTrip(null);
     }
 
     /// <summary>
@@ -64,7 +104,9 @@ public class MockTripStateManager : ITripStateManager
     {
         _currentTripId = null;
         _currentTripName = null;
+        _loadedTrip = null;
         _setCurrentTripCalls.Clear();
+        _setLoadedTripCalls.Clear();
         _clearCallCount = 0;
     }
 }

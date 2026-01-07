@@ -18,6 +18,7 @@ namespace WayfarerMobile;
 
 /// <summary>
 /// Main page showing current location and tracking controls.
+/// Shell caches this root page - cleanup happens in destructor, not on Unloaded.
 /// </summary>
 public partial class MainPage : ContentPage, IQueryAttributable
 {
@@ -53,10 +54,15 @@ public partial class MainPage : ContentPage, IQueryAttributable
         // Wire up bottom sheet StateChanged event (page-owned control)
         MainBottomSheet.StateChanged += OnMainSheetStateChanged;
 
-        // Note: Singleton ViewModel subscriptions (_viewModel.PropertyChanged,
-        // _viewModel.TripSheet.Editor.PropertyChanged) are done in OnAppearing
-        // and unsubscribed in OnDisappearing to prevent event handler accumulation
-        // when this Transient page is recreated on navigation.
+        // Subscribe to ViewModel property changes to manage sheet state.
+        // Both MainViewModel and MainPage are Transient with the same lifetime,
+        // so these subscriptions are safe and will be disposed together.
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        _viewModel.TripSheet.Editor.PropertyChanged += OnEditorPropertyChanged;
+
+        // NOTE: Do NOT subscribe to Unloaded event for Shell root pages.
+        // Shell caches root pages and reuses them on navigation.
+        // Disposing on Unloaded breaks event subscriptions when Shell reuses the page.
     }
 
     #region Context Menu Event Handlers
@@ -197,7 +203,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
             if (place != null)
             {
                 _viewModel.TripSheet.SelectTripPlaceCommand.Execute(place);
-                _viewModel.TripSheet.IsTripSheetOpen = true;
+                _viewModel.IsTripSheetOpen = true;
                 return true;
             }
         }
@@ -209,7 +215,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
             if (area != null)
             {
                 _viewModel.TripSheet.SelectTripAreaCommand.Execute(area);
-                _viewModel.TripSheet.IsTripSheetOpen = true;
+                _viewModel.IsTripSheetOpen = true;
                 return true;
             }
         }
@@ -234,19 +240,21 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// </summary>
     protected override async void OnAppearing()
     {
+        _logger.LogDebug("OnAppearing: Start, _pendingTrip={HasPending}, HasLoadedTrip={HasLoaded}",
+            _pendingTrip != null, _viewModel.HasLoadedTrip);
+
         base.OnAppearing();
-
-        // Subscribe to Singleton ViewModel events (unsubscribed in OnDisappearing)
-        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
-        _viewModel.TripSheet.Editor.PropertyChanged += OnEditorPropertyChanged;
-
         await _viewModel.OnAppearingAsync();
 
         // Load pending trip if navigated with LoadTrip parameter
         if (_pendingTrip != null)
         {
-            await _viewModel.LoadTripForNavigationAsync(_pendingTrip);
+            _logger.LogDebug("OnAppearing: Loading pending trip {TripName}", _pendingTrip.Name);
+            var tripToLoad = _pendingTrip;
             _pendingTrip = null;
+            await _viewModel.LoadTripForNavigationAsync(tripToLoad);
+
+            _logger.LogDebug("OnAppearing: After load, HasLoadedTrip={HasLoaded}", _viewModel.HasLoadedTrip);
         }
     }
 
@@ -256,8 +264,11 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// <param name="query">The query parameters from navigation.</param>
     public void ApplyQueryAttributes(IDictionary<string, object> query)
     {
+        _logger.LogDebug("ApplyQueryAttributes: query keys={Keys}", string.Join(", ", query.Keys));
+
         if (query.TryGetValue("LoadTrip", out var tripObj) && tripObj is TripDetails trip)
         {
+            _logger.LogDebug("ApplyQueryAttributes: Setting pending trip {TripName} ({TripId})", trip.Name, trip.Id);
             _pendingTrip = trip;
         }
 
@@ -293,12 +304,6 @@ public partial class MainPage : ContentPage, IQueryAttributable
     protected override async void OnDisappearing()
     {
         base.OnDisappearing();
-
-        // Unsubscribe from Singleton ViewModel events (subscribed in OnAppearing)
-        // This prevents event handler accumulation when this Transient page is recreated
-        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
-        _viewModel.TripSheet.Editor.PropertyChanged -= OnEditorPropertyChanged;
-
         await _viewModel.OnDisappearingAsync();
     }
 
@@ -430,13 +435,15 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// </summary>
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        // Reset sheet to fully expanded state when either sheet opens
-        // This ensures the sheet always opens fully, not at the last dragged position
-        if (e.PropertyName == nameof(MainViewModel.IsCheckInSheetOpen) && _viewModel.IsCheckInSheetOpen)
+        // Ensure sheet state is set correctly when trip sheet opens
+        if (e.PropertyName == nameof(MainViewModel.IsTripSheetOpen))
         {
-            MainBottomSheet.State = Syncfusion.Maui.Toolkit.BottomSheet.BottomSheetState.FullExpanded;
+            if (_viewModel.IsTripSheetOpen)
+            {
+                MainBottomSheet.State = Syncfusion.Maui.Toolkit.BottomSheet.BottomSheetState.FullExpanded;
+            }
         }
-        else if (e.PropertyName == nameof(MainViewModel.IsTripSheetOpen) && _viewModel.IsTripSheetOpen)
+        else if (e.PropertyName == nameof(MainViewModel.IsCheckInSheetOpen) && _viewModel.IsCheckInSheetOpen)
         {
             MainBottomSheet.State = Syncfusion.Maui.Toolkit.BottomSheet.BottomSheetState.FullExpanded;
         }

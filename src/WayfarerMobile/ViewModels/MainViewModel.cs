@@ -76,7 +76,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     [NotifyPropertyChangedFor(nameof(HeadingText))]
     [NotifyPropertyChangedFor(nameof(AltitudeText))]
     [NotifyPropertyChangedFor(nameof(HasAccuracy))]
-    [NotifyPropertyChangedFor(nameof(HasHeading))]
     [NotifyPropertyChangedFor(nameof(HasAltitude))]
     private LocationData? _currentLocation;
 
@@ -98,6 +97,65 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsAnySheetOpen))]
     private bool _isCheckInSheetOpen;
+
+    /// <summary>
+    /// Gets or sets whether a trip is currently loaded.
+    /// This is an observable backing field to ensure bindings update correctly.
+    /// Updated when ITripStateManager.LoadedTrip changes.
+    /// </summary>
+    [ObservableProperty]
+    private bool _hasLoadedTrip;
+
+    /// <summary>
+    /// Gets or sets whether the trip sheet is open.
+    /// This is an observable backing field to ensure compiled bindings work correctly.
+    /// Synchronized with TripSheetViewModel.IsTripSheetOpen via PropertyChanged handlers.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAnySheetOpen))]
+    private bool _isTripSheetOpen;
+
+    /// <summary>
+    /// Gets or sets the page title (trip name when loaded, "Map" otherwise).
+    /// Observable backing field to ensure compiled bindings update correctly.
+    /// </summary>
+    [ObservableProperty]
+    private string _pageTitle = "Map";
+
+    /// <summary>
+    /// Gets or sets the status text based on current state.
+    /// Observable backing field to ensure compiled bindings update correctly.
+    /// </summary>
+    [ObservableProperty]
+    private string _statusText = string.Empty;
+
+    /// <summary>
+    /// Gets or sets whether heading is available.
+    /// Observable backing field to ensure compiled bindings update correctly.
+    /// </summary>
+    [ObservableProperty]
+    private bool _hasHeading;
+
+    /// <summary>
+    /// Gets or sets whether the context menu is visible.
+    /// Observable backing field to ensure compiled bindings update correctly.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isContextMenuVisible;
+
+    /// <summary>
+    /// Gets or sets the context menu latitude.
+    /// Observable backing field to ensure compiled bindings update correctly.
+    /// </summary>
+    [ObservableProperty]
+    private double _contextMenuLatitude;
+
+    /// <summary>
+    /// Gets or sets the context menu longitude.
+    /// Observable backing field to ensure compiled bindings update correctly.
+    /// </summary>
+    [ObservableProperty]
+    private double _contextMenuLongitude;
 
     #region Tracking Forwarding Properties
 
@@ -149,11 +207,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     /// </summary>
     public Color TrackingButtonColor => Tracking.TrackingButtonColor;
 
-    /// <summary>
-    /// Gets the status text based on current state.
-    /// Forwards to TrackingCoordinatorViewModel.
-    /// </summary>
-    public string StatusText => Tracking.StatusText;
 
     #endregion
 
@@ -165,23 +218,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     /// </summary>
     public bool IsDropPinModeActive => ContextMenu.IsDropPinModeActive;
 
-    /// <summary>
-    /// Gets whether the context menu is visible.
-    /// Forwards to ContextMenuViewModel.
-    /// </summary>
-    public bool IsContextMenuVisible => ContextMenu.IsContextMenuVisible;
-
-    /// <summary>
-    /// Gets the context menu latitude.
-    /// Forwards to ContextMenuViewModel.
-    /// </summary>
-    public double ContextMenuLatitude => ContextMenu.ContextMenuLatitude;
-
-    /// <summary>
-    /// Gets the context menu longitude.
-    /// Forwards to ContextMenuViewModel.
-    /// </summary>
-    public double ContextMenuLongitude => ContextMenu.ContextMenuLongitude;
 
     /// <summary>
     /// Gets whether a dropped pin is visible on the map.
@@ -203,15 +239,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
 
     #endregion
 
-    /// <summary>
-    /// Gets whether the trip sheet is open.
-    /// Forwards to TripSheetViewModel.
-    /// </summary>
-    public bool IsTripSheetOpen
-    {
-        get => TripSheet.IsTripSheetOpen;
-        set => TripSheet.IsTripSheetOpen = value;
-    }
 
     /// <summary>
     /// Gets whether place coordinate editing mode is active.
@@ -323,11 +350,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     /// </summary>
     public bool HasAccuracy => CurrentLocation?.Accuracy != null;
 
-    /// <summary>
-    /// Gets whether heading is available.
-    /// Uses smoothed heading from MapDisplayViewModel to match map indicator.
-    /// </summary>
-    public bool HasHeading => MapDisplay.HasValidHeading;
 
     /// <summary>
     /// Gets whether altitude is available.
@@ -346,11 +368,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     /// </summary>
     public string CacheHealthTooltip => MapDisplay.CacheHealthTooltip;
 
-    /// <summary>
-    /// Gets whether a trip is currently loaded.
-    /// Forwards to TripSheetViewModel.
-    /// </summary>
-    public bool HasLoadedTrip => TripSheet.HasLoadedTrip;
 
     /// <summary>
     /// Gets or sets whether any bottom sheet is open (check-in or trip).
@@ -413,10 +430,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     /// </summary>
     public string PendingPlaceCoordinatesText => TripSheet.Editor.PendingPlaceCoordinatesText;
 
-    /// <summary>
-    /// Gets the page title (trip name when loaded, "Map" otherwise).
-    /// </summary>
-    public string PageTitle => TripSheet.LoadedTrip?.Name ?? "Map";
 
     /// <summary>
     /// Sets the pending place coordinates from a map tap.
@@ -429,6 +442,13 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     {
         TripSheet.SetPendingPlaceCoordinates(latitude, longitude);
     }
+
+    /// <summary>
+    /// Gets the command to toggle the trip sheet.
+    /// Exposed directly on MainViewModel because MAUI compiled bindings
+    /// may not reliably resolve commands through property paths.
+    /// </summary>
+    public IAsyncRelayCommand ToggleTripSheetCommand => TripSheet.ToggleTripSheetCommand;
 
     #endregion
 
@@ -499,11 +519,23 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
 
         // Subscribe to trip sheet events for static state management
         TripSheet.PropertyChanged += OnTripSheetPropertyChanged;
+        TripSheet.TripSheetOpenChanged += OnTripSheetOpenChanged;
         TripSheet.Editor.PropertyChanged += OnEditorPropertyChanged;
 
         // Subscribe to tracking and context menu property changes
         Tracking.PropertyChanged += OnTrackingPropertyChanged;
         ContextMenu.PropertyChanged += OnContextMenuPropertyChanged;
+
+        // Initialize observable properties from child VMs
+        // This ensures bindings have correct initial values even if TripStateManager already has a trip loaded
+        _hasLoadedTrip = TripSheet.HasLoadedTrip;
+        _isTripSheetOpen = TripSheet.IsTripSheetOpen;
+        _pageTitle = TripSheet.LoadedTrip?.Name ?? "Map";
+        _statusText = Tracking.StatusText;
+        _hasHeading = MapDisplay.CurrentHeading >= 0;
+        _isContextMenuVisible = ContextMenu.IsContextMenuVisible;
+        _contextMenuLatitude = ContextMenu.ContextMenuLatitude;
+        _contextMenuLongitude = ContextMenu.ContextMenuLongitude;
     }
 
     #endregion
@@ -781,10 +813,11 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
             MapDisplay.CenterOnLocation(location.Latitude, location.Longitude);
         }
 
-        // Notify heading properties after LocationLayerService updates the indicator service
+        // Update heading properties after LocationLayerService updates the indicator service
         // This ensures HeadingText uses the smoothed heading calculated by LocationIndicatorService
         OnPropertyChanged(nameof(HeadingText));
-        OnPropertyChanged(nameof(HasHeading));
+        // Set observable property to ensure compiled bindings update correctly
+        HasHeading = MapDisplay.CurrentHeading >= 0;
 
         // Delegate navigation updates to NavigationCoordinator
         Navigation.UpdateLocation(location.Latitude, location.Longitude);
@@ -837,25 +870,27 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
 
     /// <summary>
     /// Handles property changes from TripSheetViewModel.
-    /// Updates static state and forwards property change notifications.
+    /// Forwards property change notifications for UI bindings.
+    /// Note: ITripStateManager is the source of truth for LoadedTrip state.
     /// </summary>
     private void OnTripSheetPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
         {
             case nameof(TripSheetViewModel.LoadedTrip):
-                // Update ITripStateManager for cross-ViewModel access
-                var loadedTrip = TripSheet.LoadedTrip;
-                _tripStateManager.SetCurrentTrip(loadedTrip?.Id, loadedTrip?.Name);
-                _logger.LogDebug("TripSheet.LoadedTrip changed: ITripStateManager set to {TripId}", loadedTrip?.Id);
-                // Forward property changes that MainViewModel exposes
-                OnPropertyChanged(nameof(HasLoadedTrip));
-                OnPropertyChanged(nameof(PageTitle));
+                // Update observable properties from actual state
+                HasLoadedTrip = TripSheet.HasLoadedTrip;
+                PageTitle = TripSheet.LoadedTrip?.Name ?? "Map";
+                break;
+
+            case nameof(TripSheetViewModel.HasLoadedTrip):
+                // Also handle HasLoadedTrip directly (TripSheetViewModel raises both LoadedTrip and HasLoadedTrip)
+                HasLoadedTrip = TripSheet.HasLoadedTrip;
                 break;
 
             case nameof(TripSheetViewModel.IsTripSheetOpen):
-                OnPropertyChanged(nameof(IsTripSheetOpen));
-                OnPropertyChanged(nameof(IsAnySheetOpen));
+                // Sync from TripSheetViewModel to MainViewModel (bidirectional sync)
+                IsTripSheetOpen = TripSheet.IsTripSheetOpen;
                 break;
 
             case nameof(TripSheetViewModel.SelectedTripPlace):
@@ -863,6 +898,15 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
                 OnPropertyChanged(nameof(SelectedPlace));
                 break;
         }
+    }
+
+    /// <summary>
+    /// Handles TripSheetOpenChanged event from TripSheetViewModel.
+    /// Synchronizes IsTripSheetOpen state to MainViewModel.
+    /// </summary>
+    private void OnTripSheetOpenChanged(object? sender, bool isOpen)
+    {
+        IsTripSheetOpen = isOpen;
     }
 
     /// <summary>
@@ -903,7 +947,8 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
                 OnPropertyChanged(nameof(TrackingButtonIcon));
                 OnPropertyChanged(nameof(TrackingButtonImage));
                 OnPropertyChanged(nameof(TrackingButtonColor));
-                OnPropertyChanged(nameof(StatusText));
+                // Set observable property to ensure compiled bindings update
+                StatusText = Tracking.StatusText;
                 break;
 
             case nameof(TrackingCoordinatorViewModel.PerformanceMode):
@@ -919,6 +964,7 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     /// <summary>
     /// Handles property changes from ContextMenuViewModel.
     /// Forwards property change notifications for UI bindings.
+    /// Sets observable properties to ensure compiled bindings update correctly.
     /// </summary>
     private void OnContextMenuPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -929,15 +975,18 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
                 break;
 
             case nameof(ContextMenuViewModel.IsContextMenuVisible):
-                OnPropertyChanged(nameof(IsContextMenuVisible));
+                // Set observable property to ensure compiled bindings update
+                IsContextMenuVisible = ContextMenu.IsContextMenuVisible;
                 break;
 
             case nameof(ContextMenuViewModel.ContextMenuLatitude):
-                OnPropertyChanged(nameof(ContextMenuLatitude));
+                // Set observable property to ensure compiled bindings update
+                ContextMenuLatitude = ContextMenu.ContextMenuLatitude;
                 break;
 
             case nameof(ContextMenuViewModel.ContextMenuLongitude):
-                OnPropertyChanged(nameof(ContextMenuLongitude));
+                // Set observable property to ensure compiled bindings update
+                ContextMenuLongitude = ContextMenu.ContextMenuLongitude;
                 break;
 
             case nameof(ContextMenuViewModel.HasDroppedPin):
@@ -951,6 +1000,24 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
             case nameof(ContextMenuViewModel.DroppedPinLongitude):
                 OnPropertyChanged(nameof(DroppedPinLongitude));
                 break;
+        }
+    }
+
+    #endregion
+
+    #region Partial Methods
+
+    /// <summary>
+    /// Called when IsTripSheetOpen changes.
+    /// Propagates the change to TripSheetViewModel for bidirectional sync.
+    /// </summary>
+    /// <param name="value">The new value.</param>
+    partial void OnIsTripSheetOpenChanged(bool value)
+    {
+        // Propagate to TripSheetViewModel if different (avoid infinite loop)
+        if (TripSheet.IsTripSheetOpen != value)
+        {
+            TripSheet.IsTripSheetOpen = value;
         }
     }
 
@@ -1055,7 +1122,10 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         // Reset any previous selection state
         TripSheet.ClearTripSheetSelection();
 
-        TripSheet.LoadedTrip = tripDetails;
+        // Set loaded trip via ITripStateManager (source of truth)
+        _tripStateManager.SetLoadedTrip(tripDetails);
+        _logger.LogDebug("After SetLoadedTrip: HasLoadedTrip={HasTrip}, TripSheet.HasLoadedTrip={TsHasTrip}",
+            HasLoadedTrip, TripSheet.HasLoadedTrip);
         _tripNavigationService.LoadTrip(tripDetails);
 
         // Show trip layers on map
@@ -1082,6 +1152,11 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
 
         // Force map refresh to ensure layers are rendered
         MapDisplay.RefreshMap();
+
+        // Ensure HasLoadedTrip is set (should already be set via OnTripSheetPropertyChanged,
+        // but set directly here as well to ensure binding updates during navigation)
+        HasLoadedTrip = true;
+        OnPropertyChanged(nameof(PageTitle));
     }
 
     /// <summary>
@@ -1107,7 +1182,9 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
             Navigation.StopNavigation();
         }
 
-        TripSheet.LoadedTrip = null;
+        // Clear loaded trip via ITripStateManager (source of truth)
+        _tripStateManager.SetLoadedTrip(null);
+        HasLoadedTrip = false;
         TripSheet.SelectedPlace = null;
         _tripNavigationService.UnloadTrip();
 
@@ -1196,33 +1273,37 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
 
     /// <summary>
     /// Cleans up event subscriptions to prevent memory leaks.
+    /// Note: MainViewModel is Transient, but most child VMs are Singleton.
+    /// We only unsubscribe from events here - Singleton children must NOT be disposed
+    /// as they'll be reused by the next MainViewModel instance.
     /// </summary>
     protected override void Cleanup()
     {
         // Unsubscribe from location bridge events
         _locationBridge.LocationReceived -= OnLocationReceived;
 
-        // Unsubscribe from child ViewModel events and dispose
+        // Unsubscribe from Singleton child ViewModel events (do NOT dispose them)
         Navigation.NavigateToSourcePageRequested -= OnNavigateToSourcePageRequested;
         Navigation.PropertyChanged -= OnNavigationPropertyChanged;
-        Navigation.Dispose();
+        // Navigation is Singleton - do not dispose
+
         _checkInViewModel.CheckInCompleted -= OnCheckInCompleted;
+        // CheckInViewModel is Transient but injected, let DI handle it
 
-        // Dispose map display ViewModel (handles cache service, location animation, map)
-        MapDisplay.Dispose();
+        // MapDisplay is Singleton - do not dispose
+        // (holds expensive Map instance that persists across page navigations)
 
-        // Dispose trip sheet ViewModel
+        // Unsubscribe from TripSheet events and dispose it (Transient, same lifetime as MainViewModel)
         TripSheet.PropertyChanged -= OnTripSheetPropertyChanged;
+        TripSheet.TripSheetOpenChanged -= OnTripSheetOpenChanged;
         TripSheet.Editor.PropertyChanged -= OnEditorPropertyChanged;
-        TripSheet.Dispose();
+        TripSheet.Dispose(); // Triggers TripSheetViewModel.Cleanup() to unsubscribe from ITripStateManager
 
-        // Dispose tracking coordinator ViewModel
+        // Tracking is Singleton - do not dispose
         Tracking.PropertyChanged -= OnTrackingPropertyChanged;
-        Tracking.Dispose();
 
-        // Dispose context menu ViewModel
+        // ContextMenu is Singleton - do not dispose
         ContextMenu.PropertyChanged -= OnContextMenuPropertyChanged;
-        ContextMenu.Dispose();
 
         base.Cleanup();
     }

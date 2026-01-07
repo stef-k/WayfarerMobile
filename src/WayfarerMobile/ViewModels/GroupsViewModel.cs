@@ -182,28 +182,32 @@ public partial class GroupsViewModel : BaseViewModel,
     }
 
     /// <summary>
-    /// Gets whether the selected date is today.
-    /// Forwards to DateNav.IsToday.
+    /// Gets or sets whether the selected date is today.
+    /// Observable backing field to ensure compiled bindings update correctly.
     /// </summary>
-    public bool IsToday => DateNav.IsToday;
+    [ObservableProperty]
+    private bool _isToday;
 
     /// <summary>
-    /// Gets whether to show the historical toggle (only visible when viewing today).
-    /// Forwards to DateNav.ShowHistoricalToggle.
+    /// Gets or sets whether to show the historical toggle (only visible when viewing today).
+    /// Observable backing field to ensure compiled bindings update correctly.
     /// </summary>
-    public bool ShowHistoricalToggle => DateNav.ShowHistoricalToggle;
+    [ObservableProperty]
+    private bool _showHistoricalToggle;
 
     /// <summary>
-    /// Gets the formatted selected date text.
-    /// Forwards to DateNav.SelectedDateText.
+    /// Gets or sets the formatted selected date text.
+    /// Observable backing field to ensure compiled bindings update correctly.
     /// </summary>
-    public string SelectedDateText => DateNav.SelectedDateText;
+    [ObservableProperty]
+    private string _selectedDateText = string.Empty;
 
     /// <summary>
-    /// Gets the date button text.
-    /// Forwards to DateNav.DateButtonText.
+    /// Gets or sets the date button text.
+    /// Observable backing field to ensure compiled bindings update correctly.
     /// </summary>
-    public string DateButtonText => DateNav.DateButtonText;
+    [ObservableProperty]
+    private string _dateButtonText = string.Empty;
 
     #endregion
 
@@ -230,16 +234,18 @@ public partial class GroupsViewModel : BaseViewModel,
     }
 
     /// <summary>
-    /// Gets the selected member's coordinates as text.
-    /// Forwards to MemberDetails.SelectedMemberCoordinates.
+    /// Gets or sets the selected member's coordinates as text.
+    /// Observable backing field to ensure compiled bindings update correctly.
     /// </summary>
-    public string SelectedMemberCoordinates => MemberDetails.SelectedMemberCoordinates;
+    [ObservableProperty]
+    private string _selectedMemberCoordinates = string.Empty;
 
     /// <summary>
-    /// Gets the selected member's location time as text.
-    /// Forwards to MemberDetails.SelectedMemberLocationTime.
+    /// Gets or sets the selected member's location time as text.
+    /// Observable backing field to ensure compiled bindings update correctly.
     /// </summary>
-    public string SelectedMemberLocationTime => MemberDetails.SelectedMemberLocationTime;
+    [ObservableProperty]
+    private string _selectedMemberLocationTime = string.Empty;
 
     #endregion
 
@@ -397,6 +403,14 @@ public partial class GroupsViewModel : BaseViewModel,
         // Subscribe to child property changes for forwarding
         DateNav.PropertyChanged += OnDateNavPropertyChanged;
         MemberDetails.PropertyChanged += OnMemberDetailsPropertyChanged;
+
+        // Initialize observable properties from child VMs
+        _isToday = DateNav.IsToday;
+        _showHistoricalToggle = DateNav.ShowHistoricalToggle;
+        _selectedDateText = DateNav.SelectedDateText;
+        _dateButtonText = DateNav.DateButtonText;
+        _selectedMemberCoordinates = MemberDetails.SelectedMemberCoordinates;
+        _selectedMemberLocationTime = MemberDetails.SelectedMemberLocationTime;
     }
 
     #endregion
@@ -406,6 +420,7 @@ public partial class GroupsViewModel : BaseViewModel,
     private void OnDateNavPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         // Forward relevant property changes to maintain XAML bindings
+        // Set observable properties to ensure compiled bindings update correctly
         switch (e.PropertyName)
         {
             case nameof(DateNavigationViewModel.SelectedDate):
@@ -418,16 +433,16 @@ public partial class GroupsViewModel : BaseViewModel,
                 OnPropertyChanged(nameof(IsDatePickerOpen));
                 break;
             case nameof(DateNavigationViewModel.IsToday):
-                OnPropertyChanged(nameof(IsToday));
+                IsToday = DateNav.IsToday;
                 break;
             case nameof(DateNavigationViewModel.ShowHistoricalToggle):
-                OnPropertyChanged(nameof(ShowHistoricalToggle));
+                ShowHistoricalToggle = DateNav.ShowHistoricalToggle;
                 break;
             case nameof(DateNavigationViewModel.SelectedDateText):
-                OnPropertyChanged(nameof(SelectedDateText));
+                SelectedDateText = DateNav.SelectedDateText;
                 break;
             case nameof(DateNavigationViewModel.DateButtonText):
-                OnPropertyChanged(nameof(DateButtonText));
+                DateButtonText = DateNav.DateButtonText;
                 break;
         }
     }
@@ -435,6 +450,7 @@ public partial class GroupsViewModel : BaseViewModel,
     private void OnMemberDetailsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         // Forward relevant property changes to maintain XAML bindings
+        // Set observable properties to ensure compiled bindings update correctly
         switch (e.PropertyName)
         {
             case nameof(MemberDetailsViewModel.IsMemberSheetOpen):
@@ -444,10 +460,10 @@ public partial class GroupsViewModel : BaseViewModel,
                 OnPropertyChanged(nameof(SelectedMember));
                 break;
             case nameof(MemberDetailsViewModel.SelectedMemberCoordinates):
-                OnPropertyChanged(nameof(SelectedMemberCoordinates));
+                SelectedMemberCoordinates = MemberDetails.SelectedMemberCoordinates;
                 break;
             case nameof(MemberDetailsViewModel.SelectedMemberLocationTime):
-                OnPropertyChanged(nameof(SelectedMemberLocationTime));
+                SelectedMemberLocationTime = MemberDetails.SelectedMemberLocationTime;
                 break;
         }
     }

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Models;
 
 namespace WayfarerMobile.Tests.Unit.Services;
 
@@ -233,6 +234,94 @@ public class TripStateManagerTests
 
     #endregion
 
+    #region SetLoadedTrip Tests
+
+    [Fact]
+    public void SetLoadedTrip_WithTrip_SetsLoadedTrip()
+    {
+        // Arrange
+        var trip = new TripDetails { Id = Guid.NewGuid(), Name = "Test Trip" };
+
+        // Act
+        _service.SetLoadedTrip(trip);
+
+        // Assert
+        _service.LoadedTrip.Should().BeSameAs(trip);
+        _service.HasLoadedTrip.Should().BeTrue();
+        _service.CurrentLoadedTripId.Should().Be(trip.Id);
+        _service.CurrentLoadedTripName.Should().Be(trip.Name);
+    }
+
+    [Fact]
+    public void SetLoadedTrip_WithNull_ClearsLoadedTrip()
+    {
+        // Arrange
+        var trip = new TripDetails { Id = Guid.NewGuid(), Name = "Test Trip" };
+        _service.SetLoadedTrip(trip);
+
+        // Act
+        _service.SetLoadedTrip(null);
+
+        // Assert
+        _service.LoadedTrip.Should().BeNull();
+        _service.HasLoadedTrip.Should().BeFalse();
+        _service.CurrentLoadedTripId.Should().BeNull();
+    }
+
+    [Fact]
+    public void SetLoadedTrip_RaisesLoadedTripChangedEvent()
+    {
+        // Arrange
+        var trip = new TripDetails { Id = Guid.NewGuid(), Name = "Test Trip" };
+        LoadedTripChangedEventArgs? eventArgs = null;
+        _service.LoadedTripChanged += (_, args) => eventArgs = args;
+
+        // Act
+        _service.SetLoadedTrip(trip);
+
+        // Assert
+        eventArgs.Should().NotBeNull();
+        eventArgs!.PreviousTrip.Should().BeNull();
+        eventArgs.NewTrip.Should().BeSameAs(trip);
+        eventArgs.WasLoaded.Should().BeTrue();
+    }
+
+    [Fact]
+    public void SetLoadedTrip_AlsoRaisesCurrentTripChangedEvent()
+    {
+        // Arrange
+        var trip = new TripDetails { Id = Guid.NewGuid(), Name = "Test Trip" };
+        TripChangedEventArgs? eventArgs = null;
+        _service.CurrentTripChanged += (_, args) => eventArgs = args;
+
+        // Act
+        _service.SetLoadedTrip(trip);
+
+        // Assert
+        eventArgs.Should().NotBeNull();
+        eventArgs!.NewTripId.Should().Be(trip.Id);
+        eventArgs.NewTripName.Should().Be(trip.Name);
+    }
+
+    [Fact]
+    public void SetLoadedTrip_SameTrip_DoesNotRaiseEvent()
+    {
+        // Arrange
+        var trip = new TripDetails { Id = Guid.NewGuid(), Name = "Test Trip" };
+        _service.SetLoadedTrip(trip);
+
+        var eventRaised = false;
+        _service.LoadedTripChanged += (_, _) => eventRaised = true;
+
+        // Act - set same trip again
+        _service.SetLoadedTrip(trip);
+
+        // Assert
+        eventRaised.Should().BeFalse("because the trip did not change");
+    }
+
+    #endregion
+
     #region Thread Safety Tests
 
     [Fact]
@@ -298,6 +387,7 @@ public class TripStateManager : ITripStateManager
 
     private Guid? _currentTripId;
     private string? _currentTripName;
+    private TripDetails? _loadedTrip;
 
     public Guid? CurrentLoadedTripId
     {
@@ -314,7 +404,13 @@ public class TripStateManager : ITripStateManager
         get { lock (_lock) return _currentTripId.HasValue; }
     }
 
+    public TripDetails? LoadedTrip
+    {
+        get { lock (_lock) return _loadedTrip; }
+    }
+
     public event EventHandler<TripChangedEventArgs>? CurrentTripChanged;
+    public event EventHandler<LoadedTripChangedEventArgs>? LoadedTripChanged;
 
     public TripStateManager(ILogger<TripStateManager> logger)
     {
@@ -360,9 +456,74 @@ public class TripStateManager : ITripStateManager
         }
     }
 
+    public void SetLoadedTrip(TripDetails? trip)
+    {
+        LoadedTripChangedEventArgs? tripEventArgs = null;
+        TripChangedEventArgs? idEventArgs = null;
+
+        lock (_lock)
+        {
+            var previousTrip = _loadedTrip;
+            var previousId = _currentTripId;
+            var previousName = _currentTripName;
+
+            var newId = trip?.Id;
+            var newName = trip?.Name;
+
+            var tripChanged = !ReferenceEquals(previousTrip, trip) &&
+                              (previousTrip?.Id != trip?.Id);
+            var idChanged = previousId != newId;
+
+            if (!tripChanged && !idChanged)
+            {
+                return;
+            }
+
+            _loadedTrip = trip;
+            _currentTripId = newId;
+            _currentTripName = newName;
+
+            if (tripChanged)
+            {
+                tripEventArgs = new LoadedTripChangedEventArgs(previousTrip, trip);
+            }
+
+            if (idChanged)
+            {
+                idEventArgs = new TripChangedEventArgs(previousId, previousName, newId, newName);
+            }
+        }
+
+        // In production, these are dispatched to MainThread
+        // In tests, we invoke directly since there's no MAUI dispatcher
+        if (idEventArgs != null)
+        {
+            try
+            {
+                CurrentTripChanged?.Invoke(this, idEventArgs);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in CurrentTripChanged event handler");
+            }
+        }
+
+        if (tripEventArgs != null)
+        {
+            try
+            {
+                LoadedTripChanged?.Invoke(this, tripEventArgs);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in LoadedTripChanged event handler");
+            }
+        }
+    }
+
     public void ClearCurrentTrip()
     {
-        SetCurrentTrip(null, null);
+        SetLoadedTrip(null);
     }
 }
 
