@@ -296,7 +296,7 @@
                                                  IsEnabled="{Binding CheckInViewModel.HasLocation}" />
                                     <!-- Copy Coordinates -->
                                     <ImageButton Grid.Column="3"
-                                                 Source="info.png"
+                                                 Source="copy.png"
                                                  Clicked="OnCheckInCopyCoordinatesClicked"
                                                  WidthRequest="32"
                                                  HeightRequest="32"

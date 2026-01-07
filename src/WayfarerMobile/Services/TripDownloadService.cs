@@ -212,6 +212,10 @@ public class TripDownloadService : ITripDownloadService
     {
         ThrowIfDisposed();
 
+        // Debug: Log parameters to trace download flow
+        _logger.LogInformation("DownloadTripAsync called: Trip={TripName}, IncludeTiles={IncludeTiles}, HasBoundingBox={HasBbox}",
+            tripSummary.Name, includeTiles, tripSummary.BoundingBox != null);
+
         // Validate trip ID
         if (tripSummary.Id == Guid.Empty)
         {
@@ -332,19 +336,34 @@ public class TripDownloadService : ITripDownloadService
 
             // Get bounding box for tile download
             // Priority: tripSummary -> tripDetails -> stored entity -> boundary API
-            var boundingBox = tripSummary.BoundingBox ?? tripDetails.BoundingBox;
+            // Use IsValid to ensure bounding box has actual coordinates, not just default zeros
+            BoundingBox? boundingBox = null;
+            if (tripSummary.BoundingBox?.IsValid == true)
+            {
+                boundingBox = tripSummary.BoundingBox;
+                _logger.LogDebug("Using bounding box from trip summary for {TripName}", tripSummary.Name);
+            }
+            else if (tripDetails.BoundingBox?.IsValid == true)
+            {
+                boundingBox = tripDetails.BoundingBox;
+                _logger.LogDebug("Using bounding box from trip details for {TripName}", tripSummary.Name);
+            }
 
             // Check if entity already has stored bounding box (from previous metadata download)
-            if (boundingBox == null && tripEntity.BoundingBoxNorth != 0 && tripEntity.BoundingBoxSouth != 0)
+            if (boundingBox == null)
             {
-                boundingBox = new BoundingBox
+                var storedBbox = new BoundingBox
                 {
                     North = tripEntity.BoundingBoxNorth,
                     South = tripEntity.BoundingBoxSouth,
                     East = tripEntity.BoundingBoxEast,
                     West = tripEntity.BoundingBoxWest
                 };
-                _logger.LogDebug("Using stored bounding box from entity for {TripName}", tripSummary.Name);
+                if (storedBbox.IsValid)
+                {
+                    boundingBox = storedBbox;
+                    _logger.LogDebug("Using stored bounding box from entity for {TripName}", tripSummary.Name);
+                }
             }
 
             if (boundingBox == null)
@@ -352,7 +371,7 @@ public class TripDownloadService : ITripDownloadService
                 // Fetch boundary from dedicated endpoint (server calculates from geographic data)
                 RaiseProgress(tripEntity.Id, 52, "Fetching trip boundary...");
                 var boundaryResponse = await _apiClient.GetTripBoundaryAsync(tripSummary.Id, cancellationToken);
-                if (boundaryResponse?.BoundingBox != null)
+                if (boundaryResponse?.BoundingBox?.IsValid == true)
                 {
                     boundingBox = boundaryResponse.BoundingBox;
                     _logger.LogDebug("Fetched bounding box from boundary API for {TripName}", tripSummary.Name);
@@ -364,9 +383,19 @@ public class TripDownloadService : ITripDownloadService
                     tripEntity.BoundingBoxWest = boundingBox.West;
                     await _tripRepository.SaveDownloadedTripAsync(tripEntity);
                 }
+                else
+                {
+                    _logger.LogWarning("Boundary API returned invalid bounding box for {TripName}", tripSummary.Name);
+                }
             }
 
-            if (boundingBox != null && includeTiles)
+            // Debug: Log decision point
+            _logger.LogInformation("Tile download decision: BboxNull={BboxNull}, BboxValid={BboxValid}, IncludeTiles={IncludeTiles}",
+                boundingBox == null,
+                boundingBox?.IsValid ?? false,
+                includeTiles);
+
+            if (boundingBox?.IsValid == true && includeTiles)
             {
                 // Download tiles for offline map
                 RaiseProgress(tripEntity.Id, 55, "Calculating tiles...");

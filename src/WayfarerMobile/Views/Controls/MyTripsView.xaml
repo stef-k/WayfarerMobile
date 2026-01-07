@@ -230,15 +230,6 @@
                                            IsVisible="{Binding CanQuickDownload}"
                                            LineBreakMode="WordWrap" />
                                 </VerticalStackLayout>
-
-                                <!-- Download Progress (when downloading) -->
-                                <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
-                                      IsVisible="{Binding IsDownloading}"
-                                      Margin="0,8,0,0">
-                                    <ProgressBar Progress="{Binding DownloadProgress}"
-                                                 ProgressColor="{StaticResource Primary}"
-                                                 HeightRequest="4" />
-                                </Grid>
                             </Grid>
                         </Border>
                     </DataTemplate>

@@ -314,6 +314,20 @@ public class BoundingBox
     /// Gets or sets the west longitude.
     /// </summary>
     public double West { get; set; }
+
+    /// <summary>
+    /// Gets whether this bounding box has valid coordinates.
+    /// A valid bounding box has North >= South (allows single-point), coordinates within valid ranges,
+    /// and is not all zeros (default uninitialized state).
+    /// </summary>
+    [JsonIgnore]
+    public bool IsValid =>
+        North >= South &&
+        North is >= -90 and <= 90 &&
+        South is >= -90 and <= 90 &&
+        East is >= -180 and <= 180 &&
+        West is >= -180 and <= 180 &&
+        !(North == 0 && South == 0 && East == 0 && West == 0);
 }
 
 /// <summary>
