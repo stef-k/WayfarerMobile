@@ -339,7 +339,11 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
         get
         {
             if (IsTripSheetShowingPlace)
-                return SelectedTripPlace?.Name ?? "Place";
+            {
+                // Show parent region name in header (place name is shown in body with icon)
+                var region = LoadedTrip?.Regions.FirstOrDefault(r => r.Places.Any(p => p.Id == SelectedTripPlace?.Id));
+                return region?.Name ?? "Place Details";
+            }
 
             if (IsTripSheetShowingArea)
                 return SelectedTripArea?.Name ?? "Area";

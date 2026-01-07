@@ -97,7 +97,7 @@
                     FontSize="14"
                     HeightRequest="44"
                     HorizontalOptions="Fill"
-                    ImageSource="info.png"
+                    ImageSource="copy.png"
                     Text="Copy Coordinates"
                     TextColor="White" />
 
