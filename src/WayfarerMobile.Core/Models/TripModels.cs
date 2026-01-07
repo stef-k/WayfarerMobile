@@ -298,21 +298,25 @@ public class BoundingBox
     /// <summary>
     /// Gets or sets the north latitude.
     /// </summary>
+    [JsonPropertyName("north")]
     public double North { get; set; }
 
     /// <summary>
     /// Gets or sets the south latitude.
     /// </summary>
+    [JsonPropertyName("south")]
     public double South { get; set; }
 
     /// <summary>
     /// Gets or sets the east longitude.
     /// </summary>
+    [JsonPropertyName("east")]
     public double East { get; set; }
 
     /// <summary>
     /// Gets or sets the west longitude.
     /// </summary>
+    [JsonPropertyName("west")]
     public double West { get; set; }
 
     /// <summary>
@@ -998,16 +1002,19 @@ public class TripBoundaryResponse
     /// <summary>
     /// Gets or sets the trip ID.
     /// </summary>
+    [JsonPropertyName("tripId")]
     public Guid TripId { get; set; }
 
     /// <summary>
     /// Gets or sets the trip name.
     /// </summary>
+    [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the bounding box.
     /// </summary>
+    [JsonPropertyName("boundingBox")]
     public BoundingBox BoundingBox { get; set; } = new();
 }
 
