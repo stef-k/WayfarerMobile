@@ -291,41 +291,22 @@ public class TripContentService : ITripContentService
         var areaEntities = await areasTask;
         var polygonEntities = await polygonsTask;
 
-        // Group polygons by region
-        var polygonsByRegion = polygonEntities.GroupBy(p => p.RegionId).ToDictionary(g => g.Key, g => g.ToList());
+        // Group places and polygons by region for lookup
+        var placesByRegion = placeEntities
+            .GroupBy(p => p.RegionId ?? Guid.Empty)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        var polygonsByRegion = polygonEntities
+            .GroupBy(p => p.RegionId)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
-        // Build regions with places and areas (polygon zones)
+        // Build regions from areaEntities (which contains ALL regions, including empty ones)
         var regions = new List<TripRegion>();
-        var placesByRegion = placeEntities.GroupBy(p => p.RegionId ?? Guid.Empty);
 
-        foreach (var regionGroup in placesByRegion)
+        foreach (var area in areaEntities)
         {
-            var area = areaEntities.FirstOrDefault(a => a.ServerId == regionGroup.Key);
-
-            // Build TripArea list for this region
-            var tripAreas = new List<TripArea>();
-            if (polygonsByRegion.TryGetValue(regionGroup.Key, out var regionPolygons))
-            {
-                tripAreas = regionPolygons.Select(p => new TripArea
-                {
-                    Id = p.ServerId,
-                    Name = p.Name,
-                    Notes = p.Notes,
-                    FillColor = p.FillColor,
-                    StrokeColor = p.StrokeColor,
-                    GeometryGeoJson = p.GeometryGeoJson,
-                    SortOrder = p.SortOrder
-                }).OrderBy(a => a.SortOrder).ToList();
-            }
-
-            var region = new TripRegion
-            {
-                Id = regionGroup.Key,
-                Name = area?.Name ?? regionGroup.First().RegionName ?? "Places",
-                Notes = area?.Notes,
-                CoverImageUrl = area?.CoverImageUrl,
-                SortOrder = area?.SortOrder ?? 0,
-                Places = regionGroup.Select(p => new TripPlace
+            // Get places for this region (may be empty)
+            var regionPlaces = placesByRegion.TryGetValue(area.ServerId, out var places)
+                ? places.Select(p => new TripPlace
                 {
                     Id = p.ServerId,
                     Name = p.Name,
@@ -336,10 +317,83 @@ public class TripContentService : ITripContentService
                     MarkerColor = p.MarkerColor,
                     Address = p.Address,
                     SortOrder = p.SortOrder
-                }).OrderBy(p => p.SortOrder).ToList(),
+                }).OrderBy(p => p.SortOrder).ToList()
+                : new List<TripPlace>();
+
+            // Get polygon areas for this region (may be empty)
+            var tripAreas = polygonsByRegion.TryGetValue(area.ServerId, out var regionPolygons)
+                ? regionPolygons.Select(p => new TripArea
+                {
+                    Id = p.ServerId,
+                    Name = p.Name,
+                    Notes = p.Notes,
+                    FillColor = p.FillColor,
+                    StrokeColor = p.StrokeColor,
+                    GeometryGeoJson = p.GeometryGeoJson,
+                    SortOrder = p.SortOrder
+                }).OrderBy(a => a.SortOrder).ToList()
+                : new List<TripArea>();
+
+            var region = new TripRegion
+            {
+                Id = area.ServerId,
+                Name = area.Name,
+                Notes = area.Notes,
+                CoverImageUrl = area.CoverImageUrl,
+                CenterLatitude = area.CenterLatitude,
+                CenterLongitude = area.CenterLongitude,
+                SortOrder = area.SortOrder,
+                Places = regionPlaces,
                 Areas = tripAreas
             };
             regions.Add(region);
+        }
+
+        // Handle places with no region (unassigned) - these won't be in areaEntities
+        if (placesByRegion.TryGetValue(Guid.Empty, out var unassignedPlaces) && unassignedPlaces.Count > 0)
+        {
+            // Check if "Unassigned Places" region already exists from areaEntities
+            var existingUnassigned = regions.FirstOrDefault(r => r.IsUnassignedRegion);
+            if (existingUnassigned != null)
+            {
+                // Add unassigned places to existing region
+                existingUnassigned.Places = unassignedPlaces.Select(p => new TripPlace
+                {
+                    Id = p.ServerId,
+                    Name = p.Name,
+                    Latitude = p.Latitude,
+                    Longitude = p.Longitude,
+                    Notes = p.Notes,
+                    Icon = p.IconName,
+                    MarkerColor = p.MarkerColor,
+                    Address = p.Address,
+                    SortOrder = p.SortOrder
+                }).OrderBy(p => p.SortOrder).ToList();
+            }
+            else
+            {
+                // Create unassigned region
+                var regionName = unassignedPlaces.First().RegionName ?? TripRegion.UnassignedPlacesName;
+                regions.Add(new TripRegion
+                {
+                    Id = Guid.Empty,
+                    Name = regionName,
+                    SortOrder = int.MaxValue, // Sort last
+                    Places = unassignedPlaces.Select(p => new TripPlace
+                    {
+                        Id = p.ServerId,
+                        Name = p.Name,
+                        Latitude = p.Latitude,
+                        Longitude = p.Longitude,
+                        Notes = p.Notes,
+                        Icon = p.IconName,
+                        MarkerColor = p.MarkerColor,
+                        Address = p.Address,
+                        SortOrder = p.SortOrder
+                    }).OrderBy(p => p.SortOrder).ToList(),
+                    Areas = new List<TripArea>()
+                });
+            }
         }
 
         // Build segments
