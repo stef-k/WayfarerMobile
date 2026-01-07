@@ -467,8 +467,13 @@ public partial class TripItemEditorViewModel : BaseViewModel
         if (!confirmed)
             return;
 
+        // Find the actual region instance by ID (parameter may be from SortedRegions which creates new objects)
+        var targetRegion = loadedTrip.Regions.FirstOrDefault(r => r.Id == region.Id);
+        if (targetRegion == null)
+            return;
+
         // Remove from loaded trip
-        loadedTrip.Regions.Remove(region);
+        loadedTrip.Regions.Remove(targetRegion);
 
         // Notify UI to refresh regions list
         _callbacks?.NotifyTripRegionsChanged();
@@ -492,14 +497,19 @@ public partial class TripItemEditorViewModel : BaseViewModel
         if (region == null || loadedTrip == null)
             return;
 
+        // Find the actual region instance by ID (parameter may be from SortedRegions which creates new objects)
+        var targetRegion = loadedTrip.Regions.FirstOrDefault(r => r.Id == region.Id);
+        if (targetRegion == null)
+            return;
+
         var regions = loadedTrip.Regions.OrderBy(r => r.SortOrder).ToList();
-        var index = regions.IndexOf(region);
+        var index = regions.IndexOf(targetRegion);
         if (index <= 0)
             return;
 
         // Swap sort orders
         var prevRegion = regions[index - 1];
-        (region.SortOrder, prevRegion.SortOrder) = (prevRegion.SortOrder, region.SortOrder);
+        (targetRegion.SortOrder, prevRegion.SortOrder) = (prevRegion.SortOrder, targetRegion.SortOrder);
 
         // Notify UI to refresh regions list
         _callbacks?.NotifyTripRegionsChanged();
@@ -508,7 +518,7 @@ public partial class TripItemEditorViewModel : BaseViewModel
         await (_callbacks?.RefreshTripLayersAsync(loadedTrip) ?? Task.CompletedTask);
 
         // Sync to server
-        await _tripSyncService.UpdateRegionAsync(region.Id, loadedTrip.Id, displayOrder: region.SortOrder);
+        await _tripSyncService.UpdateRegionAsync(targetRegion.Id, loadedTrip.Id, displayOrder: targetRegion.SortOrder);
         await _tripSyncService.UpdateRegionAsync(prevRegion.Id, loadedTrip.Id, displayOrder: prevRegion.SortOrder);
     }
 
@@ -522,14 +532,19 @@ public partial class TripItemEditorViewModel : BaseViewModel
         if (region == null || loadedTrip == null)
             return;
 
+        // Find the actual region instance by ID (parameter may be from SortedRegions which creates new objects)
+        var targetRegion = loadedTrip.Regions.FirstOrDefault(r => r.Id == region.Id);
+        if (targetRegion == null)
+            return;
+
         var regions = loadedTrip.Regions.OrderBy(r => r.SortOrder).ToList();
-        var index = regions.IndexOf(region);
+        var index = regions.IndexOf(targetRegion);
         if (index < 0 || index >= regions.Count - 1)
             return;
 
         // Swap sort orders
         var nextRegion = regions[index + 1];
-        (region.SortOrder, nextRegion.SortOrder) = (nextRegion.SortOrder, region.SortOrder);
+        (targetRegion.SortOrder, nextRegion.SortOrder) = (nextRegion.SortOrder, targetRegion.SortOrder);
 
         // Notify UI to refresh regions list
         _callbacks?.NotifyTripRegionsChanged();
@@ -538,7 +553,7 @@ public partial class TripItemEditorViewModel : BaseViewModel
         await (_callbacks?.RefreshTripLayersAsync(loadedTrip) ?? Task.CompletedTask);
 
         // Sync to server
-        await _tripSyncService.UpdateRegionAsync(region.Id, loadedTrip.Id, displayOrder: region.SortOrder);
+        await _tripSyncService.UpdateRegionAsync(targetRegion.Id, loadedTrip.Id, displayOrder: targetRegion.SortOrder);
         await _tripSyncService.UpdateRegionAsync(nextRegion.Id, loadedTrip.Id, displayOrder: nextRegion.SortOrder);
     }
 
@@ -556,19 +571,24 @@ public partial class TripItemEditorViewModel : BaseViewModel
         if (place == null || loadedTrip == null)
             return;
 
-        // Find the region containing this place
-        var region = loadedTrip.Regions.FirstOrDefault(r => r.Places.Contains(place));
+        // Find the region containing this place by ID (parameter may be from SortedRegions which creates new objects)
+        var region = loadedTrip.Regions.FirstOrDefault(r => r.Places.Any(p => p.Id == place.Id));
         if (region == null)
             return;
 
+        // Find the actual place instance
+        var targetPlace = region.Places.FirstOrDefault(p => p.Id == place.Id);
+        if (targetPlace == null)
+            return;
+
         var places = region.Places.OrderBy(p => p.SortOrder).ToList();
-        var index = places.IndexOf(place);
+        var index = places.IndexOf(targetPlace);
         if (index <= 0)
             return;
 
         // Swap sort orders
         var prevPlace = places[index - 1];
-        (place.SortOrder, prevPlace.SortOrder) = (prevPlace.SortOrder, place.SortOrder);
+        (targetPlace.SortOrder, prevPlace.SortOrder) = (prevPlace.SortOrder, targetPlace.SortOrder);
 
         // Notify UI to refresh places list
         _callbacks?.NotifyTripPlacesChanged();
@@ -577,7 +597,7 @@ public partial class TripItemEditorViewModel : BaseViewModel
         await (_callbacks?.RefreshTripLayersAsync(loadedTrip) ?? Task.CompletedTask);
 
         // Sync to server
-        await _tripSyncService.UpdatePlaceAsync(place.Id, loadedTrip.Id, displayOrder: place.SortOrder);
+        await _tripSyncService.UpdatePlaceAsync(targetPlace.Id, loadedTrip.Id, displayOrder: targetPlace.SortOrder);
         await _tripSyncService.UpdatePlaceAsync(prevPlace.Id, loadedTrip.Id, displayOrder: prevPlace.SortOrder);
     }
 
@@ -591,19 +611,24 @@ public partial class TripItemEditorViewModel : BaseViewModel
         if (place == null || loadedTrip == null)
             return;
 
-        // Find the region containing this place
-        var region = loadedTrip.Regions.FirstOrDefault(r => r.Places.Contains(place));
+        // Find the region containing this place by ID (parameter may be from SortedRegions which creates new objects)
+        var region = loadedTrip.Regions.FirstOrDefault(r => r.Places.Any(p => p.Id == place.Id));
         if (region == null)
             return;
 
+        // Find the actual place instance
+        var targetPlace = region.Places.FirstOrDefault(p => p.Id == place.Id);
+        if (targetPlace == null)
+            return;
+
         var places = region.Places.OrderBy(p => p.SortOrder).ToList();
-        var index = places.IndexOf(place);
+        var index = places.IndexOf(targetPlace);
         if (index < 0 || index >= places.Count - 1)
             return;
 
         // Swap sort orders
         var nextPlace = places[index + 1];
-        (place.SortOrder, nextPlace.SortOrder) = (nextPlace.SortOrder, place.SortOrder);
+        (targetPlace.SortOrder, nextPlace.SortOrder) = (nextPlace.SortOrder, targetPlace.SortOrder);
 
         // Notify UI to refresh places list
         _callbacks?.NotifyTripPlacesChanged();
@@ -612,7 +637,7 @@ public partial class TripItemEditorViewModel : BaseViewModel
         await (_callbacks?.RefreshTripLayersAsync(loadedTrip) ?? Task.CompletedTask);
 
         // Sync to server
-        await _tripSyncService.UpdatePlaceAsync(place.Id, loadedTrip.Id, displayOrder: place.SortOrder);
+        await _tripSyncService.UpdatePlaceAsync(targetPlace.Id, loadedTrip.Id, displayOrder: targetPlace.SortOrder);
         await _tripSyncService.UpdatePlaceAsync(nextPlace.Id, loadedTrip.Id, displayOrder: nextPlace.SortOrder);
     }
 
@@ -857,12 +882,21 @@ public partial class TripItemEditorViewModel : BaseViewModel
     /// </summary>
     private async Task EditRegionNameAsync(TripRegion region)
     {
+        var loadedTrip = _callbacks?.LoadedTrip;
+        if (loadedTrip == null)
+            return;
+
+        // Find the actual region instance by ID (parameter may be from SortedRegions which creates new objects)
+        var targetRegion = loadedTrip.Regions.FirstOrDefault(r => r.Id == region.Id);
+        if (targetRegion == null)
+            return;
+
         var newName = await (_callbacks?.DisplayPromptAsync(
             "Edit Region Name",
             "Enter the new name:",
-            region.Name) ?? Task.FromResult<string?>(null));
+            targetRegion.Name) ?? Task.FromResult<string?>(null));
 
-        if (string.IsNullOrWhiteSpace(newName) || newName == region.Name)
+        if (string.IsNullOrWhiteSpace(newName) || newName == targetRegion.Name)
             return;
 
         // Prevent reserved name
@@ -873,20 +907,16 @@ public partial class TripItemEditorViewModel : BaseViewModel
         }
 
         // Update locally
-        region.Name = newName;
+        targetRegion.Name = newName;
 
         // Notify UI to refresh regions list
         _callbacks?.NotifyTripRegionsChanged();
 
         // Sync to server
-        var loadedTrip = _callbacks?.LoadedTrip;
-        if (loadedTrip != null)
-        {
-            await _tripSyncService.UpdateRegionAsync(
-                region.Id,
-                loadedTrip.Id,
-                name: newName);
-        }
+        await _tripSyncService.UpdateRegionAsync(
+            targetRegion.Id,
+            loadedTrip.Id,
+            name: newName);
 
         await _toastService.ShowSuccessAsync("Region renamed");
     }
@@ -936,6 +966,9 @@ public partial class TripItemEditorViewModel : BaseViewModel
 
         // Add to loaded trip
         loadedTrip.Regions.Add(newRegion);
+
+        // Notify UI to refresh regions list
+        _callbacks?.NotifyTripRegionsChanged();
 
         // Sync to server
         await _tripSyncService.CreateRegionAsync(
