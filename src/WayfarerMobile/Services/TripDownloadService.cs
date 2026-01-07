@@ -331,8 +331,22 @@ public class TripDownloadService : ITripDownloadService
             RaiseProgress(tripEntity.Id, 50, $"Saved {places.Count} places, {segments.Count} segments, {polygons.Count} polygons");
 
             // Get bounding box for tile download
-            // Priority: tripSummary (rarely has it) -> tripDetails (rarely has it) -> boundary API
+            // Priority: tripSummary -> tripDetails -> stored entity -> boundary API
             var boundingBox = tripSummary.BoundingBox ?? tripDetails.BoundingBox;
+
+            // Check if entity already has stored bounding box (from previous metadata download)
+            if (boundingBox == null && tripEntity.BoundingBoxNorth != 0 && tripEntity.BoundingBoxSouth != 0)
+            {
+                boundingBox = new BoundingBox
+                {
+                    North = tripEntity.BoundingBoxNorth,
+                    South = tripEntity.BoundingBoxSouth,
+                    East = tripEntity.BoundingBoxEast,
+                    West = tripEntity.BoundingBoxWest
+                };
+                _logger.LogDebug("Using stored bounding box from entity for {TripName}", tripSummary.Name);
+            }
+
             if (boundingBox == null)
             {
                 // Fetch boundary from dedicated endpoint (server calculates from geographic data)

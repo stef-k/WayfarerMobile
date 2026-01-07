@@ -492,7 +492,9 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
 
             // Set per-item state to Downloading for UI feedback
             item.DownloadState = TripDownloadState.Downloading;
-            item.IsDownloading = true;
+            // Only show per-item progress bar for tile downloads (full downloads)
+            // Metadata-only downloads are quick and only need the global overlay
+            item.IsDownloading = includeTiles;
             item.DownloadProgress = 0;
 
             var summary = new TripSummary

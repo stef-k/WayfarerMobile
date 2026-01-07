@@ -1130,7 +1130,9 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
     void ITripItemEditorCallbacks.NotifyTripRegionsChanged()
     {
         // Trigger UI refresh for regions list
-        // Force LoadedTrip binding to refresh (causes UI to re-read regions)
+        // SortedRegions creates new objects on each access, so we need to notify it changed
+        // This causes XAML bindings to TripSheet.LoadedTrip.SortedRegions to re-evaluate
+        LoadedTrip?.NotifySortedRegionsChanged();
         OnPropertyChanged(nameof(LoadedTrip));
     }
 

@@ -113,12 +113,25 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     /// <param name="query">The query parameters.</param>
     public void ApplyQueryAttributes(IDictionary<string, object> query)
     {
+        // Debug: Log all received query parameters
+        Console.WriteLine($"[NotesEditorViewModel] ApplyQueryAttributes received {query.Count} parameters:");
+        foreach (var kvp in query)
+        {
+            Console.WriteLine($"  {kvp.Key} = {kvp.Value} (type: {kvp.Value?.GetType().Name ?? "null"})");
+        }
+
         // Parse entity type (defaults to Timeline for backward compatibility)
         if (query.TryGetValue("entityType", out var entityTypeObj))
         {
-            if (Enum.TryParse<NotesEntityType>(entityTypeObj?.ToString(), out var entityType))
+            // Use ignoreCase: true explicitly since entityType may be passed as lowercase
+            if (Enum.TryParse<NotesEntityType>(entityTypeObj?.ToString(), ignoreCase: true, out var entityType))
             {
                 EntityType = entityType;
+                Console.WriteLine($"[NotesEditorViewModel] Parsed entityType: {EntityType}");
+            }
+            else
+            {
+                Console.WriteLine($"[NotesEditorViewModel] Failed to parse entityType: {entityTypeObj}");
             }
         }
 
@@ -220,6 +233,8 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
         // Validate we have required IDs for the entity type
         if (!ValidateEntityIds())
         {
+            Console.WriteLine($"[NotesEditorViewModel] Save failed: validation failed for {EntityType}. EntityId={EntityId}, TripId={TripId}, LocationId={LocationId}");
+            await _toastService.ShowErrorAsync("Unable to save - missing entity information");
             return;
         }
 
