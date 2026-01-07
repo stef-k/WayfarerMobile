@@ -13,13 +13,17 @@ public class TripMetadataBuilder : ITripMetadataBuilder
     /// <inheritdoc/>
     public List<OfflineAreaEntity> BuildAreas(TripDetails trip)
     {
+        // Server always sends SortOrder (displayOrder in JSON), use it directly
+        // Only fall back to index if server sends 0 and it looks like a default value
         return trip.Regions.Select((r, index) => new OfflineAreaEntity
         {
             ServerId = r.Id,
             Name = r.Name,
             Notes = r.Notes,
             CoverImageUrl = r.CoverImageUrl,
-            SortOrder = r.SortOrder > 0 ? r.SortOrder : index,
+            CenterLatitude = r.CenterLatitude,
+            CenterLongitude = r.CenterLongitude,
+            SortOrder = r.SortOrder,
             PlaceCount = r.Places.Count
         }).ToList();
     }
@@ -28,10 +32,12 @@ public class TripMetadataBuilder : ITripMetadataBuilder
     public List<OfflinePlaceEntity> BuildPlaces(TripDetails trip)
     {
         var places = new List<OfflinePlaceEntity>();
-        int placeIndex = 0;
 
         foreach (var region in trip.Regions)
         {
+            // Track index per region, not globally
+            int regionPlaceIndex = 0;
+
             foreach (var place in region.Places)
             {
                 places.Add(new OfflinePlaceEntity
@@ -46,8 +52,11 @@ public class TripMetadataBuilder : ITripMetadataBuilder
                     IconName = place.Icon,
                     MarkerColor = place.MarkerColor,
                     Address = place.Address,
-                    SortOrder = place.SortOrder is > 0 ? place.SortOrder.Value : placeIndex++
+                    // Use server value if present, otherwise use per-region index
+                    // Note: SortOrder 0 is valid (first place in region)
+                    SortOrder = place.SortOrder ?? regionPlaceIndex
                 });
+                regionPlaceIndex++;
             }
         }
 
