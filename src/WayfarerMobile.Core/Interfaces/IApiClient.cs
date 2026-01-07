@@ -300,6 +300,12 @@ public class ApiResult
     public int? LocationId { get; set; }
 
     /// <summary>
+    /// Gets or sets whether this is a transient failure that should be retried.
+    /// Examples: timeouts, temporary network issues, request cancellation.
+    /// </summary>
+    public bool IsTransient { get; set; }
+
+    /// <summary>
     /// Creates a successful result.
     /// </summary>
     public static ApiResult Ok(string? message = null) =>
@@ -314,8 +320,8 @@ public class ApiResult
     /// <summary>
     /// Creates a failure result.
     /// </summary>
-    public static ApiResult Fail(string? message, int? statusCode = null) =>
-        new() { Success = false, Message = message, StatusCode = statusCode };
+    public static ApiResult Fail(string? message, int? statusCode = null, bool isTransient = false) =>
+        new() { Success = false, Message = message, StatusCode = statusCode, IsTransient = isTransient };
 }
 
 /// <summary>

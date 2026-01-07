@@ -1147,8 +1147,17 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
         {
-            _logger.LogError(ex, "Request timed out");
-            return ApiResult.Fail("Request timed out");
+            _logger.LogWarning(ex, "Request timed out sending location");
+            return ApiResult.Fail("Request timed out", isTransient: true);
+        }
+        catch (TaskCanceledException ex)
+        {
+            // TaskCanceledException can occur from:
+            // 1. User/app cancellation (CancellationToken triggered)
+            // 2. Connection pool timeout (HttpClient internal timeout)
+            // Both are transient and should trigger retry
+            _logger.LogWarning(ex, "Request canceled sending location");
+            return ApiResult.Fail("Request canceled", isTransient: true);
         }
         catch (Exception ex)
         {
