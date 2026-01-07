@@ -52,6 +52,11 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     [ObservableProperty]
     private string? _errorMessage;
 
+    /// <summary>
+    /// Guard against rapid taps on Load to Map button.
+    /// </summary>
+    private bool _isLoadingToMap;
+
     #endregion
 
     #region Observable Properties - Sync Queue Status
@@ -327,8 +332,17 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         if (item == null)
             return;
 
+        // Guard against rapid taps - prevent multiple concurrent loads
+        if (_isLoadingToMap)
+        {
+            _logger.LogDebug("LoadTripToMapAsync: Ignoring rapid tap, already loading");
+            return;
+        }
+
         try
         {
+            _isLoadingToMap = true;
+
             // Load trip details from local storage (only downloaded trips can be loaded)
             var tripDetails = await _downloadService.GetOfflineTripDetailsAsync(item.ServerId);
             if (tripDetails == null)
@@ -361,6 +375,10 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         {
             _logger.LogError(ex, "Unexpected error loading trip to map");
             await _toastService.ShowErrorAsync($"Failed to load trip: {ex.Message}");
+        }
+        finally
+        {
+            _isLoadingToMap = false;
         }
     }
 
