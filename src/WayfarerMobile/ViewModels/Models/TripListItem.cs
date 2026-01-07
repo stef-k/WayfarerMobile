@@ -74,7 +74,7 @@ public partial class TripListItem : ObservableObject
         get
         {
             if (DownloadState == TripDownloadState.Downloading)
-                return "Downloading...";
+                return IsDownloading ? "Downloading..." : "Paused";
 
             if (DownloadState == TripDownloadState.ServerOnly)
                 return _serverStatsText ?? "Available online";
@@ -177,7 +177,7 @@ public partial class TripListItem : ObservableObject
     {
         TripDownloadState.Complete => "Offline",
         TripDownloadState.MetadataOnly => "Metadata",
-        TripDownloadState.Downloading => "Downloading...",
+        TripDownloadState.Downloading => IsDownloading ? "Downloading..." : "Paused",
         _ => "Online"
     };
 
@@ -188,7 +188,7 @@ public partial class TripListItem : ObservableObject
     {
         TripDownloadState.Complete => Colors.Green,
         TripDownloadState.MetadataOnly => Colors.Orange,
-        TripDownloadState.Downloading => Colors.Blue,
+        TripDownloadState.Downloading => IsDownloading ? Colors.Blue : Colors.DarkOrange,
         _ => Colors.Gray
     };
 
@@ -235,6 +235,9 @@ public partial class TripListItem : ObservableObject
     /// Gets or sets whether downloading.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusText))]
+    [NotifyPropertyChangedFor(nameof(StatusColor))]
+    [NotifyPropertyChangedFor(nameof(StatsText))]
     private bool _isDownloading;
 
     /// <summary>

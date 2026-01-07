@@ -640,7 +640,7 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
 
     /// <inheritdoc/>
     Task<string?> ITripSheetCallbacks.DisplayActionSheetAsync(string title, string cancel, string? destruction, params string[] buttons)
-        => Shell.Current.DisplayActionSheet(title, cancel, destruction, buttons);
+        => Shell.Current.DisplayActionSheetAsync(title, cancel, destruction, buttons);
 
     /// <inheritdoc/>
     Task<string?> ITripSheetCallbacks.DisplayPromptAsync(string title, string message, string? initialValue)
@@ -648,7 +648,7 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
 
     /// <inheritdoc/>
     Task<bool> ITripSheetCallbacks.DisplayAlertAsync(string title, string message, string accept, string cancel)
-        => Shell.Current.DisplayAlert(title, message, accept, cancel);
+        => Shell.Current.DisplayAlertAsync(title, message, accept, cancel);
 
     #endregion
 
@@ -695,7 +695,7 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         }
 
         // Fallback to action sheet if page reference not available
-        var result = await page.DisplayActionSheet(
+        var result = await page.DisplayActionSheetAsync(
             "Navigate by", "Cancel", null,
             "🚶 Walk", "🚗 Drive", "🚴 Bike", "📍 External Maps");
 
@@ -735,7 +735,7 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     {
         var page = Application.Current?.Windows.FirstOrDefault()?.Page;
         if (page == null) return Task.FromResult(false);
-        return page.DisplayAlert(title, message, accept, cancel);
+        return page.DisplayAlertAsync(title, message, accept, cancel);
     }
 
     /// <inheritdoc/>

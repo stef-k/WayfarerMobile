@@ -281,10 +281,12 @@ public sealed class TileDownloadOrchestrator : ITileDownloadOrchestrator
                             lastProgressReport = currentCompleted;
                             var tilesToDownload = totalTiles - initialCompleted;
                             // Convert to double first to avoid integer overflow for large tile counts
+                            // Tile download spans 18-98% (metadata takes 0-15%, boundary/calc takes 15-18%)
                             int percent = tilesToDownload > 0
-                                ? Math.Min(95, 55 + (int)(((double)currentCompleted - initialCompleted) * 40.0 / tilesToDownload))
-                                : 95;
-                            RaiseProgress(tripId, currentCompleted, totalTiles, percent, $"Downloading tiles: {currentCompleted}/{totalTiles}");
+                                ? Math.Min(98, 18 + (int)(((double)currentCompleted - initialCompleted) * 80.0 / tilesToDownload))
+                                : 98;
+                            var currentBytes = Interlocked.Read(ref totalBytes);
+                            RaiseProgress(tripId, currentCompleted, totalTiles, percent, currentBytes);
                         }
                     }
 
@@ -749,18 +751,36 @@ public sealed class TileDownloadOrchestrator : ITileDownloadOrchestrator
     #region Helper Methods
 
     /// <summary>
-    /// Raises the progress changed event.
+    /// Raises the progress changed event with download size.
     /// </summary>
-    private void RaiseProgress(int tripId, int completedTiles, int totalTiles, int percent, string message)
+    private void RaiseProgress(int tripId, int completedTiles, int totalTiles, int percent, long downloadedBytes)
     {
+        var sizeText = FormatBytes(downloadedBytes);
+        var message = string.IsNullOrEmpty(sizeText)
+            ? $"Downloading tiles: {completedTiles}/{totalTiles}"
+            : $"Downloading tiles: {completedTiles}/{totalTiles} ({sizeText})";
+
         RaiseEventSafe(ProgressChanged, new TileDownloadProgressEventArgs
         {
             TripId = tripId,
             CompletedTiles = completedTiles,
             TotalTiles = totalTiles,
             ProgressPercent = percent,
+            DownloadedBytes = downloadedBytes,
             StatusMessage = message
         });
+    }
+
+    /// <summary>
+    /// Formats bytes as human-readable size.
+    /// </summary>
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes <= 0) return string.Empty;
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        if (bytes < 1024 * 1024 * 1024) return $"{bytes / (1024.0 * 1024.0):F1} MB";
+        return $"{bytes / (1024.0 * 1024.0 * 1024.0):F2} GB";
     }
 
     /// <summary>

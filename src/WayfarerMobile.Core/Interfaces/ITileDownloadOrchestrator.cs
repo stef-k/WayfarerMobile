@@ -180,9 +180,31 @@ public record TileDownloadProgressEventArgs
     public int ProgressPercent { get; init; }
 
     /// <summary>
+    /// Gets the bytes downloaded so far.
+    /// </summary>
+    public long DownloadedBytes { get; init; }
+
+    /// <summary>
     /// Gets the status message.
     /// </summary>
     public string StatusMessage { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Gets the downloaded size formatted for display (e.g., "12.5 MB").
+    /// </summary>
+    public string DownloadedSizeText => FormatBytes(DownloadedBytes);
+
+    /// <summary>
+    /// Formats bytes as human-readable size.
+    /// </summary>
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes <= 0) return string.Empty;
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        if (bytes < 1024 * 1024 * 1024) return $"{bytes / (1024.0 * 1024.0):F1} MB";
+        return $"{bytes / (1024.0 * 1024.0 * 1024.0):F2} GB";
+    }
 }
 
 /// <summary>

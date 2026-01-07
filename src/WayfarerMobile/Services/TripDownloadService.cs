@@ -195,7 +195,7 @@ public class TripDownloadService : ITripDownloadService
     /// </summary>
     private void OnTileProgressChanged(object? sender, TileDownloadProgressEventArgs e)
     {
-        RaiseProgress(e.TripId, e.ProgressPercent, e.StatusMessage);
+        RaiseProgress(e.TripId, e.ProgressPercent, e.StatusMessage, e.DownloadedBytes);
     }
 
     /// <summary>
@@ -282,7 +282,7 @@ public class TripDownloadService : ITripDownloadService
 
             await _tripRepository.SaveDownloadedTripAsync(tripEntity);
             localTripId = tripEntity.Id; // Capture for cleanup
-            RaiseProgress(tripEntity.Id, 10, "Fetching trip details...");
+            RaiseProgress(tripEntity.Id, 2, "Fetching trip details...");
 
             // Fetch full trip details
             var tripDetails = await _apiClient.GetTripDetailsAsync(tripSummary.Id, cancellationToken);
@@ -303,21 +303,21 @@ public class TripDownloadService : ITripDownloadService
                     place.Name, place.Latitude, place.Longitude);
             }
 
-            RaiseProgress(tripEntity.Id, 25, "Saving regions...");
+            RaiseProgress(tripEntity.Id, 5, "Saving regions...");
 
             // Convert and save areas/regions using metadata builder
             var areas = _metadataBuilder.BuildAreas(tripDetails);
             await _areaRepository.SaveOfflineAreasAsync(tripEntity.Id, areas);
             tripEntity.RegionCount = areas.Count;
 
-            RaiseProgress(tripEntity.Id, 30, "Saving places...");
+            RaiseProgress(tripEntity.Id, 8, "Saving places...");
 
             // Convert and save places with region info
             var places = _metadataBuilder.BuildPlaces(tripDetails);
             await _placeRepository.SaveOfflinePlacesAsync(tripEntity.Id, places);
             tripEntity.PlaceCount = places.Count;
 
-            RaiseProgress(tripEntity.Id, 40, "Saving segments...");
+            RaiseProgress(tripEntity.Id, 10, "Saving segments...");
 
             // Convert and save segments with place names
             var segments = _metadataBuilder.BuildSegments(tripDetails);
@@ -329,10 +329,10 @@ public class TripDownloadService : ITripDownloadService
             await _areaRepository.SaveOfflinePolygonsAsync(tripEntity.Id, polygons);
             tripEntity.AreaCount = polygons.Count;
 
-            tripEntity.ProgressPercent = 50;
+            tripEntity.ProgressPercent = 15;
             await _tripRepository.SaveDownloadedTripAsync(tripEntity);
 
-            RaiseProgress(tripEntity.Id, 50, $"Saved {places.Count} places, {segments.Count} segments, {polygons.Count} polygons");
+            RaiseProgress(tripEntity.Id, 15, $"Saved {places.Count} places, {segments.Count} segments, {polygons.Count} polygons");
 
             // Get bounding box for tile download
             // Primary sources: tripSummary or tripDetails (simple null coalescing like main branch)
@@ -364,7 +364,7 @@ public class TripDownloadService : ITripDownloadService
             {
                 // Fallback: Fetch boundary from dedicated endpoint (server calculates from geographic data)
                 _logger.LogDebug("Fetching boundary from API for {TripName}", tripSummary.Name);
-                RaiseProgress(tripEntity.Id, 52, "Fetching trip boundary...");
+                RaiseProgress(tripEntity.Id, 16, "Fetching trip boundary...");
                 var boundaryResponse = await _apiClient.GetTripBoundaryAsync(tripSummary.Id, cancellationToken);
 
                 if (boundaryResponse?.BoundingBox != null && boundaryResponse.BoundingBox.IsValid)
@@ -390,7 +390,7 @@ public class TripDownloadService : ITripDownloadService
             if (boundingBox != null && includeTiles)
             {
                 // Download tiles for offline map
-                RaiseProgress(tripEntity.Id, 55, "Calculating tiles...");
+                RaiseProgress(tripEntity.Id, 18, "Calculating tiles...");
 
                 var tileCoords = _tileDownloadOrchestrator.CalculateTilesForBoundingBox(boundingBox);
                 _logger.LogInformation("Trip {TripName} requires {TileCount} tiles", tripSummary.Name, tileCoords.Count);
@@ -966,13 +966,14 @@ public class TripDownloadService : ITripDownloadService
     /// <summary>
     /// Raises the progress changed event.
     /// </summary>
-    private void RaiseProgress(int tripId, int percent, string message)
+    private void RaiseProgress(int tripId, int percent, string message, long downloadedBytes = 0)
     {
         RaiseEventSafe(ProgressChanged, new DownloadProgressEventArgs
         {
             TripId = tripId,
             ProgressPercent = percent,
-            StatusMessage = message
+            StatusMessage = message,
+            DownloadedBytes = downloadedBytes
         });
     }
 

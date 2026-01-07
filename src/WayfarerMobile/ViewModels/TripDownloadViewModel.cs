@@ -599,27 +599,47 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
         _downloadCts?.Dispose();
         _downloadCts = new CancellationTokenSource();
 
-        // Update UI to show resuming state (keep IsDownloadPaused true until confirmed)
+        // Set download state IMMEDIATELY so CanPauseDownload is true during the download
+        // ResumeDownloadAsync blocks until completion, so we must set this before await
         IsDownloading = true;
+        IsDownloadPaused = false;
         DownloadStatusMessage = "Resuming download...";
+
+        // Update the TripListItem's state so the UI shows downloading
+        if (_downloadingTripServerId.HasValue)
+        {
+            var item = _callbacks?.FindItemByServerId(_downloadingTripServerId.Value);
+            if (item != null)
+            {
+                item.DownloadState = TripDownloadState.Downloading;
+                item.IsDownloading = true;
+                item.DownloadProgress = 0;
+            }
+        }
 
         try
         {
             var resumed = await _downloadService.ResumeDownloadAsync(tripId, _downloadCts.Token);
-            if (resumed)
-            {
-                // Resume started successfully - download is now active
-                IsDownloadPaused = false;
-                // OnDownloadCompleted/OnDownloadPaused events handle final state cleanup
-            }
-            else
+            if (!resumed)
             {
                 // Resume failed - provide feedback and reset state
                 await _toastService.ShowErrorAsync("Could not resume download");
-                IsDownloadPaused = true; // Still paused
+                IsDownloadPaused = true; // Back to paused
                 IsDownloading = false;
                 DownloadStatusMessage = "Resume failed";
+
+                // Revert item state
+                if (_downloadingTripServerId.HasValue)
+                {
+                    var item = _callbacks?.FindItemByServerId(_downloadingTripServerId.Value);
+                    if (item != null)
+                    {
+                        item.IsDownloading = false;
+                        // Keep DownloadState as Downloading - it was already in that state in the DB
+                    }
+                }
             }
+            // Success case: OnDownloadCompleted/OnDownloadPaused events handle final state cleanup
         }
         catch (OperationCanceledException)
         {
@@ -660,6 +680,17 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
             {
                 _downloadCts?.Dispose();
                 _downloadCts = null;
+
+                // Also clean up item download state if we're not actively downloading
+                if (_downloadingTripServerId.HasValue)
+                {
+                    var item = _callbacks?.FindItemByServerId(_downloadingTripServerId.Value);
+                    if (item != null)
+                    {
+                        item.IsDownloading = false;
+                        item.DownloadProgress = 0;
+                    }
+                }
             }
         }
     }
