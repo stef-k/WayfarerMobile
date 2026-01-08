@@ -265,7 +265,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         try
         {
             var response = await ExecuteWithRetryAsync(
-                () => CreateRequest(HttpMethod.Get, $"/api/trips/{tripId}/boundingbox"),
+                () => CreateRequest(HttpMethod.Get, $"/api/trips/{tripId}/boundary"),
                 cancellationToken);
 
             if (response.IsSuccessStatusCode)
