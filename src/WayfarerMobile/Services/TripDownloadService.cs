@@ -338,16 +338,21 @@ public class TripDownloadService : ITripDownloadService
             // Primary sources: tripSummary or tripDetails - must be valid (not all zeros)
             BoundingBox? boundingBox = null;
 
+            _logger.LogInformation("BoundingBox resolution for {TripName}: summary={HasSummary}/{SummaryValid}, details={HasDetails}/{DetailsValid}",
+                tripSummary.Name,
+                tripSummary.BoundingBox != null, tripSummary.BoundingBox?.IsValid ?? false,
+                tripDetails.BoundingBox != null, tripDetails.BoundingBox?.IsValid ?? false);
+
             if (tripSummary.BoundingBox?.IsValid == true)
             {
                 boundingBox = tripSummary.BoundingBox;
-                _logger.LogDebug("Using bounding box from trip summary for {TripName}: N={North}, S={South}, E={East}, W={West}",
+                _logger.LogInformation("Using bounding box from trip summary for {TripName}: N={North}, S={South}, E={East}, W={West}",
                     tripSummary.Name, boundingBox.North, boundingBox.South, boundingBox.East, boundingBox.West);
             }
             else if (tripDetails.BoundingBox?.IsValid == true)
             {
                 boundingBox = tripDetails.BoundingBox;
-                _logger.LogDebug("Using bounding box from trip details for {TripName}: N={North}, S={South}, E={East}, W={West}",
+                _logger.LogInformation("Using bounding box from trip details for {TripName}: N={North}, S={South}, E={East}, W={West}",
                     tripSummary.Name, boundingBox.North, boundingBox.South, boundingBox.East, boundingBox.West);
             }
 
@@ -371,14 +376,19 @@ public class TripDownloadService : ITripDownloadService
             if (boundingBox == null)
             {
                 // Fallback: Fetch boundary from dedicated endpoint (server calculates from geographic data)
-                _logger.LogDebug("Fetching boundary from API for {TripName}", tripSummary.Name);
+                _logger.LogInformation("Fetching boundary from API for {TripName} (tripId={TripId})", tripSummary.Name, tripSummary.Id);
                 RaiseProgress(tripEntity.Id, 16, "Fetching trip boundary...");
                 var boundaryResponse = await _apiClient.GetTripBoundaryAsync(tripSummary.Id, cancellationToken);
+
+                _logger.LogInformation("Boundary API response for {TripName}: BoundingBox={HasBbox}, IsValid={IsValid}",
+                    tripSummary.Name,
+                    boundaryResponse?.BoundingBox != null,
+                    boundaryResponse?.BoundingBox?.IsValid ?? false);
 
                 if (boundaryResponse?.BoundingBox != null && boundaryResponse.BoundingBox.IsValid)
                 {
                     boundingBox = boundaryResponse.BoundingBox;
-                    _logger.LogDebug("Using boundary API bbox for {TripName}: N={North}, S={South}, E={East}, W={West}",
+                    _logger.LogInformation("Using boundary API bbox for {TripName}: N={North}, S={South}, E={East}, W={West}",
                         tripSummary.Name, boundingBox.North, boundingBox.South, boundingBox.East, boundingBox.West);
 
                     // Store the fetched bounding box in the entity for future use
@@ -390,7 +400,8 @@ public class TripDownloadService : ITripDownloadService
                 }
                 else
                 {
-                    _logger.LogWarning("Boundary API returned no valid bounding box for {TripName}", tripSummary.Name);
+                    _logger.LogWarning("Boundary API returned no valid bounding box for {TripName}: response={Response}, bbox={Bbox}",
+                        tripSummary.Name, boundaryResponse != null, boundaryResponse?.BoundingBox != null);
                 }
             }
 
