@@ -362,19 +362,30 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public async Task PauseDownloadAsync()
     {
+        _logger.LogInformation("PauseDownloadAsync: Entry - IsProcessing={IsProcessing}, TripId={TripId}, IsDownloading={IsDownloading}, IsDownloadPaused={IsPaused}",
+            _isProcessingPauseResume, DownloadingTripId, IsDownloading, IsDownloadPaused);
+
         if (_isProcessingPauseResume || !DownloadingTripId.HasValue)
+        {
+            _logger.LogWarning("PauseDownloadAsync: Early exit - IsProcessing={IsProcessing}, HasTripId={HasTripId}",
+                _isProcessingPauseResume, DownloadingTripId.HasValue);
             return;
+        }
 
         _isProcessingPauseResume = true;
         try
         {
-            _logger.LogInformation("Pausing download for trip {TripId}", DownloadingTripId.Value);
+            _logger.LogInformation("PauseDownloadAsync: Calling service.PauseDownloadAsync for trip {TripId}", DownloadingTripId.Value);
 
             var paused = await _downloadService.PauseDownloadAsync(DownloadingTripId.Value);
+            _logger.LogInformation("PauseDownloadAsync: Service returned paused={Paused}", paused);
+
             if (paused)
             {
                 IsDownloadPaused = true;
                 DownloadStatusMessage = "Download paused";
+                _logger.LogInformation("PauseDownloadAsync: State updated - IsDownloading={IsDownloading}, IsDownloadPaused={IsPaused}",
+                    IsDownloading, IsDownloadPaused);
 
                 // Clean up CancellationTokenSource on pause to avoid memory leak
                 _downloadCts?.Cancel();
@@ -402,8 +413,14 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public async Task ResumeDownloadAsync()
     {
+        _logger.LogInformation("ResumeDownloadAsync: Entry - IsProcessing={IsProcessing}, TripId={TripId}, IsDownloading={IsDownloading}, IsDownloadPaused={IsPaused}, PausedCount={PausedCount}",
+            _isProcessingPauseResume, DownloadingTripId, IsDownloading, IsDownloadPaused, PausedDownloadsCount);
+
         if (_isProcessingPauseResume)
+        {
+            _logger.LogWarning("ResumeDownloadAsync: Early exit - already processing");
             return;
+        }
 
         _isProcessingPauseResume = true;
         try
@@ -411,15 +428,22 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
             // Handle current session pause
             if (DownloadingTripId.HasValue)
             {
+                _logger.LogInformation("ResumeDownloadAsync: Resuming current session download {TripId}", DownloadingTripId.Value);
                 await ResumeDownloadByTripIdAsync(DownloadingTripId.Value);
                 return;
             }
 
             // Handle previous session paused downloads - find the first one to resume
+            _logger.LogInformation("ResumeDownloadAsync: Looking for paused downloads from previous session");
             var pausedDownloads = await _downloadService.GetPausedDownloadsAsync();
+            _logger.LogInformation("ResumeDownloadAsync: Found {Count} paused downloads", pausedDownloads.Count);
+
             if (pausedDownloads.Count > 0)
             {
                 var firstPaused = pausedDownloads[0];
+                _logger.LogInformation("ResumeDownloadAsync: Resuming trip {TripId} ({TripName}), ServerId={ServerId}",
+                    firstPaused.TripId, firstPaused.TripName, firstPaused.TripServerId);
+
                 // Set up download state for this trip
                 DownloadingTripId = firstPaused.TripId;
                 DownloadingTripName = firstPaused.TripName;
@@ -429,11 +453,14 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
             }
 
             // No paused downloads found
+            _logger.LogWarning("ResumeDownloadAsync: No paused downloads found");
             await _toastService.ShowErrorAsync("No paused downloads found");
         }
         finally
         {
             _isProcessingPauseResume = false;
+            _logger.LogInformation("ResumeDownloadAsync: Exit - IsDownloading={IsDownloading}, IsDownloadPaused={IsPaused}",
+                IsDownloading, IsDownloadPaused);
         }
     }
 
@@ -844,8 +871,10 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
     {
         MainThread.BeginInvokeOnMainThread(async () =>
         {
-            _logger.LogInformation("Download paused for trip {TripName}: {Reason}, {Completed}/{Total} tiles",
-                e.TripName, e.Reason, e.TilesCompleted, e.TotalTiles);
+            _logger.LogInformation("OnDownloadPaused: Event received - Trip={TripName}, Reason={Reason}, {Completed}/{Total} tiles, CanResume={CanResume}",
+                e.TripName, e.Reason, e.TilesCompleted, e.TotalTiles, e.CanResume);
+            _logger.LogInformation("OnDownloadPaused: Before state update - IsDownloading={IsDownloading}, IsDownloadPaused={IsPaused}, TripId={TripId}",
+                IsDownloading, IsDownloadPaused, DownloadingTripId);
 
             IsDownloadPaused = true;
             DownloadStatusMessage = e.Reason switch
@@ -861,6 +890,7 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
             // If cancelled (not resumable), clear download state
             if (!e.CanResume)
             {
+                _logger.LogInformation("OnDownloadPaused: Not resumable - clearing state");
                 IsDownloading = false;
                 IsDownloadPaused = false;
                 DownloadingTripName = null;
@@ -868,10 +898,15 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
                 _downloadingTripServerId = null;
             }
 
+            _logger.LogInformation("OnDownloadPaused: After state update - IsDownloading={IsDownloading}, IsDownloadPaused={IsPaused}, CanPause={CanPause}, CanResume={CanResume}",
+                IsDownloading, IsDownloadPaused, CanPauseDownload, CanResumeDownload);
+
             // Refresh paused downloads count via callback
             if (_callbacks != null)
             {
+                _logger.LogInformation("OnDownloadPaused: Calling CheckForPausedDownloadsAsync");
                 await _callbacks.CheckForPausedDownloadsAsync();
+                _logger.LogInformation("OnDownloadPaused: After CheckForPausedDownloadsAsync - PausedCount={Count}", PausedDownloadsCount);
             }
         });
     }
