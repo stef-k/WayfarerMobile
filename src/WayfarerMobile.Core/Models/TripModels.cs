@@ -261,8 +261,9 @@ public class TripDetails : INotifyPropertyChanged
                 CenterLatitude = r.CenterLatitude,
                 CenterLongitude = r.CenterLongitude,
                 SortOrder = r.SortOrder,
-                Places = r.Places.OrderBy(p => p.SortOrder).ToList(),
-                Areas = r.Areas.OrderBy(a => a.SortOrder).ToList()
+                // Defensive null checks to prevent NullReferenceException if Places/Areas not initialized
+                Places = (r.Places ?? []).OrderBy(p => p.SortOrder).ToList(),
+                Areas = (r.Areas ?? []).OrderBy(a => a.SortOrder).ToList()
             })
             .ToList();
 
@@ -271,14 +272,14 @@ public class TripDetails : INotifyPropertyChanged
     /// </summary>
     [JsonIgnore]
     public List<TripPlace> AllPlaces =>
-        Regions.SelectMany(r => r.Places).ToList();
+        Regions.SelectMany(r => r.Places ?? []).ToList();
 
     /// <summary>
     /// Gets all areas from all regions.
     /// </summary>
     [JsonIgnore]
     public List<TripArea> AllAreas =>
-        Regions.SelectMany(r => r.Areas).ToList();
+        Regions.SelectMany(r => r.Areas ?? []).ToList();
 
     /// <summary>
     /// Notifies that the SortedRegions property has changed.
