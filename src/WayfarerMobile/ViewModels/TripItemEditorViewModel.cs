@@ -556,33 +556,59 @@ public partial class TripItemEditorViewModel : BaseViewModel
     [RelayCommand]
     private async Task MoveRegionUpAsync(TripRegion? region)
     {
-        var loadedTrip = _callbacks?.LoadedTrip;
-        if (region == null || loadedTrip == null)
-            return;
+        try
+        {
+            _logger.LogInformation("MoveRegionUp: Starting for region {RegionId}", region?.Id);
 
-        // Find the actual region instance by ID (parameter may be from SortedRegions which creates new objects)
-        var targetRegion = loadedTrip.Regions.FirstOrDefault(r => r.Id == region.Id);
-        if (targetRegion == null)
-            return;
+            var loadedTrip = _callbacks?.LoadedTrip;
+            if (region == null || loadedTrip == null)
+            {
+                _logger.LogWarning("MoveRegionUp: Early exit - region={RegionNull}, loadedTrip={TripNull}",
+                    region == null, loadedTrip == null);
+                return;
+            }
 
-        var regions = loadedTrip.Regions.OrderBy(r => r.SortOrder).ToList();
-        var index = regions.IndexOf(targetRegion);
-        if (index <= 0)
-            return;
+            // Find the actual region instance by ID (parameter may be from SortedRegions which creates new objects)
+            var targetRegion = loadedTrip.Regions.FirstOrDefault(r => r.Id == region.Id);
+            if (targetRegion == null)
+            {
+                _logger.LogWarning("MoveRegionUp: Target region {RegionId} not found in loadedTrip.Regions", region.Id);
+                return;
+            }
 
-        // Swap sort orders
-        var prevRegion = regions[index - 1];
-        (targetRegion.SortOrder, prevRegion.SortOrder) = (prevRegion.SortOrder, targetRegion.SortOrder);
+            var regions = loadedTrip.Regions.OrderBy(r => r.SortOrder).ToList();
+            var index = regions.IndexOf(targetRegion);
+            _logger.LogInformation("MoveRegionUp: Region index={Index}, total regions={Count}", index, regions.Count);
 
-        // Notify UI to refresh regions list
-        _callbacks?.NotifyTripRegionsChanged();
+            if (index <= 0)
+            {
+                _logger.LogInformation("MoveRegionUp: Already at top, index={Index}", index);
+                return;
+            }
 
-        // Refresh map layers
-        await (_callbacks?.RefreshTripLayersAsync(loadedTrip) ?? Task.CompletedTask);
+            // Swap sort orders
+            var prevRegion = regions[index - 1];
+            (targetRegion.SortOrder, prevRegion.SortOrder) = (prevRegion.SortOrder, targetRegion.SortOrder);
+            _logger.LogInformation("MoveRegionUp: Swapped sort orders - target={TargetOrder}, prev={PrevOrder}",
+                targetRegion.SortOrder, prevRegion.SortOrder);
 
-        // Sync to server
-        await _tripSyncService.UpdateRegionAsync(targetRegion.Id, loadedTrip.Id, displayOrder: targetRegion.SortOrder);
-        await _tripSyncService.UpdateRegionAsync(prevRegion.Id, loadedTrip.Id, displayOrder: prevRegion.SortOrder);
+            // Notify UI to refresh regions list
+            _callbacks?.NotifyTripRegionsChanged();
+
+            // Refresh map layers
+            await (_callbacks?.RefreshTripLayersAsync(loadedTrip) ?? Task.CompletedTask);
+
+            // Sync to server
+            await _tripSyncService.UpdateRegionAsync(targetRegion.Id, loadedTrip.Id, displayOrder: targetRegion.SortOrder);
+            await _tripSyncService.UpdateRegionAsync(prevRegion.Id, loadedTrip.Id, displayOrder: prevRegion.SortOrder);
+
+            _logger.LogInformation("MoveRegionUp: Completed successfully for region {RegionId}", region.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "MoveRegionUp: Failed for region {RegionId}", region?.Id);
+            throw;
+        }
     }
 
     /// <summary>
@@ -591,33 +617,59 @@ public partial class TripItemEditorViewModel : BaseViewModel
     [RelayCommand]
     private async Task MoveRegionDownAsync(TripRegion? region)
     {
-        var loadedTrip = _callbacks?.LoadedTrip;
-        if (region == null || loadedTrip == null)
-            return;
+        try
+        {
+            _logger.LogInformation("MoveRegionDown: Starting for region {RegionId}", region?.Id);
 
-        // Find the actual region instance by ID (parameter may be from SortedRegions which creates new objects)
-        var targetRegion = loadedTrip.Regions.FirstOrDefault(r => r.Id == region.Id);
-        if (targetRegion == null)
-            return;
+            var loadedTrip = _callbacks?.LoadedTrip;
+            if (region == null || loadedTrip == null)
+            {
+                _logger.LogWarning("MoveRegionDown: Early exit - region={RegionNull}, loadedTrip={TripNull}",
+                    region == null, loadedTrip == null);
+                return;
+            }
 
-        var regions = loadedTrip.Regions.OrderBy(r => r.SortOrder).ToList();
-        var index = regions.IndexOf(targetRegion);
-        if (index < 0 || index >= regions.Count - 1)
-            return;
+            // Find the actual region instance by ID (parameter may be from SortedRegions which creates new objects)
+            var targetRegion = loadedTrip.Regions.FirstOrDefault(r => r.Id == region.Id);
+            if (targetRegion == null)
+            {
+                _logger.LogWarning("MoveRegionDown: Target region {RegionId} not found in loadedTrip.Regions", region.Id);
+                return;
+            }
 
-        // Swap sort orders
-        var nextRegion = regions[index + 1];
-        (targetRegion.SortOrder, nextRegion.SortOrder) = (nextRegion.SortOrder, targetRegion.SortOrder);
+            var regions = loadedTrip.Regions.OrderBy(r => r.SortOrder).ToList();
+            var index = regions.IndexOf(targetRegion);
+            _logger.LogInformation("MoveRegionDown: Region index={Index}, total regions={Count}", index, regions.Count);
 
-        // Notify UI to refresh regions list
-        _callbacks?.NotifyTripRegionsChanged();
+            if (index < 0 || index >= regions.Count - 1)
+            {
+                _logger.LogInformation("MoveRegionDown: Already at bottom, index={Index}", index);
+                return;
+            }
 
-        // Refresh map layers
-        await (_callbacks?.RefreshTripLayersAsync(loadedTrip) ?? Task.CompletedTask);
+            // Swap sort orders
+            var nextRegion = regions[index + 1];
+            (targetRegion.SortOrder, nextRegion.SortOrder) = (nextRegion.SortOrder, targetRegion.SortOrder);
+            _logger.LogInformation("MoveRegionDown: Swapped sort orders - target={TargetOrder}, next={NextOrder}",
+                targetRegion.SortOrder, nextRegion.SortOrder);
 
-        // Sync to server
-        await _tripSyncService.UpdateRegionAsync(targetRegion.Id, loadedTrip.Id, displayOrder: targetRegion.SortOrder);
-        await _tripSyncService.UpdateRegionAsync(nextRegion.Id, loadedTrip.Id, displayOrder: nextRegion.SortOrder);
+            // Notify UI to refresh regions list
+            _callbacks?.NotifyTripRegionsChanged();
+
+            // Refresh map layers
+            await (_callbacks?.RefreshTripLayersAsync(loadedTrip) ?? Task.CompletedTask);
+
+            // Sync to server
+            await _tripSyncService.UpdateRegionAsync(targetRegion.Id, loadedTrip.Id, displayOrder: targetRegion.SortOrder);
+            await _tripSyncService.UpdateRegionAsync(nextRegion.Id, loadedTrip.Id, displayOrder: nextRegion.SortOrder);
+
+            _logger.LogInformation("MoveRegionDown: Completed successfully for region {RegionId}", region.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "MoveRegionDown: Failed for region {RegionId}", region?.Id);
+            throw;
+        }
     }
 
     #endregion
@@ -1008,38 +1060,63 @@ public partial class TripItemEditorViewModel : BaseViewModel
     /// </summary>
     private async Task AddRegionAsync()
     {
-        var loadedTrip = _callbacks?.LoadedTrip;
-        if (loadedTrip == null)
-            return;
-
-        var name = await (_callbacks?.DisplayPromptAsync(
-            "Add Region",
-            "Enter the region name:") ?? Task.FromResult<string?>(null));
-
-        if (string.IsNullOrWhiteSpace(name))
-            return;
-
-        // Create new region with temp ID
-        var newRegion = new TripRegion
+        try
         {
-            Id = Guid.NewGuid(),
-            Name = name,
-            SortOrder = loadedTrip.Regions.Count
-        };
+            _logger.LogInformation("AddRegion: Starting");
 
-        // Add to loaded trip
-        loadedTrip.Regions.Add(newRegion);
+            var loadedTrip = _callbacks?.LoadedTrip;
+            if (loadedTrip == null)
+            {
+                _logger.LogWarning("AddRegion: Early exit - loadedTrip is null");
+                return;
+            }
 
-        // Notify UI to refresh regions list
-        _callbacks?.NotifyTripRegionsChanged();
+            _logger.LogInformation("AddRegion: Trip {TripId} has {RegionCount} existing regions",
+                loadedTrip.Id, loadedTrip.Regions.Count);
 
-        // Sync to server
-        await _tripSyncService.CreateRegionAsync(
-            loadedTrip.Id,
-            name,
-            displayOrder: newRegion.SortOrder);
+            var name = await (_callbacks?.DisplayPromptAsync(
+                "Add Region",
+                "Enter the region name:") ?? Task.FromResult<string?>(null));
 
-        await _toastService.ShowSuccessAsync("Region added");
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                _logger.LogInformation("AddRegion: User cancelled or entered empty name");
+                return;
+            }
+
+            _logger.LogInformation("AddRegion: Creating region with name '{Name}'", name);
+
+            // Create new region with temp ID
+            var newRegion = new TripRegion
+            {
+                Id = Guid.NewGuid(),
+                Name = name,
+                SortOrder = loadedTrip.Regions.Count
+            };
+
+            // Add to loaded trip
+            loadedTrip.Regions.Add(newRegion);
+            _logger.LogInformation("AddRegion: Added region {RegionId} to memory, total regions now {Count}",
+                newRegion.Id, loadedTrip.Regions.Count);
+
+            // Notify UI to refresh regions list
+            _callbacks?.NotifyTripRegionsChanged();
+
+            // Sync to server
+            _logger.LogInformation("AddRegion: Syncing to server");
+            await _tripSyncService.CreateRegionAsync(
+                loadedTrip.Id,
+                name,
+                displayOrder: newRegion.SortOrder);
+
+            _logger.LogInformation("AddRegion: Completed successfully for region {RegionId}", newRegion.Id);
+            await _toastService.ShowSuccessAsync("Region added");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "AddRegion: Failed");
+            throw;
+        }
     }
 
     /// <summary>
