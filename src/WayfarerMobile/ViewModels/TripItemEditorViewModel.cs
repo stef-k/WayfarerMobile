@@ -768,7 +768,7 @@ public partial class TripItemEditorViewModel : BaseViewModel
             "Add to Trip",
             "Cancel",
             null,
-            "Add Region", "Add Place at Current Location") ?? Task.FromResult<string?>(null));
+            "Add Region", "Add Place") ?? Task.FromResult<string?>(null));
 
         if (string.IsNullOrEmpty(selected) || selected == "Cancel")
             return;
@@ -778,7 +778,7 @@ public partial class TripItemEditorViewModel : BaseViewModel
             case "Add Region":
                 await AddRegionAsync();
                 break;
-            case "Add Place at Current Location":
+            case "Add Place":
                 await AddPlaceToCurrentLocationAsync();
                 break;
         }

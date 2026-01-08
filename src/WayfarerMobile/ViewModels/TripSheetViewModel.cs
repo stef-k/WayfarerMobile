@@ -939,6 +939,15 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
     /// Processes any pending selection restore and clears the flag.
     /// Called by MainViewModel.OnAppearingAsync.
     /// </summary>
+    /// <remarks>
+    /// After returning from sub-editors (notes, marker), this method:
+    /// 1. Finds the entity in the in-memory LoadedTrip
+    /// 2. Optionally syncs from offline database if available (for downloaded trips)
+    /// 3. Re-selects the entity to trigger UI refresh
+    ///
+    /// The in-memory LoadedTrip is already updated by the sub-editor's save method,
+    /// so we always re-select even if the database entity doesn't exist.
+    /// </remarks>
     public async Task ProcessPendingSelectionRestoreAsync()
     {
         if (_pendingSelectionRestore == null || LoadedTrip == null)
@@ -948,92 +957,110 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
         _pendingSelectionRestore = null;
         IsNavigatingToSubEditor = false;
 
-        // Refresh the entity from database to get updated notes
+        // Find entity in memory first, then optionally sync from DB, then re-select
         switch (entityType)
         {
             case "place":
-                var place = await _placeRepository.GetOfflinePlaceByServerIdAsync(entityId);
-                if (place != null)
+                // Find the place in loaded trip
+                TripPlace? tripPlace = null;
+                foreach (var region in LoadedTrip.Regions)
                 {
-                    // Find and update the place in loaded trip
-                    foreach (var region in LoadedTrip.Regions)
+                    tripPlace = region.Places.FirstOrDefault(p => p.Id == entityId);
+                    if (tripPlace != null)
+                        break;
+                }
+
+                if (tripPlace != null)
+                {
+                    // Optionally sync from offline database if available
+                    var place = await _placeRepository.GetOfflinePlaceByServerIdAsync(entityId);
+                    if (place != null)
                     {
-                        var tripPlace = region.Places.FirstOrDefault(p => p.Id == entityId);
-                        if (tripPlace != null)
+                        // Check if marker appearance changed
+                        var markerChanged = tripPlace.Icon != place.IconName ||
+                                            tripPlace.MarkerColor != place.MarkerColor;
+
+                        // Update all editable properties from local database
+                        tripPlace.Notes = place.Notes;
+                        tripPlace.Icon = place.IconName;
+                        tripPlace.MarkerColor = place.MarkerColor;
+
+                        // Refresh map layers if marker appearance changed
+                        if (markerChanged)
                         {
-                            // Check if marker appearance changed
-                            var markerChanged = tripPlace.Icon != place.IconName ||
-                                                tripPlace.MarkerColor != place.MarkerColor;
-
-                            // Update all editable properties from local database
-                            tripPlace.Notes = place.Notes;
-                            tripPlace.Icon = place.IconName;
-                            tripPlace.MarkerColor = place.MarkerColor;
-
-                            // Refresh map layers if marker appearance changed
-                            if (markerChanged)
-                            {
-                                await (_callbacks?.RefreshTripLayersAsync(LoadedTrip) ?? Task.CompletedTask);
-                            }
-
-                            SelectTripPlace(tripPlace);
-                            break;
+                            await (_callbacks?.RefreshTripLayersAsync(LoadedTrip) ?? Task.CompletedTask);
                         }
                     }
+
+                    // Always re-select to trigger UI refresh
+                    SelectTripPlace(tripPlace);
                 }
                 break;
 
             case "area":
-                var area = await _areaRepository.GetOfflineAreaByServerIdAsync(entityId);
-                if (area != null)
+                // Find the area (polygon) in loaded trip
+                var tripArea = LoadedTrip.AllAreas.FirstOrDefault(a => a.Id == entityId);
+                if (tripArea != null)
                 {
-                    var tripArea = LoadedTrip.AllAreas.FirstOrDefault(a => a.Id == entityId);
-                    if (tripArea != null)
+                    // Optionally sync from offline database if available
+                    // TripAreas (polygons) are stored in OfflinePolygon table, not OfflineArea
+                    var polygon = await _areaRepository.GetOfflinePolygonByServerIdAsync(entityId);
+                    if (polygon != null)
                     {
-                        tripArea.Notes = area.Notes;
-                        SelectTripArea(tripArea);
+                        tripArea.Notes = polygon.Notes;
                     }
+
+                    // Always re-select to trigger UI refresh
+                    SelectTripArea(tripArea);
                 }
                 break;
 
             case "segment":
-                var segment = await _segmentRepository.GetOfflineSegmentByServerIdAsync(entityId);
-                if (segment != null)
+                // Find the segment in loaded trip
+                var tripSegment = LoadedTrip.Segments.FirstOrDefault(s => s.Id == entityId);
+                if (tripSegment != null)
                 {
-                    var tripSegment = LoadedTrip.Segments.FirstOrDefault(s => s.Id == entityId);
-                    if (tripSegment != null)
+                    // Optionally sync from offline database if available
+                    var segment = await _segmentRepository.GetOfflineSegmentByServerIdAsync(entityId);
+                    if (segment != null)
                     {
                         tripSegment.Notes = segment.Notes;
-                        SelectTripSegment(tripSegment);
                     }
+
+                    // Always re-select to trigger UI refresh
+                    SelectTripSegment(tripSegment);
                 }
                 break;
 
             case "region":
-                // Fetch region from database to get updated notes
-                // Regions are stored in OfflineArea table
-                var regionArea = await _areaRepository.GetOfflineAreaByServerIdAsync(entityId);
-                if (regionArea != null)
+                // Find the region in loaded trip
+                var tripRegion = LoadedTrip.Regions.FirstOrDefault(r => r.Id == entityId);
+                if (tripRegion != null)
                 {
-                    var tripRegion = LoadedTrip.Regions.FirstOrDefault(r => r.Id == entityId);
-                    if (tripRegion != null)
+                    // Optionally sync from offline database if available
+                    // Regions are stored in OfflineArea table
+                    var regionArea = await _areaRepository.GetOfflineAreaByServerIdAsync(entityId);
+                    if (regionArea != null)
                     {
                         tripRegion.Notes = regionArea.Notes;
-                        ShowRegionNotes(tripRegion);
                     }
+
+                    // Always show region notes to trigger UI refresh
+                    ShowRegionNotes(tripRegion);
                 }
                 break;
 
             case "trip":
-                // Fetch trip from database to get updated notes
+                // Optionally sync from offline database if available
                 var downloadedTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(entityId);
                 if (downloadedTrip != null)
                 {
                     LoadedTrip.Notes = downloadedTrip.Notes;
-                    // Trigger property change notification
-                    OnPropertyChanged(nameof(TripNotesPreview));
-                    OnPropertyChanged(nameof(TripNotesHtml));
                 }
+
+                // Always trigger property change notification for UI refresh
+                OnPropertyChanged(nameof(TripNotesPreview));
+                OnPropertyChanged(nameof(TripNotesHtml));
                 break;
         }
     }
