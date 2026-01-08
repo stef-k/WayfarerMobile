@@ -335,15 +335,23 @@ public class TripDownloadService : ITripDownloadService
             RaiseProgress(tripEntity.Id, 15, $"Saved {places.Count} places, {segments.Count} segments, {polygons.Count} polygons");
 
             // Get bounding box for tile download
-            // Primary sources: tripSummary or tripDetails (simple null coalescing like main branch)
-            var boundingBox = tripSummary.BoundingBox ?? tripDetails.BoundingBox;
+            // Primary sources: tripSummary or tripDetails - must be valid (not all zeros)
+            BoundingBox? boundingBox = null;
 
-            if (boundingBox != null)
+            if (tripSummary.BoundingBox?.IsValid == true)
             {
-                _logger.LogDebug("Using bounding box from {Source} for {TripName}",
-                    tripSummary.BoundingBox != null ? "trip summary" : "trip details", tripSummary.Name);
+                boundingBox = tripSummary.BoundingBox;
+                _logger.LogDebug("Using bounding box from trip summary for {TripName}: N={North}, S={South}, E={East}, W={West}",
+                    tripSummary.Name, boundingBox.North, boundingBox.South, boundingBox.East, boundingBox.West);
             }
-            else
+            else if (tripDetails.BoundingBox?.IsValid == true)
+            {
+                boundingBox = tripDetails.BoundingBox;
+                _logger.LogDebug("Using bounding box from trip details for {TripName}: N={North}, S={South}, E={East}, W={West}",
+                    tripSummary.Name, boundingBox.North, boundingBox.South, boundingBox.East, boundingBox.West);
+            }
+
+            if (boundingBox == null)
             {
                 // Fallback: Check if entity already has stored bounding box (from previous metadata download)
                 var storedBbox = new BoundingBox
