@@ -17,6 +17,7 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
     private readonly IApiClient _apiClient;
     private readonly DatabaseService _databaseService;
     private readonly IPlaceRepository _placeRepository;
+    private readonly ITripRepository _tripRepository;
     private readonly IConnectivity _connectivity;
     private readonly SemaphoreSlim _initLock = new(1, 1);
     private SQLiteAsyncConnection? _database;
@@ -29,11 +30,13 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
         IApiClient apiClient,
         DatabaseService databaseService,
         IPlaceRepository placeRepository,
+        ITripRepository tripRepository,
         IConnectivity connectivity)
     {
         _apiClient = apiClient;
         _databaseService = databaseService;
         _placeRepository = placeRepository;
+        _tripRepository = tripRepository;
         _connectivity = connectivity;
     }
 
@@ -96,6 +99,26 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
 
         if (!IsConnected)
         {
+            // Create offline entry immediately with temp ID so subsequent updates work
+            var localTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripId);
+            if (localTrip != null)
+            {
+                var offlinePlace = new OfflinePlaceEntity
+                {
+                    TripId = localTrip.Id,
+                    ServerId = tempClientId,
+                    RegionId = regionId,
+                    Name = name,
+                    Latitude = latitude,
+                    Longitude = longitude,
+                    Notes = notes,
+                    IconName = iconName,
+                    MarkerColor = markerColor,
+                    SortOrder = displayOrder ?? 0
+                };
+                await _placeRepository.InsertOfflinePlaceAsync(offlinePlace);
+            }
+
             await EnqueuePlaceMutationAsync("Create", tempClientId, tripId, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder, true, tempClientId);
             return PlaceOperationResult.Queued(tempClientId, "Created offline - will sync when online");
         }
@@ -106,6 +129,26 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
 
             if (response?.Success == true && response.Id != Guid.Empty)
             {
+                // Create offline entry so subsequent updates can find it
+                var localTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripId);
+                if (localTrip != null)
+                {
+                    var offlinePlace = new OfflinePlaceEntity
+                    {
+                        TripId = localTrip.Id,
+                        ServerId = response.Id,
+                        RegionId = regionId,
+                        Name = name,
+                        Latitude = latitude,
+                        Longitude = longitude,
+                        Notes = notes,
+                        IconName = iconName,
+                        MarkerColor = markerColor,
+                        SortOrder = displayOrder ?? 0
+                    };
+                    await _placeRepository.InsertOfflinePlaceAsync(offlinePlace);
+                }
+
                 return PlaceOperationResult.Completed(response.Id);
             }
 
