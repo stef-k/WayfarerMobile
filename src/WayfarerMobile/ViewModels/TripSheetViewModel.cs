@@ -972,7 +972,8 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
 
                 if (tripPlace != null)
                 {
-                    // Optionally sync from offline database if available
+                    // Optionally sync marker appearance from offline database if available
+                    // Note: Don't sync notes - the in-memory notes were already updated by the sub-editor
                     var place = await _placeRepository.GetOfflinePlaceByServerIdAsync(entityId);
                     if (place != null)
                     {
@@ -980,8 +981,7 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
                         var markerChanged = tripPlace.Icon != place.IconName ||
                                             tripPlace.MarkerColor != place.MarkerColor;
 
-                        // Update all editable properties from local database
-                        tripPlace.Notes = place.Notes;
+                        // Only update marker properties, not notes (notes are already fresh in memory)
                         tripPlace.Icon = place.IconName;
                         tripPlace.MarkerColor = place.MarkerColor;
 
@@ -992,8 +992,11 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
                         }
                     }
 
-                    // Always re-select to trigger UI refresh
+                    // Re-select to trigger UI refresh
+                    // Note: SelectTripPlace won't fire PropertyChanged if same object,
+                    // so we explicitly notify the HTML property to ensure notes display updates
                     SelectTripPlace(tripPlace);
+                    OnPropertyChanged(nameof(SelectedTripPlaceNotesHtml));
                 }
                 break;
 
@@ -1002,16 +1005,13 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
                 var tripArea = LoadedTrip.AllAreas.FirstOrDefault(a => a.Id == entityId);
                 if (tripArea != null)
                 {
-                    // Optionally sync from offline database if available
-                    // TripAreas (polygons) are stored in OfflinePolygon table, not OfflineArea
-                    var polygon = await _areaRepository.GetOfflinePolygonByServerIdAsync(entityId);
-                    if (polygon != null)
-                    {
-                        tripArea.Notes = polygon.Notes;
-                    }
-
-                    // Always re-select to trigger UI refresh
+                    // Notes are already updated in-memory by the sub-editor, no DB sync needed
+                    // Re-select to trigger UI refresh
                     SelectTripArea(tripArea);
+                    // Explicitly notify visibility properties to ensure UI updates correctly
+                    OnPropertyChanged(nameof(SelectedTripAreaNotesHtml));
+                    OnPropertyChanged(nameof(IsTripSheetShowingArea));
+                    OnPropertyChanged(nameof(IsTripSheetShowingOverview));
                 }
                 break;
 
@@ -1020,15 +1020,10 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
                 var tripSegment = LoadedTrip.Segments.FirstOrDefault(s => s.Id == entityId);
                 if (tripSegment != null)
                 {
-                    // Optionally sync from offline database if available
-                    var segment = await _segmentRepository.GetOfflineSegmentByServerIdAsync(entityId);
-                    if (segment != null)
-                    {
-                        tripSegment.Notes = segment.Notes;
-                    }
-
-                    // Always re-select to trigger UI refresh
+                    // Notes are already updated in-memory by the sub-editor, no DB sync needed
+                    // Re-select to trigger UI refresh
                     SelectTripSegment(tripSegment);
+                    OnPropertyChanged(nameof(SelectedTripSegmentNotesHtml));
                 }
                 break;
 
@@ -1037,28 +1032,16 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
                 var tripRegion = LoadedTrip.Regions.FirstOrDefault(r => r.Id == entityId);
                 if (tripRegion != null)
                 {
-                    // Optionally sync from offline database if available
-                    // Regions are stored in OfflineArea table
-                    var regionArea = await _areaRepository.GetOfflineAreaByServerIdAsync(entityId);
-                    if (regionArea != null)
-                    {
-                        tripRegion.Notes = regionArea.Notes;
-                    }
-
-                    // Always show region notes to trigger UI refresh
+                    // Notes are already updated in-memory by the sub-editor, no DB sync needed
+                    // Show region notes and explicitly notify to ensure UI refresh
                     ShowRegionNotes(tripRegion);
+                    OnPropertyChanged(nameof(SelectedTripRegionNotesHtml));
                 }
                 break;
 
             case "trip":
-                // Optionally sync from offline database if available
-                var downloadedTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(entityId);
-                if (downloadedTrip != null)
-                {
-                    LoadedTrip.Notes = downloadedTrip.Notes;
-                }
-
-                // Always trigger property change notification for UI refresh
+                // Notes are already updated in-memory by the sub-editor, no DB sync needed
+                // Just trigger property change notification for UI refresh
                 OnPropertyChanged(nameof(TripNotesPreview));
                 OnPropertyChanged(nameof(TripNotesHtml));
                 break;
