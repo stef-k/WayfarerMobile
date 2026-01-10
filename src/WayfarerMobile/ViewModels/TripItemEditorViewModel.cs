@@ -396,14 +396,20 @@ public partial class TripItemEditorViewModel : BaseViewModel
         {
             if (isNewPlace && targetRegion != null)
             {
-                // Create new place on server
-                await _tripSyncService.CreatePlaceAsync(
+                // Create new place on server and get the server-assigned ID
+                var serverId = await _tripSyncService.CreatePlaceAsync(
                     loadedTrip.Id,
                     targetRegion.Id,
                     place.Name ?? "New Place",
                     newLat,
                     newLon,
                     displayOrder: place.SortOrder);
+
+                // Update the in-memory place with the server ID so subsequent updates work
+                if (serverId != Guid.Empty)
+                {
+                    place.Id = serverId;
+                }
 
                 await _toastService.ShowSuccessAsync("Place added");
             }
@@ -1099,8 +1105,12 @@ public partial class TripItemEditorViewModel : BaseViewModel
             _logger.LogInformation("AddRegion: Added region {RegionId} to memory, total regions now {Count}",
                 newRegion.Id, loadedTrip.Regions.Count);
 
-            // Notify UI to refresh regions list
-            _callbacks?.NotifyTripRegionsChanged();
+            // Defer UI notification to avoid ObjectDisposedException when prompt dialog is closing
+            // The prompt dialog's DI scope may be disposing while we're trying to update bindings
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                _callbacks?.NotifyTripRegionsChanged();
+            });
 
             // Sync to server
             _logger.LogInformation("AddRegion: Syncing to server");

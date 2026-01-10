@@ -2,6 +2,7 @@ using SQLite;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Data.Services;
 using WayfarerMobile.Interfaces;
 
@@ -26,6 +27,8 @@ public class TripSyncService : ITripSyncService
     private readonly IPlaceOperationsHandler _placeOps;
     private readonly IRegionOperationsHandler _regionOps;
     private readonly ITripEntityOperationsHandler _entityOps;
+    private readonly IPlaceRepository _placeRepository;
+    private readonly IAreaRepository _areaRepository;
     private readonly SemaphoreSlim _initLock = new(1, 1);
     private SQLiteAsyncConnection? _database;
     private bool _initialized;
@@ -60,7 +63,9 @@ public class TripSyncService : ITripSyncService
         IMutationQueueService mutationQueue,
         IPlaceOperationsHandler placeOps,
         IRegionOperationsHandler regionOps,
-        ITripEntityOperationsHandler entityOps)
+        ITripEntityOperationsHandler entityOps,
+        IPlaceRepository placeRepository,
+        IAreaRepository areaRepository)
     {
         _apiClient = apiClient;
         _databaseService = databaseService;
@@ -68,6 +73,8 @@ public class TripSyncService : ITripSyncService
         _placeOps = placeOps;
         _regionOps = regionOps;
         _entityOps = entityOps;
+        _placeRepository = placeRepository;
+        _areaRepository = areaRepository;
     }
 
     /// <summary>
@@ -469,9 +476,18 @@ public class TripSyncService : ITripSyncService
 
         if (response?.Success == true && response.Id != Guid.Empty)
         {
+            // Update the offline entry's ServerId from temp ID to real server ID
+            var tempId = mutation.TempClientId ?? mutation.EntityId;
+            var offlinePlace = await _placeRepository.GetOfflinePlaceByServerIdAsync(tempId);
+            if (offlinePlace != null)
+            {
+                offlinePlace.ServerId = response.Id;
+                await _placeRepository.UpdateOfflinePlaceAsync(offlinePlace);
+            }
+
             EntityCreated?.Invoke(this, new EntityCreatedEventArgs
             {
-                TempClientId = mutation.TempClientId ?? mutation.EntityId,
+                TempClientId = tempId,
                 ServerId = response.Id,
                 EntityType = "Place"
             });
@@ -514,9 +530,18 @@ public class TripSyncService : ITripSyncService
 
         if (response?.Success == true && response.Id != Guid.Empty)
         {
+            // Update the offline entry's ServerId from temp ID to real server ID
+            var tempId = mutation.TempClientId ?? mutation.EntityId;
+            var offlineArea = await _areaRepository.GetOfflineAreaByServerIdAsync(tempId);
+            if (offlineArea != null)
+            {
+                offlineArea.ServerId = response.Id;
+                await _areaRepository.UpdateOfflineAreaAsync(offlineArea);
+            }
+
             EntityCreated?.Invoke(this, new EntityCreatedEventArgs
             {
-                TempClientId = mutation.TempClientId ?? mutation.EntityId,
+                TempClientId = tempId,
                 ServerId = response.Id,
                 EntityType = "Region"
             });

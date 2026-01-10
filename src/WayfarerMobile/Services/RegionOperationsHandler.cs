@@ -17,6 +17,7 @@ public class RegionOperationsHandler : IRegionOperationsHandler
     private readonly IApiClient _apiClient;
     private readonly DatabaseService _databaseService;
     private readonly IAreaRepository _areaRepository;
+    private readonly ITripRepository _tripRepository;
     private readonly IConnectivity _connectivity;
     private readonly SemaphoreSlim _initLock = new(1, 1);
     private SQLiteAsyncConnection? _database;
@@ -29,11 +30,13 @@ public class RegionOperationsHandler : IRegionOperationsHandler
         IApiClient apiClient,
         DatabaseService databaseService,
         IAreaRepository areaRepository,
+        ITripRepository tripRepository,
         IConnectivity connectivity)
     {
         _apiClient = apiClient;
         _databaseService = databaseService;
         _areaRepository = areaRepository;
+        _tripRepository = tripRepository;
         _connectivity = connectivity;
     }
 
@@ -92,6 +95,24 @@ public class RegionOperationsHandler : IRegionOperationsHandler
 
         if (!IsConnected)
         {
+            // Create offline entry immediately with temp ID so subsequent updates work
+            var localTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripId);
+            if (localTrip != null)
+            {
+                var offlineArea = new OfflineAreaEntity
+                {
+                    TripId = localTrip.Id,
+                    ServerId = tempClientId,
+                    Name = name,
+                    Notes = notes,
+                    CoverImageUrl = coverImageUrl,
+                    CenterLatitude = centerLatitude,
+                    CenterLongitude = centerLongitude,
+                    SortOrder = displayOrder ?? 0
+                };
+                await _areaRepository.InsertOfflineAreaAsync(offlineArea);
+            }
+
             await EnqueueRegionMutationAsync("Create", tempClientId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, true, tempClientId);
             return RegionOperationResult.Queued(tempClientId, "Created offline - will sync when online");
         }
@@ -102,6 +123,24 @@ public class RegionOperationsHandler : IRegionOperationsHandler
 
             if (response?.Success == true && response.Id != Guid.Empty)
             {
+                // Create offline entry so subsequent updates can find it
+                var localTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripId);
+                if (localTrip != null)
+                {
+                    var offlineArea = new OfflineAreaEntity
+                    {
+                        TripId = localTrip.Id,
+                        ServerId = response.Id,
+                        Name = name,
+                        Notes = notes,
+                        CoverImageUrl = coverImageUrl,
+                        CenterLatitude = centerLatitude,
+                        CenterLongitude = centerLongitude,
+                        SortOrder = displayOrder ?? 0
+                    };
+                    await _areaRepository.InsertOfflineAreaAsync(offlineArea);
+                }
+
                 return RegionOperationResult.Completed(response.Id);
             }
 
