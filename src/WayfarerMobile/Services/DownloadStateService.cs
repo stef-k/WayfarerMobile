@@ -78,9 +78,6 @@ public class DownloadStateService : IDownloadStateService
             trip.PauseReason = null;
         }
 
-        // Update legacy status for backward compatibility
-        UpdateLegacyStatus(trip, newState);
-
         await _tripRepository.SaveDownloadedTripAsync(trip);
 
         Console.WriteLine($"[DownloadStateService] Transitioned trip {tripServerId}: {currentState} -> {newState}");
@@ -191,7 +188,6 @@ public class DownloadStateService : IDownloadStateService
             trip.PauseReason = "App was closed during download";
             trip.UpdatedAt = DateTime.UtcNow;
 
-            UpdateLegacyStatus(trip, newState);
             await _tripRepository.SaveDownloadedTripAsync(trip);
 
             Console.WriteLine($"[DownloadStateService] Recovered trip {trip.ServerId}: {previousState} -> {newState}");
@@ -216,30 +212,6 @@ public class DownloadStateService : IDownloadStateService
         trip.UpdatedAt = DateTime.UtcNow;
 
         await _tripRepository.SaveDownloadedTripAsync(trip);
-    }
-
-    /// <summary>
-    /// Updates the legacy Status field for backward compatibility.
-    /// </summary>
-    private static void UpdateLegacyStatus(DownloadedTripEntity trip, UnifiedDownloadState newState)
-    {
-#pragma warning disable CS0618 // Obsolete - intentionally updating for compatibility
-        trip.Status = newState switch
-        {
-            UnifiedDownloadState.ServerOnly => TripDownloadStatus.Pending,
-            UnifiedDownloadState.DownloadingMetadata => TripDownloadStatus.Downloading,
-            UnifiedDownloadState.DownloadingTiles => TripDownloadStatus.Downloading,
-            UnifiedDownloadState.PausedByUser => TripDownloadStatus.Downloading,
-            UnifiedDownloadState.PausedNetworkLost => TripDownloadStatus.Downloading,
-            UnifiedDownloadState.PausedStorageLow => TripDownloadStatus.Downloading,
-            UnifiedDownloadState.PausedCacheLimit => TripDownloadStatus.Downloading,
-            UnifiedDownloadState.Failed => TripDownloadStatus.Failed,
-            UnifiedDownloadState.Cancelled => TripDownloadStatus.Cancelled,
-            UnifiedDownloadState.MetadataOnly => TripDownloadStatus.MetadataOnly,
-            UnifiedDownloadState.Complete => TripDownloadStatus.Complete,
-            _ => TripDownloadStatus.Pending
-        };
-#pragma warning restore CS0618
     }
 
     /// <summary>

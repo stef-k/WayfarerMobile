@@ -124,10 +124,7 @@ public class DatabaseService : IAsyncDisposable
             return;
 
         // Run migrations in order
-        if (currentVersion < 2)
-        {
-            await MigrateToVersion2Async();
-        }
+        // Note: Version 2 migration removed - no users to migrate from legacy Status field
 
         // Update schema version
         await SetSchemaVersionAsync(CurrentSchemaVersion);
@@ -171,78 +168,6 @@ public class DatabaseService : IAsyncDisposable
             setting.LastModified = DateTime.UtcNow;
             await _database.UpdateAsync(setting);
         }
-    }
-
-    /// <summary>
-    /// Migration to version 2: Unified download state.
-    /// Migrates existing Status strings to UnifiedStateValue enum values.
-    /// </summary>
-    private async Task MigrateToVersion2Async()
-    {
-        Console.WriteLine("[DatabaseService] Running migration to version 2 (unified download state)...");
-
-        // Get all downloaded trips
-        var trips = await _database!.Table<DownloadedTripEntity>().ToListAsync();
-
-        // Get all download states for cross-referencing pause state
-        var downloadStates = await _database.Table<TripDownloadStateEntity>().ToListAsync();
-        var statesByTripId = downloadStates.ToDictionary(s => s.TripServerId, s => s);
-
-        foreach (var trip in trips)
-        {
-            var newState = MapLegacyStatusToUnifiedState(trip, statesByTripId);
-            trip.UnifiedState = newState;
-            trip.StateChangedAt = DateTime.UtcNow;
-
-            await _database.UpdateAsync(trip);
-            Console.WriteLine($"[DatabaseService] Migrated trip {trip.ServerId}: {trip.Status} -> {newState}");
-        }
-
-        Console.WriteLine($"[DatabaseService] Migrated {trips.Count} trips to unified state");
-    }
-
-    /// <summary>
-    /// Maps legacy status string to unified download state.
-    /// Also checks TripDownloadStateEntity for pause/limit state.
-    /// </summary>
-    private static UnifiedDownloadState MapLegacyStatusToUnifiedState(
-        DownloadedTripEntity trip,
-        Dictionary<Guid, TripDownloadStateEntity> statesByTripId)
-    {
-#pragma warning disable CS0618 // Using obsolete Status for migration
-        var legacyStatus = trip.Status?.ToLowerInvariant() ?? "pending";
-#pragma warning restore CS0618
-
-        // Check if there's a download state record for this trip
-        statesByTripId.TryGetValue(trip.ServerId, out var downloadState);
-        var downloadStatus = downloadState?.Status?.ToLowerInvariant();
-
-        return legacyStatus switch
-        {
-            "complete" => UnifiedDownloadState.Complete,
-            "metadata_only" => UnifiedDownloadState.MetadataOnly,
-            "failed" => UnifiedDownloadState.Failed,
-            "cancelled" => UnifiedDownloadState.Cancelled,
-            "pending" => UnifiedDownloadState.ServerOnly,
-
-            // "downloading" needs more nuance - check download state
-            "downloading" => downloadStatus switch
-            {
-                "paused" => trip.IsMetadataComplete
-                    ? UnifiedDownloadState.PausedByUser
-                    : UnifiedDownloadState.PausedByUser, // Paused early
-                "limit_reached" => UnifiedDownloadState.PausedCacheLimit,
-                "cancelled" => UnifiedDownloadState.Cancelled,
-                // Still "downloading" but app may have crashed - treat as paused
-                _ => trip.TileCount > 0
-                    ? UnifiedDownloadState.PausedByUser // Was downloading tiles
-                    : trip.IsMetadataComplete
-                        ? UnifiedDownloadState.DownloadingTiles // Resume from tiles
-                        : UnifiedDownloadState.DownloadingMetadata
-            },
-
-            _ => UnifiedDownloadState.ServerOnly
-        };
     }
 
     #endregion

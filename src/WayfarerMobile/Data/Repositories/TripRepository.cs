@@ -1,4 +1,5 @@
 using SQLite;
+using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Data.Entities;
 
 namespace WayfarerMobile.Data.Repositories;
@@ -95,9 +96,10 @@ public class TripRepository : RepositoryBase, ITripRepository
     public async Task<long> GetTotalTripCacheSizeAsync()
     {
         var db = await GetConnectionAsync();
+        // Use UnifiedStateValue (single source of truth) for cache size calculation
         var result = await db.ExecuteScalarAsync<long>(
-            "SELECT COALESCE(SUM(TotalSizeBytes), 0) FROM DownloadedTrips WHERE Status = ?",
-            TripDownloadStatus.Complete);
+            "SELECT COALESCE(SUM(TotalSizeBytes), 0) FROM DownloadedTrips WHERE UnifiedStateValue = ?",
+            (int)UnifiedDownloadState.Complete);
         return result;
     }
 }

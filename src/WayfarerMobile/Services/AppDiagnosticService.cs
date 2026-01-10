@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.Extensions.Logging;
 using SQLite;
+using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Services.TileCache;
@@ -134,7 +135,7 @@ public class AppDiagnosticService
                 {
                     TripId = t.ServerId.ToString(),
                     Name = t.Name,
-                    Status = t.Status,
+                    Status = t.UnifiedState.GetStatusText(),
                     DownloadedAt = t.DownloadedAt
                 }).ToList(),
                 TotalCacheSizeMB = (liveCacheSize + tripCacheSize) / (1024.0 * 1024.0),

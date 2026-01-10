@@ -144,6 +144,7 @@ public partial class TripListItem : ObservableObject
     [NotifyPropertyChangedFor(nameof(CanFullDownload))]
     [NotifyPropertyChangedFor(nameof(CanPause))]
     [NotifyPropertyChangedFor(nameof(CanResume))]
+    [NotifyPropertyChangedFor(nameof(CanEdit))]
     [NotifyPropertyChangedFor(nameof(StatsText))]
     private UnifiedDownloadState _unifiedState;
 
@@ -155,6 +156,7 @@ public partial class TripListItem : ObservableObject
     [NotifyPropertyChangedFor(nameof(CanDeleteTilesOnly))]
     [NotifyPropertyChangedFor(nameof(IsMetadataComplete))]
     [NotifyPropertyChangedFor(nameof(HasTiles))]
+    [NotifyPropertyChangedFor(nameof(CanLoadToMap))]
     private Data.Entities.DownloadedTripEntity? _downloadedEntity;
 
     /// <summary>
@@ -230,9 +232,11 @@ public partial class TripListItem : ObservableObject
 
     /// <summary>
     /// Gets whether Load to Map is available.
-    /// Uses the unified state extension method.
+    /// Requires: not currently loaded, state allows loading, AND metadata exists.
     /// </summary>
-    public bool CanLoadToMap => !IsCurrentlyLoaded && UnifiedState.CanLoadToMap();
+    public bool CanLoadToMap => !IsCurrentlyLoaded &&
+                                UnifiedState.CanLoadToMap() &&
+                                IsMetadataComplete;
 
     /// <summary>
     /// Gets or sets whether this trip is currently loaded on the map.
@@ -288,39 +292,6 @@ public partial class TripListItem : ObservableObject
     [ObservableProperty]
     private double _downloadProgress;
 
-    #region Backward Compatibility
-
-    /// <summary>
-    /// Gets or sets the download state using the legacy enum.
-    /// Maps to/from <see cref="UnifiedState"/>.
-    /// </summary>
-    /// <remarks>
-    /// Deprecated. Use <see cref="UnifiedState"/> instead.
-    /// This property is kept for backward compatibility during migration.
-    /// </remarks>
-    [Obsolete("Use UnifiedState instead.")]
-    public TripDownloadState DownloadState
-    {
-        get => UnifiedState switch
-        {
-            UnifiedDownloadState.Complete => TripDownloadState.Complete,
-            UnifiedDownloadState.MetadataOnly => TripDownloadState.MetadataOnly,
-            UnifiedDownloadState.ServerOnly => TripDownloadState.ServerOnly,
-            _ when UnifiedState.IsDownloading() || UnifiedState.IsPaused() || UnifiedState == UnifiedDownloadState.Failed
-                => TripDownloadState.Downloading,
-            _ => TripDownloadState.ServerOnly
-        };
-        set => UnifiedState = value switch
-        {
-            TripDownloadState.Complete => UnifiedDownloadState.Complete,
-            TripDownloadState.MetadataOnly => UnifiedDownloadState.MetadataOnly,
-            TripDownloadState.Downloading => UnifiedDownloadState.DownloadingMetadata,
-            _ => UnifiedDownloadState.ServerOnly
-        };
-    }
-
-    #endregion
-
     /// <summary>
     /// Creates a new trip list item from a trip summary and optional downloaded entity.
     /// </summary>
@@ -346,41 +317,26 @@ public partial class TripListItem : ObservableObject
     /// Updates the unified state and related properties.
     /// Call this when receiving state change events.
     /// </summary>
+    /// <remarks>
+    /// The isMetadataComplete and hasTiles parameters are provided for context but the
+    /// actual values come from the entity's computed properties which are based on counts.
+    /// </remarks>
     public void UpdateState(UnifiedDownloadState newState, bool isMetadataComplete, bool hasTiles)
     {
         UnifiedState = newState;
         IsDownloading = newState.IsDownloading();
 
-        // Update entity if present
+        // Update entity state if present
+        // Note: IsMetadataComplete and HasTiles are computed from entity counts, not directly set
         if (DownloadedEntity != null)
         {
             DownloadedEntity.UnifiedState = newState;
         }
 
-        // Force property change notifications for computed properties
+        // Force property change notifications for computed properties that depend on entity state
         OnPropertyChanged(nameof(StatsText));
+        OnPropertyChanged(nameof(IsMetadataComplete));
+        OnPropertyChanged(nameof(HasTiles));
+        OnPropertyChanged(nameof(CanLoadToMap));
     }
-}
-
-/// <summary>
-/// Legacy trip download state enum.
-/// </summary>
-/// <remarks>
-/// Deprecated. Use <see cref="UnifiedDownloadState"/> instead.
-/// Kept for backward compatibility during migration.
-/// </remarks>
-[Obsolete("Use UnifiedDownloadState instead.")]
-public enum TripDownloadState
-{
-    /// <summary>Trip exists only on server.</summary>
-    ServerOnly,
-
-    /// <summary>Trip metadata is downloaded but no tiles.</summary>
-    MetadataOnly,
-
-    /// <summary>Trip is being downloaded.</summary>
-    Downloading,
-
-    /// <summary>Trip is fully downloaded with tiles.</summary>
-    Complete
 }

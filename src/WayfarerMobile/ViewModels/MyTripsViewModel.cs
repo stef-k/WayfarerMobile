@@ -24,7 +24,9 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     private readonly ITripNavigationService _tripNavigationService;
     private readonly ITripSyncService _tripSyncService;
     private readonly ITripStateManager _tripStateManager;
+    private readonly IDownloadStateService _downloadStateService;
     private readonly ILogger<MyTripsViewModel> _logger;
+    private bool _hasRecoveredStuckDownloads;
 
     #region Observable Properties
 
@@ -127,6 +129,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         ITripNavigationService tripNavigationService,
         ITripSyncService tripSyncService,
         ITripStateManager tripStateManager,
+        IDownloadStateService downloadStateService,
         TripDownloadViewModel downloadViewModel,
         ILogger<MyTripsViewModel> logger)
     {
@@ -138,6 +141,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         _tripNavigationService = tripNavigationService;
         _tripSyncService = tripSyncService;
         _tripStateManager = tripStateManager;
+        _downloadStateService = downloadStateService;
         _logger = logger;
         Title = "My Trips";
 
@@ -627,7 +631,10 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
                         var item = group.FirstOrDefault(i => i.ServerId == pausedState.TripServerId);
                         if (item != null)
                         {
-                            item.DownloadState = TripDownloadState.Downloading;
+                            // Set proper paused state based on pause reason
+                            item.UnifiedState = pausedState.Status == DownloadStateStatus.LimitReached
+                                ? Core.Enums.UnifiedDownloadState.PausedCacheLimit
+                                : Core.Enums.UnifiedDownloadState.PausedByUser;
                             // Set proper paused state for UI (not actively downloading, shows paused progress)
                             item.IsDownloading = false;
                             item.DownloadProgress = pausedState.TotalTileCount > 0
@@ -659,6 +666,17 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     public override async Task OnAppearingAsync()
     {
         _logger.LogDebug("OnAppearingAsync: Trips.Count = {Count}", Trips.Count);
+
+        // Recover stuck downloads once per session (downloads interrupted by app closure)
+        if (!_hasRecoveredStuckDownloads)
+        {
+            _hasRecoveredStuckDownloads = true;
+            var recovered = await _downloadStateService.RecoverStuckDownloadsAsync();
+            if (recovered > 0)
+            {
+                _logger.LogInformation("Recovered {Count} stuck download(s) from previous session", recovered);
+            }
+        }
 
         // Load trips if empty
         if (Trips.Count == 0)

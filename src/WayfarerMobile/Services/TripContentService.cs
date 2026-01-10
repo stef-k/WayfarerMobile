@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
@@ -91,7 +92,7 @@ public class TripContentService : ITripContentService
         var downloadedTrips = await _tripRepository.GetDownloadedTripsAsync();
 
         foreach (var trip in downloadedTrips.Where(t =>
-            t.Status == TripDownloadStatus.Complete || t.Status == TripDownloadStatus.MetadataOnly))
+            t.UnifiedState == UnifiedDownloadState.Complete || t.UnifiedState == UnifiedDownloadState.MetadataOnly))
         {
             try
             {
@@ -231,7 +232,7 @@ public class TripContentService : ITripContentService
 
         var downloadedTrips = await _tripRepository.GetDownloadedTripsAsync();
         var completedTrips = downloadedTrips.Where(t =>
-            t.Status == TripDownloadStatus.Complete || t.Status == TripDownloadStatus.MetadataOnly).ToList();
+            t.UnifiedState == UnifiedDownloadState.Complete || t.UnifiedState == UnifiedDownloadState.MetadataOnly).ToList();
 
         if (completedTrips.Count == 0)
         {
