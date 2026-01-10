@@ -442,7 +442,12 @@ public class TripDownloadService : ITripDownloadService
                     {
                         _logger.LogInformation("Download stopped for trip {TripName}: Paused={Paused}, LimitReached={LimitReached}",
                             tripSummary.Name, downloadResult.WasPaused, downloadResult.WasLimitReached);
-                        return tripEntity; // State already saved by orchestrator
+
+                        // Set status to MetadataOnly so trip can be loaded with online tiles
+                        // The pause/resume state is tracked separately in TripDownloadStateEntity
+                        tripEntity.Status = TripDownloadStatus.MetadataOnly;
+                        await _tripRepository.SaveDownloadedTripAsync(tripEntity);
+                        return tripEntity;
                     }
                 }
 
@@ -504,7 +509,11 @@ public class TripDownloadService : ITripDownloadService
                     await _downloadStateRepository.SaveDownloadStateAsync(existingState);
                 }
 
-                tripEntityForCancel.Status = TripDownloadStatus.Failed;
+                // Use MetadataOnly if metadata was saved (ProgressPercent >= 15), allowing trip to be loaded
+                // Otherwise mark as Failed since there's nothing usable
+                tripEntityForCancel.Status = tripEntityForCancel.ProgressPercent >= 15
+                    ? TripDownloadStatus.MetadataOnly
+                    : TripDownloadStatus.Failed;
                 tripEntityForCancel.LastError = "Download cancelled by user";
                 await _tripRepository.SaveDownloadedTripAsync(tripEntityForCancel);
 
@@ -527,11 +536,14 @@ public class TripDownloadService : ITripDownloadService
         {
             _logger.LogError(ex, "Failed to download trip: {TripName}", tripSummary.Name);
 
-            // Update status to failed
+            // Update status - use MetadataOnly if metadata was saved (ProgressPercent >= 15)
+            // This allows the trip to be loaded with online tiles even if tile download failed
             var tripEntity = await _tripRepository.GetDownloadedTripByServerIdAsync(tripSummary.Id);
             if (tripEntity != null)
             {
-                tripEntity.Status = TripDownloadStatus.Failed;
+                tripEntity.Status = tripEntity.ProgressPercent >= 15
+                    ? TripDownloadStatus.MetadataOnly
+                    : TripDownloadStatus.Failed;
                 tripEntity.LastError = ex.Message;
                 await _tripRepository.SaveDownloadedTripAsync(tripEntity);
 

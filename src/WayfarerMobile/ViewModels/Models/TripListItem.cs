@@ -273,6 +273,12 @@ public partial class TripListItem : ObservableObject
         {
             _downloadState = TripDownloadState.MetadataOnly;
         }
+        else if (downloaded.PlaceCount > 0 || downloaded.ProgressPercent >= 15)
+        {
+            // Trip has metadata saved but tiles incomplete - treat as MetadataOnly
+            // This allows loading with online tiles for stuck/failed/cancelled downloads
+            _downloadState = TripDownloadState.MetadataOnly;
+        }
         else
         {
             _downloadState = TripDownloadState.Downloading;
