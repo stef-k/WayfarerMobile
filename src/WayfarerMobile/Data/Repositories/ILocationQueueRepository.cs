@@ -100,6 +100,23 @@ public interface ILocationQueueRepository
     /// <returns>Number of locations reset.</returns>
     Task<int> ResetStuckLocationsAsync();
 
+    /// <summary>
+    /// Atomically claims pending locations by marking them as Syncing and returns them.
+    /// Only returns locations that were successfully claimed (prevents race conditions
+    /// between LocationSyncService and QueueDrainService).
+    /// </summary>
+    /// <param name="limit">Maximum locations to claim.</param>
+    /// <returns>List of claimed locations (already marked as Syncing).</returns>
+    Task<List<QueuedLocation>> ClaimPendingLocationsAsync(int limit);
+
+    /// <summary>
+    /// Resets multiple locations from Syncing back to Pending in a single batch operation.
+    /// Used for failure recovery when batch sync fails or is interrupted.
+    /// </summary>
+    /// <param name="ids">The IDs of locations to reset.</param>
+    /// <returns>Number of rows updated.</returns>
+    Task<int> ResetLocationsBatchToPendingAsync(IEnumerable<int> ids);
+
     #endregion
 
     #region Cleanup Operations

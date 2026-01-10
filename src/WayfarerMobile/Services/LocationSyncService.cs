@@ -317,38 +317,53 @@ public class LocationSyncService : IDisposable
 
     /// <summary>
     /// Syncs pending locations to the server with retry for transient failures.
-    /// Uses batch update for successful syncs to minimize database operations.
+    /// Uses atomic claim pattern to prevent race conditions with QueueDrainService.
     /// </summary>
     private async Task<int> SyncPendingLocationsAsync()
     {
-        var pending = await _locationQueue.GetPendingLocationsAsync(BatchSize);
-        if (pending.Count == 0)
+        // CRITICAL FIX: Atomically claim locations (marks as Syncing in single operation)
+        // This prevents QueueDrainService from processing the same locations
+        var claimed = await _locationQueue.ClaimPendingLocationsAsync(BatchSize);
+        if (claimed.Count == 0)
         {
-            _logger.LogDebug("No pending locations to sync");
+            _logger.LogDebug("No pending locations to sync (or all claimed by drain service)");
             return 0;
         }
 
-        _logger.LogInformation("Syncing {Count} pending locations", pending.Count);
+        _logger.LogInformation("Claimed and syncing {Count} locations", claimed.Count);
 
         var successfulIds = new List<int>();
+        var failedIds = new List<int>();
         var cancellationToken = CancellationToken.None;
+        var stopProcessing = false;
 
-        foreach (var location in pending)
+        foreach (var location in claimed)
         {
+            if (stopProcessing)
+            {
+                // Add unprocessed locations to failed list for reset
+                failedIds.Add(location.Id);
+                continue;
+            }
+
             var (success, shouldContinue) = await SyncLocationWithRetryAsync(location, cancellationToken);
 
             if (success)
             {
                 successfulIds.Add(location.Id);
             }
+            else
+            {
+                failedIds.Add(location.Id);
+            }
 
             if (!shouldContinue)
             {
-                break;
+                stopProcessing = true;
             }
         }
 
-        // Batch update all successful syncs in one database operation
+        // Batch update successful syncs
         if (successfulIds.Count > 0)
         {
             await _locationQueue.MarkLocationsSyncedAsync(successfulIds);
@@ -358,7 +373,16 @@ public class LocationSyncService : IDisposable
             _settings.LastSyncTime = DateTime.UtcNow;
         }
 
-        _logger.LogInformation("Sync complete: {Success}/{Total} locations", successfulIds.Count, pending.Count);
+        // CRITICAL: Reset failed/unprocessed locations back to Pending for retry
+        // This allows QueueDrainService to pick them up later
+        if (failedIds.Count > 0)
+        {
+            await _locationQueue.ResetLocationsBatchToPendingAsync(failedIds);
+            _logger.LogDebug("Reset {Count} failed locations to Pending for retry", failedIds.Count);
+        }
+
+        _logger.LogInformation("Sync complete: {Success}/{Total} locations ({Failed} reset for retry)",
+            successfulIds.Count, claimed.Count, failedIds.Count);
 
         // Cleanup old synced locations
         await PurgeOldLocationsAsync();

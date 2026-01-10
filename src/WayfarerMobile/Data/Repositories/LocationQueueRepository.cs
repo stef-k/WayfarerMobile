@@ -206,6 +206,75 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
             (int)SyncStatus.Pending, (int)SyncStatus.Syncing);
     }
 
+    /// <inheritdoc />
+    public async Task<List<QueuedLocation>> ClaimPendingLocationsAsync(int limit)
+    {
+        var db = await GetConnectionAsync();
+
+        // Step 1: Get IDs of pending locations (oldest first)
+        var pendingLocations = await db.Table<QueuedLocation>()
+            .Where(l => l.SyncStatus == SyncStatus.Pending && !l.IsRejected)
+            .OrderBy(l => l.Timestamp)
+            .Take(limit)
+            .ToListAsync();
+
+        if (pendingLocations.Count == 0)
+            return new List<QueuedLocation>();
+
+        var pendingIds = pendingLocations.Select(l => l.Id).ToList();
+
+        // Step 2: Atomically claim them (only if still Pending - prevents race with QueueDrainService)
+        var placeholders = string.Join(",", pendingIds.Select((_, i) => $"?{i + 2}"));
+        var updateQuery = $"UPDATE QueuedLocations SET SyncStatus = ?1 WHERE Id IN ({placeholders}) AND SyncStatus = ?{pendingIds.Count + 2}";
+
+        var updateParams = new object[pendingIds.Count + 2];
+        updateParams[0] = (int)SyncStatus.Syncing;
+        for (var i = 0; i < pendingIds.Count; i++)
+            updateParams[i + 1] = pendingIds[i];
+        updateParams[pendingIds.Count + 1] = (int)SyncStatus.Pending;
+
+        var claimedCount = await db.ExecuteAsync(updateQuery, updateParams);
+
+        if (claimedCount == 0)
+            return new List<QueuedLocation>();
+
+        // Step 3: Return only the locations we successfully claimed (now Syncing)
+        // If claimedCount < pendingIds.Count, some were taken by QueueDrainService
+        if (claimedCount == pendingIds.Count)
+        {
+            // All claimed - update in-memory objects and return
+            foreach (var loc in pendingLocations)
+                loc.SyncStatus = SyncStatus.Syncing;
+            return pendingLocations;
+        }
+
+        // Partial claim - re-fetch to get only the ones we actually claimed
+        return await db.Table<QueuedLocation>()
+            .Where(l => pendingIds.Contains(l.Id) && l.SyncStatus == SyncStatus.Syncing)
+            .OrderBy(l => l.Timestamp)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> ResetLocationsBatchToPendingAsync(IEnumerable<int> ids)
+    {
+        var db = await GetConnectionAsync();
+
+        var idList = ids.ToList();
+        if (idList.Count == 0)
+            return 0;
+
+        var placeholders = string.Join(",", idList.Select((_, i) => $"?{i + 2}"));
+        var query = $"UPDATE QueuedLocations SET SyncStatus = ?1 WHERE Id IN ({placeholders})";
+
+        var parameters = new object[idList.Count + 1];
+        parameters[0] = (int)SyncStatus.Pending;
+        for (var i = 0; i < idList.Count; i++)
+            parameters[i + 1] = idList[i];
+
+        return await db.ExecuteAsync(query, parameters);
+    }
+
     #endregion
 
     #region Cleanup Operations
