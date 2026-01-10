@@ -53,9 +53,12 @@ public class DownloadStateRepository : RepositoryBase, IDownloadStateRepository
     public async Task<List<TripDownloadStateEntity>> GetPausedDownloadsAsync()
     {
         var db = await GetConnectionAsync();
+        // Include InProgress status to handle downloads interrupted by app kill/crash.
+        // Cancelled status is excluded because those get cleaned up.
         return await db.Table<TripDownloadStateEntity>()
             .Where(s => s.Status == DownloadStateStatus.Paused ||
-                       s.Status == DownloadStateStatus.LimitReached)
+                       s.Status == DownloadStateStatus.LimitReached ||
+                       s.Status == DownloadStateStatus.InProgress)
             .OrderByDescending(s => s.PausedAt)
             .ToListAsync();
     }

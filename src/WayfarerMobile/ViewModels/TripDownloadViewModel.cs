@@ -644,6 +644,11 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
             }
         }
 
+        // CRITICAL: Clear the processing flag BEFORE the long-running await
+        // The flag is meant to protect the brief initialization phase, not the entire download.
+        // Without this, pause attempts are blocked until the download completes.
+        _isProcessingPauseResume = false;
+
         try
         {
             var resumed = await _downloadService.ResumeDownloadAsync(tripId, _downloadCts.Token);
