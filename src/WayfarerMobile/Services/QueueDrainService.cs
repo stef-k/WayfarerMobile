@@ -354,21 +354,21 @@ public sealed class QueueDrainService : IDisposable
 
         try
         {
-            // Get oldest pending location
-            location = await _locationQueue.GetOldestPendingForDrainAsync();
+            // CRITICAL FIX: Atomically claim the oldest pending location
+            // This prevents race condition with LocationSyncService's batch claims
+            // The method marks it as Syncing in a single atomic operation
+            location = await _locationQueue.ClaimOldestPendingLocationAsync();
             if (location == null)
             {
-                _logger.LogInformation("QueueDrain: No pending locations in queue");
+                _logger.LogInformation("QueueDrain: No pending locations to claim (or all claimed by sync service)");
                 return;
             }
 
             _logger.LogInformation(
-                "QueueDrain: Processing location {Id} from {Timestamp}",
+                "QueueDrain: Claimed location {Id} from {Timestamp}",
                 location.Id, location.Timestamp);
 
-            // CRITICAL FIX: Mark location as Syncing BEFORE releasing lock
-            // This prevents duplicate processing if another drain cycle starts
-            await _locationQueue.MarkLocationSyncingAsync(location.Id);
+            // Note: Location is already marked as Syncing by ClaimOldestPendingLocationAsync
 
             // CRITICAL FIX: Record rate limit BEFORE making API call
             // This prevents race conditions in rate limiting
@@ -376,12 +376,24 @@ public sealed class QueueDrainService : IDisposable
         }
         catch (SQLiteException ex)
         {
-            _logger.LogError(ex, "Database error getting pending location from queue");
+            _logger.LogError(ex, "Database error claiming pending location from queue");
+
+            // If we claimed a location but failed before processing, reset it
+            if (location != null)
+            {
+                await TryResetLocationAsync(location.Id, "Database error after claim");
+            }
             return;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error getting pending location from queue");
+            _logger.LogError(ex, "Unexpected error claiming pending location from queue");
+
+            // If we claimed a location but failed before processing, reset it
+            if (location != null)
+            {
+                await TryResetLocationAsync(location.Id, "Unexpected error after claim");
+            }
             return;
         }
         finally
@@ -392,7 +404,35 @@ public sealed class QueueDrainService : IDisposable
         // Process location outside lock (network call)
         if (location != null)
         {
-            await ProcessLocationAsync(location, cancellationToken);
+            try
+            {
+                await ProcessLocationAsync(location, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                // ProcessLocationAsync handles most exceptions internally,
+                // but if something unexpected escapes, ensure we don't leave location stuck
+                _logger.LogError(ex, "Unhandled exception processing location {Id}", location.Id);
+                await TryResetLocationAsync(location.Id, "Unhandled processing exception");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Safely attempts to reset a location to Pending, logging any errors.
+    /// </summary>
+    private async Task TryResetLocationAsync(int locationId, string reason)
+    {
+        try
+        {
+            await _locationQueue.ResetLocationToPendingAsync(locationId);
+            _logger.LogWarning("Reset location {Id} to Pending: {Reason}", locationId, reason);
+        }
+        catch (Exception resetEx)
+        {
+            _logger.LogError(resetEx,
+                "Failed to reset location {Id} to Pending - may be stuck in Syncing state",
+                locationId);
         }
     }
 

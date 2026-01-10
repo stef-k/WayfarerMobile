@@ -110,6 +110,14 @@ public interface ILocationQueueRepository
     Task<List<QueuedLocation>> ClaimPendingLocationsAsync(int limit);
 
     /// <summary>
+    /// Atomically claims the oldest pending location by marking it as Syncing.
+    /// Used by QueueDrainService for one-at-a-time processing.
+    /// Returns null if no pending locations or if another service claimed it first.
+    /// </summary>
+    /// <returns>The claimed location (already marked as Syncing), or null if none available.</returns>
+    Task<QueuedLocation?> ClaimOldestPendingLocationAsync();
+
+    /// <summary>
     /// Resets multiple locations from Syncing back to Pending in a single batch operation.
     /// Used for failure recovery when batch sync fails or is interrupted.
     /// </summary>

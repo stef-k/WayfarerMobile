@@ -334,33 +334,76 @@ public class LocationSyncService : IDisposable
 
         var successfulIds = new List<int>();
         var failedIds = new List<int>();
+        var rejectedIds = new HashSet<int>(); // Track rejected IDs separately
         var cancellationToken = CancellationToken.None;
         var stopProcessing = false;
+        var processedCount = 0;
 
-        foreach (var location in claimed)
+        try
         {
-            if (stopProcessing)
+            foreach (var location in claimed)
             {
-                // Add unprocessed locations to failed list for reset
-                failedIds.Add(location.Id);
-                continue;
+                if (stopProcessing)
+                {
+                    // Add unprocessed locations to failed list for reset
+                    failedIds.Add(location.Id);
+                    continue;
+                }
+
+                processedCount++;
+                var (result, shouldContinue) = await SyncLocationWithRetryAsync(location, cancellationToken);
+
+                switch (result)
+                {
+                    case SyncResult.Success:
+                        successfulIds.Add(location.Id);
+                        break;
+                    case SyncResult.Rejected:
+                        // Already marked as rejected in SyncLocationWithRetryAsync
+                        // Track so we don't accidentally reset them in cleanup
+                        rejectedIds.Add(location.Id);
+                        break;
+                    case SyncResult.Failed:
+                        failedIds.Add(location.Id);
+                        break;
+                }
+
+                if (!shouldContinue)
+                {
+                    stopProcessing = true;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Unexpected exception during processing - reset all unprocessed claimed locations
+            _logger.LogError(ex, "Unexpected error during batch sync at location {ProcessedCount}/{Total}",
+                processedCount, claimed.Count);
+
+            // Reset any claimed locations that weren't processed (not in success, failed, or rejected)
+            var processedIds = new HashSet<int>(successfulIds);
+            processedIds.UnionWith(failedIds);
+            processedIds.UnionWith(rejectedIds);
+
+            var unprocessedIds = claimed
+                .Where(l => !processedIds.Contains(l.Id))
+                .Select(l => l.Id)
+                .ToList();
+
+            if (unprocessedIds.Count > 0)
+            {
+                try
+                {
+                    await _locationQueue.ResetLocationsBatchToPendingAsync(unprocessedIds);
+                    _logger.LogWarning("Reset {Count} unprocessed locations to Pending after error", unprocessedIds.Count);
+                }
+                catch (Exception resetEx)
+                {
+                    _logger.LogError(resetEx, "Failed to reset unprocessed locations - they may be stuck in Syncing state");
+                }
             }
 
-            var (success, shouldContinue) = await SyncLocationWithRetryAsync(location, cancellationToken);
-
-            if (success)
-            {
-                successfulIds.Add(location.Id);
-            }
-            else
-            {
-                failedIds.Add(location.Id);
-            }
-
-            if (!shouldContinue)
-            {
-                stopProcessing = true;
-            }
+            // Still try to finalize what we processed successfully
         }
 
         // Batch update successful syncs
@@ -373,16 +416,17 @@ public class LocationSyncService : IDisposable
             _settings.LastSyncTime = DateTime.UtcNow;
         }
 
-        // CRITICAL: Reset failed/unprocessed locations back to Pending for retry
+        // Reset failed/unprocessed locations back to Pending for retry
         // This allows QueueDrainService to pick them up later
+        // Note: Rejected locations are NOT reset - they're already marked appropriately
         if (failedIds.Count > 0)
         {
             await _locationQueue.ResetLocationsBatchToPendingAsync(failedIds);
             _logger.LogDebug("Reset {Count} failed locations to Pending for retry", failedIds.Count);
         }
 
-        _logger.LogInformation("Sync complete: {Success}/{Total} locations ({Failed} reset for retry)",
-            successfulIds.Count, claimed.Count, failedIds.Count);
+        _logger.LogInformation("Sync complete: {Success}/{Total} locations ({Failed} reset for retry, {Rejected} rejected)",
+            successfulIds.Count, claimed.Count, failedIds.Count, rejectedIds.Count);
 
         // Cleanup old synced locations
         await PurgeOldLocationsAsync();
@@ -391,11 +435,25 @@ public class LocationSyncService : IDisposable
     }
 
     /// <summary>
-    /// Syncs a single location with retry policy for transient failures.
-    /// Does not update database status - caller handles batch updates for successful syncs.
+    /// Result of syncing a single location.
     /// </summary>
-    /// <returns>Tuple of (success, shouldContinue).</returns>
-    private async Task<(bool Success, bool ShouldContinue)> SyncLocationWithRetryAsync(
+    private enum SyncResult
+    {
+        /// <summary>Location was synced successfully.</summary>
+        Success,
+        /// <summary>Location was rejected by server (threshold not met, etc.) - don't retry.</summary>
+        Rejected,
+        /// <summary>Location sync failed (network, server error, etc.) - should retry.</summary>
+        Failed
+    }
+
+    /// <summary>
+    /// Syncs a single location with retry policy for transient failures.
+    /// Does not update database status for success - caller handles batch updates.
+    /// Rejected locations are marked in the database directly.
+    /// </summary>
+    /// <returns>Tuple of (SyncResult, shouldContinue).</returns>
+    private async Task<(SyncResult Result, bool ShouldContinue)> SyncLocationWithRetryAsync(
         QueuedLocation location,
         CancellationToken cancellationToken)
     {
@@ -432,7 +490,7 @@ public class LocationSyncService : IDisposable
                         location.Timestamp,
                         "Threshold not met");
 
-                    return (false, true); // Not success (won't be marked synced), continue with next
+                    return (SyncResult.Rejected, true); // Rejected by server, continue with next
                 }
 
                 _logger.LogDebug("Location {Id} synced successfully", location.Id);
@@ -446,7 +504,7 @@ public class LocationSyncService : IDisposable
                         location.Timestamp);
                 }
 
-                return (true, true);
+                return (SyncResult.Success, true);
             }
 
             // Classify the failure
@@ -461,7 +519,7 @@ public class LocationSyncService : IDisposable
                     _logger.LogWarning(
                         "Server rejected location {Id}: {Message} (HTTP {StatusCode})",
                         location.Id, result.Message, result.StatusCode);
-                    return (false, true); // Continue with next location
+                    return (SyncResult.Rejected, true); // Rejected, continue with next
 
                 case FailureType.AuthenticationError:
                     // Auth error - stop all syncing
@@ -469,14 +527,14 @@ public class LocationSyncService : IDisposable
                     _logger.LogWarning(
                         "Authentication error for location {Id}, stopping sync (HTTP {StatusCode})",
                         location.Id, result.StatusCode);
-                    return (false, false); // Stop syncing
+                    return (SyncResult.Failed, false); // Failed, stop syncing
 
                 case FailureType.RateLimited:
                     // Rate limited by server - stop and wait
                     _logger.LogWarning(
                         "Server rate limited request (HTTP {StatusCode}), will retry later",
                         result.StatusCode);
-                    return (false, false); // Stop syncing
+                    return (SyncResult.Failed, false); // Failed, stop syncing
 
                 case FailureType.ServerError:
                     // Server error - might be temporary, continue with next
@@ -484,14 +542,14 @@ public class LocationSyncService : IDisposable
                     _logger.LogWarning(
                         "Server error for location {Id}: {Message} (HTTP {StatusCode})",
                         location.Id, result.Message, result.StatusCode);
-                    return (false, true); // Continue with next location
+                    return (SyncResult.Failed, true); // Failed, continue with next
 
                 default:
                     await _locationQueue.MarkLocationFailedAsync(location.Id, result.Message ?? "Unknown error");
                     _logger.LogWarning(
                         "Failed to sync location {Id}: {Message}",
                         location.Id, result.Message);
-                    return (false, true);
+                    return (SyncResult.Failed, true);
             }
         }
         catch (HttpRequestException ex)
@@ -499,19 +557,19 @@ public class LocationSyncService : IDisposable
             // Network error after all retries exhausted
             await _locationQueue.IncrementRetryCountAsync(location.Id);
             _logger.LogError(ex, "Network error syncing location {Id} after retries", location.Id);
-            return (false, true); // Continue with next
+            return (SyncResult.Failed, true); // Continue with next
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
         {
             await _locationQueue.IncrementRetryCountAsync(location.Id);
             _logger.LogWarning(ex, "Timeout syncing location {Id}", location.Id);
-            return (false, true);
+            return (SyncResult.Failed, true);
         }
         catch (Exception ex)
         {
             await _locationQueue.MarkLocationFailedAsync(location.Id, $"Unexpected: {ex.Message}");
             _logger.LogError(ex, "Unexpected error syncing location {Id}", location.Id);
-            return (false, true);
+            return (SyncResult.Failed, true);
         }
     }
 
