@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using SQLite;
 using WayfarerMobile.Core.Algorithms;
+using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
@@ -375,7 +376,7 @@ public class UnifiedTileCacheService : IDisposable
 
             foreach (var trip in downloadedTrips)
             {
-                if (trip.Status == TripDownloadStatus.Complete && IsLocationInTripBoundary(currentLocation, trip))
+                if (trip.UnifiedState == UnifiedDownloadState.Complete && IsLocationInTripBoundary(currentLocation, trip))
                 {
                     _cachedActiveTrip = trip;
                     _lastLocationCheck = currentLocation;

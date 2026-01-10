@@ -26,6 +26,8 @@ public class DatabaseService : IAsyncDisposable
 
     private const string DatabaseFilename = "wayfarer.db3";
     private const int MaxQueuedLocations = 25000;
+    private const int CurrentSchemaVersion = 2; // Increment when schema changes
+    private const string SchemaVersionKey = "db_schema_version";
 
     private static readonly SQLiteOpenFlags DbFlags =
         SQLiteOpenFlags.ReadWrite |
@@ -80,7 +82,7 @@ public class DatabaseService : IAsyncDisposable
 
             _database = new SQLiteAsyncConnection(DatabasePath, DbFlags);
 
-            // Create tables
+            // Create tables (this also adds new columns to existing tables)
             await _database.CreateTableAsync<QueuedLocation>();
             await _database.CreateTableAsync<AppSetting>();
             await _database.CreateTableAsync<DownloadedTripEntity>();
@@ -94,12 +96,77 @@ public class DatabaseService : IAsyncDisposable
             await _database.CreateTableAsync<LocalTimelineEntry>();
             await _database.CreateTableAsync<TripDownloadStateEntity>();
 
+            // Run migrations
+            await RunMigrationsAsync();
+
             _initialized = true;
             Console.WriteLine($"[DatabaseService] Initialized: {DatabasePath}");
         }
         finally
         {
             _initLock.Release();
+        }
+    }
+
+    #endregion
+
+    #region Migrations
+
+    /// <summary>
+    /// Runs all pending database migrations.
+    /// </summary>
+    private async Task RunMigrationsAsync()
+    {
+        var currentVersion = await GetSchemaVersionAsync();
+        Console.WriteLine($"[DatabaseService] Current schema version: {currentVersion}, target: {CurrentSchemaVersion}");
+
+        if (currentVersion >= CurrentSchemaVersion)
+            return;
+
+        // Run migrations in order
+        // Note: Version 2 migration removed - no users to migrate from legacy Status field
+
+        // Update schema version
+        await SetSchemaVersionAsync(CurrentSchemaVersion);
+        Console.WriteLine($"[DatabaseService] Migration complete. Schema version: {CurrentSchemaVersion}");
+    }
+
+    /// <summary>
+    /// Gets the current schema version from settings.
+    /// </summary>
+    private async Task<int> GetSchemaVersionAsync()
+    {
+        var setting = await _database!.Table<AppSetting>()
+            .FirstOrDefaultAsync(s => s.Key == SchemaVersionKey);
+
+        if (setting?.Value == null)
+            return 1; // Original schema
+
+        return int.TryParse(setting.Value, out var version) ? version : 1;
+    }
+
+    /// <summary>
+    /// Sets the schema version in settings.
+    /// </summary>
+    private async Task SetSchemaVersionAsync(int version)
+    {
+        var setting = await _database!.Table<AppSetting>()
+            .FirstOrDefaultAsync(s => s.Key == SchemaVersionKey);
+
+        if (setting == null)
+        {
+            setting = new AppSetting
+            {
+                Key = SchemaVersionKey,
+                Value = version.ToString()
+            };
+            await _database.InsertAsync(setting);
+        }
+        else
+        {
+            setting.Value = version.ToString();
+            setting.LastModified = DateTime.UtcNow;
+            await _database.UpdateAsync(setting);
         }
     }
 

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Models;
 
 namespace WayfarerMobile.ViewModels;
@@ -25,6 +26,7 @@ public class TripGrouping : ObservableCollection<TripListItem>
 
 /// <summary>
 /// Trip list item with download status.
+/// Uses <see cref="UnifiedDownloadState"/> as the single source of truth for download state.
 /// </summary>
 public partial class TripListItem : ObservableObject
 {
@@ -73,15 +75,21 @@ public partial class TripListItem : ObservableObject
     {
         get
         {
-            if (DownloadState == TripDownloadState.Downloading)
+            if (UnifiedState.IsDownloading())
                 return IsDownloading ? "Downloading..." : "Paused";
 
-            if (DownloadState == TripDownloadState.ServerOnly)
+            if (UnifiedState.IsPaused())
+                return "Paused";
+
+            if (UnifiedState == UnifiedDownloadState.Failed)
+                return "Failed";
+
+            if (UnifiedState == UnifiedDownloadState.ServerOnly)
                 return _serverStatsText ?? "Available online";
 
             // For downloaded trips (MetadataOnly or Complete), show detailed stats
             if (DownloadedEntity == null)
-                return DownloadState == TripDownloadState.Complete ? "Downloaded" : "Metadata only";
+                return UnifiedState == UnifiedDownloadState.Complete ? "Downloaded" : "Metadata only";
 
             var parts = new List<string>();
 
@@ -97,9 +105,9 @@ public partial class TripListItem : ObservableObject
             if (DownloadedEntity.AreaCount > 0)
                 parts.Add($"{DownloadedEntity.AreaCount} area{(DownloadedEntity.AreaCount == 1 ? "" : "s")}");
 
-            if (DownloadState == TripDownloadState.Complete && DownloadedEntity.TileCount > 0)
+            if (UnifiedState == UnifiedDownloadState.Complete && DownloadedEntity.TileCount > 0)
                 parts.Add($"{DownloadedEntity.TileCount} tiles");
-            else if (DownloadState == TripDownloadState.MetadataOnly)
+            else if (UnifiedState == UnifiedDownloadState.MetadataOnly)
                 parts.Add("No tiles");
 
             return parts.Count > 0 ? string.Join(" • ", parts) : "Empty trip";
@@ -117,12 +125,15 @@ public partial class TripListItem : ObservableObject
     public BoundingBox? BoundingBox { get; }
 
     /// <summary>
-    /// Gets or sets the download status.
+    /// Gets or sets the unified download state.
+    /// This is the single source of truth for download state.
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsDownloaded))]
     [NotifyPropertyChangedFor(nameof(IsMetadataOnly))]
     [NotifyPropertyChangedFor(nameof(IsServerOnly))]
+    [NotifyPropertyChangedFor(nameof(IsPaused))]
+    [NotifyPropertyChangedFor(nameof(IsFailed))]
     [NotifyPropertyChangedFor(nameof(CanDelete))]
     [NotifyPropertyChangedFor(nameof(CanDeleteTilesOnly))]
     [NotifyPropertyChangedFor(nameof(GroupName))]
@@ -131,8 +142,11 @@ public partial class TripListItem : ObservableObject
     [NotifyPropertyChangedFor(nameof(CanLoadToMap))]
     [NotifyPropertyChangedFor(nameof(CanQuickDownload))]
     [NotifyPropertyChangedFor(nameof(CanFullDownload))]
+    [NotifyPropertyChangedFor(nameof(CanPause))]
+    [NotifyPropertyChangedFor(nameof(CanResume))]
+    [NotifyPropertyChangedFor(nameof(CanEdit))]
     [NotifyPropertyChangedFor(nameof(StatsText))]
-    private TripDownloadState _downloadState;
+    private UnifiedDownloadState _unifiedState;
 
     /// <summary>
     /// Gets or sets the downloaded entity (for stats updates).
@@ -140,68 +154,89 @@ public partial class TripListItem : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StatsText))]
     [NotifyPropertyChangedFor(nameof(CanDeleteTilesOnly))]
+    [NotifyPropertyChangedFor(nameof(IsMetadataComplete))]
+    [NotifyPropertyChangedFor(nameof(HasTiles))]
+    [NotifyPropertyChangedFor(nameof(CanLoadToMap))]
     private Data.Entities.DownloadedTripEntity? _downloadedEntity;
 
     /// <summary>
-    /// Gets whether the trip is downloaded.
+    /// Gets whether the trip is fully downloaded (Complete state).
     /// </summary>
-    public bool IsDownloaded => DownloadState == TripDownloadState.Complete;
+    public bool IsDownloaded => UnifiedState == UnifiedDownloadState.Complete;
 
     /// <summary>
     /// Gets whether the trip has metadata only.
     /// </summary>
-    public bool IsMetadataOnly => DownloadState == TripDownloadState.MetadataOnly;
+    public bool IsMetadataOnly => UnifiedState == UnifiedDownloadState.MetadataOnly;
 
     /// <summary>
     /// Gets whether the trip is on server only.
     /// </summary>
-    public bool IsServerOnly => DownloadState == TripDownloadState.ServerOnly;
+    public bool IsServerOnly => UnifiedState == UnifiedDownloadState.ServerOnly;
+
+    /// <summary>
+    /// Gets whether the download is paused.
+    /// </summary>
+    public bool IsPaused => UnifiedState.IsPaused();
+
+    /// <summary>
+    /// Gets whether the download has failed.
+    /// </summary>
+    public bool IsFailed => UnifiedState == UnifiedDownloadState.Failed;
+
+    /// <summary>
+    /// Gets whether metadata is complete for this trip.
+    /// </summary>
+    public bool IsMetadataComplete => DownloadedEntity?.IsMetadataComplete ?? false;
+
+    /// <summary>
+    /// Gets whether this trip has downloaded tiles.
+    /// </summary>
+    public bool HasTiles => DownloadedEntity?.HasTiles ?? false;
 
     /// <summary>
     /// Gets whether the trip has any local data that can be deleted.
-    /// Includes complete downloads, metadata only, and failed/stuck downloads.
+    /// Includes complete downloads, metadata only, paused, and failed downloads.
     /// </summary>
-    public bool CanDelete => DownloadState != TripDownloadState.ServerOnly;
+    public bool CanDelete => UnifiedState.HasLocalData();
 
     /// <summary>
     /// Gets the group name for this trip.
+    /// Uses the unified state extension method.
     /// </summary>
-    public string GroupName => DownloadState switch
-    {
-        TripDownloadState.Complete => "Downloaded",
-        TripDownloadState.MetadataOnly => "Metadata Only",
-        _ => "Available on Server"
-    };
+    public string GroupName => UnifiedState.GetGroupName();
 
     /// <summary>
     /// Gets the status text.
+    /// Uses the unified state extension method.
     /// </summary>
-    public string StatusText => DownloadState switch
-    {
-        TripDownloadState.Complete => "Offline",
-        TripDownloadState.MetadataOnly => "Metadata",
-        TripDownloadState.Downloading => IsDownloading ? "Downloading..." : "Paused",
-        _ => "Online"
-    };
+    public string StatusText => UnifiedState.GetStatusText();
 
     /// <summary>
     /// Gets the status color.
     /// </summary>
-    public Color StatusColor => DownloadState switch
+    public Color StatusColor => UnifiedState switch
     {
-        TripDownloadState.Complete => Colors.Green,
-        TripDownloadState.MetadataOnly => Colors.Orange,
-        TripDownloadState.Downloading => IsDownloading ? Colors.Blue : Colors.DarkOrange,
+        UnifiedDownloadState.Complete => Colors.Green,
+        UnifiedDownloadState.MetadataOnly => Colors.Orange,
+        UnifiedDownloadState.DownloadingMetadata => Colors.Blue,
+        UnifiedDownloadState.DownloadingTiles => Colors.Blue,
+        UnifiedDownloadState.PausedByUser => Colors.DarkOrange,
+        UnifiedDownloadState.PausedNetworkLost => Colors.OrangeRed,
+        UnifiedDownloadState.PausedStorageLow => Colors.OrangeRed,
+        UnifiedDownloadState.PausedCacheLimit => Colors.OrangeRed,
+        UnifiedDownloadState.Failed => Colors.Red,
+        UnifiedDownloadState.Cancelled => Colors.Gray,
         _ => Colors.Gray
     };
 
     /// <summary>
     /// Gets whether Load to Map is available.
-    /// Only available for downloaded trips (metadata or complete) that aren't already loaded.
+    /// Requires: not currently loaded, state allows loading, AND metadata exists.
     /// </summary>
     public bool CanLoadToMap => !IsCurrentlyLoaded &&
-                                 (DownloadState == TripDownloadState.MetadataOnly ||
-                                  DownloadState == TripDownloadState.Complete);
+                                UnifiedState.CanLoadToMap() &&
+                                IsMetadataComplete;
 
     /// <summary>
     /// Gets or sets whether this trip is currently loaded on the map.
@@ -211,35 +246,43 @@ public partial class TripListItem : ObservableObject
     private bool _isCurrentlyLoaded;
 
     /// <summary>
-    /// Gets whether Quick Download is available.
+    /// Gets whether Quick Download is available (metadata only).
     /// </summary>
-    public bool CanQuickDownload => DownloadState == TripDownloadState.ServerOnly;
+    public bool CanQuickDownload => UnifiedState == UnifiedDownloadState.ServerOnly;
 
     /// <summary>
-    /// Gets whether Full Download is available.
+    /// Gets whether Full Download (with tiles) is available.
     /// </summary>
-    public bool CanFullDownload => DownloadState == TripDownloadState.ServerOnly || DownloadState == TripDownloadState.MetadataOnly;
+    public bool CanFullDownload => UnifiedState.CanDownloadTiles();
+
+    /// <summary>
+    /// Gets whether the download can be paused.
+    /// </summary>
+    public bool CanPause => UnifiedState.CanPause();
+
+    /// <summary>
+    /// Gets whether the download can be resumed.
+    /// </summary>
+    public bool CanResume => UnifiedState.CanResume();
 
     /// <summary>
     /// Gets whether Delete Tiles Only is available.
     /// Only available for trips with offline maps (Complete state with tiles).
     /// </summary>
-    public bool CanDeleteTilesOnly => DownloadState == TripDownloadState.Complete &&
+    public bool CanDeleteTilesOnly => UnifiedState.CanDeleteTilesOnly() &&
                                        (DownloadedEntity?.TileCount ?? 0) > 0;
 
     /// <summary>
     /// Gets whether editing is available.
-    /// Only available for downloaded trips (have local data to edit).
+    /// Only available for downloaded trips that have metadata.
     /// </summary>
-    public bool CanEdit => DownloadState == TripDownloadState.MetadataOnly ||
-                            DownloadState == TripDownloadState.Complete;
+    public bool CanEdit => UnifiedState.HasMetadata();
 
     /// <summary>
-    /// Gets or sets whether downloading.
+    /// Gets or sets whether actively downloading.
+    /// True only when download is in progress (not paused).
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StatusText))]
-    [NotifyPropertyChangedFor(nameof(StatusColor))]
     [NotifyPropertyChangedFor(nameof(StatsText))]
     private bool _isDownloading;
 
@@ -250,7 +293,7 @@ public partial class TripListItem : ObservableObject
     private double _downloadProgress;
 
     /// <summary>
-    /// Creates a new trip list item.
+    /// Creates a new trip list item from a trip summary and optional downloaded entity.
     /// </summary>
     public TripListItem(TripSummary trip, Data.Entities.DownloadedTripEntity? downloaded)
     {
@@ -263,46 +306,37 @@ public partial class TripListItem : ObservableObject
         _serverStatsText = trip.PlacesCount > 0 ? trip.StatsText : null;
         _downloadedEntity = downloaded;
 
-        // Determine download state
-        if (downloaded == null)
-        {
-            _downloadState = TripDownloadState.ServerOnly;
-        }
-        else if (downloaded.Status == Data.Entities.TripDownloadStatus.Complete)
-        {
-            _downloadState = TripDownloadState.Complete;
-        }
-        else if (downloaded.Status == Data.Entities.TripDownloadStatus.MetadataOnly)
-        {
-            _downloadState = TripDownloadState.MetadataOnly;
-        }
-        else if (downloaded.PlaceCount > 0 || downloaded.ProgressPercent >= 15)
-        {
-            // Trip has metadata saved but tiles incomplete - treat as MetadataOnly
-            // This allows loading with online tiles for stuck/failed/cancelled downloads
-            _downloadState = TripDownloadState.MetadataOnly;
-        }
-        else
-        {
-            _downloadState = TripDownloadState.Downloading;
-        }
+        // Use unified state from entity, or ServerOnly if no entity
+        _unifiedState = downloaded?.UnifiedState ?? UnifiedDownloadState.ServerOnly;
+
+        // Set IsDownloading based on active download states
+        _isDownloading = _unifiedState.IsDownloading();
     }
-}
 
-/// <summary>
-/// Trip download state.
-/// </summary>
-public enum TripDownloadState
-{
-    /// <summary>Trip exists only on server.</summary>
-    ServerOnly,
+    /// <summary>
+    /// Updates the unified state and related properties.
+    /// Call this when receiving state change events.
+    /// </summary>
+    /// <remarks>
+    /// The isMetadataComplete and hasTiles parameters are provided for context but the
+    /// actual values come from the entity's computed properties which are based on counts.
+    /// </remarks>
+    public void UpdateState(UnifiedDownloadState newState, bool isMetadataComplete, bool hasTiles)
+    {
+        UnifiedState = newState;
+        IsDownloading = newState.IsDownloading();
 
-    /// <summary>Trip metadata is downloaded but no tiles.</summary>
-    MetadataOnly,
+        // Update entity state if present
+        // Note: IsMetadataComplete and HasTiles are computed from entity counts, not directly set
+        if (DownloadedEntity != null)
+        {
+            DownloadedEntity.UnifiedState = newState;
+        }
 
-    /// <summary>Trip is being downloaded.</summary>
-    Downloading,
-
-    /// <summary>Trip is fully downloaded with tiles.</summary>
-    Complete
+        // Force property change notifications for computed properties that depend on entity state
+        OnPropertyChanged(nameof(StatsText));
+        OnPropertyChanged(nameof(IsMetadataComplete));
+        OnPropertyChanged(nameof(HasTiles));
+        OnPropertyChanged(nameof(CanLoadToMap));
+    }
 }

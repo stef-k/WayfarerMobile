@@ -1,9 +1,11 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
+using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services;
 
 namespace WayfarerMobile.ViewModels;
@@ -21,6 +23,7 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
     #region Fields
 
     private readonly TripDownloadService _downloadService;
+    private readonly IDownloadStateService _downloadStateService;
     private readonly ITripNavigationService _tripNavigationService;
     private readonly ITripStateManager _tripStateManager;
     private readonly IToastService _toastService;
@@ -119,12 +122,14 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
     /// </summary>
     public TripDownloadViewModel(
         TripDownloadService downloadService,
+        IDownloadStateService downloadStateService,
         ITripNavigationService tripNavigationService,
         ITripStateManager tripStateManager,
         IToastService toastService,
         ILogger<TripDownloadViewModel> logger)
     {
         _downloadService = downloadService;
+        _downloadStateService = downloadStateService;
         _tripNavigationService = tripNavigationService;
         _tripStateManager = tripStateManager;
         _toastService = toastService;
@@ -140,6 +145,9 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
         _downloadService.DownloadCompleted += OnDownloadCompleted;
         _downloadService.DownloadFailed += OnDownloadFailed;
         _downloadService.DownloadPaused += OnDownloadPaused;
+
+        // Subscribe to unified state changes for reactive UI updates
+        _downloadStateService.StateChanged += OnDownloadStateChanged;
     }
 
     #endregion
@@ -256,9 +264,9 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
                 });
             }
 
-            // Clear entity FIRST so StatsText shows correct value when DownloadState triggers notification
+            // Clear entity FIRST so StatsText shows correct value when UnifiedState triggers notification
             item.DownloadedEntity = null;
-            item.DownloadState = TripDownloadState.ServerOnly;
+            item.UnifiedState = UnifiedDownloadState.ServerOnly;
             item.IsCurrentlyLoaded = false;  // Clear loaded state since trip data is deleted
 
             // Move item to correct group based on new state
@@ -301,12 +309,16 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
             var deletedCount = await _downloadService.DeleteTripTilesAsync(item.ServerId);
 
             // Update item state - now has metadata only (no tiles)
-            item.DownloadState = TripDownloadState.MetadataOnly;
+            item.UnifiedState = UnifiedDownloadState.MetadataOnly;
             if (item.DownloadedEntity != null)
             {
                 item.DownloadedEntity.TileCount = 0;
                 item.DownloadedEntity.TotalSizeBytes = 0;
+                item.DownloadedEntity.UnifiedState = UnifiedDownloadState.MetadataOnly;
             }
+
+            // Move item to correct group (from Downloaded to Available Offline)
+            _callbacks?.MoveItemToCorrectGroup(item);
 
             await _toastService.ShowSuccessAsync($"Removed {deletedCount} map tiles");
         }
@@ -352,6 +364,12 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
         DownloadingTripName = null;
         DownloadingTripId = null;
         _downloadingTripServerId = null;
+
+        // Refresh trips list since the trip was deleted from the database
+        if (_callbacks != null)
+        {
+            await _callbacks.RefreshTripsAsync();
+        }
 
         await _toastService.ShowAsync("Download cancelled");
     }
@@ -464,6 +482,75 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// Resume a specific trip download from the item-level button.
+    /// </summary>
+    [RelayCommand]
+    public async Task ResumeDownloadForItemAsync(TripListItem? item)
+    {
+        if (item == null)
+        {
+            _logger.LogWarning("ResumeDownloadForItemAsync: item is null");
+            return;
+        }
+
+        _logger.LogInformation("ResumeDownloadForItemAsync: Resuming download for trip {TripName} ({ServerId})",
+            item.Name, item.ServerId);
+
+        // Find the local trip ID from server ID
+        var downloadedTrips = await _downloadService.GetDownloadedTripsAsync();
+        var trip = downloadedTrips.FirstOrDefault(t => t.ServerId == item.ServerId);
+
+        if (trip == null)
+        {
+            _logger.LogWarning("ResumeDownloadForItemAsync: Trip not found in local storage for ServerId {ServerId}", item.ServerId);
+            await _toastService.ShowErrorAsync("Cannot resume - trip not found in local storage");
+            return;
+        }
+
+        // Set up download state for this trip
+        DownloadingTripId = trip.Id;
+        DownloadingTripName = trip.Name;
+        _downloadingTripServerId = trip.ServerId;
+
+        await ResumeDownloadByTripIdAsync(trip.Id);
+    }
+
+    /// <summary>
+    /// Pause a specific trip download from the item-level button.
+    /// </summary>
+    [RelayCommand]
+    public async Task PauseDownloadForItemAsync(TripListItem? item)
+    {
+        if (item == null)
+        {
+            _logger.LogWarning("PauseDownloadForItemAsync: item is null");
+            return;
+        }
+
+        _logger.LogInformation("PauseDownloadForItemAsync: Pausing download for trip {TripName} ({ServerId})",
+            item.Name, item.ServerId);
+
+        // Find the local trip ID if we don't already have it
+        if (!DownloadingTripId.HasValue)
+        {
+            var downloadedTrips = await _downloadService.GetDownloadedTripsAsync();
+            var trip = downloadedTrips.FirstOrDefault(t => t.ServerId == item.ServerId);
+
+            if (trip == null)
+            {
+                _logger.LogWarning("PauseDownloadForItemAsync: Trip not found in local storage for ServerId {ServerId}", item.ServerId);
+                await _toastService.ShowErrorAsync("Cannot pause - trip not found");
+                return;
+            }
+
+            DownloadingTripId = trip.Id;
+        }
+
+        // Use the existing pause logic
+        await PauseDownloadAsync();
+    }
+
     #endregion
 
     #region Public Methods
@@ -503,7 +590,7 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
     private async Task DownloadTripInternalAsync(TripListItem item, bool includeTiles)
     {
         // Store original state to restore if download fails/cancels
-        var originalState = item.DownloadState;
+        var originalState = item.UnifiedState;
         var downloadCompleted = false;
 
         try
@@ -518,7 +605,7 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
             _downloadCts = new CancellationTokenSource();
 
             // Set per-item state to Downloading for UI feedback
-            item.DownloadState = TripDownloadState.Downloading;
+            item.UnifiedState = UnifiedDownloadState.DownloadingMetadata;
             // Only show per-item progress bar for tile downloads (full downloads)
             // Metadata-only downloads are quick and only need the global overlay
             item.IsDownloading = includeTiles;
@@ -542,13 +629,11 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
                 item.DownloadedEntity = result;
 
                 // Check if download actually completed or was paused/interrupted
-                // result.Status will be "downloading" if paused, "complete" if finished
-                if (result.Status == TripDownloadStatus.Complete ||
-                    result.Status == TripDownloadStatus.MetadataOnly)
+                // Use UnifiedState as the single source of truth
+                if (result.UnifiedState == UnifiedDownloadState.Complete ||
+                    result.UnifiedState == UnifiedDownloadState.MetadataOnly)
                 {
-                    item.DownloadState = result.Status == TripDownloadStatus.Complete
-                        ? TripDownloadState.Complete
-                        : TripDownloadState.MetadataOnly;
+                    item.UnifiedState = result.UnifiedState;
                     downloadCompleted = true;
 
                     // Move item to the correct group based on new state
@@ -558,11 +643,10 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
                 }
                 else
                 {
-                    // Download was paused/interrupted - keep downloading state
+                    // Download was paused/interrupted - state already updated by service
                     // The OnDownloadPaused event handler will update UI appropriately
-                    item.DownloadState = TripDownloadState.Downloading;
-                    _logger.LogInformation("Download paused/interrupted for trip {TripId}, status: {Status}",
-                        result.Id, result.Status);
+                    _logger.LogInformation("Download paused/interrupted for trip {TripId}, state: {State}",
+                        result.Id, result.UnifiedState);
                 }
             }
             else if (!_downloadCts.IsCancellationRequested)
@@ -610,9 +694,9 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
             item.DownloadProgress = 0;
 
             // Restore original state if download didn't complete
-            if (!downloadCompleted && item.DownloadState == TripDownloadState.Downloading)
+            if (!downloadCompleted && item.UnifiedState.IsDownloading())
             {
-                item.DownloadState = originalState;
+                item.UnifiedState = originalState;
             }
         }
     }
@@ -638,7 +722,7 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
             var item = _callbacks?.FindItemByServerId(_downloadingTripServerId.Value);
             if (item != null)
             {
-                item.DownloadState = TripDownloadState.Downloading;
+                item.UnifiedState = UnifiedDownloadState.DownloadingTiles;
                 item.IsDownloading = true;
                 item.DownloadProgress = 0;
             }
@@ -660,14 +744,15 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
                 IsDownloading = false;
                 DownloadStatusMessage = "Resume failed";
 
-                // Revert item state
+                // Revert item state to paused (not downloading)
                 if (_downloadingTripServerId.HasValue)
                 {
                     var item = _callbacks?.FindItemByServerId(_downloadingTripServerId.Value);
                     if (item != null)
                     {
                         item.IsDownloading = false;
-                        // Keep DownloadState as Downloading - it was already in that state in the DB
+                        item.UnifiedState = UnifiedDownloadState.PausedByUser;
+                        _callbacks?.MoveItemToCorrectGroup(item);
                     }
                 }
             }
@@ -679,6 +764,7 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
             IsDownloadPaused = true;
             IsDownloading = false;
             DownloadStatusMessage = "Download paused";
+            RevertItemToPausedState();
         }
         catch (HttpRequestException ex)
         {
@@ -687,6 +773,7 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
             IsDownloadPaused = true;
             IsDownloading = false;
             DownloadStatusMessage = "Resume failed";
+            RevertItemToPausedState();
         }
         catch (IOException ex)
         {
@@ -695,6 +782,7 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
             IsDownloadPaused = true;
             IsDownloading = false;
             DownloadStatusMessage = "Resume failed";
+            RevertItemToPausedState();
         }
         catch (Exception ex)
         {
@@ -704,6 +792,7 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
             IsDownloadPaused = true;
             IsDownloading = false;
             DownloadStatusMessage = "Resume failed";
+            RevertItemToPausedState();
         }
         finally
         {
@@ -723,6 +812,24 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
                         item.DownloadProgress = 0;
                     }
                 }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reverts the current downloading item back to paused state.
+    /// Used when resume fails or is cancelled.
+    /// </summary>
+    private void RevertItemToPausedState()
+    {
+        if (_downloadingTripServerId.HasValue)
+        {
+            var item = _callbacks?.FindItemByServerId(_downloadingTripServerId.Value);
+            if (item != null)
+            {
+                item.IsDownloading = false;
+                item.UnifiedState = UnifiedDownloadState.PausedByUser;
+                _callbacks?.MoveItemToCorrectGroup(item);
             }
         }
     }
@@ -916,6 +1023,22 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
         });
     }
 
+    /// <summary>
+    /// Handles unified download state changes for reactive UI updates.
+    /// Updates the corresponding TripListItem to reflect the new state.
+    /// </summary>
+    private void OnDownloadStateChanged(object? sender, DownloadStateChangedEventArgs e)
+    {
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            _logger.LogInformation("State changed for trip {TripId}: {PrevState} -> {NewState}",
+                e.TripServerId, e.PreviousState, e.NewState);
+
+            // Update the TripListItem via callbacks
+            _callbacks?.UpdateTripState(e.TripServerId, e.NewState, e.IsMetadataComplete, e.HasTiles);
+        });
+    }
+
     #endregion
 
     #region IDisposable
@@ -934,6 +1057,7 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
         _downloadService.DownloadCompleted -= OnDownloadCompleted;
         _downloadService.DownloadFailed -= OnDownloadFailed;
         _downloadService.DownloadPaused -= OnDownloadPaused;
+        _downloadStateService.StateChanged -= OnDownloadStateChanged;
 
         _downloadCts?.Cancel();
         _downloadCts?.Dispose();

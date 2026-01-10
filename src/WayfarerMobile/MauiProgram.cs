@@ -211,6 +211,7 @@ public static class MauiProgram
         services.AddSingleton<TripDownloadService>();
         // Also register as interface for consumers that prefer interface injection
         services.AddSingleton<ITripDownloadService>(sp => sp.GetRequiredService<TripDownloadService>());
+        services.AddSingleton<IDownloadStateService, DownloadStateService>();
 
         // Trip editing and sync coordination (extracted from TripDownloadService)
         services.AddSingleton<ITripEditingService, TripEditingService>();

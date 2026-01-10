@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
+using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
@@ -171,7 +172,7 @@ public class TripSyncCoordinator : ITripSyncCoordinator
 
         var downloadedTrips = await _tripRepository.GetDownloadedTripsAsync();
         var completedTrips = downloadedTrips.Where(t =>
-            t.Status == TripDownloadStatus.Complete || t.Status == TripDownloadStatus.MetadataOnly).ToList();
+            t.UnifiedState == UnifiedDownloadState.Complete || t.UnifiedState == UnifiedDownloadState.MetadataOnly).ToList();
 
         if (completedTrips.Count == 0)
         {

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using BatchDownloadResult = WayfarerMobile.Core.Interfaces.BatchDownloadResult;
@@ -33,6 +34,7 @@ public class TripDownloadService : ITripDownloadService
     private readonly ITripMetadataBuilder _metadataBuilder;
     private readonly ITripContentService _contentService;
     private readonly ITileDownloadOrchestrator _tileDownloadOrchestrator;
+    private readonly IDownloadStateService _downloadStateService;
     private readonly ILogger<TripDownloadService> _logger;
 
     #region Constants
@@ -163,6 +165,7 @@ public class TripDownloadService : ITripDownloadService
         ITripMetadataBuilder metadataBuilder,
         ITripContentService contentService,
         ITileDownloadOrchestrator tileDownloadOrchestrator,
+        IDownloadStateService downloadStateService,
         ILogger<TripDownloadService> logger)
     {
         _apiClient = apiClient;
@@ -180,6 +183,7 @@ public class TripDownloadService : ITripDownloadService
         _metadataBuilder = metadataBuilder;
         _contentService = contentService;
         _tileDownloadOrchestrator = tileDownloadOrchestrator;
+        _downloadStateService = downloadStateService;
         _logger = logger;
 
         // Wire up events from the tile download orchestrator
@@ -254,7 +258,7 @@ public class TripDownloadService : ITripDownloadService
 
             // Check if already downloaded
             var existing = await _tripRepository.GetDownloadedTripByServerIdAsync(tripSummary.Id);
-            if (existing != null && existing.Status == TripDownloadStatus.Complete)
+            if (existing != null && existing.UnifiedState == UnifiedDownloadState.Complete)
             {
                 _logger.LogInformation("Trip already downloaded: {TripName}", tripSummary.Name);
                 return existing;
@@ -268,7 +272,7 @@ public class TripDownloadService : ITripDownloadService
                 DownloadedAt = DateTime.UtcNow
             };
 
-            tripEntity.Status = TripDownloadStatus.Downloading;
+            tripEntity.UnifiedState = UnifiedDownloadState.DownloadingMetadata;
             tripEntity.ProgressPercent = 0;
 
             // Set bounding box
@@ -288,8 +292,9 @@ public class TripDownloadService : ITripDownloadService
             var tripDetails = await _apiClient.GetTripDetailsAsync(tripSummary.Id, cancellationToken);
             if (tripDetails == null)
             {
-                tripEntity.Status = TripDownloadStatus.Failed;
+                tripEntity.UnifiedState = UnifiedDownloadState.Failed;
                 tripEntity.LastError = "Failed to fetch trip details";
+                tripEntity.StateChangedAt = DateTime.UtcNow;
                 await _tripRepository.SaveDownloadedTripAsync(tripEntity);
                 return null;
             }
@@ -443,20 +448,29 @@ public class TripDownloadService : ITripDownloadService
                         _logger.LogInformation("Download stopped for trip {TripName}: Paused={Paused}, LimitReached={LimitReached}",
                             tripSummary.Name, downloadResult.WasPaused, downloadResult.WasLimitReached);
 
-                        // Set status to MetadataOnly so trip can be loaded with online tiles
-                        // The pause/resume state is tracked separately in TripDownloadStateEntity
-                        tripEntity.Status = TripDownloadStatus.MetadataOnly;
+                        // Set unified state to paused (not MetadataOnly) so UI shows correct buttons
+                        tripEntity.UnifiedState = downloadResult.WasLimitReached
+                            ? UnifiedDownloadState.PausedCacheLimit
+                            : UnifiedDownloadState.PausedByUser;
+                        tripEntity.StateChangedAt = DateTime.UtcNow;
                         await _tripRepository.SaveDownloadedTripAsync(tripEntity);
+
+                        // Notify UI of state change
+                        await _downloadStateService.TransitionAsync(
+                            tripEntity.ServerId,
+                            tripEntity.UnifiedState,
+                            downloadResult.WasLimitReached ? "Cache limit reached" : "User paused");
+
                         return tripEntity;
                     }
                 }
 
-                tripEntity.Status = TripDownloadStatus.Complete;
+                tripEntity.UnifiedState = UnifiedDownloadState.Complete;
             }
             else
             {
                 // No bounding box or metadata-only requested - skip tiles
-                tripEntity.Status = TripDownloadStatus.MetadataOnly;
+                tripEntity.UnifiedState = UnifiedDownloadState.MetadataOnly;
                 if (!includeTiles)
                 {
                     _logger.LogInformation("Metadata-only download for trip {TripName}, skipping tiles", tripSummary.Name);
@@ -509,12 +523,14 @@ public class TripDownloadService : ITripDownloadService
                     await _downloadStateRepository.SaveDownloadStateAsync(existingState);
                 }
 
-                // Use MetadataOnly if metadata was saved (ProgressPercent >= 15), allowing trip to be loaded
-                // Otherwise mark as Failed since there's nothing usable
-                tripEntityForCancel.Status = tripEntityForCancel.ProgressPercent >= 15
-                    ? TripDownloadStatus.MetadataOnly
-                    : TripDownloadStatus.Failed;
+                // If metadata was saved, use MetadataOnly so trip can be loaded
+                // Otherwise use Failed since there's nothing usable
+                var hasUsableMetadata = tripEntityForCancel.ProgressPercent >= 15;
+                tripEntityForCancel.UnifiedState = hasUsableMetadata
+                    ? UnifiedDownloadState.MetadataOnly
+                    : UnifiedDownloadState.Failed;
                 tripEntityForCancel.LastError = "Download cancelled by user";
+                tripEntityForCancel.StateChangedAt = DateTime.UtcNow;
                 await _tripRepository.SaveDownloadedTripAsync(tripEntityForCancel);
 
                 // Raise download paused event
@@ -541,10 +557,12 @@ public class TripDownloadService : ITripDownloadService
             var tripEntity = await _tripRepository.GetDownloadedTripByServerIdAsync(tripSummary.Id);
             if (tripEntity != null)
             {
-                tripEntity.Status = tripEntity.ProgressPercent >= 15
-                    ? TripDownloadStatus.MetadataOnly
-                    : TripDownloadStatus.Failed;
+                var hasUsableMetadata = tripEntity.ProgressPercent >= 15;
+                tripEntity.UnifiedState = hasUsableMetadata
+                    ? UnifiedDownloadState.MetadataOnly
+                    : UnifiedDownloadState.Failed;
                 tripEntity.LastError = ex.Message;
+                tripEntity.StateChangedAt = DateTime.UtcNow;
                 await _tripRepository.SaveDownloadedTripAsync(tripEntity);
 
                 // Raise download failed event
@@ -589,8 +607,8 @@ public class TripDownloadService : ITripDownloadService
     {
         var trip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripId);
         return trip != null &&
-               (trip.Status == TripDownloadStatus.Complete ||
-                trip.Status == TripDownloadStatus.MetadataOnly);
+               (trip.UnifiedState == UnifiedDownloadState.Complete ||
+                trip.UnifiedState == UnifiedDownloadState.MetadataOnly);
     }
 
     /// <summary>
@@ -676,11 +694,15 @@ public class TripDownloadService : ITripDownloadService
             }
         }
 
-        // Update trip to reflect no tiles - set status to metadata only
+        // Update trip to reflect no tiles - set state to metadata only
         trip.TileCount = 0;
         trip.TotalSizeBytes = 0;
-        trip.Status = TripDownloadStatus.MetadataOnly;
+        trip.UnifiedState = UnifiedDownloadState.MetadataOnly;
+        trip.StateChangedAt = DateTime.UtcNow;
         await _tripRepository.SaveDownloadedTripAsync(trip);
+
+        // Notify UI of state change
+        await _downloadStateService.TransitionAsync(trip.ServerId, UnifiedDownloadState.MetadataOnly, "Tiles deleted");
 
         _logger.LogInformation("Deleted {Count} tiles for trip {TripId}", deletedCount, tripServerId);
         return deletedCount;
@@ -697,7 +719,7 @@ public class TripDownloadService : ITripDownloadService
     public async Task<bool> PauseDownloadAsync(int tripId)
     {
         var trip = await _tripRepository.GetDownloadedTripAsync(tripId);
-        if (trip == null || trip.Status != TripDownloadStatus.Downloading)
+        if (trip == null || !trip.UnifiedState.IsDownloading())
         {
             _logger.LogWarning("Cannot pause - trip {TripId} not downloading", tripId);
             return false;
@@ -711,26 +733,45 @@ public class TripDownloadService : ITripDownloadService
     /// <summary>
     /// Resumes a paused download.
     /// Loads the saved state and continues downloading remaining tiles.
+    /// If no saved state exists but trip has metadata, restarts tile download.
     /// </summary>
     /// <param name="tripId">The local trip ID.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>True if resumed successfully, false if no saved state found.</returns>
+    /// <returns>True if resumed successfully, false if cannot resume.</returns>
     public async Task<bool> ResumeDownloadAsync(int tripId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-
-        var state = await _downloadStateRepository.GetDownloadStateAsync(tripId);
-        if (state == null)
-        {
-            _logger.LogWarning("Cannot resume - no saved state for trip {TripId}", tripId);
-            return false;
-        }
 
         var trip = await _tripRepository.GetDownloadedTripAsync(tripId);
         if (trip == null)
         {
             _logger.LogWarning("Cannot resume - trip {TripId} not found", tripId);
             return false;
+        }
+
+        // Validate that the trip is in a resumable state
+        if (!trip.UnifiedState.CanResume())
+        {
+            _logger.LogWarning("Cannot resume - trip {TripId} is in state {State} which is not resumable",
+                tripId, trip.UnifiedState);
+            return false;
+        }
+
+        var state = await _downloadStateRepository.GetDownloadStateAsync(tripId);
+
+        // If no saved state but trip has metadata, restart tile download from beginning
+        if (state == null)
+        {
+            if (trip.IsMetadataComplete)
+            {
+                _logger.LogInformation("No saved state for trip {TripId}, restarting tile download from beginning", tripId);
+                return await RestartTileDownloadAsync(trip, cancellationToken);
+            }
+            else
+            {
+                _logger.LogWarning("Cannot resume - no saved state and no metadata for trip {TripId}", tripId);
+                return false;
+            }
         }
 
         // Guard against concurrent downloads of the same trip
@@ -752,8 +793,8 @@ public class TripDownloadService : ITripDownloadService
             state.InterruptionReason = string.Empty;
             await _downloadStateRepository.SaveDownloadStateAsync(state);
 
-            // Update trip status
-            trip.Status = TripDownloadStatus.Downloading;
+            // Update trip state
+            trip.UnifiedState = UnifiedDownloadState.DownloadingTiles;
             await _tripRepository.SaveDownloadedTripAsync(trip);
 
             _logger.LogInformation("Resuming download for trip {TripId}: {Completed}/{Total} tiles",
@@ -770,8 +811,9 @@ public class TripDownloadService : ITripDownloadService
             {
                 _logger.LogError(ex, "Failed to deserialize remaining tiles for trip {TripId}, clearing corrupt state", tripId);
                 await _downloadStateRepository.DeleteDownloadStateAsync(tripId);
-                trip.Status = TripDownloadStatus.Failed;
+                trip.UnifiedState = UnifiedDownloadState.Failed;
                 trip.LastError = "Corrupt download state - please restart download";
+                trip.StateChangedAt = DateTime.UtcNow;
                 await _tripRepository.SaveDownloadedTripAsync(trip);
                 return false;
             }
@@ -779,7 +821,7 @@ public class TripDownloadService : ITripDownloadService
             if (remainingTiles.Count == 0)
             {
                 // All tiles already downloaded
-                trip.Status = TripDownloadStatus.Complete;
+                trip.UnifiedState = UnifiedDownloadState.Complete;
                 await _tripRepository.SaveDownloadedTripAsync(trip);
                 await _downloadStateRepository.DeleteDownloadStateAsync(tripId);
                 return true;
@@ -805,7 +847,7 @@ public class TripDownloadService : ITripDownloadService
             }
 
             // Complete - update tile count to reflect actual downloads
-            trip.Status = TripDownloadStatus.Complete;
+            trip.UnifiedState = UnifiedDownloadState.Complete;
             trip.TileCount = state.CompletedTileCount + downloadResult.TilesDownloaded;
             trip.TotalSizeBytes = downloadResult.TotalBytes;
             trip.ProgressPercent = 100;
@@ -835,8 +877,9 @@ public class TripDownloadService : ITripDownloadService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error resuming download for trip {TripId}", tripId);
-            trip.Status = TripDownloadStatus.Failed;
+            trip.UnifiedState = UnifiedDownloadState.Failed;
             trip.LastError = ex.Message;
+            trip.StateChangedAt = DateTime.UtcNow;
             await _tripRepository.SaveDownloadedTripAsync(trip);
 
             // Delete orphaned download state to avoid stale resume attempts
@@ -861,6 +904,146 @@ public class TripDownloadService : ITripDownloadService
             _activeDownloads.TryRemove(trip.ServerId, out _);
             // Clean up per-trip warning state
             _tileDownloadOrchestrator.ClearWarningState(tripId);
+        }
+    }
+
+    /// <summary>
+    /// Restarts tile download from the beginning for a trip that has metadata but no saved tile state.
+    /// Used when resuming a download that was paused before tiles started.
+    /// </summary>
+    private async Task<bool> RestartTileDownloadAsync(DownloadedTripEntity trip, CancellationToken cancellationToken)
+    {
+        // Guard against concurrent downloads of the same trip
+        if (!_activeDownloads.TryAdd(trip.ServerId, true))
+        {
+            _logger.LogWarning("Download already in progress for trip {TripName} ({TripId})",
+                trip.Name, trip.ServerId);
+            return false;
+        }
+
+        try
+        {
+            // Clear any previous stop request
+            _downloadStateManager.ClearStopRequest(trip.Id);
+            _tileDownloadOrchestrator.InitializeWarningState(trip.Id);
+
+            // Update trip state
+            trip.UnifiedState = UnifiedDownloadState.DownloadingTiles;
+            await _tripRepository.SaveDownloadedTripAsync(trip);
+
+            // Calculate bounding box
+            var boundingBox = new BoundingBox
+            {
+                North = trip.BoundingBoxNorth,
+                South = trip.BoundingBoxSouth,
+                East = trip.BoundingBoxEast,
+                West = trip.BoundingBoxWest
+            };
+
+            if (!boundingBox.IsValid)
+            {
+                _logger.LogWarning("Cannot restart tile download - invalid bounding box for trip {TripId}", trip.Id);
+                trip.UnifiedState = UnifiedDownloadState.MetadataOnly;
+                await _tripRepository.SaveDownloadedTripAsync(trip);
+                return false;
+            }
+
+            // Calculate tiles needed
+            var tileCoords = _tileDownloadOrchestrator.CalculateTilesForBoundingBox(boundingBox);
+            _logger.LogInformation("Restarting tile download for trip {TripName}: {TileCount} tiles", trip.Name, tileCoords.Count);
+
+            if (tileCoords.Count == 0)
+            {
+                // No tiles needed - mark as complete
+                trip.UnifiedState = UnifiedDownloadState.Complete;
+                trip.ProgressPercent = 100;
+                await _tripRepository.SaveDownloadedTripAsync(trip);
+                return true;
+            }
+
+            // Start tile download
+            var downloadResult = await _tileDownloadOrchestrator.DownloadTilesAsync(
+                trip.Id,
+                trip.ServerId,
+                trip.Name,
+                tileCoords,
+                initialCompleted: 0,
+                totalTiles: tileCoords.Count,
+                initialBytes: 0,
+                cancellationToken);
+
+            // Check if paused or hit limit
+            if (downloadResult.WasPaused || downloadResult.WasLimitReached)
+            {
+                _logger.LogInformation("Download stopped during restart for trip {TripId}: Paused={Paused}, LimitReached={LimitReached}",
+                    trip.Id, downloadResult.WasPaused, downloadResult.WasLimitReached);
+
+                trip.TileCount = downloadResult.TilesDownloaded;
+                trip.TotalSizeBytes = downloadResult.TotalBytes;
+                trip.UnifiedState = downloadResult.WasLimitReached
+                    ? UnifiedDownloadState.PausedCacheLimit
+                    : UnifiedDownloadState.PausedByUser;
+                trip.StateChangedAt = DateTime.UtcNow;
+                await _tripRepository.SaveDownloadedTripAsync(trip);
+
+                await _downloadStateService.TransitionAsync(
+                    trip.ServerId,
+                    trip.UnifiedState,
+                    downloadResult.WasLimitReached ? "Cache limit reached" : "User paused");
+
+                return true; // State saved, can resume later
+            }
+
+            // Complete
+            trip.UnifiedState = UnifiedDownloadState.Complete;
+            trip.TileCount = downloadResult.TilesDownloaded;
+            trip.TotalSizeBytes = downloadResult.TotalBytes;
+            trip.ProgressPercent = 100;
+            await _tripRepository.SaveDownloadedTripAsync(trip);
+
+            RaiseProgress(trip.Id, 100, "Download complete");
+            _logger.LogInformation("Restarted download complete for trip {TripId}", trip.Id);
+
+            DownloadCompleted?.Invoke(this, new DownloadTerminalEventArgs
+            {
+                TripId = trip.Id,
+                TripServerId = trip.ServerId,
+                TripName = trip.Name,
+                TilesDownloaded = trip.TileCount,
+                TotalBytes = trip.TotalSizeBytes
+            });
+
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("Restarted download cancelled for trip {TripId}", trip.Id);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error restarting download for trip {TripId}", trip.Id);
+            trip.UnifiedState = UnifiedDownloadState.Failed;
+            trip.LastError = ex.Message;
+            trip.StateChangedAt = DateTime.UtcNow;
+            await _tripRepository.SaveDownloadedTripAsync(trip);
+
+            DownloadFailed?.Invoke(this, new DownloadTerminalEventArgs
+            {
+                TripId = trip.Id,
+                TripServerId = trip.ServerId,
+                TripName = trip.Name,
+                TilesDownloaded = trip.TileCount,
+                TotalBytes = trip.TotalSizeBytes,
+                ErrorMessage = ex.Message
+            });
+
+            return false;
+        }
+        finally
+        {
+            _activeDownloads.TryRemove(trip.ServerId, out _);
+            _tileDownloadOrchestrator.ClearWarningState(trip.Id);
         }
     }
 
@@ -903,8 +1086,9 @@ public class TripDownloadService : ITripDownloadService
         else
         {
             // Keep partial download but mark as cancelled (distinct from failed)
-            trip.Status = TripDownloadStatus.Cancelled;
+            trip.UnifiedState = UnifiedDownloadState.Cancelled;
             trip.LastError = "Download cancelled by user";
+            trip.StateChangedAt = DateTime.UtcNow;
             await _tripRepository.SaveDownloadedTripAsync(trip);
             _logger.LogInformation("Cancelled trip {TripId}, keeping partial data", tripId);
 
@@ -982,6 +1166,19 @@ public class TripDownloadService : ITripDownloadService
         await _downloadStateRepository.SaveDownloadStateAsync(state);
         _logger.LogInformation("Saved download state for trip {TripId}: {Completed}/{Total} tiles, status: {Status}, reason: {Reason}",
             trip.Id, completedCount, totalCount, status, interruptionReason);
+
+        // Also update unified state for UI reactivity
+        var unifiedState = status switch
+        {
+            DownloadStateStatus.Paused when interruptionReason == DownloadPauseReason.UserCancel
+                => UnifiedDownloadState.Cancelled,
+            DownloadStateStatus.Paused when interruptionReason == DownloadPauseReason.StorageLow
+                => UnifiedDownloadState.PausedStorageLow,
+            DownloadStateStatus.LimitReached => UnifiedDownloadState.PausedCacheLimit,
+            DownloadStateStatus.Paused => UnifiedDownloadState.PausedByUser,
+            _ => UnifiedDownloadState.PausedByUser
+        };
+        await _downloadStateService.TransitionAsync(trip.ServerId, unifiedState, interruptionReason);
     }
 
     #endregion
