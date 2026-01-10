@@ -51,7 +51,9 @@ public class TripSummary
 
     /// <summary>
     /// Gets or sets the bounding box.
+    /// Server sends as "boundingBox".
     /// </summary>
+    [JsonPropertyName("boundingBox")]
     public BoundingBox? BoundingBox { get; set; }
 
     /// <summary>
@@ -174,7 +176,9 @@ public class TripDetails : INotifyPropertyChanged
 
     /// <summary>
     /// Gets or sets the bounding box.
+    /// Server sends as "boundingBox".
     /// </summary>
+    [JsonPropertyName("boundingBox")]
     public BoundingBox? BoundingBox { get; set; }
 
     /// <summary>
