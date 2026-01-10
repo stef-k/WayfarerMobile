@@ -1,9 +1,11 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
+using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services;
 
 namespace WayfarerMobile.ViewModels;
@@ -21,6 +23,7 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
     #region Fields
 
     private readonly TripDownloadService _downloadService;
+    private readonly IDownloadStateService _downloadStateService;
     private readonly ITripNavigationService _tripNavigationService;
     private readonly ITripStateManager _tripStateManager;
     private readonly IToastService _toastService;
@@ -119,12 +122,14 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
     /// </summary>
     public TripDownloadViewModel(
         TripDownloadService downloadService,
+        IDownloadStateService downloadStateService,
         ITripNavigationService tripNavigationService,
         ITripStateManager tripStateManager,
         IToastService toastService,
         ILogger<TripDownloadViewModel> logger)
     {
         _downloadService = downloadService;
+        _downloadStateService = downloadStateService;
         _tripNavigationService = tripNavigationService;
         _tripStateManager = tripStateManager;
         _toastService = toastService;
@@ -140,6 +145,9 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
         _downloadService.DownloadCompleted += OnDownloadCompleted;
         _downloadService.DownloadFailed += OnDownloadFailed;
         _downloadService.DownloadPaused += OnDownloadPaused;
+
+        // Subscribe to unified state changes for reactive UI updates
+        _downloadStateService.StateChanged += OnDownloadStateChanged;
     }
 
     #endregion
@@ -916,6 +924,22 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
         });
     }
 
+    /// <summary>
+    /// Handles unified download state changes for reactive UI updates.
+    /// Updates the corresponding TripListItem to reflect the new state.
+    /// </summary>
+    private void OnDownloadStateChanged(object? sender, DownloadStateChangedEventArgs e)
+    {
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            _logger.LogInformation("State changed for trip {TripId}: {PrevState} -> {NewState}",
+                e.TripServerId, e.PreviousState, e.NewState);
+
+            // Update the TripListItem via callbacks
+            _callbacks?.UpdateTripState(e.TripServerId, e.NewState, e.IsMetadataComplete, e.HasTiles);
+        });
+    }
+
     #endregion
 
     #region IDisposable
@@ -934,6 +958,7 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
         _downloadService.DownloadCompleted -= OnDownloadCompleted;
         _downloadService.DownloadFailed -= OnDownloadFailed;
         _downloadService.DownloadPaused -= OnDownloadPaused;
+        _downloadStateService.StateChanged -= OnDownloadStateChanged;
 
         _downloadCts?.Cancel();
         _downloadCts?.Dispose();

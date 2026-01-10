@@ -1,3 +1,4 @@
+using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Models;
 
 namespace WayfarerMobile.ViewModels;
@@ -46,4 +47,14 @@ public interface ITripDownloadCallbacks
     /// Called after download operations to update paused count.
     /// </summary>
     Task CheckForPausedDownloadsAsync();
+
+    /// <summary>
+    /// Updates the unified download state on a specific trip item.
+    /// Called when download state changes to update UI reactively.
+    /// </summary>
+    /// <param name="serverId">The server ID of the trip.</param>
+    /// <param name="newState">The new unified download state.</param>
+    /// <param name="isMetadataComplete">Whether metadata is complete.</param>
+    /// <param name="hasTiles">Whether the trip has tiles.</param>
+    void UpdateTripState(Guid serverId, UnifiedDownloadState newState, bool isMetadataComplete, bool hasTiles);
 }

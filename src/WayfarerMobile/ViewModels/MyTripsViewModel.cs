@@ -732,5 +732,20 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         await CheckForPausedDownloadsAsync();
     }
 
+    /// <inheritdoc/>
+    void ITripDownloadCallbacks.UpdateTripState(Guid serverId, Core.Enums.UnifiedDownloadState newState, bool isMetadataComplete, bool hasTiles)
+    {
+        foreach (var group in Trips)
+        {
+            var item = group.FirstOrDefault(t => t.ServerId == serverId);
+            if (item != null)
+            {
+                item.UpdateState(newState, isMetadataComplete, hasTiles);
+                MoveItemToCorrectGroup(item);
+                return;
+            }
+        }
+    }
+
     #endregion
 }
