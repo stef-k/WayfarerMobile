@@ -137,7 +137,10 @@ public partial class TripListItem : ObservableObject
     /// <summary>
     /// Gets or sets the downloaded entity (for stats updates).
     /// </summary>
-    public Data.Entities.DownloadedTripEntity? DownloadedEntity { get; set; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatsText))]
+    [NotifyPropertyChangedFor(nameof(CanDeleteTilesOnly))]
+    private Data.Entities.DownloadedTripEntity? _downloadedEntity;
 
     /// <summary>
     /// Gets whether the trip is downloaded.
@@ -258,7 +261,7 @@ public partial class TripListItem : ObservableObject
 
         // Cache server stats for fallback
         _serverStatsText = trip.PlacesCount > 0 ? trip.StatsText : null;
-        DownloadedEntity = downloaded;
+        _downloadedEntity = downloaded;
 
         // Determine download state
         if (downloaded == null)
