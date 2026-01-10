@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using BatchDownloadResult = WayfarerMobile.Core.Interfaces.BatchDownloadResult;
@@ -33,6 +34,7 @@ public class TripDownloadService : ITripDownloadService
     private readonly ITripMetadataBuilder _metadataBuilder;
     private readonly ITripContentService _contentService;
     private readonly ITileDownloadOrchestrator _tileDownloadOrchestrator;
+    private readonly IDownloadStateService _downloadStateService;
     private readonly ILogger<TripDownloadService> _logger;
 
     #region Constants
@@ -163,6 +165,7 @@ public class TripDownloadService : ITripDownloadService
         ITripMetadataBuilder metadataBuilder,
         ITripContentService contentService,
         ITileDownloadOrchestrator tileDownloadOrchestrator,
+        IDownloadStateService downloadStateService,
         ILogger<TripDownloadService> logger)
     {
         _apiClient = apiClient;
@@ -180,6 +183,7 @@ public class TripDownloadService : ITripDownloadService
         _metadataBuilder = metadataBuilder;
         _contentService = contentService;
         _tileDownloadOrchestrator = tileDownloadOrchestrator;
+        _downloadStateService = downloadStateService;
         _logger = logger;
 
         // Wire up events from the tile download orchestrator
@@ -269,6 +273,7 @@ public class TripDownloadService : ITripDownloadService
             };
 
             tripEntity.Status = TripDownloadStatus.Downloading;
+            tripEntity.UnifiedState = UnifiedDownloadState.DownloadingMetadata;
             tripEntity.ProgressPercent = 0;
 
             // Set bounding box
@@ -452,11 +457,13 @@ public class TripDownloadService : ITripDownloadService
                 }
 
                 tripEntity.Status = TripDownloadStatus.Complete;
+                tripEntity.UnifiedState = UnifiedDownloadState.Complete;
             }
             else
             {
                 // No bounding box or metadata-only requested - skip tiles
                 tripEntity.Status = TripDownloadStatus.MetadataOnly;
+                tripEntity.UnifiedState = UnifiedDownloadState.MetadataOnly;
                 if (!includeTiles)
                 {
                     _logger.LogInformation("Metadata-only download for trip {TripName}, skipping tiles", tripSummary.Name);
@@ -754,6 +761,7 @@ public class TripDownloadService : ITripDownloadService
 
             // Update trip status
             trip.Status = TripDownloadStatus.Downloading;
+            trip.UnifiedState = UnifiedDownloadState.DownloadingTiles;
             await _tripRepository.SaveDownloadedTripAsync(trip);
 
             _logger.LogInformation("Resuming download for trip {TripId}: {Completed}/{Total} tiles",
@@ -780,6 +788,7 @@ public class TripDownloadService : ITripDownloadService
             {
                 // All tiles already downloaded
                 trip.Status = TripDownloadStatus.Complete;
+                trip.UnifiedState = UnifiedDownloadState.Complete;
                 await _tripRepository.SaveDownloadedTripAsync(trip);
                 await _downloadStateRepository.DeleteDownloadStateAsync(tripId);
                 return true;
@@ -806,6 +815,7 @@ public class TripDownloadService : ITripDownloadService
 
             // Complete - update tile count to reflect actual downloads
             trip.Status = TripDownloadStatus.Complete;
+            trip.UnifiedState = UnifiedDownloadState.Complete;
             trip.TileCount = state.CompletedTileCount + downloadResult.TilesDownloaded;
             trip.TotalSizeBytes = downloadResult.TotalBytes;
             trip.ProgressPercent = 100;
@@ -982,6 +992,19 @@ public class TripDownloadService : ITripDownloadService
         await _downloadStateRepository.SaveDownloadStateAsync(state);
         _logger.LogInformation("Saved download state for trip {TripId}: {Completed}/{Total} tiles, status: {Status}, reason: {Reason}",
             trip.Id, completedCount, totalCount, status, interruptionReason);
+
+        // Also update unified state for UI reactivity
+        var unifiedState = status switch
+        {
+            DownloadStateStatus.Paused when interruptionReason == DownloadPauseReason.UserCancel
+                => UnifiedDownloadState.Cancelled,
+            DownloadStateStatus.Paused when interruptionReason == DownloadPauseReason.StorageLow
+                => UnifiedDownloadState.PausedStorageLow,
+            DownloadStateStatus.LimitReached => UnifiedDownloadState.PausedCacheLimit,
+            DownloadStateStatus.Paused => UnifiedDownloadState.PausedByUser,
+            _ => UnifiedDownloadState.PausedByUser
+        };
+        await _downloadStateService.TransitionAsync(trip.ServerId, unifiedState, interruptionReason);
     }
 
     #endregion
