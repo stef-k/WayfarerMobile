@@ -293,8 +293,10 @@ public class TripDownloadService : ITripDownloadService
             var tripDetails = await _apiClient.GetTripDetailsAsync(tripSummary.Id, cancellationToken);
             if (tripDetails == null)
             {
+                tripEntity.UnifiedState = UnifiedDownloadState.Failed;
                 tripEntity.Status = TripDownloadStatus.Failed;
                 tripEntity.LastError = "Failed to fetch trip details";
+                tripEntity.StateChangedAt = DateTime.UtcNow;
                 await _tripRepository.SaveDownloadedTripAsync(tripEntity);
                 return null;
             }
@@ -448,10 +450,20 @@ public class TripDownloadService : ITripDownloadService
                         _logger.LogInformation("Download stopped for trip {TripName}: Paused={Paused}, LimitReached={LimitReached}",
                             tripSummary.Name, downloadResult.WasPaused, downloadResult.WasLimitReached);
 
-                        // Set status to MetadataOnly so trip can be loaded with online tiles
-                        // The pause/resume state is tracked separately in TripDownloadStateEntity
-                        tripEntity.Status = TripDownloadStatus.MetadataOnly;
+                        // Set unified state to paused (not MetadataOnly) so UI shows correct buttons
+                        tripEntity.UnifiedState = downloadResult.WasLimitReached
+                            ? UnifiedDownloadState.PausedCacheLimit
+                            : UnifiedDownloadState.PausedByUser;
+                        tripEntity.Status = TripDownloadStatus.Downloading; // Keep as downloading for legacy
+                        tripEntity.StateChangedAt = DateTime.UtcNow;
                         await _tripRepository.SaveDownloadedTripAsync(tripEntity);
+
+                        // Notify UI of state change
+                        await _downloadStateService.TransitionAsync(
+                            tripEntity.ServerId,
+                            tripEntity.UnifiedState,
+                            downloadResult.WasLimitReached ? "Cache limit reached" : "User paused");
+
                         return tripEntity;
                     }
                 }
@@ -516,12 +528,17 @@ public class TripDownloadService : ITripDownloadService
                     await _downloadStateRepository.SaveDownloadStateAsync(existingState);
                 }
 
-                // Use MetadataOnly if metadata was saved (ProgressPercent >= 15), allowing trip to be loaded
-                // Otherwise mark as Failed since there's nothing usable
-                tripEntityForCancel.Status = tripEntityForCancel.ProgressPercent >= 15
+                // If metadata was saved, use MetadataOnly so trip can be loaded
+                // Otherwise use Failed since there's nothing usable
+                var hasUsableMetadata = tripEntityForCancel.ProgressPercent >= 15;
+                tripEntityForCancel.UnifiedState = hasUsableMetadata
+                    ? UnifiedDownloadState.MetadataOnly
+                    : UnifiedDownloadState.Failed;
+                tripEntityForCancel.Status = hasUsableMetadata
                     ? TripDownloadStatus.MetadataOnly
                     : TripDownloadStatus.Failed;
                 tripEntityForCancel.LastError = "Download cancelled by user";
+                tripEntityForCancel.StateChangedAt = DateTime.UtcNow;
                 await _tripRepository.SaveDownloadedTripAsync(tripEntityForCancel);
 
                 // Raise download paused event
@@ -548,10 +565,15 @@ public class TripDownloadService : ITripDownloadService
             var tripEntity = await _tripRepository.GetDownloadedTripByServerIdAsync(tripSummary.Id);
             if (tripEntity != null)
             {
-                tripEntity.Status = tripEntity.ProgressPercent >= 15
+                var hasUsableMetadata = tripEntity.ProgressPercent >= 15;
+                tripEntity.UnifiedState = hasUsableMetadata
+                    ? UnifiedDownloadState.MetadataOnly
+                    : UnifiedDownloadState.Failed;
+                tripEntity.Status = hasUsableMetadata
                     ? TripDownloadStatus.MetadataOnly
                     : TripDownloadStatus.Failed;
                 tripEntity.LastError = ex.Message;
+                tripEntity.StateChangedAt = DateTime.UtcNow;
                 await _tripRepository.SaveDownloadedTripAsync(tripEntity);
 
                 // Raise download failed event
