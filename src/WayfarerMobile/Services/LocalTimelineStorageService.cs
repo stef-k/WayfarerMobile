@@ -301,13 +301,24 @@ public class LocalTimelineStorageService : IDisposable
             }
 
             // Update main filter with the most recent backfilled location to prevent over-accept
-            // Real-time events will now correctly filter against backfilled entries
+            // Only update if backfill location is newer than current filter state
+            // (a real-time event may have updated the filter while backfill was running)
             if (lastBackfillLocation != null && backfilled > 0)
             {
-                _filter.MarkAsStored(lastBackfillLocation);
-                _logger.LogDebug(
-                    "Updated main filter with last backfilled location from {Timestamp:u}",
-                    lastBackfillLocation.Timestamp);
+                var currentFilterTimestamp = _filter.LastStoredLocation?.Timestamp;
+                if (currentFilterTimestamp == null || lastBackfillLocation.Timestamp > currentFilterTimestamp)
+                {
+                    _filter.MarkAsStored(lastBackfillLocation);
+                    _logger.LogDebug(
+                        "Updated main filter with last backfilled location from {Timestamp:u}",
+                        lastBackfillLocation.Timestamp);
+                }
+                else
+                {
+                    _logger.LogDebug(
+                        "Skipped filter update: real-time event already advanced filter to {Timestamp:u}",
+                        currentFilterTimestamp);
+                }
             }
 
             if (backfilled > 0 || filtered > 0)
