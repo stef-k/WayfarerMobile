@@ -204,6 +204,24 @@ public class LocationSyncService : IDisposable
             // Create cancellation token source for graceful shutdown
             _cancellationTokenSource = new CancellationTokenSource();
 
+            // Crash recovery: Reset locations stuck in Syncing state from previous session
+            // This runs async without blocking Start() to avoid delaying app startup
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var resetCount = await _locationQueue.ResetStuckLocationsAsync();
+                    if (resetCount > 0)
+                    {
+                        _logger.LogInformation("Crash recovery: Reset {Count} stuck locations to appropriate state", resetCount);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error during crash recovery reset of stuck locations");
+                }
+            });
+
             // Add random jitter to initial delay to prevent timer alignment with other services
             var jitteredDelay = InitialDelaySeconds + Jitter.Next(MaxJitterSeconds);
 

@@ -77,7 +77,15 @@ public static class LocationSyncCallbacks
         // Dispatch to main thread for UI safety (consistent with LocationServiceCallbacks)
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            LocationSynced?.Invoke(null, args);
+            try
+            {
+                LocationSynced?.Invoke(null, args);
+            }
+            catch (Exception ex)
+            {
+                // Prevent subscriber exceptions from crashing the app
+                System.Diagnostics.Debug.WriteLine($"[LocationSyncCallbacks] LocationSynced subscriber exception: {ex.Message}");
+            }
         });
     }
 
@@ -112,7 +120,15 @@ public static class LocationSyncCallbacks
         // Dispatch to main thread for UI safety (consistent with LocationServiceCallbacks)
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            LocationSkipped?.Invoke(null, args);
+            try
+            {
+                LocationSkipped?.Invoke(null, args);
+            }
+            catch (Exception ex)
+            {
+                // Prevent subscriber exceptions from crashing the app
+                System.Diagnostics.Debug.WriteLine($"[LocationSyncCallbacks] LocationSkipped subscriber exception: {ex.Message}");
+            }
         });
     }
 

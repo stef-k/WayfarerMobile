@@ -180,11 +180,17 @@ public class LocalTimelineStorageService : IDisposable
     /// <summary>
     /// Handles sync completion by updating the ServerId on the matching local entry.
     /// </summary>
+    /// <remarks>
+    /// Uses async void because this is an event handler. Exceptions are caught and logged
+    /// to prevent them from crashing the app. The work runs on a background thread via
+    /// Task.Run to avoid blocking the MainThread (callbacks are dispatched to MainThread).
+    /// </remarks>
     private async void OnLocationSynced(object? sender, LocationSyncedEventArgs e)
     {
-        _ = Task.Run(async () =>
+        try
         {
-            try
+            // Run on background thread to avoid blocking MainThread
+            await Task.Run(async () =>
             {
                 var updated = await _timelineRepository.UpdateLocalTimelineServerIdAsync(
                     e.Timestamp,
@@ -205,27 +211,33 @@ public class LocalTimelineStorageService : IDisposable
                         "No matching local entry found for timestamp {Timestamp:u} to update ServerId",
                         e.Timestamp);
                 }
-            }
-            catch (SQLiteException ex)
-            {
-                _logger.LogError(ex, "Database error updating ServerId for synced location");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unexpected error updating ServerId for synced location");
-            }
-        });
+            });
+        }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error updating ServerId for synced location");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error updating ServerId for synced location");
+        }
     }
 
     /// <summary>
     /// Handles sync skip by removing the entry from local timeline.
     /// Server's AND filter is stricter - if server skipped it, we should too.
     /// </summary>
+    /// <remarks>
+    /// Uses async void because this is an event handler. Exceptions are caught and logged
+    /// to prevent them from crashing the app. The work runs on a background thread via
+    /// Task.Run to avoid blocking the MainThread (callbacks are dispatched to MainThread).
+    /// </remarks>
     private async void OnLocationSkipped(object? sender, LocationSkippedEventArgs e)
     {
-        _ = Task.Run(async () =>
+        try
         {
-            try
+            // Run on background thread to avoid blocking MainThread
+            await Task.Run(async () =>
             {
                 var deleted = await _timelineRepository.DeleteLocalTimelineEntryByTimestampAsync(
                     e.Timestamp,
@@ -246,16 +258,16 @@ public class LocalTimelineStorageService : IDisposable
                         "No matching local entry found for skipped timestamp {Timestamp:u}",
                         e.Timestamp);
                 }
-            }
-            catch (SQLiteException ex)
-            {
-                _logger.LogError(ex, "Database error removing skipped location from local timeline");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unexpected error removing skipped location from local timeline");
-            }
-        });
+            });
+        }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error removing skipped location from local timeline");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error removing skipped location from local timeline");
+        }
     }
 
     /// <summary>
