@@ -19,11 +19,11 @@ PR #151 addresses a race condition between `LocationSyncService` and `QueueDrain
 | Race Conditions | 0 | 0 | 0 | 0 |
 | Deadlocks | 0 | 0 | 0 | 0 |
 | Error Handling | ~~1~~ 0 | ~~1~~ 0 | 0 | 0 |
-| Data Integrity | 0 | 0 | ~~1~~ 0 | 1 |
+| Data Integrity | 0 | 0 | ~~1~~ 0 | ~~1~~ 0 |
 | Architecture | 0 | ~~1~~ 0 | 3 | 2 |
-| **Total** | **~~1~~ 0** | **~~2~~ 0** | **~~4~~ 3** | **3** |
+| **Total** | **~~1~~ 0** | **~~2~~ 0** | **~~4~~ 3** | **~~3~~ 2** |
 
-> **Note:** Issues #1, #2, #3 have been fixed. Issue #4 verified - server implements idempotency.
+> **Note:** Issues #1, #2, #3 fixed. #4 verified (server idempotency). #5 by design (300-day offline support).
 
 ---
 
@@ -45,8 +45,8 @@ PR #151 addresses a race condition between `LocationSyncService` and `QueueDrain
 
 - [x] **#4 Crash Window API→ServerConfirmed** - `LocationSyncService.cs:646-648`
   - ✅ VERIFIED: Server implements full idempotency on `Idempotency-Key` header (both `/check-in` and `/log-location` endpoints)
-- [ ] **#5 No Per-Location Retry Limit** - `LocationQueueRepository.cs`, `QueuedLocation.cs`
-  - Add max retry count (e.g., 100) to prevent 300-day retry loops
+- [x] **#5 No Per-Location Retry Limit** - `LocationQueueRepository.cs`, `QueuedLocation.cs`
+  - ✅ BY DESIGN: 300-day retention is intentional for extended offline periods
 - [ ] **#6 InitializeAsync() Fire-and-Forget** - `App.xaml.cs:209-212`
   - Await with try-catch or add explicit error handling
 - [ ] **#7 MainThread→Background Double-Hop** - `LocationSyncCallbacks.cs`, `LocalTimelineStorageService.cs`
@@ -194,29 +194,17 @@ public void Start()
 
 ### 5. No Per-Location Retry Limit
 
-**Severity:** MEDIUM
+**Severity:** ~~MEDIUM~~ N/A (by design)
 **Files:** `src/WayfarerMobile/Data/Repositories/LocationQueueRepository.cs`, `src/WayfarerMobile/Data/Entities/QueuedLocation.cs`
 
-**Issue:** A location that fails with transient 5xx errors will retry indefinitely for 300 days.
+**Original Concern:** A location that fails with transient 5xx errors will retry indefinitely for 300 days.
 
-**Mitigating Factors:**
+**✅ BY DESIGN:** The 300-day retention period is intentional for extended offline scenarios. The app is designed to support users who may be offline for weeks or months (e.g., remote travel, expeditions). The existing safeguards are sufficient:
 - Rate limiting: 65s between syncs, max 55/hour
 - Consecutive failure backoff in QueueDrainService (MaxConsecutiveFailures = 5)
-- 300-day purge is ultimate safety valve
+- 300-day purge as ultimate safety valve
 
-**Recommendation:** Add max retry count (e.g., 100 attempts):
-```csharp
-// QueuedLocation.cs
-private const int MaxSyncAttempts = 100;
-
-[Ignore]
-public bool CanSync => SyncStatus == SyncStatus.Pending && !IsRejected && SyncAttempts < MaxSyncAttempts;
-```
-
-And update claim query:
-```sql
-WHERE SyncStatus = ? AND IsRejected = 0 AND SyncAttempts < 100
-```
+**Result:** Not an issue - working as intended.
 
 ---
 
@@ -407,7 +395,7 @@ Queue Drain (QueueDrainService):
 ### Consider (Medium Priority)
 
 - [x] **#4:** ~~Verify server implements idempotency on `IdempotencyKey` header~~ ✅ VERIFIED - Server implements full idempotency
-- [ ] **#5:** Add per-location max retry count (e.g., 100 attempts)
+- [x] **#5:** ~~Add per-location max retry count~~ ✅ BY DESIGN - 300-day retention intentional for extended offline
 - [ ] **#6:** Properly await `InitializeAsync()` in App.xaml.cs
 - [ ] **#7:** Remove unnecessary MainThread dispatch for DB-only operations
 - [ ] **#8:** Monitor combined rate limiting (110 req/hour)
