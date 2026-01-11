@@ -203,12 +203,12 @@ public partial class App : Application
 
             // Start queue drain service (offline queue sync via check-in endpoint)
             var queueDrainService = _serviceProvider.GetService<QueueDrainService>();
-            _ = queueDrainService?.StartAsync();
+            SafeFireAndForget(queueDrainService?.StartAsync(), "QueueDrainService");
             _logger.LogDebug("Queue drain service started");
 
             // Initialize local timeline storage service (subscribes to location events)
             var timelineStorageService = _serviceProvider.GetService<LocalTimelineStorageService>();
-            _ = timelineStorageService?.InitializeAsync();
+            SafeFireAndForget(timelineStorageService?.InitializeAsync(), "LocalTimelineStorageService");
             _logger.LogDebug("Local timeline storage service initialization started");
 
             // Note: Settings sync is handled by SettingsSyncService, triggered opportunistically
@@ -216,11 +216,11 @@ public partial class App : Application
 
             // Sync activity types if needed (UI data, fire-and-forget)
             var activitySyncService = _serviceProvider.GetService<IActivitySyncService>();
-            _ = activitySyncService?.AutoSyncIfNeededAsync();
+            SafeFireAndForget(activitySyncService?.AutoSyncIfNeededAsync(), "ActivitySyncService");
 
             // Start visit notification service if enabled (subscribes to SSE visit events)
             var visitNotificationService = _serviceProvider.GetService<IVisitNotificationService>();
-            _ = visitNotificationService?.StartAsync();
+            SafeFireAndForget(visitNotificationService?.StartAsync(), "VisitNotificationService");
             _logger.LogDebug("Visit notification service initialization started");
 
             // Note: Location tracking service start is handled by OnWindowActivatedForServiceStart
@@ -644,6 +644,26 @@ public partial class App : Application
         finally
         {
             _isShowingLockScreen = false;
+        }
+    }
+
+    /// <summary>
+    /// Executes an async task in fire-and-forget mode with proper exception logging.
+    /// Ensures exceptions are observed and logged rather than becoming unobserved task exceptions.
+    /// </summary>
+    /// <param name="task">The task to execute.</param>
+    /// <param name="serviceName">Name of the service for logging context.</param>
+    private async void SafeFireAndForget(Task? task, string serviceName)
+    {
+        if (task == null) return;
+
+        try
+        {
+            await task;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "{ServiceName} initialization failed", serviceName);
         }
     }
 
