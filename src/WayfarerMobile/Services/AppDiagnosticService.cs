@@ -58,7 +58,7 @@ public class AppDiagnosticService
     {
         try
         {
-            var pendingCount = await _locationQueueRepository.GetPendingLocationCountAsync();
+            var pendingCount = await _locationQueueRepository.GetPendingCountAsync();
             var syncedCount = await _locationQueueRepository.GetSyncedLocationCountAsync();
             var rejectedCount = await _locationQueueRepository.GetRejectedLocationCountAsync();
             var failedCount = await _locationQueueRepository.GetFailedLocationCountAsync();

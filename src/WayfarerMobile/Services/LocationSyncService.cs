@@ -25,13 +25,15 @@ public class LocationSyncService : IDisposable
     private Timer? _syncTimer;
     private Timer? _cleanupTimer;
     private readonly SemaphoreSlim _syncLock = new(1, 1);
-    private bool _isSyncing;
+    private CancellationTokenSource? _cancellationTokenSource;
+    private volatile bool _isSyncing;
     private bool _disposed;
 
     // Rate limiting tracking
     private DateTime _lastSyncTime = DateTime.MinValue;
     private readonly Queue<DateTime> _syncHistory = new();
     private readonly object _rateLimitLock = new();
+    private const int MaxSyncHistorySize = 100; // Prevent unbounded growth
 
     #endregion
 
@@ -67,6 +69,52 @@ public class LocationSyncService : IDisposable
     /// Cleanup interval in hours (lesson learned: separate cleanup timer).
     /// </summary>
     private const int CleanupIntervalHours = 6;
+
+    /// <summary>
+    /// Initial delay before first sync/cleanup run (seconds).
+    /// </summary>
+    private const int InitialDelaySeconds = 5;
+
+    /// <summary>
+    /// Delay before first cleanup run (minutes).
+    /// </summary>
+    private const int FirstCleanupDelayMinutes = 30;
+
+    /// <summary>
+    /// Timeout for graceful Stop() waiting for in-progress sync (seconds).
+    /// </summary>
+    private const int StopTimeoutSeconds = 30;
+
+    /// <summary>
+    /// Poll interval when waiting for sync to complete during Stop() (milliseconds).
+    /// </summary>
+    private const int StopPollIntervalMs = 100;
+
+    /// <summary>
+    /// Threshold for detecting stuck syncing locations during runtime (minutes).
+    /// </summary>
+    private const int StuckLocationThresholdMinutes = 30;
+
+    /// <summary>
+    /// Number of days after which synced locations are purged.
+    /// </summary>
+    private const int PurgeDaysOld = 7;
+
+    /// <summary>
+    /// Maximum jitter to add to initial delay (seconds).
+    /// Prevents timer alignment with other services.
+    /// </summary>
+    private const int MaxJitterSeconds = 5;
+
+    /// <summary>
+    /// Random generator for jitter (thread-safe in .NET 6+).
+    /// </summary>
+    private static readonly Random Jitter = new();
+
+    /// <summary>
+    /// Maximum length for stored error messages.
+    /// </summary>
+    private const int MaxErrorMessageLength = 200;
 
     #endregion
 
@@ -149,39 +197,77 @@ public class LocationSyncService : IDisposable
 
         _logger.LogInformation("Starting location sync service");
 
+        // Create cancellation token source for graceful shutdown
+        _cancellationTokenSource = new CancellationTokenSource();
+
+        // Add random jitter to initial delay to prevent timer alignment with other services
+        var jitteredDelay = InitialDelaySeconds + Jitter.Next(MaxJitterSeconds);
+
         // Sync timer - checks every 30 seconds if sync should run
         _syncTimer = new Timer(
             async _ => await TrySyncAsync(),
             null,
-            TimeSpan.FromSeconds(5), // Initial delay
+            TimeSpan.FromSeconds(jitteredDelay),
             TimeSpan.FromSeconds(TimerIntervalSeconds));
 
         // Cleanup timer - runs every 6 hours (lesson learned: separate from sync)
         _cleanupTimer = new Timer(
             async _ => await RunCleanupAsync(),
             null,
-            TimeSpan.FromMinutes(30), // First run after 30 minutes
+            TimeSpan.FromMinutes(FirstCleanupDelayMinutes),
             TimeSpan.FromHours(CleanupIntervalHours));
     }
 
     /// <summary>
     /// Stops the background sync timer and cleanup timer.
+    /// Waits for any in-progress sync to complete.
     /// </summary>
     public void Stop()
     {
         _logger.LogInformation("Stopping location sync service");
+
+        // Stop timers first to prevent new syncs from starting
         _syncTimer?.Change(Timeout.Infinite, Timeout.Infinite);
         _cleanupTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+
+        // Signal cancellation for in-progress operations
+        _cancellationTokenSource?.Cancel();
+
+        // Wait for in-progress sync to complete (with timeout)
+        if (_isSyncing)
+        {
+            _logger.LogDebug("Waiting for in-progress sync to complete...");
+            var waitStart = DateTime.UtcNow;
+            while (_isSyncing && (DateTime.UtcNow - waitStart).TotalSeconds < StopTimeoutSeconds)
+            {
+                Thread.Sleep(StopPollIntervalMs);
+            }
+
+            if (_isSyncing)
+            {
+                _logger.LogWarning("Sync did not complete within timeout, proceeding with stop");
+            }
+        }
     }
 
     /// <summary>
-    /// Runs cleanup of old locations (separate from sync for reliability).
+    /// Runs cleanup of old locations and stuck location detection.
     /// </summary>
     private async Task RunCleanupAsync()
     {
         try
         {
             _logger.LogDebug("Running scheduled location cleanup");
+
+            // Reset locations stuck in Syncing state for too long
+            // This handles edge cases where sync operations fail without proper cleanup
+            var resetCount = await _locationQueue.ResetTimedOutSyncingLocationsAsync(
+                stuckThresholdMinutes: StuckLocationThresholdMinutes);
+            if (resetCount > 0)
+            {
+                _logger.LogInformation("Reset {Count} timed-out syncing locations to Pending", resetCount);
+            }
+
             await PurgeOldLocationsAsync();
         }
         catch (SQLiteException ex)
@@ -248,6 +334,12 @@ public class LocationSyncService : IDisposable
             var now = DateTime.UtcNow;
             _lastSyncTime = now;
             _syncHistory.Enqueue(now);
+
+            // Enforce max size to prevent unbounded growth from clock manipulation
+            while (_syncHistory.Count > MaxSyncHistorySize)
+            {
+                _syncHistory.Dequeue();
+            }
         }
     }
 
@@ -335,7 +427,7 @@ public class LocationSyncService : IDisposable
         var successfulIds = new List<int>();
         var failedIds = new List<int>();
         var rejectedIds = new HashSet<int>(); // Track rejected IDs separately
-        var cancellationToken = CancellationToken.None;
+        var cancellationToken = _cancellationTokenSource?.Token ?? CancellationToken.None;
         var stopProcessing = false;
         var processedCount = 0;
 
@@ -343,6 +435,14 @@ public class LocationSyncService : IDisposable
         {
             foreach (var location in claimed)
             {
+                // Check for cancellation (graceful shutdown)
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    _logger.LogInformation("Sync cancelled, resetting remaining {Count} locations",
+                        claimed.Count - processedCount);
+                    stopProcessing = true;
+                }
+
                 if (stopProcessing)
                 {
                     // Add unprocessed locations to failed list for reset
@@ -428,9 +528,6 @@ public class LocationSyncService : IDisposable
         _logger.LogInformation("Sync complete: {Success}/{Total} locations ({Failed} reset for retry, {Rejected} rejected)",
             successfulIds.Count, claimed.Count, failedIds.Count, rejectedIds.Count);
 
-        // Cleanup old synced locations
-        await PurgeOldLocationsAsync();
-
         return successfulIds.Count;
     }
 
@@ -468,7 +565,7 @@ public class LocationSyncService : IDisposable
                 Accuracy = location.Accuracy,
                 Speed = location.Speed,
                 Timestamp = location.Timestamp,
-                Provider = location.Provider
+                Provider = location.Provider ?? "location-sync"
             };
 
             // Use Polly retry for transient network failures
@@ -492,6 +589,10 @@ public class LocationSyncService : IDisposable
 
                     return (SyncResult.Rejected, true); // Rejected by server, continue with next
                 }
+
+                // CRITICAL: Mark ServerConfirmed IMMEDIATELY after API success
+                // This ensures crash recovery marks as Synced instead of resetting to Pending
+                await _locationQueue.MarkServerConfirmedAsync(location.Id);
 
                 _logger.LogDebug("Location {Id} synced successfully", location.Id);
 
@@ -567,7 +668,7 @@ public class LocationSyncService : IDisposable
         }
         catch (Exception ex)
         {
-            await _locationQueue.MarkLocationFailedAsync(location.Id, $"Unexpected: {ex.Message}");
+            await _locationQueue.MarkLocationFailedAsync(location.Id, $"Unexpected: {SanitizeErrorMessage(ex.Message)}");
             _logger.LogError(ex, "Unexpected error syncing location {Id}", location.Id);
             return (SyncResult.Failed, true);
         }
@@ -580,7 +681,7 @@ public class LocationSyncService : IDisposable
     {
         try
         {
-            var purged = await _locationQueue.PurgeSyncedLocationsAsync(daysOld: 7);
+            var purged = await _locationQueue.PurgeSyncedLocationsAsync(daysOld: PurgeDaysOld);
             if (purged > 0)
             {
                 _logger.LogDebug("Purged {Count} old synced locations", purged);
@@ -638,6 +739,31 @@ public class LocationSyncService : IDisposable
 
     #endregion
 
+    #region Helpers
+
+    /// <summary>
+    /// Sanitizes exception messages for safe storage.
+    /// Truncates to maximum length and removes newlines.
+    /// </summary>
+    private static string SanitizeErrorMessage(string message)
+    {
+        if (string.IsNullOrEmpty(message))
+            return "Unknown error";
+
+        // Replace newlines with spaces
+        var sanitized = message.Replace('\n', ' ').Replace('\r', ' ');
+
+        // Truncate if too long
+        if (sanitized.Length > MaxErrorMessageLength)
+        {
+            sanitized = sanitized[..MaxErrorMessageLength] + "...";
+        }
+
+        return sanitized;
+    }
+
+    #endregion
+
     #region IDisposable
 
     /// <summary>
@@ -649,6 +775,8 @@ public class LocationSyncService : IDisposable
             return;
 
         _disposed = true;
+        _cancellationTokenSource?.Cancel();
+        _cancellationTokenSource?.Dispose();
         _syncTimer?.Dispose();
         _cleanupTimer?.Dispose();
         _syncLock.Dispose();

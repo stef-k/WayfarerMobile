@@ -8,6 +8,8 @@ namespace WayfarerMobile.Data.Entities;
 /// Stored in SQLite for offline support.
 /// </summary>
 [Table("QueuedLocations")]
+// Composite index for efficient claim queries: WHERE SyncStatus = Pending AND IsRejected = 0 ORDER BY Timestamp
+// Note: SQLite-net-pcl doesn't support composite indexes via attributes, so this is created in DbInitializer
 public class QueuedLocation
 {
     /// <summary>
@@ -82,6 +84,20 @@ public class QueuedLocation
     /// Gets or sets the error message from the last failed sync attempt.
     /// </summary>
     public string? LastError { get; set; }
+
+    /// <summary>
+    /// Gets or sets a unique key for idempotent sync operations.
+    /// Once the server confirms receipt, this key is marked to prevent duplicate re-sends
+    /// if the app crashes between API success and local DB update.
+    /// </summary>
+    public string? IdempotencyKey { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the server has confirmed receipt of this location.
+    /// Set to true after successful API response, BEFORE marking as Synced.
+    /// Used to prevent duplicate sync attempts on crash recovery.
+    /// </summary>
+    public bool ServerConfirmed { get; set; }
 
     /// <summary>
     /// Gets or sets whether this location was rejected (by client threshold check or server).

@@ -28,25 +28,70 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
     /// <inheritdoc />
     public async Task QueueLocationAsync(LocationData location)
     {
+        // Validate coordinates to prevent corrupted data
+        if (!IsValidCoordinate(location.Latitude, location.Longitude))
+        {
+            throw new ArgumentException(
+                $"Invalid coordinates: Lat={location.Latitude}, Lon={location.Longitude}. " +
+                "Coordinates must be finite numbers within valid ranges.");
+        }
+
         var db = await GetConnectionAsync();
 
         var queued = new QueuedLocation
         {
             Latitude = location.Latitude,
             Longitude = location.Longitude,
-            Altitude = location.Altitude,
-            Accuracy = location.Accuracy,
-            Speed = location.Speed,
-            Bearing = location.Bearing,
+            Altitude = SanitizeOptionalDouble(location.Altitude),
+            Accuracy = SanitizeOptionalDouble(location.Accuracy),
+            Speed = SanitizeOptionalDouble(location.Speed),
+            Bearing = SanitizeOptionalDouble(location.Bearing),
             Timestamp = location.Timestamp,
             Provider = location.Provider,
-            SyncStatus = SyncStatus.Pending
+            SyncStatus = SyncStatus.Pending,
+            IdempotencyKey = Guid.NewGuid().ToString("N") // Unique key for idempotent sync
         };
 
         await db.InsertAsync(queued);
 
         // Cleanup old locations if queue is too large
         await CleanupOldLocationsAsync(db);
+    }
+
+    /// <summary>
+    /// Validates that latitude and longitude are valid, finite numbers within range.
+    /// </summary>
+    private static bool IsValidCoordinate(double latitude, double longitude)
+    {
+        // Check for NaN, Infinity
+        if (double.IsNaN(latitude) || double.IsInfinity(latitude) ||
+            double.IsNaN(longitude) || double.IsInfinity(longitude))
+        {
+            return false;
+        }
+
+        // Check valid ranges
+        if (latitude < -90 || latitude > 90 ||
+            longitude < -180 || longitude > 180)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Sanitizes optional double values, replacing NaN/Infinity with null.
+    /// </summary>
+    private static double? SanitizeOptionalDouble(double? value)
+    {
+        if (value == null)
+            return null;
+
+        if (double.IsNaN(value.Value) || double.IsInfinity(value.Value))
+            return null;
+
+        return value;
     }
 
     /// <inheritdoc />
@@ -111,6 +156,18 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
     }
 
     /// <inheritdoc />
+    public async Task MarkServerConfirmedAsync(int id)
+    {
+        var db = await GetConnectionAsync();
+
+        // Mark as ServerConfirmed BEFORE updating to Synced
+        // This ensures crash recovery can complete the transition
+        await db.ExecuteAsync(
+            "UPDATE QueuedLocations SET ServerConfirmed = 1 WHERE Id = ?",
+            id);
+    }
+
+    /// <inheritdoc />
     public async Task<int> MarkLocationsSyncedAsync(IEnumerable<int> ids)
     {
         var db = await GetConnectionAsync();
@@ -123,16 +180,16 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
         var totalUpdated = 0;
         foreach (var batch in idList.Chunk(MaxBatchSize))
         {
-            var batchList = batch.ToList();
-            var placeholders = string.Join(",", Enumerable.Repeat("?", batchList.Count));
+            // batch is already int[] from Chunk()
+            var placeholders = string.Join(",", Enumerable.Repeat("?", batch.Length));
             var query = $"UPDATE QueuedLocations SET SyncStatus = ? WHERE Id IN ({placeholders})";
 
             // Build parameters: first is SyncStatus, rest are IDs
-            var parameters = new object[batchList.Count + 1];
+            var parameters = new object[batch.Length + 1];
             parameters[0] = (int)SyncStatus.Synced;
-            for (var i = 0; i < batchList.Count; i++)
+            for (var i = 0; i < batch.Length; i++)
             {
-                parameters[i + 1] = batchList[i];
+                parameters[i + 1] = batch[i];
             }
 
             totalUpdated += await db.ExecuteAsync(query, parameters);
@@ -208,9 +265,46 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
     {
         var db = await GetConnectionAsync();
 
-        return await db.ExecuteAsync(
-            "UPDATE QueuedLocations SET SyncStatus = ? WHERE SyncStatus = ?",
+        // First, mark ServerConfirmed locations as Synced (crash recovery - server has them)
+        // This prevents duplicate sync attempts for locations the server already received
+        var confirmedCount = await db.ExecuteAsync(
+            @"UPDATE QueuedLocations
+              SET SyncStatus = ?
+              WHERE SyncStatus = ? AND ServerConfirmed = 1",
+            (int)SyncStatus.Synced, (int)SyncStatus.Syncing);
+
+        // Then reset remaining stuck locations (not ServerConfirmed) to Pending for retry
+        var resetCount = await db.ExecuteAsync(
+            @"UPDATE QueuedLocations
+              SET SyncStatus = ?
+              WHERE SyncStatus = ? AND ServerConfirmed = 0",
             (int)SyncStatus.Pending, (int)SyncStatus.Syncing);
+
+        return confirmedCount + resetCount;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> ResetTimedOutSyncingLocationsAsync(int stuckThresholdMinutes = 30)
+    {
+        var db = await GetConnectionAsync();
+
+        var cutoff = DateTime.UtcNow.AddMinutes(-stuckThresholdMinutes);
+
+        // First, mark ServerConfirmed timed-out locations as Synced
+        var confirmedCount = await db.ExecuteAsync(
+            @"UPDATE QueuedLocations
+              SET SyncStatus = ?
+              WHERE SyncStatus = ? AND ServerConfirmed = 1 AND LastSyncAttempt < ?",
+            (int)SyncStatus.Synced, (int)SyncStatus.Syncing, cutoff);
+
+        // Then reset remaining timed-out locations to Pending
+        var resetCount = await db.ExecuteAsync(
+            @"UPDATE QueuedLocations
+              SET SyncStatus = ?
+              WHERE SyncStatus = ? AND ServerConfirmed = 0 AND LastSyncAttempt < ?",
+            (int)SyncStatus.Pending, (int)SyncStatus.Syncing, cutoff);
+
+        return confirmedCount + resetCount;
     }
 
     /// <inheritdoc />
@@ -218,40 +312,54 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
     {
         var db = await GetConnectionAsync();
 
-        // Step 1: Get candidate pending locations (oldest first)
-        var pendingLocations = await db.Table<QueuedLocation>()
-            .Where(l => l.SyncStatus == SyncStatus.Pending && !l.IsRejected)
-            .OrderBy(l => l.Timestamp)
-            .Take(limit)
-            .ToListAsync();
+        // Step 1: Get candidate IDs atomically with a snapshot query
+        var candidateIds = await db.QueryScalarsAsync<int>(
+            @"SELECT Id FROM QueuedLocations
+              WHERE SyncStatus = ? AND IsRejected = 0
+              ORDER BY Timestamp
+              LIMIT ?",
+            (int)SyncStatus.Pending, limit);
 
-        if (pendingLocations.Count == 0)
+        if (candidateIds.Count == 0)
             return [];
 
         // Step 2: Claim each location individually with atomic check-and-set
-        // This ensures we only process locations WE successfully claimed,
-        // preventing race conditions with QueueDrainService
+        // This ensures we only track locations WE successfully claimed
+        // (other services may claim between SELECT and UPDATE - that's fine)
         var claimedIds = new List<int>();
-        foreach (var location in pendingLocations)
+        var now = DateTime.UtcNow;
+
+        foreach (var id in candidateIds)
         {
+            // Atomic claim: only succeeds if row is still Pending
             var updated = await db.ExecuteAsync(
-                "UPDATE QueuedLocations SET SyncStatus = ? WHERE Id = ? AND SyncStatus = ?",
-                (int)SyncStatus.Syncing, location.Id, (int)SyncStatus.Pending);
+                @"UPDATE QueuedLocations
+                  SET SyncStatus = ?, LastSyncAttempt = ?
+                  WHERE Id = ? AND SyncStatus = ?",
+                (int)SyncStatus.Syncing, now, id, (int)SyncStatus.Pending);
 
             if (updated > 0)
             {
-                claimedIds.Add(location.Id);
+                claimedIds.Add(id);
             }
         }
 
         if (claimedIds.Count == 0)
             return [];
 
-        // Step 3: Fetch fresh copies of claimed locations from database
-        // Using raw SQL to avoid LINQ Contains() translation issues
-        var placeholders = string.Join(",", Enumerable.Repeat("?", claimedIds.Count));
-        var selectQuery = $"SELECT * FROM QueuedLocations WHERE Id IN ({placeholders}) ORDER BY Timestamp";
-        return await db.QueryAsync<QueuedLocation>(selectQuery, claimedIds.Cast<object>().ToArray());
+        // Step 3: Batch fetch claimed locations by exact IDs
+        // Process in batches for SQLite parameter limits
+        var results = new List<QueuedLocation>();
+        foreach (var batch in claimedIds.Chunk(MaxBatchSize))
+        {
+            // batch is already int[] from Chunk()
+            var placeholders = string.Join(",", Enumerable.Repeat("?", batch.Length));
+            var fetchQuery = $"SELECT * FROM QueuedLocations WHERE Id IN ({placeholders}) ORDER BY Timestamp";
+            var fetched = await db.QueryAsync<QueuedLocation>(fetchQuery, batch.Cast<object>().ToArray());
+            results.AddRange(fetched);
+        }
+
+        return results;
     }
 
     /// <inheritdoc />
@@ -298,14 +406,14 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
         var totalUpdated = 0;
         foreach (var batch in idList.Chunk(MaxBatchSize))
         {
-            var batchList = batch.ToList();
-            var placeholders = string.Join(",", Enumerable.Repeat("?", batchList.Count));
+            // batch is already int[] from Chunk()
+            var placeholders = string.Join(",", Enumerable.Repeat("?", batch.Length));
             var query = $"UPDATE QueuedLocations SET SyncStatus = ? WHERE Id IN ({placeholders})";
 
-            var parameters = new object[batchList.Count + 1];
+            var parameters = new object[batch.Length + 1];
             parameters[0] = (int)SyncStatus.Pending;
-            for (var i = 0; i < batchList.Count; i++)
-                parameters[i + 1] = batchList[i];
+            for (var i = 0; i < batch.Length; i++)
+                parameters[i + 1] = batch[i];
 
             totalUpdated += await db.ExecuteAsync(query, parameters);
         }
@@ -339,7 +447,8 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
             "DELETE FROM QueuedLocations WHERE SyncStatus = ? AND CreatedAt < ?",
             (int)SyncStatus.Pending, pendingCutoff);
 
-        // Purge failed locations older than 3 days
+        // Note: SyncStatus.Failed is never set in current code (locations stay Pending with retry count)
+        // Keeping this as a safety net for any future use
         var failedCutoff = DateTime.UtcNow.AddDays(-3);
         var deletedFailed = await db.ExecuteAsync(
             "DELETE FROM QueuedLocations WHERE SyncStatus = ? AND CreatedAt < ?",
@@ -405,10 +514,6 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
     }
 
     /// <inheritdoc />
-    public Task<int> GetPendingLocationCountAsync()
-        => GetPendingCountAsync(); // Delegate to avoid duplicate implementation
-
-    /// <inheritdoc />
     public async Task<int> GetRejectedLocationCountAsync()
     {
         var db = await GetConnectionAsync();
@@ -423,8 +528,9 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
     {
         var db = await GetConnectionAsync();
 
+        // Exclude rejected locations (they have SyncStatus=Synced + IsRejected=true)
         return await db.Table<QueuedLocation>()
-            .Where(l => l.SyncStatus == SyncStatus.Synced)
+            .Where(l => l.SyncStatus == SyncStatus.Synced && !l.IsRejected)
             .CountAsync();
     }
 
@@ -444,7 +550,7 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
         var db = await GetConnectionAsync();
 
         return await db.Table<QueuedLocation>()
-            .Where(l => l.SyncStatus == SyncStatus.Pending)
+            .Where(l => l.SyncStatus == SyncStatus.Pending && !l.IsRejected)
             .OrderBy(l => l.Timestamp)
             .FirstOrDefaultAsync();
     }

@@ -55,6 +55,15 @@ public interface ILocationQueueRepository
     Task MarkLocationSyncedAsync(int id);
 
     /// <summary>
+    /// Marks a location as confirmed by server (API call succeeded).
+    /// Called immediately after API success, BEFORE marking as Synced.
+    /// If app crashes between ServerConfirmed and Synced, crash recovery will
+    /// complete the Synced transition instead of resetting to Pending.
+    /// </summary>
+    /// <param name="id">The location ID.</param>
+    Task MarkServerConfirmedAsync(int id);
+
+    /// <summary>
     /// Marks multiple locations as successfully synced in a single batch operation.
     /// </summary>
     /// <param name="ids">The location IDs to mark as synced.</param>
@@ -96,9 +105,19 @@ public interface ILocationQueueRepository
 
     /// <summary>
     /// Resets locations stuck in "Syncing" status back to "Pending".
+    /// Called at startup to handle crash recovery.
     /// </summary>
     /// <returns>Number of locations reset.</returns>
     Task<int> ResetStuckLocationsAsync();
+
+    /// <summary>
+    /// Resets locations that have been stuck in "Syncing" status for too long.
+    /// Called periodically during runtime to handle edge cases where sync operations
+    /// fail to complete (e.g., network timeout without proper cleanup).
+    /// </summary>
+    /// <param name="stuckThresholdMinutes">Locations stuck longer than this are reset. Default 30 minutes.</param>
+    /// <returns>Number of locations reset.</returns>
+    Task<int> ResetTimedOutSyncingLocationsAsync(int stuckThresholdMinutes = 30);
 
     /// <summary>
     /// Atomically claims pending locations by marking them as Syncing and returns them.
@@ -159,14 +178,9 @@ public interface ILocationQueueRepository
     #region Diagnostic Queries
 
     /// <summary>
-    /// Gets the count of pending locations that can be synced.
+    /// Gets the count of pending locations that can be synced (excludes rejected).
     /// </summary>
     Task<int> GetPendingCountAsync();
-
-    /// <summary>
-    /// Gets the count of pending locations (for diagnostics).
-    /// </summary>
-    Task<int> GetPendingLocationCountAsync();
 
     /// <summary>
     /// Gets the count of rejected locations (for diagnostics).

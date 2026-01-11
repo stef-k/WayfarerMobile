@@ -26,7 +26,7 @@ public class DatabaseService : IAsyncDisposable
 
     private const string DatabaseFilename = "wayfarer.db3";
     private const int MaxQueuedLocations = 25000;
-    private const int CurrentSchemaVersion = 2; // Increment when schema changes
+    private const int CurrentSchemaVersion = 3; // Increment when schema changes
     private const string SchemaVersionKey = "db_schema_version";
 
     private static readonly SQLiteOpenFlags DbFlags =
@@ -126,9 +126,37 @@ public class DatabaseService : IAsyncDisposable
         // Run migrations in order
         // Note: Version 2 migration removed - no users to migrate from legacy Status field
 
+        // Version 3: Add composite index for efficient claim queries
+        if (currentVersion < 3)
+        {
+            await MigrateToVersion3Async();
+        }
+
         // Update schema version
         await SetSchemaVersionAsync(CurrentSchemaVersion);
         Console.WriteLine($"[DatabaseService] Migration complete. Schema version: {CurrentSchemaVersion}");
+    }
+
+    /// <summary>
+    /// Migration to version 3: Add composite index for efficient location claim queries.
+    /// </summary>
+    private async Task MigrateToVersion3Async()
+    {
+        Console.WriteLine("[DatabaseService] Running migration to version 3: Adding composite index");
+
+        // Create composite index for efficient claim queries:
+        // WHERE SyncStatus = Pending AND IsRejected = 0 ORDER BY Timestamp
+        // This dramatically improves ClaimPendingLocationsAsync performance
+        await _database!.ExecuteAsync(
+            @"CREATE INDEX IF NOT EXISTS IX_QueuedLocations_SyncStatus_IsRejected_Timestamp
+              ON QueuedLocations (SyncStatus, IsRejected, Timestamp)");
+
+        // Also add index for ServerConfirmed recovery queries
+        await _database.ExecuteAsync(
+            @"CREATE INDEX IF NOT EXISTS IX_QueuedLocations_ServerConfirmed
+              ON QueuedLocations (ServerConfirmed) WHERE ServerConfirmed = 1");
+
+        Console.WriteLine("[DatabaseService] Version 3 migration complete");
     }
 
     /// <summary>
