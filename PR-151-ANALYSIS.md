@@ -20,10 +20,10 @@ PR #151 addresses a race condition between `LocationSyncService` and `QueueDrain
 | Deadlocks | 0 | 0 | 0 | 0 |
 | Error Handling | ~~1~~ 0 | ~~1~~ 0 | 0 | 0 |
 | Data Integrity | 0 | 0 | ~~1~~ 0 | ~~1~~ 0 |
-| Architecture | 0 | ~~1~~ 0 | ~~3~~ 0 | ~~2~~ 1 |
-| **Total** | **0** | **0** | **0** | **1** |
+| Architecture | 0 | ~~1~~ 0 | ~~3~~ 0 | ~~2~~ 0 |
+| **Total** | **0** | **0** | **0** | **0** |
 
-> **All issues resolved except #9** (cosmetic). #1-#3 fixed. #4-#8 verified. #6, #10 improved. Peer review findings addressed. Only #9 remains (optional).
+> **All issues resolved.** #1-#3 fixed. #4-#8 verified. #6, #9, #10 improved. Peer review findings addressed.
 
 ---
 
@@ -259,21 +259,15 @@ This ensures exceptions are explicitly logged via `ILogger` rather than becoming
 
 ### 9. `_consecutiveFailures` Not Thread-Safe
 
-**Severity:** LOW
+**Severity:** ~~LOW~~ N/A (implemented)
 **File:** `src/WayfarerMobile/Services/QueueDrainService.cs:107, 518, 540`
 
-```csharp
-private int _consecutiveFailures;
-// ...
-_consecutiveFailures = 0;  // Reset
-_consecutiveFailures++;    // Increment
-```
+**Original Issue:** Simple int increment is not atomic.
 
-**Issue:** Simple int increment is not atomic.
-
-**Mitigation:** Operations are serialized by `_drainLock`, so safe in practice.
-
-**Recommendation:** Use `Interlocked.Increment`/`Interlocked.Exchange` for clarity.
+**✅ IMPLEMENTED:** Replaced all direct assignments and increments with thread-safe operations:
+- Reset: `Interlocked.Exchange(ref _consecutiveFailures, 0)`
+- Increment: `Interlocked.Increment(ref _consecutiveFailures)`
+- Read: `Volatile.Read(ref _consecutiveFailures)`
 
 ---
 
@@ -402,7 +396,7 @@ Queue Drain (QueueDrainService):
 
 ### Low Priority
 
-- [ ] **#9:** Use `Interlocked` for `_consecutiveFailures` (cosmetic - already thread-safe via lock)
+- [x] **#9:** ~~Use `Interlocked` for `_consecutiveFailures`~~ ✅ IMPLEMENTED
 - [x] **#10:** ~~Add real-time updates to DiagnosticsViewModel~~ ✅ IMPLEMENTED
 
 ---

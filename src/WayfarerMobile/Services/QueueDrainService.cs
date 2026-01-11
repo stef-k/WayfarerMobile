@@ -327,7 +327,7 @@ public sealed class QueueDrainService : IDisposable
             {
                 _logger.LogInformation("Network restored, queue drain will resume");
                 // Reset consecutive failures on network restore
-                _consecutiveFailures = 0;
+                Interlocked.Exchange(ref _consecutiveFailures, 0);
             }
             else if (wasOnline && !_isOnline)
             {
@@ -363,11 +363,12 @@ public sealed class QueueDrainService : IDisposable
             return;
         }
 
-        if (_consecutiveFailures >= MaxConsecutiveFailures)
+        var failures = Volatile.Read(ref _consecutiveFailures);
+        if (failures >= MaxConsecutiveFailures)
         {
             _logger.LogDebug(
                 "QueueDrain: Too many consecutive failures ({Failures}), backing off",
-                _consecutiveFailures);
+                failures);
             return;
         }
 
@@ -525,7 +526,7 @@ public sealed class QueueDrainService : IDisposable
                     location.Longitude,
                     location.Timestamp);
 
-                _consecutiveFailures = 0;
+                Interlocked.Exchange(ref _consecutiveFailures, 0);
                 _logger.LogInformation(
                     "QueueDrain: Location {Id} synced successfully via check-in",
                     location.Id);
@@ -547,7 +548,7 @@ public sealed class QueueDrainService : IDisposable
                 await _locationQueue.MarkLocationRejectedAsync(
                     location.Id,
                     $"Server: {result.Message ?? "skipped"}");
-                _consecutiveFailures = 0;
+                Interlocked.Exchange(ref _consecutiveFailures, 0);
                 _logger.LogDebug(
                     "Location {Id} skipped by server: {Message}",
                     location.Id, result.Message);
@@ -566,7 +567,7 @@ public sealed class QueueDrainService : IDisposable
                 await _locationQueue.MarkLocationRejectedAsync(
                     location.Id,
                     $"Server: {result.Message ?? $"HTTP {result.StatusCode}"}");
-                _consecutiveFailures = 0;
+                Interlocked.Exchange(ref _consecutiveFailures, 0);
                 _logger.LogWarning(
                     "Location {Id} rejected by server (HTTP {StatusCode}): {Message}",
                     location.Id, result.StatusCode, result.Message);
@@ -575,7 +576,7 @@ public sealed class QueueDrainService : IDisposable
             {
                 // Technical failure (5xx, network) - reset to pending for retry
                 await _locationQueue.ResetLocationToPendingAsync(location.Id);
-                _consecutiveFailures++;
+                Interlocked.Increment(ref _consecutiveFailures);
                 _logger.LogWarning(
                     "Location {Id} sync failed (attempt {Attempts}): {Message}",
                     location.Id, location.SyncAttempts + 1, result.Message);
@@ -591,21 +592,21 @@ public sealed class QueueDrainService : IDisposable
         {
             // Timeout - reset to pending for retry
             await _locationQueue.ResetLocationToPendingAsync(location.Id);
-            _consecutiveFailures++;
+            Interlocked.Increment(ref _consecutiveFailures);
             _logger.LogWarning("Location {Id} sync timed out", location.Id);
         }
         catch (HttpRequestException ex)
         {
             // Network error - reset to pending for retry
             await _locationQueue.ResetLocationToPendingAsync(location.Id);
-            _consecutiveFailures++;
+            Interlocked.Increment(ref _consecutiveFailures);
             _logger.LogWarning(ex, "Network error syncing location {Id}", location.Id);
         }
         catch (Exception ex)
         {
             // Unexpected error - mark as failed (sanitize message for safe storage)
             await _locationQueue.MarkLocationFailedAsync(location.Id, $"Unexpected: {SanitizeErrorMessage(ex.Message)}");
-            _consecutiveFailures++;
+            Interlocked.Increment(ref _consecutiveFailures);
             _logger.LogError(ex, "Unexpected error processing location {Id}", location.Id);
         }
     }
