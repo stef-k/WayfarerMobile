@@ -67,6 +67,11 @@ public sealed class QueueDrainService : IDisposable
     private const int DrainLockTimeoutMs = 100;
 
     /// <summary>
+    /// Candidate batch size for atomic claims to avoid no-op cycles under contention.
+    /// </summary>
+    private const int DrainClaimBatchSize = 5;
+
+    /// <summary>
     /// Maximum jitter to add to initial delay (seconds).
     /// Prevents timer alignment with other services.
     /// </summary>
@@ -386,10 +391,11 @@ public sealed class QueueDrainService : IDisposable
 
         try
         {
-            // CRITICAL FIX: Atomically claim the oldest pending location
+            // CRITICAL FIX: Atomically claim pending locations and take the oldest claimed.
             // This prevents race condition with LocationSyncService's batch claims
-            // The method marks it as Syncing in a single atomic operation
-            location = await _locationQueue.ClaimOldestPendingLocationAsync();
+            // and avoids no-op cycles when the oldest item is claimed by another service.
+            var claimed = await _locationQueue.ClaimPendingLocationsAsync(DrainClaimBatchSize);
+            location = claimed.Count > 0 ? claimed[0] : null;
             if (location == null)
             {
                 _logger.LogDebug("QueueDrain: No pending locations to claim");
