@@ -60,11 +60,6 @@ public class QueuedLocation
     public string? Provider { get; set; }
 
     /// <summary>
-    /// Gets or sets user notes for this location (HTML format).
-    /// </summary>
-    public string? Notes { get; set; }
-
-    /// <summary>
     /// Gets or sets the sync status of this location.
     /// </summary>
     [Indexed]

@@ -353,8 +353,10 @@ public class DatabaseService : IAsyncDisposable
 
             return defaultValue;
         }
-        catch
+        catch (Exception ex)
         {
+            // Log parse failures for diagnostics (previously silent)
+            Console.WriteLine($"[DatabaseService] Failed to parse setting '{key}' as {typeof(T).Name}: {ex.Message}");
             return defaultValue;
         }
     }

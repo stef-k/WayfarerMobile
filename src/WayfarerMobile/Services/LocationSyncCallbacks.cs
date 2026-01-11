@@ -12,6 +12,25 @@ namespace WayfarerMobile.Services;
 /// Subscribers (e.g., <c>LocalTimelineStorageService</c>) listen for sync events
 /// to update local timeline storage without modifying the sync service directly.
 /// </para>
+/// <para>
+/// <b>Memory Leak Warning:</b> This class uses static events. Subscribers MUST unsubscribe
+/// when they are disposed or go out of scope, otherwise they will be kept alive indefinitely
+/// by the static event handlers, causing memory leaks.
+/// </para>
+/// <para>
+/// <b>Correct usage pattern:</b>
+/// <code>
+/// // In constructor or initialization:
+/// LocationSyncCallbacks.LocationSynced += OnLocationSynced;
+///
+/// // In Dispose or cleanup:
+/// LocationSyncCallbacks.LocationSynced -= OnLocationSynced;
+/// </code>
+/// </para>
+/// <para>
+/// ViewModels should unsubscribe in their <c>Cleanup()</c> or <c>OnDisappearing()</c> methods.
+/// Services should unsubscribe in their <c>Dispose()</c> methods.
+/// </para>
 /// </remarks>
 public static class LocationSyncCallbacks
 {
@@ -29,35 +48,53 @@ public static class LocationSyncCallbacks
 
     /// <summary>
     /// Notifies listeners that a location was successfully synced to the server.
-    /// Called by <c>LocationSyncService</c> after successful sync.
+    /// Called by <c>LocationSyncService</c> or <c>QueueDrainService</c> after successful sync.
     /// </summary>
     /// <param name="queuedLocationId">The local queued location ID.</param>
     /// <param name="serverId">The server-assigned location ID.</param>
     /// <param name="timestamp">The location timestamp (UTC).</param>
+    /// <remarks>
+    /// Event is dispatched to the main thread for UI safety.
+    /// </remarks>
     public static void NotifyLocationSynced(int queuedLocationId, int serverId, DateTime timestamp)
     {
-        LocationSynced?.Invoke(null, new LocationSyncedEventArgs
+        var args = new LocationSyncedEventArgs
         {
             QueuedLocationId = queuedLocationId,
             ServerId = serverId,
             Timestamp = timestamp
+        };
+
+        // Dispatch to main thread for UI safety (consistent with LocationServiceCallbacks)
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            LocationSynced?.Invoke(null, args);
         });
     }
 
     /// <summary>
     /// Notifies listeners that a location sync was skipped by the server.
-    /// Called by <c>LocationSyncService</c> when server returns skipped status.
+    /// Called by <c>LocationSyncService</c> or <c>QueueDrainService</c> when server returns skipped status.
     /// </summary>
     /// <param name="queuedLocationId">The local queued location ID.</param>
     /// <param name="timestamp">The location timestamp (UTC).</param>
     /// <param name="reason">The reason for skipping (e.g., "Threshold not met").</param>
+    /// <remarks>
+    /// Event is dispatched to the main thread for UI safety.
+    /// </remarks>
     public static void NotifyLocationSkipped(int queuedLocationId, DateTime timestamp, string reason)
     {
-        LocationSkipped?.Invoke(null, new LocationSkippedEventArgs
+        var args = new LocationSkippedEventArgs
         {
             QueuedLocationId = queuedLocationId,
             Timestamp = timestamp,
             Reason = reason
+        };
+
+        // Dispatch to main thread for UI safety (consistent with LocationServiceCallbacks)
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            LocationSkipped?.Invoke(null, args);
         });
     }
 

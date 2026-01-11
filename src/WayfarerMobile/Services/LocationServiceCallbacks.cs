@@ -7,6 +7,27 @@ namespace WayfarerMobile.Services;
 /// Shared callback handler for communication between platform location services and the UI layer.
 /// This provides a platform-independent way to receive location updates.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>Memory Leak Warning:</b> This class uses static events. Subscribers MUST unsubscribe
+/// when they are disposed or go out of scope, otherwise they will be kept alive indefinitely
+/// by the static event handlers, causing memory leaks.
+/// </para>
+/// <para>
+/// <b>Correct usage pattern:</b>
+/// <code>
+/// // In constructor or initialization:
+/// LocationServiceCallbacks.LocationReceived += OnLocationReceived;
+///
+/// // In Dispose or cleanup:
+/// LocationServiceCallbacks.LocationReceived -= OnLocationReceived;
+/// </code>
+/// </para>
+/// <para>
+/// ViewModels should unsubscribe in their <c>Cleanup()</c> or <c>OnDisappearing()</c> methods.
+/// Services should unsubscribe in their <c>Dispose()</c> methods.
+/// </para>
+/// </remarks>
 public static class LocationServiceCallbacks
 {
     /// <summary>

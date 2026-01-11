@@ -60,6 +60,16 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
     }
 
     /// <summary>
+    /// Unsubscribes from notification action callbacks to prevent memory leaks.
+    /// </summary>
+    private void UnsubscribeFromCallbacks()
+    {
+        LocationServiceCallbacks.PauseRequested -= OnPauseRequested;
+        LocationServiceCallbacks.ResumeRequested -= OnResumeRequested;
+        LocationServiceCallbacks.StopRequested -= OnStopRequested;
+    }
+
+    /// <summary>
     /// Handles pause request from notification.
     /// </summary>
     private void OnPauseRequested(object? sender, EventArgs e)
@@ -171,6 +181,9 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
 
         try
         {
+            // Unsubscribe from callbacks to prevent memory leaks
+            UnsubscribeFromCallbacks();
+
             _locationManager.StopUpdatingLocation();
             _locationManager.StopMonitoringSignificantLocationChanges();
 

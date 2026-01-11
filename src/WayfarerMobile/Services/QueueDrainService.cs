@@ -103,6 +103,7 @@ public sealed class QueueDrainService : IDisposable
     private volatile bool _isOnline;
     private volatile bool _isDisposed;
     private volatile bool _isStarted;
+    private int _disposeGuard; // For thread-safe Dispose via Interlocked
 
     #endregion
 
@@ -213,15 +214,17 @@ public sealed class QueueDrainService : IDisposable
 
     /// <summary>
     /// Disposes the service and releases resources.
+    /// Thread-safe - uses Interlocked to prevent double-dispose race.
     /// </summary>
     public void Dispose()
     {
-        if (_isDisposed)
+        // Thread-safe check-and-set to prevent double-dispose race
+        if (Interlocked.Exchange(ref _disposeGuard, 1) != 0)
             return;
 
+        _isDisposed = true;
         Stop();
         _drainLock.Dispose();
-        _isDisposed = true;
     }
 
     #endregion
@@ -511,6 +514,15 @@ public sealed class QueueDrainService : IDisposable
                 _logger.LogInformation(
                     "QueueDrain: Location {Id} synced successfully via check-in",
                     location.Id);
+
+                // Notify listeners (e.g., LocalTimelineStorageService) for ServerId update
+                if (result.LocationId.HasValue)
+                {
+                    LocationSyncCallbacks.NotifyLocationSynced(
+                        location.Id,
+                        result.LocationId.Value,
+                        location.Timestamp);
+                }
             }
             else if (result.Skipped)
             {
@@ -522,6 +534,12 @@ public sealed class QueueDrainService : IDisposable
                 _logger.LogDebug(
                     "Location {Id} skipped by server: {Message}",
                     location.Id, result.Message);
+
+                // Notify listeners for local timeline cleanup
+                LocationSyncCallbacks.NotifyLocationSkipped(
+                    location.Id,
+                    location.Timestamp,
+                    result.Message ?? "Threshold not met");
             }
             else if (result.StatusCode.HasValue && result.StatusCode >= 400 && result.StatusCode < 500)
             {

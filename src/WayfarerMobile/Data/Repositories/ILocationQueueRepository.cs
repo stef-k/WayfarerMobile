@@ -81,12 +81,6 @@ public interface ILocationQueueRepository
     Task MarkLocationRejectedAsync(int id, string reason);
 
     /// <summary>
-    /// Marks a location as currently syncing.
-    /// </summary>
-    /// <param name="id">The location ID.</param>
-    Task MarkLocationSyncingAsync(int id);
-
-    /// <summary>
     /// Increments the retry count and resets SyncStatus to Pending for retry.
     /// Used for transient failures (network errors, server errors) where retry is appropriate.
     /// </summary>

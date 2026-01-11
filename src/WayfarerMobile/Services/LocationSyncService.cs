@@ -464,7 +464,21 @@ public class LocationSyncService : IDisposable
         var successfulIds = new List<int>();
         var failedIds = new List<int>();
         var rejectedIds = new HashSet<int>(); // Track rejected IDs separately
-        var cancellationToken = _cancellationTokenSource?.Token ?? CancellationToken.None;
+
+        // Capture CTS reference safely to avoid ObjectDisposedException during token access
+        // If CTS is null or disposed, use CancellationToken.None for graceful handling
+        var cts = _cancellationTokenSource;
+        CancellationToken cancellationToken;
+        try
+        {
+            cancellationToken = cts?.Token ?? CancellationToken.None;
+        }
+        catch (ObjectDisposedException)
+        {
+            // CTS was disposed between null check and Token access - use empty token
+            cancellationToken = CancellationToken.None;
+        }
+
         var stopProcessing = false;
         var processedCount = 0;
 

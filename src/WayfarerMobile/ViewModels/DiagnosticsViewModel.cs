@@ -718,7 +718,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
             }
 
             var csv = new StringBuilder();
-            csv.AppendLine("Id,Timestamp,Latitude,Longitude,Altitude,Accuracy,Speed,Bearing,Provider,SyncStatus,SyncAttempts,LastSyncAttempt,IsRejected,RejectionReason,LastError,Notes");
+            csv.AppendLine("Id,Timestamp,Latitude,Longitude,Altitude,Accuracy,Speed,Bearing,Provider,SyncStatus,SyncAttempts,LastSyncAttempt,IsRejected,RejectionReason,LastError");
 
             foreach (var loc in locations)
             {
@@ -747,8 +747,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
                     $"{(loc.LastSyncAttempt.HasValue ? loc.LastSyncAttempt.Value.ToString("yyyy-MM-dd HH:mm:ss") : "")}," +
                     $"{loc.IsRejected}," +
                     $"\"{loc.RejectionReason?.Replace("\"", "\"\"") ?? ""}\"," +
-                    $"\"{loc.LastError?.Replace("\"", "\"\"") ?? ""}\"," +
-                    $"\"{loc.Notes?.Replace("\"", "\"\"") ?? ""}\"");
+                    $"\"{loc.LastError?.Replace("\"", "\"\"") ?? ""}\"");
             }
 
             var fileName = $"wayfarer_locations_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
@@ -1018,7 +1017,8 @@ public partial class DiagnosticsViewModel : BaseViewModel
         HasZoomCoverage = true;
         OverallCoverage = $"{info.OverallCoveragePercent:F0}%";
 
-        ZoomCoverageItems.Clear();
+        // Build items list first (can be done on any thread)
+        var items = new List<ZoomCoverageItem>();
         foreach (var (zoom, coverage) in info.CoverageByZoom.OrderBy(kv => kv.Key))
         {
             // Calculate coverage area in km using tile math
@@ -1026,13 +1026,38 @@ public partial class DiagnosticsViewModel : BaseViewModel
                 _settingsService.LiveCachePrefetchRadius, zoom, info.Latitude);
             var radiusKm = radiusMeters / 1000.0;
 
-            ZoomCoverageItems.Add(new ZoomCoverageItem
+            items.Add(new ZoomCoverageItem
             {
                 ZoomLevel = zoom,
                 Coverage = $"{coverage.CoveragePercent:F0}%",
                 AreaKm = radiusKm >= 10 ? $"{radiusKm:F0} km" : $"{radiusKm:F1} km"
             });
         }
+
+        // Update ObservableCollection on main thread (required for UI binding)
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            ZoomCoverageItems.Clear();
+            foreach (var item in items)
+            {
+                ZoomCoverageItems.Add(item);
+            }
+        });
+    }
+
+    #endregion
+
+    #region Cleanup
+
+    /// <summary>
+    /// Cleans up resources when the ViewModel is disposed.
+    /// Ensures event unsubscription even if OnDisappearing was not called.
+    /// </summary>
+    protected override void Cleanup()
+    {
+        // Ensure unsubscription even if page navigation didn't trigger OnDisappearing
+        OnDisappearing();
+        base.Cleanup();
     }
 
     #endregion

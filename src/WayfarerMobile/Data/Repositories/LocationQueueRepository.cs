@@ -111,8 +111,17 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
     {
         var db = await GetConnectionAsync();
 
-        var startOfDay = date.Date.ToUniversalTime();
-        var endOfDay = date.Date.AddDays(1).ToUniversalTime();
+        // Normalize input date to ensure consistent UTC comparison with stored timestamps.
+        // - If date is UTC: use as-is (midnight UTC to midnight UTC next day)
+        // - If date is Local or Unspecified: treat as local time and convert to UTC
+        //   This gives the user's local day boundaries in UTC for proper filtering.
+        var localDate = date.Kind == DateTimeKind.Utc
+            ? date.ToLocalTime().Date
+            : date.Date;
+
+        // Get UTC boundaries for the local day
+        var startOfDay = DateTime.SpecifyKind(localDate, DateTimeKind.Local).ToUniversalTime();
+        var endOfDay = DateTime.SpecifyKind(localDate.AddDays(1), DateTimeKind.Local).ToUniversalTime();
 
         return await db.Table<QueuedLocation>()
             .Where(l => l.Timestamp >= startOfDay && l.Timestamp < endOfDay)
@@ -217,16 +226,6 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
                   LastSyncAttempt = ?
               WHERE Id = ?",
             reason, (int)SyncStatus.Synced, DateTime.UtcNow, id);
-    }
-
-    /// <inheritdoc />
-    public async Task MarkLocationSyncingAsync(int id)
-    {
-        var db = await GetConnectionAsync();
-
-        await db.ExecuteAsync(
-            "UPDATE QueuedLocations SET SyncStatus = ? WHERE Id = ?",
-            (int)SyncStatus.Syncing, id);
     }
 
     /// <inheritdoc />
