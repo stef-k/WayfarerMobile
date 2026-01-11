@@ -43,8 +43,16 @@ public static class LocationServiceCallbacks
 
     /// <summary>
     /// Event raised when a new location is received from GPS.
+    /// Used for UI updates (map, current position display).
     /// </summary>
     public static event EventHandler<LocationData>? LocationReceived;
+
+    /// <summary>
+    /// Event raised when a location is queued for sync.
+    /// Used by LocalTimelineStorageService to store entries with correct coordinates.
+    /// This may differ from LocationReceived when Android uses best-wake-sample optimization.
+    /// </summary>
+    public static event EventHandler<LocationData>? LocationQueued;
 
     /// <summary>
     /// Event raised when the tracking state changes.
@@ -88,6 +96,20 @@ public static class LocationServiceCallbacks
         MainThread.BeginInvokeOnMainThread(() =>
         {
             LocationReceived?.Invoke(null, location);
+        });
+    }
+
+    /// <summary>
+    /// Notifies listeners that a location was queued for sync.
+    /// Called by platform-specific location services after successful queue.
+    /// </summary>
+    /// <param name="location">The location data that was queued (may differ from broadcast).</param>
+    public static void NotifyLocationQueued(LocationData location)
+    {
+        // Ensure we're on the main thread for UI updates
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            LocationQueued?.Invoke(null, location);
         });
     }
 

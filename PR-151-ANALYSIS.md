@@ -23,7 +23,7 @@ PR #151 addresses a race condition between `LocationSyncService` and `QueueDrain
 | Architecture | 0 | ~~1~~ 0 | ~~3~~ 0 | ~~2~~ 1 |
 | **Total** | **0** | **0** | **0** | **1** |
 
-> **All issues resolved except #9** (cosmetic). #1-#3 fixed. #4-#8 verified. #6, #10 improved. Only #9 remains (optional).
+> **All issues resolved except #9** (cosmetic). #1-#3 fixed. #4-#8 verified. #6, #10 improved. Peer review findings addressed. Only #9 remains (optional).
 
 ---
 
@@ -407,6 +407,31 @@ Queue Drain (QueueDrainService):
 
 ---
 
+## Peer Review Findings (Addressed)
+
+### Best-Wake-Sample Coordinate Mismatch
+
+**Issue:** Android could broadcast current GPS (`locationData`) but queue a different location (`locationToLog` - best wake sample). Local timeline stored from broadcast, sync used queue coordinates → match failed.
+
+**Fix:** Added `LocationQueued` event that fires after successful queue. `LocalTimelineStorageService` now subscribes to `LocationQueued` instead of `LocationReceived`, ensuring coordinates match.
+
+**Files changed:**
+- `LocationServiceCallbacks.cs` - Added `LocationQueued` event
+- `LocationTrackingService.cs` (Android) - Emit after queue
+- `LocationTrackingService.cs` (iOS) - Emit after queue
+- `LocalTimelineStorageService.cs` - Subscribe to `LocationQueued`
+
+### Client-Side Rejection Missing Skip Event
+
+**Issue:** When `QueueDrainService.ShouldSyncLocation()` rejected a location, no skip event was emitted. Local timeline kept entries for locations that never reached server.
+
+**Fix:** Added `LocationSyncCallbacks.NotifyLocationSkipped()` call after client-side rejection.
+
+**Files changed:**
+- `QueueDrainService.cs` - Emit skip event on client rejection
+
+---
+
 ## Conclusion
 
 **PR #151 correctly solves the race condition** between LocationSyncService and QueueDrainService. The atomic claim pattern with optimistic locking is appropriate for SQLite, and the ServerConfirmed flag provides robust crash recovery.
@@ -418,10 +443,12 @@ Queue Drain (QueueDrainService):
 - Proper parameterized queries throughout
 - Documented intentional code duplication
 
-**Key Risks to Address:**
-- Unhandled callback exceptions can crash app (CRITICAL)
-- Async void fire-and-forget hides database failures (HIGH)
-- LocationSyncService missing immediate startup recovery (HIGH)
+**~~Key Risks to Address:~~ All Addressed:**
+- ~~Unhandled callback exceptions can crash app (CRITICAL)~~ ✅ Fixed
+- ~~Async void fire-and-forget hides database failures (HIGH)~~ ✅ Fixed
+- ~~LocationSyncService missing immediate startup recovery (HIGH)~~ ✅ Fixed
+- ~~Best-wake-sample coordinate mismatch (MEDIUM)~~ ✅ Fixed
+- ~~Client-side rejection missing skip event (MEDIUM)~~ ✅ Fixed
 
 ---
 

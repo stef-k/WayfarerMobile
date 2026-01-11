@@ -374,6 +374,10 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
         try
         {
             await _database.QueueLocationAsync(location);
+
+            // Notify that location was queued - used by LocalTimelineStorageService
+            // to store with correct coordinates (matches what will be synced)
+            LocationServiceCallbacks.NotifyLocationQueued(location);
         }
         catch (Exception ex)
         {

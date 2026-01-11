@@ -473,6 +473,16 @@ public sealed class QueueDrainService : IDisposable
             {
                 // Mark as rejected - no API call needed, no rate limit recorded
                 await _locationQueue.MarkLocationRejectedAsync(location.Id, $"Client: {filterResult.Reason}");
+
+                // Notify skip so local timeline removes the entry
+                // Client filtering mirrors server behavior, so timeline should stay consistent
+                LocationSyncCallbacks.NotifyLocationSkipped(
+                    location.Id,
+                    location.Timestamp,
+                    location.Latitude,
+                    location.Longitude,
+                    $"Client filter: {filterResult.Reason}");
+
                 _logger.LogDebug(
                     "QueueDrain: Location {Id} rejected: {Reason}",
                     location.Id, filterResult.Reason);

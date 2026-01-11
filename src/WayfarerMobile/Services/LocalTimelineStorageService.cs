@@ -108,11 +108,14 @@ public class LocalTimelineStorageService : IDisposable
     /// </summary>
     private void SubscribeToEvents()
     {
-        LocationServiceCallbacks.LocationReceived += OnLocationReceived;
+        // Subscribe to LocationQueued (not LocationReceived) to ensure we store
+        // the same coordinates that will be synced. On Android, these may differ
+        // due to best-wake-sample optimization.
+        LocationServiceCallbacks.LocationQueued += OnLocationQueued;
         LocationSyncCallbacks.LocationSynced += OnLocationSynced;
         LocationSyncCallbacks.LocationSkipped += OnLocationSkipped;
 
-        _logger.LogDebug("Subscribed to location and sync events");
+        _logger.LogDebug("Subscribed to location queue and sync events");
     }
 
     /// <summary>
@@ -120,17 +123,18 @@ public class LocalTimelineStorageService : IDisposable
     /// </summary>
     private void UnsubscribeFromEvents()
     {
-        LocationServiceCallbacks.LocationReceived -= OnLocationReceived;
+        LocationServiceCallbacks.LocationQueued -= OnLocationQueued;
         LocationSyncCallbacks.LocationSynced -= OnLocationSynced;
         LocationSyncCallbacks.LocationSkipped -= OnLocationSkipped;
 
-        _logger.LogDebug("Unsubscribed from location and sync events");
+        _logger.LogDebug("Unsubscribed from location queue and sync events");
     }
 
     /// <summary>
-    /// Handles incoming GPS locations by filtering and storing to local timeline.
+    /// Handles queued locations by filtering and storing to local timeline.
+    /// Uses queued coordinates to ensure matching with sync callbacks.
     /// </summary>
-    private async void OnLocationReceived(object? sender, LocationData location)
+    private async void OnLocationQueued(object? sender, LocationData location)
     {
         try
         {
