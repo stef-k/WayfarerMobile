@@ -8,7 +8,7 @@ Fresh implementation of the Wayfarer Mobile app with a clean architecture, incor
 
 ## Reference Codebase
 
-The previous implementation is at: `~\source\repos\Wayfarer.Mobile`
+The previous implementation is at: `~\source\repos\Wayfarer.Mobile` if not available locally use gh to access it on github.
 Backend server code is at: `~\source\repos\Wayfarer`
 
 **Do not modify the old codebase or the backend.** Use them for reference only.
@@ -140,4 +140,3 @@ Phase 1: #77 Services ──► Phase 2: #76 TripsViewModel ──► Phase 3: #
 1. `git fetch origin`
 2. Check which phase is active in #93
 3. Ensure you're on `develop` or a feature branch based on `develop`
-4. Verify previous phase is complete (check #93 progress tracking)
