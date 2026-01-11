@@ -56,6 +56,37 @@ public sealed class QueueDrainService : IDisposable
     /// </summary>
     private const int MaxReferenceAgeDays = 30;
 
+    /// <summary>
+    /// Initial delay before first timer run (seconds).
+    /// </summary>
+    private const int InitialDelaySeconds = 5;
+
+    /// <summary>
+    /// Timeout for acquiring drain lock (milliseconds).
+    /// </summary>
+    private const int DrainLockTimeoutMs = 100;
+
+    /// <summary>
+    /// Candidate batch size for atomic claims to avoid no-op cycles under contention.
+    /// </summary>
+    private const int DrainClaimBatchSize = 5;
+
+    /// <summary>
+    /// Maximum jitter to add to initial delay (seconds).
+    /// Prevents timer alignment with other services.
+    /// </summary>
+    private const int MaxJitterSeconds = 5;
+
+    /// <summary>
+    /// Random generator for jitter (thread-safe in .NET 6+).
+    /// </summary>
+    private static readonly Random Jitter = new();
+
+    /// <summary>
+    /// Maximum length for stored error messages.
+    /// </summary>
+    private const int MaxErrorMessageLength = 200;
+
     #endregion
 
     #region Fields
@@ -77,6 +108,7 @@ public sealed class QueueDrainService : IDisposable
     private volatile bool _isOnline;
     private volatile bool _isDisposed;
     private volatile bool _isStarted;
+    private int _disposeGuard; // For thread-safe Dispose via Interlocked
 
     #endregion
 
@@ -141,11 +173,14 @@ public sealed class QueueDrainService : IDisposable
             // Create cancellation token for timer callbacks
             _timerCts = new CancellationTokenSource();
 
+            // Add random jitter to initial delay to prevent timer alignment with other services
+            var jitteredDelay = InitialDelaySeconds + Jitter.Next(MaxJitterSeconds);
+
             // Start the drain timer
             _drainTimer = new Timer(
                 OnDrainTimerElapsed,
                 null,
-                TimeSpan.FromSeconds(5), // Initial delay
+                TimeSpan.FromSeconds(jitteredDelay),
                 TimeSpan.FromSeconds(TimerIntervalSeconds));
 
             _isStarted = true;
@@ -184,15 +219,17 @@ public sealed class QueueDrainService : IDisposable
 
     /// <summary>
     /// Disposes the service and releases resources.
+    /// Thread-safe - uses Interlocked to prevent double-dispose race.
     /// </summary>
     public void Dispose()
     {
-        if (_isDisposed)
+        // Thread-safe check-and-set to prevent double-dispose race
+        if (Interlocked.Exchange(ref _disposeGuard, 1) != 0)
             return;
 
+        _isDisposed = true;
         Stop();
         _drainLock.Dispose();
-        _isDisposed = true;
     }
 
     #endregion
@@ -290,7 +327,7 @@ public sealed class QueueDrainService : IDisposable
             {
                 _logger.LogInformation("Network restored, queue drain will resume");
                 // Reset consecutive failures on network restore
-                _consecutiveFailures = 0;
+                Interlocked.Exchange(ref _consecutiveFailures, 0);
             }
             else if (wasOnline && !_isOnline)
             {
@@ -313,38 +350,39 @@ public sealed class QueueDrainService : IDisposable
     /// <param name="cancellationToken">Cancellation token for shutdown.</param>
     private async Task DrainOneAsync(CancellationToken cancellationToken)
     {
-        // Early exits - log at Info level for diagnostics
+        // Early exits - use Debug level for routine skip conditions
         if (!_isOnline)
         {
-            _logger.LogInformation("QueueDrain: Offline, skipping cycle");
+            _logger.LogDebug("QueueDrain: Offline, skipping cycle");
             return;
         }
 
         if (!_apiClient.IsConfigured)
         {
-            _logger.LogInformation("QueueDrain: API not configured, skipping cycle");
+            _logger.LogDebug("QueueDrain: API not configured, skipping cycle");
             return;
         }
 
-        if (_consecutiveFailures >= MaxConsecutiveFailures)
+        var failures = Volatile.Read(ref _consecutiveFailures);
+        if (failures >= MaxConsecutiveFailures)
         {
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "QueueDrain: Too many consecutive failures ({Failures}), backing off",
-                _consecutiveFailures);
+                failures);
             return;
         }
 
         if (!CanMakeCheckInRequest())
         {
             var timeSinceLast = DateTime.UtcNow - _lastDrainTime;
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "QueueDrain: Rate limited ({SecondsSinceLast:F0}s since last, need {Required}s)",
                 timeSinceLast.TotalSeconds, MinSecondsBetweenDrains);
             return;
         }
 
         // Try to acquire lock with timeout (non-blocking if busy)
-        if (!await _drainLock.WaitAsync(100, cancellationToken))
+        if (!await _drainLock.WaitAsync(DrainLockTimeoutMs, cancellationToken))
         {
             _logger.LogDebug("Drain lock busy, skipping cycle");
             return;
@@ -354,34 +392,33 @@ public sealed class QueueDrainService : IDisposable
 
         try
         {
-            // Get oldest pending location
-            location = await _locationQueue.GetOldestPendingForDrainAsync();
+            // CRITICAL FIX: Atomically claim the oldest pending location.
+            // This prevents race condition with LocationSyncService's batch claims
+            // and avoids no-op cycles when the oldest item is claimed by another service.
+            location = await _locationQueue.ClaimOldestPendingLocationAsync(DrainClaimBatchSize);
             if (location == null)
             {
-                _logger.LogInformation("QueueDrain: No pending locations in queue");
+                _logger.LogDebug("QueueDrain: No pending locations to claim");
                 return;
             }
 
-            _logger.LogInformation(
-                "QueueDrain: Processing location {Id} from {Timestamp}",
+            _logger.LogDebug(
+                "QueueDrain: Claimed location {Id} from {Timestamp}",
                 location.Id, location.Timestamp);
 
-            // CRITICAL FIX: Mark location as Syncing BEFORE releasing lock
-            // This prevents duplicate processing if another drain cycle starts
-            await _locationQueue.MarkLocationSyncingAsync(location.Id);
-
-            // CRITICAL FIX: Record rate limit BEFORE making API call
-            // This prevents race conditions in rate limiting
-            RecordDrainAttempt();
+            // Note: Location is already marked as Syncing by ClaimOldestPendingLocationAsync
+            // Rate limit is recorded in ProcessLocationAsync AFTER client-side filter passes
         }
         catch (SQLiteException ex)
         {
-            _logger.LogError(ex, "Database error getting pending location from queue");
+            // Exception occurs during claim - location is not yet assigned
+            _logger.LogError(ex, "Database error claiming pending location from queue");
             return;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error getting pending location from queue");
+            // Exception occurs during claim - location is not yet assigned
+            _logger.LogError(ex, "Unexpected error claiming pending location from queue");
             return;
         }
         finally
@@ -390,9 +427,34 @@ public sealed class QueueDrainService : IDisposable
         }
 
         // Process location outside lock (network call)
-        if (location != null)
+        try
         {
             await ProcessLocationAsync(location, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // ProcessLocationAsync handles most exceptions internally,
+            // but if something unexpected escapes, ensure we don't leave location stuck
+            _logger.LogError(ex, "Unhandled exception processing location {Id}", location.Id);
+            await TryResetLocationAsync(location.Id, "Unhandled processing exception");
+        }
+    }
+
+    /// <summary>
+    /// Safely attempts to reset a location to Pending, logging any errors.
+    /// </summary>
+    private async Task TryResetLocationAsync(int locationId, string reason)
+    {
+        try
+        {
+            await _locationQueue.ResetLocationToPendingAsync(locationId);
+            _logger.LogWarning("Reset location {Id} to Pending: {Reason}", locationId, reason);
+        }
+        catch (Exception resetEx)
+        {
+            _logger.LogError(resetEx,
+                "Failed to reset location {Id} to Pending - may be stuck in Syncing state",
+                locationId);
         }
     }
 
@@ -410,13 +472,27 @@ public sealed class QueueDrainService : IDisposable
 
             if (!filterResult.ShouldSync)
             {
-                // Mark as rejected and continue to next
+                // Mark as rejected - no API call needed, no rate limit recorded
                 await _locationQueue.MarkLocationRejectedAsync(location.Id, $"Client: {filterResult.Reason}");
-                _logger.LogInformation(
+
+                // Notify skip so local timeline removes the entry
+                // Client filtering mirrors server behavior, so timeline should stay consistent
+                LocationSyncCallbacks.NotifyLocationSkipped(
+                    location.Id,
+                    location.Timestamp,
+                    location.Latitude,
+                    location.Longitude,
+                    $"Client filter: {filterResult.Reason}");
+
+                _logger.LogDebug(
                     "QueueDrain: Location {Id} rejected: {Reason}",
                     location.Id, filterResult.Reason);
                 return;
             }
+
+            // FIX: Record rate limit AFTER filter passes, BEFORE API call
+            // This ensures client-rejected locations don't count against rate limit
+            RecordDrainAttempt();
 
             // Send via check-in endpoint
             var request = new LocationLogRequest
@@ -435,12 +511,15 @@ public sealed class QueueDrainService : IDisposable
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
                 cancellationToken, timeoutCts.Token);
 
-            var result = await _apiClient.CheckInAsync(request, linkedCts.Token);
-
-            // Note: RecordDrainAttempt is now called BEFORE the API call in DrainOneAsync
+            var result = await _apiClient.CheckInAsync(request, location.IdempotencyKey, linkedCts.Token);
 
             if (result.Success)
             {
+                // CRITICAL: Mark ServerConfirmed IMMEDIATELY after API success
+                // This ensures crash recovery marks as Synced instead of resetting to Pending
+                // Store ServerId for local timeline reconciliation on crash recovery
+                await _locationQueue.MarkServerConfirmedAsync(location.Id, result.LocationId);
+
                 // Mark synced and update reference point with location's actual timestamp
                 await _locationQueue.MarkLocationSyncedAsync(location.Id);
                 _settings.UpdateLastSyncedLocation(
@@ -448,10 +527,21 @@ public sealed class QueueDrainService : IDisposable
                     location.Longitude,
                     location.Timestamp);
 
-                _consecutiveFailures = 0;
+                Interlocked.Exchange(ref _consecutiveFailures, 0);
                 _logger.LogInformation(
-                    "QueueDrain: Location {Id} synced successfully via check-in",
-                    location.Id);
+                    "QueueDrain: Location {Id} synced successfully via check-in (ServerId: {ServerId})",
+                    location.Id, result.LocationId);
+
+                // Notify listeners (e.g., LocalTimelineStorageService) for ServerId update
+                if (result.LocationId.HasValue)
+                {
+                    LocationSyncCallbacks.NotifyLocationSynced(
+                        location.Id,
+                        result.LocationId.Value,
+                        location.Timestamp,
+                        location.Latitude,
+                        location.Longitude);
+                }
             }
             else if (result.Skipped)
             {
@@ -459,10 +549,18 @@ public sealed class QueueDrainService : IDisposable
                 await _locationQueue.MarkLocationRejectedAsync(
                     location.Id,
                     $"Server: {result.Message ?? "skipped"}");
-                _consecutiveFailures = 0;
+                Interlocked.Exchange(ref _consecutiveFailures, 0);
                 _logger.LogDebug(
                     "Location {Id} skipped by server: {Message}",
                     location.Id, result.Message);
+
+                // Notify listeners for local timeline cleanup
+                LocationSyncCallbacks.NotifyLocationSkipped(
+                    location.Id,
+                    location.Timestamp,
+                    location.Latitude,
+                    location.Longitude,
+                    result.Message ?? "Threshold not met");
             }
             else if (result.StatusCode.HasValue && result.StatusCode >= 400 && result.StatusCode < 500)
             {
@@ -470,7 +568,7 @@ public sealed class QueueDrainService : IDisposable
                 await _locationQueue.MarkLocationRejectedAsync(
                     location.Id,
                     $"Server: {result.Message ?? $"HTTP {result.StatusCode}"}");
-                _consecutiveFailures = 0;
+                Interlocked.Exchange(ref _consecutiveFailures, 0);
                 _logger.LogWarning(
                     "Location {Id} rejected by server (HTTP {StatusCode}): {Message}",
                     location.Id, result.StatusCode, result.Message);
@@ -479,7 +577,7 @@ public sealed class QueueDrainService : IDisposable
             {
                 // Technical failure (5xx, network) - reset to pending for retry
                 await _locationQueue.ResetLocationToPendingAsync(location.Id);
-                _consecutiveFailures++;
+                Interlocked.Increment(ref _consecutiveFailures);
                 _logger.LogWarning(
                     "Location {Id} sync failed (attempt {Attempts}): {Message}",
                     location.Id, location.SyncAttempts + 1, result.Message);
@@ -495,21 +593,21 @@ public sealed class QueueDrainService : IDisposable
         {
             // Timeout - reset to pending for retry
             await _locationQueue.ResetLocationToPendingAsync(location.Id);
-            _consecutiveFailures++;
+            Interlocked.Increment(ref _consecutiveFailures);
             _logger.LogWarning("Location {Id} sync timed out", location.Id);
         }
         catch (HttpRequestException ex)
         {
             // Network error - reset to pending for retry
             await _locationQueue.ResetLocationToPendingAsync(location.Id);
-            _consecutiveFailures++;
+            Interlocked.Increment(ref _consecutiveFailures);
             _logger.LogWarning(ex, "Network error syncing location {Id}", location.Id);
         }
         catch (Exception ex)
         {
-            // Unexpected error - mark as failed
-            await _locationQueue.MarkLocationFailedAsync(location.Id, $"Unexpected: {ex.Message}");
-            _consecutiveFailures++;
+            // Unexpected error - mark as failed (sanitize message for safe storage)
+            await _locationQueue.MarkLocationFailedAsync(location.Id, $"Unexpected: {SanitizeErrorMessage(ex.Message)}");
+            Interlocked.Increment(ref _consecutiveFailures);
             _logger.LogError(ex, "Unexpected error processing location {Id}", location.Id);
         }
     }
@@ -628,6 +726,31 @@ public sealed class QueueDrainService : IDisposable
             _lastDrainTime = now;
             _drainHistory.Enqueue(now);
         }
+    }
+
+    #endregion
+
+    #region Helpers
+
+    /// <summary>
+    /// Sanitizes exception messages for safe storage.
+    /// Truncates to maximum length and removes newlines.
+    /// </summary>
+    private static string SanitizeErrorMessage(string message)
+    {
+        if (string.IsNullOrEmpty(message))
+            return "Unknown error";
+
+        // Replace newlines with spaces
+        var sanitized = message.Replace('\n', ' ').Replace('\r', ' ');
+
+        // Truncate if too long
+        if (sanitized.Length > MaxErrorMessageLength)
+        {
+            sanitized = sanitized[..MaxErrorMessageLength] + "...";
+        }
+
+        return sanitized;
     }
 
     #endregion

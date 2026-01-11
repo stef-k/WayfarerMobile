@@ -18,10 +18,5 @@ public enum SyncStatus
     /// <summary>
     /// Location was successfully synced to server.
     /// </summary>
-    Synced,
-
-    /// <summary>
-    /// Sync failed, will retry later.
-    /// </summary>
-    Failed
+    Synced
 }

@@ -16,17 +16,25 @@ public interface IApiClient
     /// Logs a location to the server.
     /// </summary>
     /// <param name="location">The location data to log.</param>
+    /// <param name="idempotencyKey">Optional idempotency key for duplicate protection.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Result indicating success or failure with optional message.</returns>
-    Task<ApiResult> LogLocationAsync(LocationLogRequest location, CancellationToken cancellationToken = default);
+    Task<ApiResult> LogLocationAsync(
+        LocationLogRequest location,
+        string? idempotencyKey,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Performs a manual check-in (bypasses time/distance thresholds).
     /// </summary>
     /// <param name="location">The location data to check in.</param>
+    /// <param name="idempotencyKey">Optional idempotency key for duplicate protection.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Result indicating success or failure with optional message.</returns>
-    Task<ApiResult> CheckInAsync(LocationLogRequest location, CancellationToken cancellationToken = default);
+    Task<ApiResult> CheckInAsync(
+        LocationLogRequest location,
+        string? idempotencyKey,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Tests connectivity to the server.

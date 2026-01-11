@@ -69,8 +69,8 @@
                                 <Label Grid.Column="1" Text="{Binding RejectedLocations}" />
                             </Grid>
                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                                <Label Grid.Column="0" Text="Failed:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-                                <Label Grid.Column="1" Text="{Binding FailedLocations}" />
+                                <Label Grid.Column="0" Text="Retrying:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Grid.Column="1" Text="{Binding RetryingLocations}" />
                             </Grid>
                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
                                 <Label Grid.Column="0" Text="Oldest Pending:" TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />

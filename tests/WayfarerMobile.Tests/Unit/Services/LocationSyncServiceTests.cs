@@ -772,7 +772,7 @@ public class LocationSyncServiceTests
     [Fact]
     public void SyncPendingLocationsAsync_EmptyQueue_DocumentedBehavior()
     {
-        // When GetPendingLocationsAsync returns empty list:
+        // When ClaimPendingLocationsAsync returns empty list:
         // - Return 0 immediately
         // - Log "No pending locations to sync"
         // - Still record sync for rate limiting

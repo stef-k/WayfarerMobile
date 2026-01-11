@@ -270,7 +270,7 @@ public class TrackingNotificationService : NSObject, IUNUserNotificationCenterDe
             };
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            var result = await apiClient.CheckInAsync(request, cts.Token);
+            var result = await apiClient.CheckInAsync(request, Guid.NewGuid().ToString("N"), cts.Token);
 
             LocationServiceCallbacks.NotifyCheckInPerformed(
                 result.Success,

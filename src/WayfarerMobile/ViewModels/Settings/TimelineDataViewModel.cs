@@ -142,7 +142,7 @@ public partial class TimelineDataViewModel : ObservableObject
             var csv = new StringBuilder();
 
             // Header row
-            csv.AppendLine("Id,Timestamp,Latitude,Longitude,Altitude,Accuracy,Speed,Bearing,Provider,SyncStatus,SyncAttempts,LastSyncAttempt,IsRejected,RejectionReason,LastError,Notes");
+            csv.AppendLine("Id,Timestamp,Latitude,Longitude,Altitude,Accuracy,Speed,Bearing,Provider,SyncStatus,SyncAttempts,LastSyncAttempt,IsRejected,RejectionReason,LastError");
 
             // Data rows
             foreach (var loc in locations)
@@ -151,8 +151,8 @@ public partial class TimelineDataViewModel : ObservableObject
                 {
                     SyncStatus.Pending => loc.IsRejected ? "Rejected" :
                                          loc.SyncAttempts > 0 ? $"Retrying({loc.SyncAttempts})" : "Pending",
+                    SyncStatus.Syncing => "Syncing",
                     SyncStatus.Synced => "Synced",
-                    SyncStatus.Failed => "Failed",
                     _ => "Unknown"
                 };
 
@@ -173,8 +173,7 @@ public partial class TimelineDataViewModel : ObservableObject
                     $"{(loc.LastSyncAttempt.HasValue ? loc.LastSyncAttempt.Value.ToString("yyyy-MM-dd HH:mm:ss") : "")}," +
                     $"{loc.IsRejected}," +
                     $"\"{loc.RejectionReason?.Replace("\"", "\"\"") ?? ""}\"," +
-                    $"\"{loc.LastError?.Replace("\"", "\"\"") ?? ""}\"," +
-                    $"\"{loc.Notes?.Replace("\"", "\"\"") ?? ""}\"");
+                    $"\"{loc.LastError?.Replace("\"", "\"\"") ?? ""}\"");
             }
 
             // Save to temp file

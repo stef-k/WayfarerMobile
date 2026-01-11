@@ -25,13 +25,16 @@ public class LocationSyncService : IDisposable
     private Timer? _syncTimer;
     private Timer? _cleanupTimer;
     private readonly SemaphoreSlim _syncLock = new(1, 1);
-    private bool _isSyncing;
-    private bool _disposed;
+    private readonly object _startStopLock = new();
+    private CancellationTokenSource? _cancellationTokenSource;
+    private volatile bool _isSyncing;
+    private int _disposeGuard; // For thread-safe Dispose via Interlocked
 
     // Rate limiting tracking
     private DateTime _lastSyncTime = DateTime.MinValue;
     private readonly Queue<DateTime> _syncHistory = new();
     private readonly object _rateLimitLock = new();
+    private const int MaxSyncHistorySize = 100; // Prevent unbounded growth
 
     #endregion
 
@@ -67,6 +70,52 @@ public class LocationSyncService : IDisposable
     /// Cleanup interval in hours (lesson learned: separate cleanup timer).
     /// </summary>
     private const int CleanupIntervalHours = 6;
+
+    /// <summary>
+    /// Initial delay before first sync/cleanup run (seconds).
+    /// </summary>
+    private const int InitialDelaySeconds = 5;
+
+    /// <summary>
+    /// Delay before first cleanup run (minutes).
+    /// </summary>
+    private const int FirstCleanupDelayMinutes = 30;
+
+    /// <summary>
+    /// Timeout for graceful Stop() waiting for in-progress sync (seconds).
+    /// </summary>
+    private const int StopTimeoutSeconds = 30;
+
+    /// <summary>
+    /// Poll interval when waiting for sync to complete during Stop() (milliseconds).
+    /// </summary>
+    private const int StopPollIntervalMs = 100;
+
+    /// <summary>
+    /// Threshold for detecting stuck syncing locations during runtime (minutes).
+    /// </summary>
+    private const int StuckLocationThresholdMinutes = 30;
+
+    /// <summary>
+    /// Number of days after which synced locations are purged.
+    /// </summary>
+    private const int PurgeDaysOld = 7;
+
+    /// <summary>
+    /// Maximum jitter to add to initial delay (seconds).
+    /// Prevents timer alignment with other services.
+    /// </summary>
+    private const int MaxJitterSeconds = 5;
+
+    /// <summary>
+    /// Random generator for jitter (thread-safe in .NET 6+).
+    /// </summary>
+    private static readonly Random Jitter = new();
+
+    /// <summary>
+    /// Maximum length for stored error messages.
+    /// </summary>
+    private const int MaxErrorMessageLength = 200;
 
     #endregion
 
@@ -141,47 +190,139 @@ public class LocationSyncService : IDisposable
 
     /// <summary>
     /// Starts the background sync timer and cleanup timer.
+    /// Thread-safe: uses lock to prevent race conditions when called concurrently.
     /// </summary>
     public void Start()
     {
-        if (_syncTimer != null)
-            return;
+        lock (_startStopLock)
+        {
+            if (_syncTimer != null)
+                return;
 
-        _logger.LogInformation("Starting location sync service");
+            _logger.LogInformation("Starting location sync service");
 
-        // Sync timer - checks every 30 seconds if sync should run
-        _syncTimer = new Timer(
-            async _ => await TrySyncAsync(),
-            null,
-            TimeSpan.FromSeconds(5), // Initial delay
-            TimeSpan.FromSeconds(TimerIntervalSeconds));
+            // Create cancellation token source for graceful shutdown
+            _cancellationTokenSource = new CancellationTokenSource();
 
-        // Cleanup timer - runs every 6 hours (lesson learned: separate from sync)
-        _cleanupTimer = new Timer(
-            async _ => await RunCleanupAsync(),
-            null,
-            TimeSpan.FromMinutes(30), // First run after 30 minutes
-            TimeSpan.FromHours(CleanupIntervalHours));
+            // Crash recovery: Reset locations stuck in Syncing state from previous session
+            // This runs async without blocking Start() to avoid delaying app startup
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var resetCount = await _locationQueue.ResetStuckLocationsAsync();
+                    if (resetCount > 0)
+                    {
+                        _logger.LogInformation("Crash recovery: Reset {Count} stuck locations to appropriate state", resetCount);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error during crash recovery reset of stuck locations");
+                }
+            });
+
+            // Add random jitter to initial delay to prevent timer alignment with other services
+            var jitteredDelay = InitialDelaySeconds + Jitter.Next(MaxJitterSeconds);
+
+            // Sync timer - checks every 30 seconds if sync should run
+            // Note: Timer callbacks compile to async void, so we must catch all exceptions
+            _syncTimer = new Timer(
+                async _ =>
+                {
+                    try
+                    {
+                        await TrySyncAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Unhandled exception in sync timer callback");
+                    }
+                },
+                null,
+                TimeSpan.FromSeconds(jitteredDelay),
+                TimeSpan.FromSeconds(TimerIntervalSeconds));
+
+            // Cleanup timer - runs every 6 hours (lesson learned: separate from sync)
+            // Note: Timer callbacks compile to async void, so we must catch all exceptions
+            _cleanupTimer = new Timer(
+                async _ =>
+                {
+                    try
+                    {
+                        await RunCleanupAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Unhandled exception in cleanup timer callback");
+                    }
+                },
+                null,
+                TimeSpan.FromMinutes(FirstCleanupDelayMinutes),
+                TimeSpan.FromHours(CleanupIntervalHours));
+        }
     }
 
     /// <summary>
     /// Stops the background sync timer and cleanup timer.
+    /// Waits for any in-progress sync to complete.
+    /// Note: This method blocks the calling thread. Use <see cref="StopAsync"/> for non-blocking stop.
     /// </summary>
     public void Stop()
     {
-        _logger.LogInformation("Stopping location sync service");
-        _syncTimer?.Change(Timeout.Infinite, Timeout.Infinite);
-        _cleanupTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+        StopAsync().GetAwaiter().GetResult();
     }
 
     /// <summary>
-    /// Runs cleanup of old locations (separate from sync for reliability).
+    /// Asynchronously stops the background sync timer and cleanup timer.
+    /// Waits for any in-progress sync to complete without blocking the calling thread.
+    /// </summary>
+    public async Task StopAsync()
+    {
+        _logger.LogInformation("Stopping location sync service");
+
+        // Stop timers first to prevent new syncs from starting
+        _syncTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+        _cleanupTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+
+        // Signal cancellation for in-progress operations
+        _cancellationTokenSource?.Cancel();
+
+        // Wait for in-progress sync to complete (with timeout)
+        if (_isSyncing)
+        {
+            _logger.LogDebug("Waiting for in-progress sync to complete...");
+            var waitStart = DateTime.UtcNow;
+            while (_isSyncing && (DateTime.UtcNow - waitStart).TotalSeconds < StopTimeoutSeconds)
+            {
+                await Task.Delay(StopPollIntervalMs);
+            }
+
+            if (_isSyncing)
+            {
+                _logger.LogWarning("Sync did not complete within timeout, proceeding with stop");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Runs cleanup of old locations and stuck location detection.
     /// </summary>
     private async Task RunCleanupAsync()
     {
         try
         {
             _logger.LogDebug("Running scheduled location cleanup");
+
+            // Reset locations stuck in Syncing state for too long
+            // This handles edge cases where sync operations fail without proper cleanup
+            var resetCount = await _locationQueue.ResetTimedOutSyncingLocationsAsync(
+                stuckThresholdMinutes: StuckLocationThresholdMinutes);
+            if (resetCount > 0)
+            {
+                _logger.LogInformation("Reset {Count} timed-out syncing locations to Pending", resetCount);
+            }
+
             await PurgeOldLocationsAsync();
         }
         catch (SQLiteException ex)
@@ -248,6 +389,12 @@ public class LocationSyncService : IDisposable
             var now = DateTime.UtcNow;
             _lastSyncTime = now;
             _syncHistory.Enqueue(now);
+
+            // Enforce max size to prevent unbounded growth from clock manipulation
+            while (_syncHistory.Count > MaxSyncHistorySize)
+            {
+                _syncHistory.Dequeue();
+            }
         }
     }
 
@@ -317,38 +464,118 @@ public class LocationSyncService : IDisposable
 
     /// <summary>
     /// Syncs pending locations to the server with retry for transient failures.
-    /// Uses batch update for successful syncs to minimize database operations.
+    /// Uses atomic claim pattern to prevent race conditions with QueueDrainService.
     /// </summary>
     private async Task<int> SyncPendingLocationsAsync()
     {
-        var pending = await _locationQueue.GetPendingLocationsAsync(BatchSize);
-        if (pending.Count == 0)
+        // CRITICAL FIX: Atomically claim locations (marks as Syncing in single operation)
+        // This prevents QueueDrainService from processing the same locations
+        var claimed = await _locationQueue.ClaimPendingLocationsAsync(BatchSize);
+        if (claimed.Count == 0)
         {
-            _logger.LogDebug("No pending locations to sync");
+            _logger.LogDebug("No pending locations to sync (or all claimed by drain service)");
             return 0;
         }
 
-        _logger.LogInformation("Syncing {Count} pending locations", pending.Count);
+        _logger.LogInformation("Claimed and syncing {Count} locations", claimed.Count);
 
         var successfulIds = new List<int>();
-        var cancellationToken = CancellationToken.None;
+        var failedIds = new List<int>();
+        var rejectedIds = new HashSet<int>(); // Track rejected IDs separately
 
-        foreach (var location in pending)
+        // Capture CTS reference safely to avoid ObjectDisposedException during token access
+        // If CTS is null or disposed, use CancellationToken.None for graceful handling
+        var cts = _cancellationTokenSource;
+        CancellationToken cancellationToken;
+        try
         {
-            var (success, shouldContinue) = await SyncLocationWithRetryAsync(location, cancellationToken);
-
-            if (success)
-            {
-                successfulIds.Add(location.Id);
-            }
-
-            if (!shouldContinue)
-            {
-                break;
-            }
+            cancellationToken = cts?.Token ?? CancellationToken.None;
+        }
+        catch (ObjectDisposedException)
+        {
+            // CTS was disposed between null check and Token access - use empty token
+            cancellationToken = CancellationToken.None;
         }
 
-        // Batch update all successful syncs in one database operation
+        var stopProcessing = false;
+        var processedCount = 0;
+
+        try
+        {
+            foreach (var location in claimed)
+            {
+                // Check for cancellation (graceful shutdown)
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    _logger.LogInformation("Sync cancelled, resetting remaining {Count} locations",
+                        claimed.Count - processedCount);
+                    stopProcessing = true;
+                }
+
+                if (stopProcessing)
+                {
+                    // Add unprocessed locations to failed list for reset
+                    failedIds.Add(location.Id);
+                    continue;
+                }
+
+                processedCount++;
+                var (result, shouldContinue) = await SyncLocationWithRetryAsync(location, cancellationToken);
+
+                switch (result)
+                {
+                    case SyncResult.Success:
+                        successfulIds.Add(location.Id);
+                        break;
+                    case SyncResult.Rejected:
+                        // Already marked as rejected in SyncLocationWithRetryAsync
+                        // Track so we don't accidentally reset them in cleanup
+                        rejectedIds.Add(location.Id);
+                        break;
+                    case SyncResult.Failed:
+                        failedIds.Add(location.Id);
+                        break;
+                }
+
+                if (!shouldContinue)
+                {
+                    stopProcessing = true;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Unexpected exception during processing - reset all unprocessed claimed locations
+            _logger.LogError(ex, "Unexpected error during batch sync at location {ProcessedCount}/{Total}",
+                processedCount, claimed.Count);
+
+            // Reset any claimed locations that weren't processed (not in success, failed, or rejected)
+            var processedIds = new HashSet<int>(successfulIds);
+            processedIds.UnionWith(failedIds);
+            processedIds.UnionWith(rejectedIds);
+
+            var unprocessedIds = claimed
+                .Where(l => !processedIds.Contains(l.Id))
+                .Select(l => l.Id)
+                .ToList();
+
+            if (unprocessedIds.Count > 0)
+            {
+                try
+                {
+                    await _locationQueue.ResetLocationsBatchToPendingAsync(unprocessedIds);
+                    _logger.LogWarning("Reset {Count} unprocessed locations to Pending after error", unprocessedIds.Count);
+                }
+                catch (Exception resetEx)
+                {
+                    _logger.LogError(resetEx, "Failed to reset unprocessed locations - they may be stuck in Syncing state");
+                }
+            }
+
+            // Still try to finalize what we processed successfully
+        }
+
+        // Batch update successful syncs
         if (successfulIds.Count > 0)
         {
             await _locationQueue.MarkLocationsSyncedAsync(successfulIds);
@@ -358,20 +585,41 @@ public class LocationSyncService : IDisposable
             _settings.LastSyncTime = DateTime.UtcNow;
         }
 
-        _logger.LogInformation("Sync complete: {Success}/{Total} locations", successfulIds.Count, pending.Count);
+        // Reset failed/unprocessed locations back to Pending for retry
+        // This allows QueueDrainService to pick them up later
+        // Note: Rejected locations are NOT reset - they're already marked appropriately
+        if (failedIds.Count > 0)
+        {
+            await _locationQueue.ResetLocationsBatchToPendingAsync(failedIds);
+            _logger.LogDebug("Reset {Count} failed locations to Pending for retry", failedIds.Count);
+        }
 
-        // Cleanup old synced locations
-        await PurgeOldLocationsAsync();
+        _logger.LogInformation("Sync complete: {Success}/{Total} locations ({Failed} reset for retry, {Rejected} rejected)",
+            successfulIds.Count, claimed.Count, failedIds.Count, rejectedIds.Count);
 
         return successfulIds.Count;
     }
 
     /// <summary>
-    /// Syncs a single location with retry policy for transient failures.
-    /// Does not update database status - caller handles batch updates for successful syncs.
+    /// Result of syncing a single location.
     /// </summary>
-    /// <returns>Tuple of (success, shouldContinue).</returns>
-    private async Task<(bool Success, bool ShouldContinue)> SyncLocationWithRetryAsync(
+    private enum SyncResult
+    {
+        /// <summary>Location was synced successfully.</summary>
+        Success,
+        /// <summary>Location was rejected by server (threshold not met, etc.) - don't retry.</summary>
+        Rejected,
+        /// <summary>Location sync failed (network, server error, etc.) - should retry.</summary>
+        Failed
+    }
+
+    /// <summary>
+    /// Syncs a single location with retry policy for transient failures.
+    /// Does not update database status for success - caller handles batch updates.
+    /// Rejected locations are marked in the database directly.
+    /// </summary>
+    /// <returns>Tuple of (SyncResult, shouldContinue).</returns>
+    private async Task<(SyncResult Result, bool ShouldContinue)> SyncLocationWithRetryAsync(
         QueuedLocation location,
         CancellationToken cancellationToken)
     {
@@ -386,12 +634,12 @@ public class LocationSyncService : IDisposable
                 Accuracy = location.Accuracy,
                 Speed = location.Speed,
                 Timestamp = location.Timestamp,
-                Provider = location.Provider
+                Provider = location.Provider ?? "location-sync"
             };
 
             // Use Polly retry for transient network failures
             var result = await _retryPipeline.ExecuteAsync(async ct =>
-                await _apiClient.LogLocationAsync(request, ct), cancellationToken);
+                await _apiClient.LogLocationAsync(request, location.IdempotencyKey, ct), cancellationToken);
 
             if (result.Success)
             {
@@ -406,12 +654,19 @@ public class LocationSyncService : IDisposable
                     LocationSyncCallbacks.NotifyLocationSkipped(
                         location.Id,
                         location.Timestamp,
+                        location.Latitude,
+                        location.Longitude,
                         "Threshold not met");
 
-                    return (false, true); // Not success (won't be marked synced), continue with next
+                    return (SyncResult.Rejected, true); // Rejected by server, continue with next
                 }
 
-                _logger.LogDebug("Location {Id} synced successfully", location.Id);
+                // CRITICAL: Mark ServerConfirmed IMMEDIATELY after API success
+                // This ensures crash recovery marks as Synced instead of resetting to Pending
+                // Store ServerId for local timeline reconciliation on crash recovery
+                await _locationQueue.MarkServerConfirmedAsync(location.Id, result.LocationId);
+
+                _logger.LogDebug("Location {Id} synced successfully (ServerId: {ServerId})", location.Id, result.LocationId);
 
                 // Notify listeners that location was synced (for local timeline ServerId update)
                 if (result.LocationId.HasValue)
@@ -419,10 +674,12 @@ public class LocationSyncService : IDisposable
                     LocationSyncCallbacks.NotifyLocationSynced(
                         location.Id,
                         result.LocationId.Value,
-                        location.Timestamp);
+                        location.Timestamp,
+                        location.Latitude,
+                        location.Longitude);
                 }
 
-                return (true, true);
+                return (SyncResult.Success, true);
             }
 
             // Classify the failure
@@ -437,7 +694,7 @@ public class LocationSyncService : IDisposable
                     _logger.LogWarning(
                         "Server rejected location {Id}: {Message} (HTTP {StatusCode})",
                         location.Id, result.Message, result.StatusCode);
-                    return (false, true); // Continue with next location
+                    return (SyncResult.Rejected, true); // Rejected, continue with next
 
                 case FailureType.AuthenticationError:
                     // Auth error - stop all syncing
@@ -445,14 +702,14 @@ public class LocationSyncService : IDisposable
                     _logger.LogWarning(
                         "Authentication error for location {Id}, stopping sync (HTTP {StatusCode})",
                         location.Id, result.StatusCode);
-                    return (false, false); // Stop syncing
+                    return (SyncResult.Failed, false); // Failed, stop syncing
 
                 case FailureType.RateLimited:
                     // Rate limited by server - stop and wait
                     _logger.LogWarning(
                         "Server rate limited request (HTTP {StatusCode}), will retry later",
                         result.StatusCode);
-                    return (false, false); // Stop syncing
+                    return (SyncResult.Failed, false); // Failed, stop syncing
 
                 case FailureType.ServerError:
                     // Server error - might be temporary, continue with next
@@ -460,14 +717,14 @@ public class LocationSyncService : IDisposable
                     _logger.LogWarning(
                         "Server error for location {Id}: {Message} (HTTP {StatusCode})",
                         location.Id, result.Message, result.StatusCode);
-                    return (false, true); // Continue with next location
+                    return (SyncResult.Failed, true); // Failed, continue with next
 
                 default:
                     await _locationQueue.MarkLocationFailedAsync(location.Id, result.Message ?? "Unknown error");
                     _logger.LogWarning(
                         "Failed to sync location {Id}: {Message}",
                         location.Id, result.Message);
-                    return (false, true);
+                    return (SyncResult.Failed, true);
             }
         }
         catch (HttpRequestException ex)
@@ -475,19 +732,19 @@ public class LocationSyncService : IDisposable
             // Network error after all retries exhausted
             await _locationQueue.IncrementRetryCountAsync(location.Id);
             _logger.LogError(ex, "Network error syncing location {Id} after retries", location.Id);
-            return (false, true); // Continue with next
+            return (SyncResult.Failed, true); // Continue with next
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
         {
             await _locationQueue.IncrementRetryCountAsync(location.Id);
             _logger.LogWarning(ex, "Timeout syncing location {Id}", location.Id);
-            return (false, true);
+            return (SyncResult.Failed, true);
         }
         catch (Exception ex)
         {
-            await _locationQueue.MarkLocationFailedAsync(location.Id, $"Unexpected: {ex.Message}");
+            await _locationQueue.MarkLocationFailedAsync(location.Id, $"Unexpected: {SanitizeErrorMessage(ex.Message)}");
             _logger.LogError(ex, "Unexpected error syncing location {Id}", location.Id);
-            return (false, true);
+            return (SyncResult.Failed, true);
         }
     }
 
@@ -498,7 +755,7 @@ public class LocationSyncService : IDisposable
     {
         try
         {
-            var purged = await _locationQueue.PurgeSyncedLocationsAsync(daysOld: 7);
+            var purged = await _locationQueue.PurgeSyncedLocationsAsync(daysOld: PurgeDaysOld);
             if (purged > 0)
             {
                 _logger.LogDebug("Purged {Count} old synced locations", purged);
@@ -556,17 +813,47 @@ public class LocationSyncService : IDisposable
 
     #endregion
 
+    #region Helpers
+
+    /// <summary>
+    /// Sanitizes exception messages for safe storage.
+    /// Truncates to maximum length and removes newlines.
+    /// </summary>
+    private static string SanitizeErrorMessage(string message)
+    {
+        if (string.IsNullOrEmpty(message))
+            return "Unknown error";
+
+        // Replace newlines with spaces
+        var sanitized = message.Replace('\n', ' ').Replace('\r', ' ');
+
+        // Truncate if too long
+        if (sanitized.Length > MaxErrorMessageLength)
+        {
+            sanitized = sanitized[..MaxErrorMessageLength] + "...";
+        }
+
+        return sanitized;
+    }
+
+    #endregion
+
     #region IDisposable
 
     /// <summary>
-    /// Disposes resources.
+    /// Disposes resources. Calls Stop() first to ensure graceful shutdown.
+    /// Thread-safe - uses Interlocked to prevent double-dispose race.
     /// </summary>
     public void Dispose()
     {
-        if (_disposed)
+        // Thread-safe check-and-set to prevent double-dispose race
+        if (Interlocked.Exchange(ref _disposeGuard, 1) != 0)
             return;
 
-        _disposed = true;
+        // Stop first to wait for in-progress operations and stop timers
+        Stop();
+
+        _cancellationTokenSource?.Dispose();
         _syncTimer?.Dispose();
         _cleanupTimer?.Dispose();
         _syncLock.Dispose();

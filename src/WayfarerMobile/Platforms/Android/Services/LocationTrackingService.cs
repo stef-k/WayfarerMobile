@@ -1167,6 +1167,10 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         {
             await _databaseService.QueueLocationAsync(location);
             Log.Debug(LogTag, $"Queued for sync: {location}");
+
+            // Notify that location was queued - used by LocalTimelineStorageService
+            // to store with correct coordinates (may differ from broadcast when using best-wake-sample)
+            LocationServiceCallbacks.NotifyLocationQueued(location);
         }
         catch (SQLiteException ex)
         {

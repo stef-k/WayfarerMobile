@@ -26,7 +26,7 @@ public class DatabaseService : IAsyncDisposable
 
     private const string DatabaseFilename = "wayfarer.db3";
     private const int MaxQueuedLocations = 25000;
-    private const int CurrentSchemaVersion = 2; // Increment when schema changes
+    private const int CurrentSchemaVersion = 3; // Increment when schema changes
     private const string SchemaVersionKey = "db_schema_version";
 
     private static readonly SQLiteOpenFlags DbFlags =
@@ -126,9 +126,37 @@ public class DatabaseService : IAsyncDisposable
         // Run migrations in order
         // Note: Version 2 migration removed - no users to migrate from legacy Status field
 
+        // Version 3: Add composite index for efficient claim queries
+        if (currentVersion < 3)
+        {
+            await MigrateToVersion3Async();
+        }
+
         // Update schema version
         await SetSchemaVersionAsync(CurrentSchemaVersion);
         Console.WriteLine($"[DatabaseService] Migration complete. Schema version: {CurrentSchemaVersion}");
+    }
+
+    /// <summary>
+    /// Migration to version 3: Add composite index for efficient location claim queries.
+    /// </summary>
+    private async Task MigrateToVersion3Async()
+    {
+        Console.WriteLine("[DatabaseService] Running migration to version 3: Adding composite index");
+
+        // Create composite index for efficient claim queries:
+        // WHERE SyncStatus = Pending AND IsRejected = 0 ORDER BY Timestamp
+        // This dramatically improves ClaimPendingLocationsAsync performance
+        await _database!.ExecuteAsync(
+            @"CREATE INDEX IF NOT EXISTS IX_QueuedLocations_SyncStatus_IsRejected_Timestamp
+              ON QueuedLocations (SyncStatus, IsRejected, Timestamp)");
+
+        // Also add index for ServerConfirmed recovery queries
+        await _database.ExecuteAsync(
+            @"CREATE INDEX IF NOT EXISTS IX_QueuedLocations_ServerConfirmed
+              ON QueuedLocations (ServerConfirmed) WHERE ServerConfirmed = 1");
+
+        Console.WriteLine("[DatabaseService] Version 3 migration complete");
     }
 
     /// <summary>
@@ -180,21 +208,31 @@ public class DatabaseService : IAsyncDisposable
     /// For DI-enabled services, use <see cref="WayfarerMobile.Data.Repositories.ILocationQueueRepository"/>.
     /// </summary>
     /// <param name="location">The location data to queue.</param>
+    /// <exception cref="ArgumentException">Thrown when coordinates are invalid.</exception>
     public async Task QueueLocationAsync(LocationData location)
     {
+        // Validate coordinates to prevent corrupted data (parity with LocationQueueRepository)
+        if (!IsValidCoordinate(location.Latitude, location.Longitude))
+        {
+            throw new ArgumentException(
+                $"Invalid coordinates: Lat={location.Latitude}, Lon={location.Longitude}. " +
+                "Coordinates must be finite numbers within valid ranges.");
+        }
+
         await EnsureInitializedAsync();
 
         var queued = new QueuedLocation
         {
             Latitude = location.Latitude,
             Longitude = location.Longitude,
-            Altitude = location.Altitude,
-            Accuracy = location.Accuracy,
-            Speed = location.Speed,
-            Bearing = location.Bearing,
+            Altitude = SanitizeOptionalDouble(location.Altitude),
+            Accuracy = SanitizeOptionalDouble(location.Accuracy),
+            Speed = SanitizeOptionalDouble(location.Speed),
+            Bearing = SanitizeOptionalDouble(location.Bearing),
             Timestamp = location.Timestamp,
             Provider = location.Provider,
-            SyncStatus = SyncStatus.Pending
+            SyncStatus = SyncStatus.Pending,
+            IdempotencyKey = Guid.NewGuid().ToString("N")
         };
 
         await _database!.InsertAsync(queued);
@@ -205,20 +243,77 @@ public class DatabaseService : IAsyncDisposable
     }
 
     /// <summary>
-    /// Cleans up old locations if queue is too large.
+    /// Validates that latitude and longitude are valid, finite numbers within range.
     /// </summary>
+    private static bool IsValidCoordinate(double latitude, double longitude)
+    {
+        // Check for NaN, Infinity
+        if (double.IsNaN(latitude) || double.IsInfinity(latitude) ||
+            double.IsNaN(longitude) || double.IsInfinity(longitude))
+        {
+            return false;
+        }
+
+        // Check valid ranges
+        if (latitude < -90 || latitude > 90 ||
+            longitude < -180 || longitude > 180)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Sanitizes optional double values, replacing NaN/Infinity with null.
+    /// </summary>
+    private static double? SanitizeOptionalDouble(double? value)
+    {
+        if (value == null)
+            return null;
+
+        if (double.IsNaN(value.Value) || double.IsInfinity(value.Value))
+            return null;
+
+        return value;
+    }
+
+    /// <summary>
+    /// Cleans up old locations if queue is at capacity.
+    /// Gradual deletion: removes just 1 location to make room for new one.
+    /// Priority: 1) Oldest Synced, 2) Oldest Rejected, 3) Oldest Pending (last resort).
+    /// </summary>
+    /// <remarks>
+    /// Note: This logic is duplicated in <see cref="Repositories.LocationQueueRepository.CleanupOldLocationsAsync"/>.
+    /// The duplication is intentional - DatabaseService serves platform services that can't use DI,
+    /// while LocationQueueRepository serves DI-enabled services. Both are thread-safe via SQLite
+    /// subquery-based deletion (concurrent calls safely delete different or same rows).
+    /// </remarks>
     private async Task CleanupOldLocationsAsync()
     {
         var count = await _database!.Table<QueuedLocation>().CountAsync();
-        if (count > MaxQueuedLocations)
-        {
-            // Remove oldest synced locations first
-            await _database.ExecuteAsync(
-                "DELETE FROM QueuedLocations WHERE Id IN (SELECT Id FROM QueuedLocations WHERE SyncStatus = ? ORDER BY Timestamp LIMIT ?)",
-                (int)SyncStatus.Synced, count - MaxQueuedLocations + 1000);
+        if (count < MaxQueuedLocations)
+            return;
 
-            Console.WriteLine("[DatabaseService] Cleaned up old synced locations");
-        }
+        // 1. Try to delete 1 oldest synced location (safe - already uploaded)
+        var deleted = await _database.ExecuteAsync(
+            "DELETE FROM QueuedLocations WHERE Id = (SELECT Id FROM QueuedLocations WHERE SyncStatus = ? ORDER BY Timestamp LIMIT 1)",
+            (int)SyncStatus.Synced);
+
+        if (deleted > 0)
+            return;
+
+        // 2. Try to delete 1 oldest rejected location (safe - won't sync anyway)
+        deleted = await _database.ExecuteAsync(
+            "DELETE FROM QueuedLocations WHERE Id = (SELECT Id FROM QueuedLocations WHERE IsRejected = 1 ORDER BY Timestamp LIMIT 1)");
+
+        if (deleted > 0)
+            return;
+
+        // 3. Last resort: delete 1 oldest pending location (DATA LOSS - but prevents unbounded growth)
+        await _database.ExecuteAsync(
+            "DELETE FROM QueuedLocations WHERE Id = (SELECT Id FROM QueuedLocations WHERE SyncStatus = ? ORDER BY Timestamp LIMIT 1)",
+            (int)SyncStatus.Pending);
     }
 
     #endregion
@@ -258,8 +353,10 @@ public class DatabaseService : IAsyncDisposable
 
             return defaultValue;
         }
-        catch
+        catch (Exception ex)
         {
+            // Log parse failures for diagnostics (previously silent)
+            Console.WriteLine($"[DatabaseService] Failed to parse setting '{key}' as {typeof(T).Name}: {ex.Message}");
             return defaultValue;
         }
     }

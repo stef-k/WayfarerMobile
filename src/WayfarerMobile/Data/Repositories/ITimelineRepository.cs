@@ -30,13 +30,19 @@ public interface ITimelineRepository
     Task DeleteLocalTimelineEntryAsync(int id);
 
     /// <summary>
-    /// Deletes a local timeline entry by timestamp.
+    /// Deletes a local timeline entry by timestamp and coordinates.
     /// Uses a tolerance window to handle minor timestamp differences.
     /// </summary>
     /// <param name="timestamp">The timestamp to match (UTC).</param>
+    /// <param name="latitude">The latitude to match.</param>
+    /// <param name="longitude">The longitude to match.</param>
     /// <param name="toleranceSeconds">Tolerance window in seconds (default 2).</param>
     /// <returns>Number of entries deleted.</returns>
-    Task<int> DeleteLocalTimelineEntryByTimestampAsync(DateTime timestamp, int toleranceSeconds = 2);
+    Task<int> DeleteLocalTimelineEntryByTimestampAsync(
+        DateTime timestamp,
+        double latitude,
+        double longitude,
+        int toleranceSeconds = 2);
 
     #endregion
 
@@ -121,20 +127,34 @@ public interface ITimelineRepository
     #region Sync Operations
 
     /// <summary>
-    /// Updates the ServerId for a local timeline entry matched by timestamp.
+    /// Updates the ServerId for a local timeline entry matched by timestamp and coordinates.
     /// Used when sync confirms a location was stored on server.
     /// </summary>
     /// <param name="timestamp">The timestamp to match (UTC).</param>
+    /// <param name="latitude">The latitude to match.</param>
+    /// <param name="longitude">The longitude to match.</param>
     /// <param name="serverId">The server-assigned ID.</param>
     /// <param name="toleranceSeconds">Tolerance window in seconds (default 2).</param>
     /// <returns>True if an entry was updated.</returns>
-    Task<bool> UpdateLocalTimelineServerIdAsync(DateTime timestamp, int serverId, int toleranceSeconds = 2);
+    Task<bool> UpdateLocalTimelineServerIdAsync(
+        DateTime timestamp,
+        double latitude,
+        double longitude,
+        int serverId,
+        int toleranceSeconds = 2);
 
     /// <summary>
     /// Gets the total count of local timeline entries.
     /// </summary>
     /// <returns>The count of entries.</returns>
     Task<int> GetLocalTimelineEntryCountAsync();
+
+    /// <summary>
+    /// Gets local timeline entries missing ServerId for reconciliation.
+    /// </summary>
+    /// <param name="sinceTimestamp">Optional: only return entries after this timestamp.</param>
+    /// <returns>List of entries with ServerId = null.</returns>
+    Task<List<LocalTimelineEntry>> GetEntriesMissingServerIdAsync(DateTime? sinceTimestamp = null);
 
     #endregion
 }
