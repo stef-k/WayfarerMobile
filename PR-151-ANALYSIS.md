@@ -19,11 +19,11 @@ PR #151 addresses a race condition between `LocationSyncService` and `QueueDrain
 | Race Conditions | 0 | 0 | 0 | 0 |
 | Deadlocks | 0 | 0 | 0 | 0 |
 | Error Handling | ~~1~~ 0 | ~~1~~ 0 | 0 | 0 |
-| Data Integrity | 0 | 0 | 1 | 0 |
+| Data Integrity | 0 | 0 | ~~1~~ 0 | 1 |
 | Architecture | 0 | ~~1~~ 0 | 3 | 2 |
-| **Total** | **~~1~~ 0** | **~~2~~ 0** | **4** | **2** |
+| **Total** | **~~1~~ 0** | **~~2~~ 0** | **~~4~~ 3** | **3** |
 
-> **Note:** Issues #1, #2, and #3 have been fixed in this PR.
+> **Note:** Issues #1, #2, #3 have been fixed. Issue #4 verified - server implements idempotency.
 
 ---
 
@@ -43,8 +43,8 @@ PR #151 addresses a race condition between `LocationSyncService` and `QueueDrain
 
 ### Medium Priority (Consider Fixing)
 
-- [ ] **#4 Crash Window API→ServerConfirmed** - `LocationSyncService.cs:646-648`
-  - Verify server implements idempotency on `IdempotencyKey` header
+- [x] **#4 Crash Window API→ServerConfirmed** - `LocationSyncService.cs:646-648`
+  - ✅ VERIFIED: Server implements full idempotency on `Idempotency-Key` header (both `/check-in` and `/log-location` endpoints)
 - [ ] **#5 No Per-Location Retry Limit** - `LocationQueueRepository.cs`, `QueuedLocation.cs`
   - Add max retry count (e.g., 100) to prevent 300-day retry loops
 - [ ] **#6 InitializeAsync() Fire-and-Forget** - `App.xaml.cs:209-212`
@@ -169,7 +169,7 @@ public void Start()
 
 ### 4. Crash Window Between API Success and ServerConfirmed
 
-**Severity:** MEDIUM
+**Severity:** ~~MEDIUM~~ LOW (verified)
 **File:** `src/WayfarerMobile/Services/LocationSyncService.cs:646-648`
 
 **Scenario:**
@@ -183,7 +183,12 @@ public void Start()
 
 **Mitigation:** The `IdempotencyKey` is sent with each request.
 
-**Action Required:** Verify server implements idempotency on this key. If yes, this becomes LOW severity.
+**✅ VERIFIED:** Server implements full idempotency on both endpoints:
+- `/api/location/check-in` - Checks `Idempotency-Key` header, returns existing location if found
+- `/api/location/log-location` - Same pattern, plus handles `DbUpdateException` for race conditions
+- Implementation in `LocationController.cs` (lines 85-107, 482-504, 673-685)
+
+**Result:** This is a non-issue. Retried locations will be deduplicated by the server.
 
 ---
 
@@ -401,7 +406,7 @@ Queue Drain (QueueDrainService):
 
 ### Consider (Medium Priority)
 
-- [ ] **#4:** Verify server implements idempotency on `IdempotencyKey` header
+- [x] **#4:** ~~Verify server implements idempotency on `IdempotencyKey` header~~ ✅ VERIFIED - Server implements full idempotency
 - [ ] **#5:** Add per-location max retry count (e.g., 100 attempts)
 - [ ] **#6:** Properly await `InitializeAsync()` in App.xaml.cs
 - [ ] **#7:** Remove unnecessary MainThread dispatch for DB-only operations
