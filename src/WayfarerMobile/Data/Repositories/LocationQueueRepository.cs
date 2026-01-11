@@ -335,9 +335,10 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
             // Atomic claim: only succeeds if row is still Pending
             var updated = await db.ExecuteAsync(
                 @"UPDATE QueuedLocations
-                  SET SyncStatus = ?, LastSyncAttempt = ?
+                  SET SyncStatus = ?, LastSyncAttempt = ?,
+                      IdempotencyKey = COALESCE(IdempotencyKey, ?)
                   WHERE Id = ? AND SyncStatus = ?",
-                (int)SyncStatus.Syncing, now, id, (int)SyncStatus.Pending);
+                (int)SyncStatus.Syncing, now, Guid.NewGuid().ToString("N"), id, (int)SyncStatus.Pending);
 
             if (updated > 0)
             {
@@ -381,8 +382,11 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
         // Also update LastSyncAttempt for consistency with ClaimPendingLocationsAsync
         var now = DateTime.UtcNow;
         var updated = await db.ExecuteAsync(
-            "UPDATE QueuedLocations SET SyncStatus = ?, LastSyncAttempt = ? WHERE Id = ? AND SyncStatus = ?",
-            (int)SyncStatus.Syncing, now, location.Id, (int)SyncStatus.Pending);
+            @"UPDATE QueuedLocations
+              SET SyncStatus = ?, LastSyncAttempt = ?,
+                  IdempotencyKey = COALESCE(IdempotencyKey, ?)
+              WHERE Id = ? AND SyncStatus = ?",
+            (int)SyncStatus.Syncing, now, Guid.NewGuid().ToString("N"), location.Id, (int)SyncStatus.Pending);
 
         if (updated == 0)
         {

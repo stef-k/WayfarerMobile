@@ -621,7 +621,7 @@ public class LocationSyncService : IDisposable
 
             // Use Polly retry for transient network failures
             var result = await _retryPipeline.ExecuteAsync(async ct =>
-                await _apiClient.LogLocationAsync(request, ct), cancellationToken);
+                await _apiClient.LogLocationAsync(request, location.IdempotencyKey, ct), cancellationToken);
 
             if (result.Success)
             {

@@ -96,15 +96,21 @@ public class ApiClient : IApiClient, IVisitApiClient
     public bool IsConfigured => _settings.IsConfigured;
 
     /// <inheritdoc/>
-    public async Task<ApiResult> LogLocationAsync(LocationLogRequest location, CancellationToken cancellationToken = default)
+    public async Task<ApiResult> LogLocationAsync(
+        LocationLogRequest location,
+        string? idempotencyKey,
+        CancellationToken cancellationToken = default)
     {
-        return await SendLocationAsync("/api/location/log-location", location, cancellationToken);
+        return await SendLocationAsync("/api/location/log-location", location, idempotencyKey, cancellationToken);
     }
 
     /// <inheritdoc/>
-    public async Task<ApiResult> CheckInAsync(LocationLogRequest location, CancellationToken cancellationToken = default)
+    public async Task<ApiResult> CheckInAsync(
+        LocationLogRequest location,
+        string? idempotencyKey,
+        CancellationToken cancellationToken = default)
     {
-        return await SendLocationAsync("/api/location/check-in", location, cancellationToken);
+        return await SendLocationAsync("/api/location/check-in", location, idempotencyKey, cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -1094,6 +1100,7 @@ public class ApiClient : IApiClient, IVisitApiClient
     private async Task<ApiResult> SendLocationAsync(
         string endpoint,
         LocationLogRequest location,
+        string? idempotencyKey,
         CancellationToken cancellationToken)
     {
         if (!IsConfigured)
@@ -1118,6 +1125,10 @@ public class ApiClient : IApiClient, IVisitApiClient
             };
 
             var request = CreateRequest(HttpMethod.Post, endpoint);
+            if (!string.IsNullOrWhiteSpace(idempotencyKey))
+            {
+                request.Headers.TryAddWithoutValidation("Idempotency-Key", idempotencyKey);
+            }
             request.Content = JsonContent.Create(payload, options: JsonOptions);
 
             _logger.LogDebug("Sending location to {Endpoint}: ({Lat}, {Lon})",

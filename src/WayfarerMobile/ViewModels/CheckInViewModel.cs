@@ -241,7 +241,7 @@ public partial class CheckInViewModel : BaseViewModel
                 Notes = string.IsNullOrWhiteSpace(Notes) ? null : Notes.Trim()
             };
 
-            var result = await _apiClient.CheckInAsync(request);
+            var result = await _apiClient.CheckInAsync(request, Guid.NewGuid().ToString("N"));
 
             IsSubmitting = false;
 

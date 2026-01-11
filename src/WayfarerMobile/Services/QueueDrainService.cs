@@ -495,7 +495,7 @@ public sealed class QueueDrainService : IDisposable
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
                 cancellationToken, timeoutCts.Token);
 
-            var result = await _apiClient.CheckInAsync(request, linkedCts.Token);
+            var result = await _apiClient.CheckInAsync(request, location.IdempotencyKey, linkedCts.Token);
 
             if (result.Success)
             {

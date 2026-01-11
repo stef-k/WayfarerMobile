@@ -84,7 +84,7 @@ public class NotificationActionReceiver : BroadcastReceiver
 
             // Perform check-in (bypasses thresholds)
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            var result = await apiClient.CheckInAsync(request, cts.Token);
+            var result = await apiClient.CheckInAsync(request, Guid.NewGuid().ToString("N"), cts.Token);
 
             if (result.Success)
             {
