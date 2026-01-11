@@ -668,8 +668,8 @@ private async Task EnsureInitializedAsync()
 // Queue a location
 await _databaseService.QueueLocationAsync(locationData);
 
-// Get pending locations for sync
-var pending = await _databaseService.GetPendingLocationsAsync(limit: 100);
+// Claim pending locations for sync (repository)
+var claimed = await _locationQueueRepository.ClaimPendingLocationsAsync(limit: 100);
 
 // Mark as synced
 await _databaseService.MarkLocationSyncedAsync(id);
