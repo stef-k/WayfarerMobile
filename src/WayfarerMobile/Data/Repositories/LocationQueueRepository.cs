@@ -95,18 +95,6 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
     }
 
     /// <inheritdoc />
-    public async Task<List<QueuedLocation>> GetPendingLocationsAsync(int limit = 100)
-    {
-        var db = await GetConnectionAsync();
-
-        return await db.Table<QueuedLocation>()
-            .Where(l => l.SyncStatus == SyncStatus.Pending && !l.IsRejected)
-            .OrderBy(l => l.Timestamp)
-            .Take(limit)
-            .ToListAsync();
-    }
-
-    /// <inheritdoc />
     public async Task<List<QueuedLocation>> GetLocationsForDateAsync(DateTime date)
     {
         var db = await GetConnectionAsync();

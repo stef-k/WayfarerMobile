@@ -18,14 +18,6 @@ public interface ILocationQueueRepository
     Task QueueLocationAsync(LocationData location);
 
     /// <summary>
-    /// Gets all pending locations for synchronization.
-    /// Excludes rejected locations (they should not be retried).
-    /// </summary>
-    /// <param name="limit">Maximum number of locations to retrieve.</param>
-    /// <returns>List of pending locations.</returns>
-    Task<List<QueuedLocation>> GetPendingLocationsAsync(int limit = 100);
-
-    /// <summary>
     /// Gets all locations for a specific date.
     /// </summary>
     /// <param name="date">The date to retrieve locations for.</param>
