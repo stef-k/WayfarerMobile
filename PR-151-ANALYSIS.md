@@ -48,7 +48,7 @@ PR #151 addresses a race condition between `LocationSyncService` and `QueueDrain
 - [x] **#5 No Per-Location Retry Limit** - `LocationQueueRepository.cs`, `QueuedLocation.cs`
   - ✅ BY DESIGN: 300-day retention is intentional for extended offline periods
 - [x] **#6 InitializeAsync() Fire-and-Forget** - `App.xaml.cs:209-212`
-  - ✅ ACCEPTABLE: Standard pattern for non-critical startup; errors logged internally
+  - ✅ IMPROVED: Added `SafeFireAndForget()` helper for explicit exception logging
 - [x] **#7 MainThread→Background Double-Hop** - `LocationSyncCallbacks.cs`, `LocalTimelineStorageService.cs`
   - ✅ ACCEPTABLE: Ensures UI safety for all subscribers; overhead is negligible
 - [x] **#8 Combined Rate Limiting** - `LocationSyncService.cs`, `QueueDrainService.cs`
@@ -210,17 +210,22 @@ public void Start()
 
 ### 6. LocalTimelineStorageService.InitializeAsync() Fire-and-Forget
 
-**Severity:** ~~MEDIUM~~ N/A (acceptable)
+**Severity:** ~~MEDIUM~~ N/A (improved)
 **File:** `App.xaml.cs:209-212`
 
+**Original Code:**
 ```csharp
-var timelineStorageService = _serviceProvider.GetService<LocalTimelineStorageService>();
-_ = timelineStorageService?.InitializeAsync();  // Fire-and-forget
+_ = timelineStorageService?.InitializeAsync();  // Fire-and-forget, exception unobserved
 ```
 
 **Original Concern:** If initialization fails, the service won't subscribe to events but no error propagates.
 
-**✅ ACCEPTABLE:** This is a standard pattern for non-critical startup initialization. The service logs errors internally, and the app remains functional even if this specific feature fails. Blocking app startup for non-essential features would degrade UX.
+**✅ IMPROVED:** Added `SafeFireAndForget()` helper method that wraps fire-and-forget calls with proper exception logging:
+```csharp
+SafeFireAndForget(timelineStorageService?.InitializeAsync(), "LocalTimelineStorageService");
+```
+
+This ensures exceptions are explicitly logged via `ILogger` rather than becoming unobserved task exceptions.
 
 ---
 
@@ -391,7 +396,7 @@ Queue Drain (QueueDrainService):
 
 - [x] **#4:** ~~Verify server implements idempotency on `IdempotencyKey` header~~ ✅ VERIFIED - Server implements full idempotency
 - [x] **#5:** ~~Add per-location max retry count~~ ✅ BY DESIGN - 300-day retention intentional for extended offline
-- [x] **#6:** ~~Properly await `InitializeAsync()`~~ ✅ ACCEPTABLE - Standard non-blocking startup pattern
+- [x] **#6:** ~~Properly await `InitializeAsync()`~~ ✅ IMPROVED - Added `SafeFireAndForget()` helper
 - [x] **#7:** ~~Remove MainThread dispatch~~ ✅ ACCEPTABLE - Ensures UI safety, negligible overhead
 - [x] **#8:** ~~Monitor combined rate limiting~~ ✅ N/A - Server supports 10s (Wayfarer#82), mobile update in #101
 
