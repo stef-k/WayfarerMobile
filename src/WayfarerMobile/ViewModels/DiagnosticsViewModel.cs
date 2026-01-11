@@ -65,8 +65,10 @@ public partial class DiagnosticsViewModel : BaseViewModel
         {
             _locationBridge.StateChanged += OnLocationStateChanged;
             _locationBridge.LocationReceived += OnLocationReceived;
+            LocationSyncCallbacks.LocationSynced += OnLocationSynced;
+            LocationSyncCallbacks.LocationSkipped += OnLocationSkipped;
             _isSubscribed = true;
-            _logger.LogDebug("Subscribed to location bridge events");
+            _logger.LogDebug("Subscribed to location and sync events");
 
             // Initialize from current state immediately
             var currentState = _locationBridge.CurrentState;
@@ -84,8 +86,10 @@ public partial class DiagnosticsViewModel : BaseViewModel
         {
             _locationBridge.StateChanged -= OnLocationStateChanged;
             _locationBridge.LocationReceived -= OnLocationReceived;
+            LocationSyncCallbacks.LocationSynced -= OnLocationSynced;
+            LocationSyncCallbacks.LocationSkipped -= OnLocationSkipped;
             _isSubscribed = false;
-            _logger.LogDebug("Unsubscribed from location bridge events");
+            _logger.LogDebug("Unsubscribed from location and sync events");
         }
     }
 
@@ -130,6 +134,39 @@ public partial class DiagnosticsViewModel : BaseViewModel
                 UpdateHealthStatusFromCurrentState();
             }
         });
+    }
+
+    /// <summary>
+    /// Handles location sync completion to refresh queue statistics in real-time.
+    /// </summary>
+    private async void OnLocationSynced(object? sender, LocationSyncedEventArgs e)
+    {
+        await RefreshQueueStatisticsAsync();
+    }
+
+    /// <summary>
+    /// Handles location skip events to refresh queue statistics in real-time.
+    /// </summary>
+    private async void OnLocationSkipped(object? sender, LocationSkippedEventArgs e)
+    {
+        await RefreshQueueStatisticsAsync();
+    }
+
+    /// <summary>
+    /// Refreshes queue statistics from the database.
+    /// Called by sync event handlers for real-time updates.
+    /// </summary>
+    private async Task RefreshQueueStatisticsAsync()
+    {
+        try
+        {
+            var queueDiag = await _appDiagnosticService.GetLocationQueueDiagnosticsAsync();
+            UpdateLocationQueue(queueDiag);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Error refreshing queue statistics after sync event");
+        }
     }
 
     /// <summary>

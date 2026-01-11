@@ -20,10 +20,10 @@ PR #151 addresses a race condition between `LocationSyncService` and `QueueDrain
 | Deadlocks | 0 | 0 | 0 | 0 |
 | Error Handling | ~~1~~ 0 | ~~1~~ 0 | 0 | 0 |
 | Data Integrity | 0 | 0 | ~~1~~ 0 | ~~1~~ 0 |
-| Architecture | 0 | ~~1~~ 0 | ~~3~~ 0 | 2 |
-| **Total** | **0** | **0** | **0** | **2** |
+| Architecture | 0 | ~~1~~ 0 | ~~3~~ 0 | ~~2~~ 1 |
+| **Total** | **0** | **0** | **0** | **1** |
 
-> **All critical/high/medium issues resolved.** #1-#3 fixed. #4-#8 verified as non-issues or acceptable patterns. Only #9-#10 remain as minor low-priority items.
+> **All issues resolved except #9** (cosmetic). #1-#3 fixed. #4-#8 verified. #6, #10 improved. Only #9 remains (optional).
 
 ---
 
@@ -58,8 +58,8 @@ PR #151 addresses a race condition between `LocationSyncService` and `QueueDrain
 
 - [ ] **#9 `_consecutiveFailures` Not Atomic** - `QueueDrainService.cs:107, 518, 540`
   - Use `Interlocked.Increment`/`Exchange` for thread safety clarity
-- [ ] **#10 DiagnosticsViewModel No Real-Time Updates** - `DiagnosticsViewModel.cs`
-  - Subscribe to sync callbacks for real-time queue statistics
+- [x] **#10 DiagnosticsViewModel No Real-Time Updates** - `DiagnosticsViewModel.cs`
+  - ✅ IMPLEMENTED: Subscribed to `LocationSyncCallbacks` for real-time queue stats
 
 ---
 
@@ -279,12 +279,12 @@ _consecutiveFailures++;    // Increment
 
 ### 10. DiagnosticsViewModel No Real-Time Updates
 
-**Severity:** LOW
+**Severity:** ~~LOW~~ N/A (implemented)
 **File:** `src/WayfarerMobile/ViewModels/DiagnosticsViewModel.cs`
 
-**Issue:** Queue state changes (sync success/failure) don't trigger ViewModel refresh. User sees stale data until manual refresh.
+**Original Issue:** Queue state changes (sync success/failure) don't trigger ViewModel refresh. User sees stale data until manual refresh.
 
-**Recommendation:** Consider subscribing to sync callbacks for real-time updates.
+**✅ IMPLEMENTED:** Added subscription to `LocationSyncCallbacks.LocationSynced` and `LocationSyncCallbacks.LocationSkipped` in `OnAppearing()` with proper cleanup in `OnDisappearing()`. Queue statistics now refresh automatically after each sync event.
 
 ---
 
@@ -402,8 +402,8 @@ Queue Drain (QueueDrainService):
 
 ### Low Priority
 
-- [ ] **#9:** Use `Interlocked` for `_consecutiveFailures`
-- [ ] **#10:** Add real-time updates to DiagnosticsViewModel
+- [ ] **#9:** Use `Interlocked` for `_consecutiveFailures` (cosmetic - already thread-safe via lock)
+- [x] **#10:** ~~Add real-time updates to DiagnosticsViewModel~~ ✅ IMPLEMENTED
 
 ---
 
