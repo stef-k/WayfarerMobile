@@ -28,7 +28,7 @@ public class LocationSyncService : IDisposable
     private readonly object _startStopLock = new();
     private CancellationTokenSource? _cancellationTokenSource;
     private volatile bool _isSyncing;
-    private bool _disposed;
+    private int _disposeGuard; // For thread-safe Dispose via Interlocked
 
     // Rate limiting tracking
     private DateTime _lastSyncTime = DateTime.MinValue;
@@ -805,16 +805,17 @@ public class LocationSyncService : IDisposable
 
     /// <summary>
     /// Disposes resources. Calls Stop() first to ensure graceful shutdown.
+    /// Thread-safe - uses Interlocked to prevent double-dispose race.
     /// </summary>
     public void Dispose()
     {
-        if (_disposed)
+        // Thread-safe check-and-set to prevent double-dispose race
+        if (Interlocked.Exchange(ref _disposeGuard, 1) != 0)
             return;
 
         // Stop first to wait for in-progress operations and stop timers
         Stop();
 
-        _disposed = true;
         _cancellationTokenSource?.Dispose();
         _syncTimer?.Dispose();
         _cleanupTimer?.Dispose();

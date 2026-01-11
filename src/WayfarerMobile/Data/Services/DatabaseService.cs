@@ -208,21 +208,31 @@ public class DatabaseService : IAsyncDisposable
     /// For DI-enabled services, use <see cref="WayfarerMobile.Data.Repositories.ILocationQueueRepository"/>.
     /// </summary>
     /// <param name="location">The location data to queue.</param>
+    /// <exception cref="ArgumentException">Thrown when coordinates are invalid.</exception>
     public async Task QueueLocationAsync(LocationData location)
     {
+        // Validate coordinates to prevent corrupted data (parity with LocationQueueRepository)
+        if (!IsValidCoordinate(location.Latitude, location.Longitude))
+        {
+            throw new ArgumentException(
+                $"Invalid coordinates: Lat={location.Latitude}, Lon={location.Longitude}. " +
+                "Coordinates must be finite numbers within valid ranges.");
+        }
+
         await EnsureInitializedAsync();
 
         var queued = new QueuedLocation
         {
             Latitude = location.Latitude,
             Longitude = location.Longitude,
-            Altitude = location.Altitude,
-            Accuracy = location.Accuracy,
-            Speed = location.Speed,
-            Bearing = location.Bearing,
+            Altitude = SanitizeOptionalDouble(location.Altitude),
+            Accuracy = SanitizeOptionalDouble(location.Accuracy),
+            Speed = SanitizeOptionalDouble(location.Speed),
+            Bearing = SanitizeOptionalDouble(location.Bearing),
             Timestamp = location.Timestamp,
             Provider = location.Provider,
-            SyncStatus = SyncStatus.Pending
+            SyncStatus = SyncStatus.Pending,
+            IdempotencyKey = Guid.NewGuid().ToString("N")
         };
 
         await _database!.InsertAsync(queued);
@@ -233,10 +243,52 @@ public class DatabaseService : IAsyncDisposable
     }
 
     /// <summary>
+    /// Validates that latitude and longitude are valid, finite numbers within range.
+    /// </summary>
+    private static bool IsValidCoordinate(double latitude, double longitude)
+    {
+        // Check for NaN, Infinity
+        if (double.IsNaN(latitude) || double.IsInfinity(latitude) ||
+            double.IsNaN(longitude) || double.IsInfinity(longitude))
+        {
+            return false;
+        }
+
+        // Check valid ranges
+        if (latitude < -90 || latitude > 90 ||
+            longitude < -180 || longitude > 180)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Sanitizes optional double values, replacing NaN/Infinity with null.
+    /// </summary>
+    private static double? SanitizeOptionalDouble(double? value)
+    {
+        if (value == null)
+            return null;
+
+        if (double.IsNaN(value.Value) || double.IsInfinity(value.Value))
+            return null;
+
+        return value;
+    }
+
+    /// <summary>
     /// Cleans up old locations if queue is at capacity.
     /// Gradual deletion: removes just 1 location to make room for new one.
     /// Priority: 1) Oldest Synced, 2) Oldest Rejected, 3) Oldest Pending (last resort).
     /// </summary>
+    /// <remarks>
+    /// Note: This logic is duplicated in <see cref="Repositories.LocationQueueRepository.CleanupOldLocationsAsync"/>.
+    /// The duplication is intentional - DatabaseService serves platform services that can't use DI,
+    /// while LocationQueueRepository serves DI-enabled services. Both are thread-safe via SQLite
+    /// subquery-based deletion (concurrent calls safely delete different or same rows).
+    /// </remarks>
     private async Task CleanupOldLocationsAsync()
     {
         var count = await _database!.Table<QueuedLocation>().CountAsync();

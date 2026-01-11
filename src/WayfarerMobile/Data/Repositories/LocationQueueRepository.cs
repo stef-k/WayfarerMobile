@@ -192,13 +192,16 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
     {
         var db = await GetConnectionAsync();
 
+        // Reset SyncStatus to Pending so location can be retried
+        // Previously only tracked error without reset, requiring batch reset or periodic cleanup
         await db.ExecuteAsync(
             @"UPDATE QueuedLocations
-              SET SyncAttempts = SyncAttempts + 1,
+              SET SyncStatus = ?,
+                  SyncAttempts = SyncAttempts + 1,
                   LastSyncAttempt = ?,
                   LastError = ?
               WHERE Id = ?",
-            DateTime.UtcNow, error, id);
+            (int)SyncStatus.Pending, DateTime.UtcNow, error, id);
     }
 
     /// <inheritdoc />
@@ -231,9 +234,15 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
     {
         var db = await GetConnectionAsync();
 
+        // Reset SyncStatus to Pending so location can be retried
+        // Also increment attempt count for diagnostics
         await db.ExecuteAsync(
-            "UPDATE QueuedLocations SET SyncAttempts = SyncAttempts + 1, LastSyncAttempt = ? WHERE Id = ?",
-            DateTime.UtcNow, id);
+            @"UPDATE QueuedLocations
+              SET SyncStatus = ?,
+                  SyncAttempts = SyncAttempts + 1,
+                  LastSyncAttempt = ?
+              WHERE Id = ?",
+            (int)SyncStatus.Pending, DateTime.UtcNow, id);
     }
 
     /// <inheritdoc />

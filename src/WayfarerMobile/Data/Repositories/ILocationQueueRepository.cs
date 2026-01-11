@@ -65,7 +65,8 @@ public interface ILocationQueueRepository
     Task<int> MarkLocationsSyncedAsync(IEnumerable<int> ids);
 
     /// <summary>
-    /// Records a sync failure for diagnostics. Location stays Pending for retry.
+    /// Records a sync failure and resets SyncStatus to Pending for retry.
+    /// Increments SyncAttempts for diagnostics.
     /// </summary>
     /// <param name="id">The location ID.</param>
     /// <param name="error">The error message.</param>
@@ -86,7 +87,8 @@ public interface ILocationQueueRepository
     Task MarkLocationSyncingAsync(int id);
 
     /// <summary>
-    /// Increments the retry count for a location without marking it as failed.
+    /// Increments the retry count and resets SyncStatus to Pending for retry.
+    /// Used for transient failures (network errors, server errors) where retry is appropriate.
     /// </summary>
     /// <param name="id">The location ID.</param>
     Task IncrementRetryCountAsync(int id);
