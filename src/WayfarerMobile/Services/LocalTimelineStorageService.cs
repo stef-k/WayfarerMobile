@@ -182,34 +182,37 @@ public class LocalTimelineStorageService : IDisposable
     /// </summary>
     private async void OnLocationSynced(object? sender, LocationSyncedEventArgs e)
     {
-        try
+        _ = Task.Run(async () =>
         {
-            var updated = await _timelineRepository.UpdateLocalTimelineServerIdAsync(
-                e.Timestamp,
-                e.ServerId);
+            try
+            {
+                var updated = await _timelineRepository.UpdateLocalTimelineServerIdAsync(
+                    e.Timestamp,
+                    e.ServerId);
 
-            if (updated)
-            {
-                _logger.LogDebug(
-                    "Updated local entry with ServerId {ServerId} for timestamp {Timestamp:u}",
-                    e.ServerId,
-                    e.Timestamp);
+                if (updated)
+                {
+                    _logger.LogDebug(
+                        "Updated local entry with ServerId {ServerId} for timestamp {Timestamp:u}",
+                        e.ServerId,
+                        e.Timestamp);
+                }
+                else
+                {
+                    _logger.LogDebug(
+                        "No matching local entry found for timestamp {Timestamp:u} to update ServerId",
+                        e.Timestamp);
+                }
             }
-            else
+            catch (SQLiteException ex)
             {
-                _logger.LogDebug(
-                    "No matching local entry found for timestamp {Timestamp:u} to update ServerId",
-                    e.Timestamp);
+                _logger.LogError(ex, "Database error updating ServerId for synced location");
             }
-        }
-        catch (SQLiteException ex)
-        {
-            _logger.LogError(ex, "Database error updating ServerId for synced location");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error updating ServerId for synced location");
-        }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error updating ServerId for synced location");
+            }
+        });
     }
 
     /// <summary>
@@ -218,33 +221,36 @@ public class LocalTimelineStorageService : IDisposable
     /// </summary>
     private async void OnLocationSkipped(object? sender, LocationSkippedEventArgs e)
     {
-        try
+        _ = Task.Run(async () =>
         {
-            var deleted = await _timelineRepository.DeleteLocalTimelineEntryByTimestampAsync(e.Timestamp);
+            try
+            {
+                var deleted = await _timelineRepository.DeleteLocalTimelineEntryByTimestampAsync(e.Timestamp);
 
-            if (deleted > 0)
-            {
-                _logger.LogDebug(
-                    "Removed {Count} local entry for skipped location at {Timestamp:u}: {Reason}",
-                    deleted,
-                    e.Timestamp,
-                    e.Reason);
+                if (deleted > 0)
+                {
+                    _logger.LogDebug(
+                        "Removed {Count} local entry for skipped location at {Timestamp:u}: {Reason}",
+                        deleted,
+                        e.Timestamp,
+                        e.Reason);
+                }
+                else
+                {
+                    _logger.LogDebug(
+                        "No matching local entry found for skipped timestamp {Timestamp:u}",
+                        e.Timestamp);
+                }
             }
-            else
+            catch (SQLiteException ex)
             {
-                _logger.LogDebug(
-                    "No matching local entry found for skipped timestamp {Timestamp:u}",
-                    e.Timestamp);
+                _logger.LogError(ex, "Database error removing skipped location from local timeline");
             }
-        }
-        catch (SQLiteException ex)
-        {
-            _logger.LogError(ex, "Database error removing skipped location from local timeline");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error removing skipped location from local timeline");
-        }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error removing skipped location from local timeline");
+            }
+        });
     }
 
     /// <summary>
