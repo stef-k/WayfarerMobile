@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using SQLite;
 using WayfarerMobile.Core.Algorithms;
+using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
 using WayfarerMobile.Data.Repositories;
@@ -25,23 +26,37 @@ namespace WayfarerMobile.Services;
 public class LocalTimelineStorageService : IDisposable
 {
     private readonly ITimelineRepository _timelineRepository;
+    private readonly ILocationQueueRepository _locationQueue;
+    private readonly ISettingsService _settings;
     private readonly LocalTimelineFilter _filter;
     private readonly ILogger<LocalTimelineStorageService> _logger;
     private bool _isInitialized;
     private bool _disposed;
 
     /// <summary>
+    /// Time window for backfill/reconciliation operations (days).
+    /// Matches queue purge retention (7 days) to ensure no orphans.
+    /// </summary>
+    private const int BackfillWindowDays = 7;
+
+    /// <summary>
     /// Creates a new instance of LocalTimelineStorageService.
     /// </summary>
     /// <param name="timelineRepository">Repository for timeline operations.</param>
+    /// <param name="locationQueue">Repository for location queue operations.</param>
+    /// <param name="settings">Settings service for threshold values.</param>
     /// <param name="filter">Local timeline filter with AND logic.</param>
     /// <param name="logger">Logger instance.</param>
     public LocalTimelineStorageService(
         ITimelineRepository timelineRepository,
+        ILocationQueueRepository locationQueue,
+        ISettingsService settings,
         LocalTimelineFilter filter,
         ILogger<LocalTimelineStorageService> logger)
     {
         _timelineRepository = timelineRepository ?? throw new ArgumentNullException(nameof(timelineRepository));
+        _locationQueue = locationQueue ?? throw new ArgumentNullException(nameof(locationQueue));
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _filter = filter ?? throw new ArgumentNullException(nameof(filter));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -85,8 +100,16 @@ public class LocalTimelineStorageService : IDisposable
                 _logger.LogInformation("No previous timeline entries found, filter will accept first location");
             }
 
-            // Subscribe to events
+            // Subscribe to events BEFORE running recovery to avoid missing new events
             SubscribeToEvents();
+
+            // EDGE-14: Reconcile missing ServerIds from confirmed queue entries
+            // This handles crash recovery where API succeeded but callback didn't update local timeline
+            await ReconcileMissingServerIdsAsync();
+
+            // EDGE-1: Backfill any queue entries missed during initialization race
+            // This handles the case where background service queued locations before we subscribed
+            await BackfillMissedQueueEntriesAsync();
 
             _isInitialized = true;
             _logger.LogInformation("LocalTimelineStorageService initialized");
@@ -100,6 +123,204 @@ public class LocalTimelineStorageService : IDisposable
         {
             _logger.LogError(ex, "Unexpected error initializing LocalTimelineStorageService");
             throw;
+        }
+    }
+
+    /// <summary>
+    /// EDGE-14: Reconciles missing ServerIds on local timeline entries.
+    /// Matches confirmed queue entries (with ServerId) to local entries missing ServerId.
+    /// </summary>
+    private async Task ReconcileMissingServerIdsAsync()
+    {
+        try
+        {
+            var backfillSince = DateTime.UtcNow.AddDays(-BackfillWindowDays);
+
+            // Get local entries missing ServerId
+            var entriesMissingServerId = await _timelineRepository.GetEntriesMissingServerIdAsync(backfillSince);
+            if (entriesMissingServerId.Count == 0)
+            {
+                _logger.LogDebug("No local entries missing ServerId");
+                return;
+            }
+
+            // Get confirmed queue entries with ServerId
+            var confirmedEntries = await _locationQueue.GetConfirmedEntriesWithServerIdAsync(backfillSince);
+            if (confirmedEntries.Count == 0)
+            {
+                _logger.LogDebug("No confirmed queue entries with ServerId for reconciliation");
+                return;
+            }
+
+            // Build lookup by timestamp+coordinates for efficient matching
+            // Use ToLookup instead of ToDictionary to handle duplicate keys safely
+            var confirmedLookup = confirmedEntries
+                .Where(e => e.ServerId.HasValue)
+                .ToLookup(
+                    e => (e.Timestamp, e.Latitude, e.Longitude),
+                    e => e.ServerId!.Value);
+
+            var reconciled = 0;
+            foreach (var entry in entriesMissingServerId)
+            {
+                var key = (entry.Timestamp, entry.Latitude, entry.Longitude);
+                var serverIds = confirmedLookup[key];
+                // Note: Server IDs are always > 0 (auto-increment primary keys)
+                // Use Any() to safely check for matches without assuming ID values
+                if (serverIds.Any())
+                {
+                    var serverId = serverIds.First();
+                    var updated = await _timelineRepository.UpdateLocalTimelineServerIdAsync(
+                        entry.Timestamp,
+                        entry.Latitude,
+                        entry.Longitude,
+                        serverId);
+
+                    if (updated)
+                    {
+                        reconciled++;
+                    }
+                }
+            }
+
+            if (reconciled > 0)
+            {
+                _logger.LogInformation(
+                    "EDGE-14 reconciliation: Updated {Count} local entries with missing ServerId",
+                    reconciled);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Don't fail initialization for reconciliation errors
+            _logger.LogWarning(ex, "Error during ServerId reconciliation (non-fatal)");
+        }
+    }
+
+    /// <summary>
+    /// EDGE-1: Backfills local timeline entries for queue entries that may have been
+    /// missed during the initialization race (background service already running).
+    /// Uses isolated filter state to avoid racing with concurrent real-time events.
+    /// </summary>
+    private async Task BackfillMissedQueueEntriesAsync()
+    {
+        try
+        {
+            var backfillSince = DateTime.UtcNow.AddDays(-BackfillWindowDays);
+
+            // Get ALL non-rejected queue entries (pending/syncing/synced) - not just confirmed
+            // This ensures offline-first behavior: pending entries queued before subscription are included
+            var queuedLocations = await _locationQueue.GetNonRejectedEntriesForBackfillAsync(backfillSince);
+            if (queuedLocations.Count == 0)
+            {
+                _logger.LogDebug("No queue entries in backfill window");
+                return;
+            }
+
+            // Get existing local timeline entries in the same window
+            var existingEntries = await _timelineRepository.GetLocalTimelineEntriesInRangeAsync(
+                backfillSince, DateTime.UtcNow);
+
+            // Build lookup for existing entries by timestamp+coordinates
+            var existingLookup = new HashSet<(DateTime Timestamp, double Lat, double Lon)>(
+                existingEntries.Select(e => (e.Timestamp, e.Latitude, e.Longitude)));
+
+            // ISOLATED FILTER STATE: Don't modify main filter during backfill
+            // Track last backfilled location separately to avoid racing with concurrent events
+            // Initialize from main filter's current state (captures last stored location from DB)
+            var lastBackfillLocation = _filter.LastStoredLocation;
+
+            // Get threshold values for isolated filter logic
+            var timeThresholdMinutes = _settings.LocationTimeThresholdMinutes;
+            var distanceThresholdMeters = _settings.LocationDistanceThresholdMeters;
+
+            var backfilled = 0;
+            var filtered = 0;
+
+            // Process in timestamp order (queue entries already sorted by timestamp)
+            foreach (var queued in queuedLocations)
+            {
+                var key = (queued.Timestamp, queued.Latitude, queued.Longitude);
+                if (existingLookup.Contains(key))
+                {
+                    continue; // Already exists in local timeline
+                }
+
+                // Apply isolated filter logic (AND: both time AND distance must exceed threshold)
+                if (lastBackfillLocation != null)
+                {
+                    var timeDiff = queued.Timestamp - lastBackfillLocation.Timestamp;
+                    var timeExceeded = timeDiff.TotalMinutes >= timeThresholdMinutes;
+
+                    var distance = GeoMath.CalculateDistance(
+                        lastBackfillLocation.Latitude,
+                        lastBackfillLocation.Longitude,
+                        queued.Latitude,
+                        queued.Longitude);
+                    var distanceExceeded = distance >= distanceThresholdMeters;
+
+                    if (!timeExceeded || !distanceExceeded)
+                    {
+                        filtered++;
+                        continue; // Doesn't pass filter
+                    }
+                }
+
+                // Create the missing local entry
+                var entry = new LocalTimelineEntry
+                {
+                    Latitude = queued.Latitude,
+                    Longitude = queued.Longitude,
+                    Timestamp = queued.Timestamp,
+                    Accuracy = queued.Accuracy,
+                    Altitude = queued.Altitude,
+                    Speed = queued.Speed,
+                    Bearing = queued.Bearing,
+                    Provider = queued.Provider,
+                    ServerId = queued.ServerId, // May be null for pending entries, that's OK
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                await _timelineRepository.InsertLocalTimelineEntryAsync(entry);
+
+                // Update isolated filter state (not main filter)
+                lastBackfillLocation = new LocationData
+                {
+                    Latitude = queued.Latitude,
+                    Longitude = queued.Longitude,
+                    Timestamp = queued.Timestamp,
+                    Accuracy = queued.Accuracy,
+                    Altitude = queued.Altitude,
+                    Speed = queued.Speed,
+                    Bearing = queued.Bearing,
+                    Provider = queued.Provider
+                };
+
+                existingLookup.Add(key); // Prevent duplicates in this batch
+                backfilled++;
+            }
+
+            // Update main filter with the most recent backfilled location to prevent over-accept
+            // Real-time events will now correctly filter against backfilled entries
+            if (lastBackfillLocation != null && backfilled > 0)
+            {
+                _filter.MarkAsStored(lastBackfillLocation);
+                _logger.LogDebug(
+                    "Updated main filter with last backfilled location from {Timestamp:u}",
+                    lastBackfillLocation.Timestamp);
+            }
+
+            if (backfilled > 0 || filtered > 0)
+            {
+                _logger.LogInformation(
+                    "EDGE-1 backfill: Created {Backfilled} local timeline entries from queue ({Filtered} filtered)",
+                    backfilled, filtered);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Don't fail initialization for backfill errors
+            _logger.LogWarning(ex, "Error during queue backfill (non-fatal)");
         }
     }
 

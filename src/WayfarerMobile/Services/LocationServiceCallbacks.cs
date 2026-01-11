@@ -95,7 +95,14 @@ public static class LocationServiceCallbacks
         // Ensure we're on the main thread for UI updates
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            LocationReceived?.Invoke(null, location);
+            try
+            {
+                LocationReceived?.Invoke(null, location);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LocationServiceCallbacks] LocationReceived subscriber exception: {ex.Message}");
+            }
         });
     }
 
@@ -109,7 +116,14 @@ public static class LocationServiceCallbacks
         // Ensure we're on the main thread for UI updates
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            LocationQueued?.Invoke(null, location);
+            try
+            {
+                LocationQueued?.Invoke(null, location);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LocationServiceCallbacks] LocationQueued subscriber exception: {ex.Message}");
+            }
         });
     }
 
@@ -123,7 +137,14 @@ public static class LocationServiceCallbacks
         // Ensure we're on the main thread for UI updates
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            StateChanged?.Invoke(null, state);
+            try
+            {
+                StateChanged?.Invoke(null, state);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LocationServiceCallbacks] StateChanged subscriber exception: {ex.Message}");
+            }
         });
     }
 
@@ -138,7 +159,14 @@ public static class LocationServiceCallbacks
         // Ensure we're on the main thread for UI updates
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            CheckInPerformed?.Invoke(null, new CheckInEventArgs(success, errorMessage));
+            try
+            {
+                CheckInPerformed?.Invoke(null, new CheckInEventArgs(success, errorMessage));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LocationServiceCallbacks] CheckInPerformed subscriber exception: {ex.Message}");
+            }
         });
     }
 
@@ -150,7 +178,14 @@ public static class LocationServiceCallbacks
     {
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            PauseRequested?.Invoke(null, EventArgs.Empty);
+            try
+            {
+                PauseRequested?.Invoke(null, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LocationServiceCallbacks] PauseRequested subscriber exception: {ex.Message}");
+            }
         });
     }
 
@@ -162,7 +197,14 @@ public static class LocationServiceCallbacks
     {
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            ResumeRequested?.Invoke(null, EventArgs.Empty);
+            try
+            {
+                ResumeRequested?.Invoke(null, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LocationServiceCallbacks] ResumeRequested subscriber exception: {ex.Message}");
+            }
         });
     }
 
@@ -174,7 +216,14 @@ public static class LocationServiceCallbacks
     {
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            StopRequested?.Invoke(null, EventArgs.Empty);
+            try
+            {
+                StopRequested?.Invoke(null, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LocationServiceCallbacks] StopRequested subscriber exception: {ex.Message}");
+            }
         });
     }
 }

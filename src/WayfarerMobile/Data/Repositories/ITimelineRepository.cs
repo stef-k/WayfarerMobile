@@ -149,5 +149,12 @@ public interface ITimelineRepository
     /// <returns>The count of entries.</returns>
     Task<int> GetLocalTimelineEntryCountAsync();
 
+    /// <summary>
+    /// Gets local timeline entries missing ServerId for reconciliation.
+    /// </summary>
+    /// <param name="sinceTimestamp">Optional: only return entries after this timestamp.</param>
+    /// <returns>List of entries with ServerId = null.</returns>
+    Task<List<LocalTimelineEntry>> GetEntriesMissingServerIdAsync(DateTime? sinceTimestamp = null);
+
     #endregion
 }

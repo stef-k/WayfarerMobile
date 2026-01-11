@@ -142,15 +142,16 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
     }
 
     /// <inheritdoc />
-    public async Task MarkServerConfirmedAsync(int id)
+    public async Task MarkServerConfirmedAsync(int id, int? serverId = null)
     {
         var db = await GetConnectionAsync();
 
         // Mark as ServerConfirmed BEFORE updating to Synced
         // This ensures crash recovery can complete the transition
+        // Also store ServerId for local timeline reconciliation on crash recovery
         await db.ExecuteAsync(
-            "UPDATE QueuedLocations SET ServerConfirmed = 1 WHERE Id = ?",
-            id);
+            "UPDATE QueuedLocations SET ServerConfirmed = 1, ServerId = ? WHERE Id = ?",
+            serverId, id);
     }
 
     /// <inheritdoc />
@@ -579,6 +580,44 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
             .Where(l => l.SyncStatus == SyncStatus.Synced)
             .OrderByDescending(l => l.LastSyncAttempt)
             .FirstOrDefaultAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<QueuedLocation>> GetConfirmedEntriesWithServerIdAsync(DateTime? sinceTimestamp = null)
+    {
+        var db = await GetConnectionAsync();
+
+        if (sinceTimestamp.HasValue)
+        {
+            return await db.Table<QueuedLocation>()
+                .Where(l => l.ServerConfirmed && l.ServerId != null && l.Timestamp >= sinceTimestamp.Value)
+                .OrderBy(l => l.Timestamp)
+                .ToListAsync();
+        }
+
+        return await db.Table<QueuedLocation>()
+            .Where(l => l.ServerConfirmed && l.ServerId != null)
+            .OrderBy(l => l.Timestamp)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<QueuedLocation>> GetNonRejectedEntriesForBackfillAsync(DateTime? sinceTimestamp = null)
+    {
+        var db = await GetConnectionAsync();
+
+        if (sinceTimestamp.HasValue)
+        {
+            return await db.Table<QueuedLocation>()
+                .Where(l => !l.IsRejected && l.Timestamp >= sinceTimestamp.Value)
+                .OrderBy(l => l.Timestamp)
+                .ToListAsync();
+        }
+
+        return await db.Table<QueuedLocation>()
+            .Where(l => !l.IsRejected)
+            .OrderBy(l => l.Timestamp)
+            .ToListAsync();
     }
 
     #endregion

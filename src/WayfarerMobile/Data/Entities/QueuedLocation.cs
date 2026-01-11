@@ -95,6 +95,13 @@ public class QueuedLocation
     public bool ServerConfirmed { get; set; }
 
     /// <summary>
+    /// Gets or sets the server-assigned ID for this location.
+    /// Stored alongside ServerConfirmed to enable crash recovery reconciliation
+    /// with local timeline entries that may be missing their ServerId.
+    /// </summary>
+    public int? ServerId { get; set; }
+
+    /// <summary>
     /// Gets or sets whether this location was rejected (by client threshold check or server).
     /// When true, this location should not be retried.
     /// </summary>

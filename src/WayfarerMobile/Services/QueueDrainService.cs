@@ -517,7 +517,8 @@ public sealed class QueueDrainService : IDisposable
             {
                 // CRITICAL: Mark ServerConfirmed IMMEDIATELY after API success
                 // This ensures crash recovery marks as Synced instead of resetting to Pending
-                await _locationQueue.MarkServerConfirmedAsync(location.Id);
+                // Store ServerId for local timeline reconciliation on crash recovery
+                await _locationQueue.MarkServerConfirmedAsync(location.Id, result.LocationId);
 
                 // Mark synced and update reference point with location's actual timestamp
                 await _locationQueue.MarkLocationSyncedAsync(location.Id);
@@ -528,8 +529,8 @@ public sealed class QueueDrainService : IDisposable
 
                 Interlocked.Exchange(ref _consecutiveFailures, 0);
                 _logger.LogInformation(
-                    "QueueDrain: Location {Id} synced successfully via check-in",
-                    location.Id);
+                    "QueueDrain: Location {Id} synced successfully via check-in (ServerId: {ServerId})",
+                    location.Id, result.LocationId);
 
                 // Notify listeners (e.g., LocalTimelineStorageService) for ServerId update
                 if (result.LocationId.HasValue)

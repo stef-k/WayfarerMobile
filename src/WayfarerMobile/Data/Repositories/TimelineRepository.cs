@@ -200,5 +200,24 @@ public class TimelineRepository : RepositoryBase, ITimelineRepository
         return await db.Table<LocalTimelineEntry>().CountAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<List<LocalTimelineEntry>> GetEntriesMissingServerIdAsync(DateTime? sinceTimestamp = null)
+    {
+        var db = await GetConnectionAsync();
+
+        if (sinceTimestamp.HasValue)
+        {
+            return await db.Table<LocalTimelineEntry>()
+                .Where(e => e.ServerId == null && e.Timestamp >= sinceTimestamp.Value)
+                .OrderBy(e => e.Timestamp)
+                .ToListAsync();
+        }
+
+        return await db.Table<LocalTimelineEntry>()
+            .Where(e => e.ServerId == null)
+            .OrderBy(e => e.Timestamp)
+            .ToListAsync();
+    }
+
     #endregion
 }

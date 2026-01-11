@@ -47,7 +47,8 @@ public interface ILocationQueueRepository
     /// complete the Synced transition instead of resetting to Pending.
     /// </summary>
     /// <param name="id">The location ID.</param>
-    Task MarkServerConfirmedAsync(int id);
+    /// <param name="serverId">The server-assigned ID (for local timeline reconciliation).</param>
+    Task MarkServerConfirmedAsync(int id, int? serverId = null);
 
     /// <summary>
     /// Marks multiple locations as successfully synced in a single batch operation.
@@ -192,6 +193,24 @@ public interface ILocationQueueRepository
     /// Gets the last synced location (for diagnostics).
     /// </summary>
     Task<QueuedLocation?> GetLastSyncedLocationAsync();
+
+    /// <summary>
+    /// Gets confirmed entries with ServerId for crash recovery reconciliation.
+    /// Returns entries where ServerConfirmed=true AND ServerId IS NOT NULL.
+    /// Used by LocalTimelineStorageService to backfill missing ServerIds.
+    /// </summary>
+    /// <param name="sinceTimestamp">Optional: only return entries after this timestamp.</param>
+    /// <returns>List of confirmed entries with ServerId.</returns>
+    Task<List<QueuedLocation>> GetConfirmedEntriesWithServerIdAsync(DateTime? sinceTimestamp = null);
+
+    /// <summary>
+    /// Gets all non-rejected queue entries for local timeline backfill.
+    /// Returns entries where IsRejected=false (includes Pending, Syncing, Synced).
+    /// Used by LocalTimelineStorageService to backfill missed queue entries.
+    /// </summary>
+    /// <param name="sinceTimestamp">Optional: only return entries after this timestamp.</param>
+    /// <returns>List of non-rejected queue entries ordered by timestamp.</returns>
+    Task<List<QueuedLocation>> GetNonRejectedEntriesForBackfillAsync(DateTime? sinceTimestamp = null);
 
     #endregion
 }

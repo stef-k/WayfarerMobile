@@ -663,9 +663,10 @@ public class LocationSyncService : IDisposable
 
                 // CRITICAL: Mark ServerConfirmed IMMEDIATELY after API success
                 // This ensures crash recovery marks as Synced instead of resetting to Pending
-                await _locationQueue.MarkServerConfirmedAsync(location.Id);
+                // Store ServerId for local timeline reconciliation on crash recovery
+                await _locationQueue.MarkServerConfirmedAsync(location.Id, result.LocationId);
 
-                _logger.LogDebug("Location {Id} synced successfully", location.Id);
+                _logger.LogDebug("Location {Id} synced successfully (ServerId: {ServerId})", location.Id, result.LocationId);
 
                 // Notify listeners that location was synced (for local timeline ServerId update)
                 if (result.LocationId.HasValue)
