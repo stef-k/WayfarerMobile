@@ -636,6 +636,8 @@ public class LocationSyncService : IDisposable
                     LocationSyncCallbacks.NotifyLocationSkipped(
                         location.Id,
                         location.Timestamp,
+                        location.Latitude,
+                        location.Longitude,
                         "Threshold not met");
 
                     return (SyncResult.Rejected, true); // Rejected by server, continue with next
@@ -653,7 +655,9 @@ public class LocationSyncService : IDisposable
                     LocationSyncCallbacks.NotifyLocationSynced(
                         location.Id,
                         result.LocationId.Value,
-                        location.Timestamp);
+                        location.Timestamp,
+                        location.Latitude,
+                        location.Longitude);
                 }
 
                 return (SyncResult.Success, true);

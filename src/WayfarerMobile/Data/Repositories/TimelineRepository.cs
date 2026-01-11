@@ -45,6 +45,8 @@ public class TimelineRepository : RepositoryBase, ITimelineRepository
     /// <inheritdoc />
     public async Task<int> DeleteLocalTimelineEntryByTimestampAsync(
         DateTime timestamp,
+        double latitude,
+        double longitude,
         int toleranceSeconds = 2)
     {
         var db = await GetConnectionAsync();
@@ -53,8 +55,8 @@ public class TimelineRepository : RepositoryBase, ITimelineRepository
         var maxTime = timestamp.AddSeconds(toleranceSeconds);
 
         return await db.ExecuteAsync(
-            "DELETE FROM LocalTimelineEntries WHERE Timestamp >= ? AND Timestamp <= ?",
-            minTime, maxTime);
+            "DELETE FROM LocalTimelineEntries WHERE Timestamp >= ? AND Timestamp <= ? AND Latitude = ? AND Longitude = ?",
+            minTime, maxTime, latitude, longitude);
     }
 
     #endregion
@@ -174,6 +176,8 @@ public class TimelineRepository : RepositoryBase, ITimelineRepository
     /// <inheritdoc />
     public async Task<bool> UpdateLocalTimelineServerIdAsync(
         DateTime timestamp,
+        double latitude,
+        double longitude,
         int serverId,
         int toleranceSeconds = 2)
     {
@@ -183,8 +187,8 @@ public class TimelineRepository : RepositoryBase, ITimelineRepository
         var maxTime = timestamp.AddSeconds(toleranceSeconds);
 
         var affected = await db.ExecuteAsync(
-            "UPDATE LocalTimelineEntries SET ServerId = ? WHERE Timestamp >= ? AND Timestamp <= ? AND ServerId IS NULL",
-            serverId, minTime, maxTime);
+            "UPDATE LocalTimelineEntries SET ServerId = ? WHERE Timestamp >= ? AND Timestamp <= ? AND Latitude = ? AND Longitude = ? AND ServerId IS NULL",
+            serverId, minTime, maxTime, latitude, longitude);
 
         return affected > 0;
     }

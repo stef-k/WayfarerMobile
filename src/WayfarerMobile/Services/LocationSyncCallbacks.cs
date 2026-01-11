@@ -53,16 +53,25 @@ public static class LocationSyncCallbacks
     /// <param name="queuedLocationId">The local queued location ID.</param>
     /// <param name="serverId">The server-assigned location ID.</param>
     /// <param name="timestamp">The location timestamp (UTC).</param>
+    /// <param name="latitude">The location latitude.</param>
+    /// <param name="longitude">The location longitude.</param>
     /// <remarks>
     /// Event is dispatched to the main thread for UI safety.
     /// </remarks>
-    public static void NotifyLocationSynced(int queuedLocationId, int serverId, DateTime timestamp)
+    public static void NotifyLocationSynced(
+        int queuedLocationId,
+        int serverId,
+        DateTime timestamp,
+        double latitude,
+        double longitude)
     {
         var args = new LocationSyncedEventArgs
         {
             QueuedLocationId = queuedLocationId,
             ServerId = serverId,
-            Timestamp = timestamp
+            Timestamp = timestamp,
+            Latitude = latitude,
+            Longitude = longitude
         };
 
         // Dispatch to main thread for UI safety (consistent with LocationServiceCallbacks)
@@ -78,16 +87,25 @@ public static class LocationSyncCallbacks
     /// </summary>
     /// <param name="queuedLocationId">The local queued location ID.</param>
     /// <param name="timestamp">The location timestamp (UTC).</param>
+    /// <param name="latitude">The location latitude.</param>
+    /// <param name="longitude">The location longitude.</param>
     /// <param name="reason">The reason for skipping (e.g., "Threshold not met").</param>
     /// <remarks>
     /// Event is dispatched to the main thread for UI safety.
     /// </remarks>
-    public static void NotifyLocationSkipped(int queuedLocationId, DateTime timestamp, string reason)
+    public static void NotifyLocationSkipped(
+        int queuedLocationId,
+        DateTime timestamp,
+        double latitude,
+        double longitude,
+        string reason)
     {
         var args = new LocationSkippedEventArgs
         {
             QueuedLocationId = queuedLocationId,
             Timestamp = timestamp,
+            Latitude = latitude,
+            Longitude = longitude,
             Reason = reason
         };
 
@@ -129,6 +147,16 @@ public class LocationSyncedEventArgs : EventArgs
     /// Gets the location timestamp (UTC).
     /// </summary>
     public DateTime Timestamp { get; init; }
+
+    /// <summary>
+    /// Gets the location latitude.
+    /// </summary>
+    public double Latitude { get; init; }
+
+    /// <summary>
+    /// Gets the location longitude.
+    /// </summary>
+    public double Longitude { get; init; }
 }
 
 /// <summary>
@@ -145,6 +173,16 @@ public class LocationSkippedEventArgs : EventArgs
     /// Gets the location timestamp (UTC).
     /// </summary>
     public DateTime Timestamp { get; init; }
+
+    /// <summary>
+    /// Gets the location latitude.
+    /// </summary>
+    public double Latitude { get; init; }
+
+    /// <summary>
+    /// Gets the location longitude.
+    /// </summary>
+    public double Longitude { get; init; }
 
     /// <summary>
     /// Gets the reason the location was skipped.

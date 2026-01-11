@@ -188,6 +188,8 @@ public class LocalTimelineStorageService : IDisposable
             {
                 var updated = await _timelineRepository.UpdateLocalTimelineServerIdAsync(
                     e.Timestamp,
+                    e.Latitude,
+                    e.Longitude,
                     e.ServerId);
 
                 if (updated)
@@ -225,7 +227,10 @@ public class LocalTimelineStorageService : IDisposable
         {
             try
             {
-                var deleted = await _timelineRepository.DeleteLocalTimelineEntryByTimestampAsync(e.Timestamp);
+                var deleted = await _timelineRepository.DeleteLocalTimelineEntryByTimestampAsync(
+                    e.Timestamp,
+                    e.Latitude,
+                    e.Longitude);
 
                 if (deleted > 0)
                 {

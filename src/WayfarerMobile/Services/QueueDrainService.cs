@@ -526,7 +526,9 @@ public sealed class QueueDrainService : IDisposable
                     LocationSyncCallbacks.NotifyLocationSynced(
                         location.Id,
                         result.LocationId.Value,
-                        location.Timestamp);
+                        location.Timestamp,
+                        location.Latitude,
+                        location.Longitude);
                 }
             }
             else if (result.Skipped)
@@ -544,6 +546,8 @@ public sealed class QueueDrainService : IDisposable
                 LocationSyncCallbacks.NotifyLocationSkipped(
                     location.Id,
                     location.Timestamp,
+                    location.Latitude,
+                    location.Longitude,
                     result.Message ?? "Threshold not met");
             }
             else if (result.StatusCode.HasValue && result.StatusCode >= 400 && result.StatusCode < 500)
