@@ -391,11 +391,10 @@ public sealed class QueueDrainService : IDisposable
 
         try
         {
-            // CRITICAL FIX: Atomically claim pending locations and take the oldest claimed.
+            // CRITICAL FIX: Atomically claim the oldest pending location.
             // This prevents race condition with LocationSyncService's batch claims
             // and avoids no-op cycles when the oldest item is claimed by another service.
-            var claimed = await _locationQueue.ClaimPendingLocationsAsync(DrainClaimBatchSize);
-            location = claimed.Count > 0 ? claimed[0] : null;
+            location = await _locationQueue.ClaimOldestPendingLocationAsync(DrainClaimBatchSize);
             if (location == null)
             {
                 _logger.LogDebug("QueueDrain: No pending locations to claim");

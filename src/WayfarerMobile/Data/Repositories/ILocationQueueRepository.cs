@@ -119,7 +119,7 @@ public interface ILocationQueueRepository
     /// Returns null if no pending locations or if another service claimed it first.
     /// </summary>
     /// <returns>The claimed location (already marked as Syncing), or null if none available.</returns>
-    Task<QueuedLocation?> ClaimOldestPendingLocationAsync();
+    Task<QueuedLocation?> ClaimOldestPendingLocationAsync(int candidateLimit = 5);
 
     /// <summary>
     /// Resets multiple locations from Syncing back to Pending in a single batch operation.

@@ -353,39 +353,46 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
     }
 
     /// <inheritdoc />
-    public async Task<QueuedLocation?> ClaimOldestPendingLocationAsync()
+    public async Task<QueuedLocation?> ClaimOldestPendingLocationAsync(int candidateLimit = 5)
     {
         var db = await GetConnectionAsync();
 
-        // Step 1: Get the oldest pending location
-        var location = await db.Table<QueuedLocation>()
-            .Where(l => l.SyncStatus == SyncStatus.Pending && !l.IsRejected)
-            .OrderBy(l => l.Timestamp)
-            .FirstOrDefaultAsync();
-
-        if (location == null)
+        if (candidateLimit <= 0)
             return null;
 
-        // Step 2: Atomically claim it (only if still Pending)
+        // Step 1: Get a small batch of oldest pending IDs
+        var candidateIds = await db.QueryScalarsAsync<int>(
+            @"SELECT Id FROM QueuedLocations
+              WHERE SyncStatus = ? AND IsRejected = 0
+              ORDER BY Timestamp
+              LIMIT ?",
+            (int)SyncStatus.Pending, candidateLimit);
+
+        if (candidateIds.Count == 0)
+            return null;
+
+        // Step 2: Atomically claim the first available candidate
         // Also update LastSyncAttempt for consistency with ClaimPendingLocationsAsync
         var now = DateTime.UtcNow;
-        var updated = await db.ExecuteAsync(
-            @"UPDATE QueuedLocations
-              SET SyncStatus = ?, LastSyncAttempt = ?,
-                  IdempotencyKey = COALESCE(IdempotencyKey, ?)
-              WHERE Id = ? AND SyncStatus = ?",
-            (int)SyncStatus.Syncing, now, Guid.NewGuid().ToString("N"), location.Id, (int)SyncStatus.Pending);
-
-        if (updated == 0)
+        foreach (var id in candidateIds)
         {
-            // Another service claimed it first - return null
-            return null;
+            var updated = await db.ExecuteAsync(
+                @"UPDATE QueuedLocations
+                  SET SyncStatus = ?, LastSyncAttempt = ?,
+                      IdempotencyKey = COALESCE(IdempotencyKey, ?)
+                  WHERE Id = ? AND SyncStatus = ?",
+                (int)SyncStatus.Syncing, now, Guid.NewGuid().ToString("N"), id, (int)SyncStatus.Pending);
+
+            if (updated > 0)
+            {
+                // Step 3: Fetch fresh copy from database
+                return await db.Table<QueuedLocation>()
+                    .Where(l => l.Id == id)
+                    .FirstOrDefaultAsync();
+            }
         }
 
-        // Step 3: Fetch fresh copy from database
-        return await db.Table<QueuedLocation>()
-            .Where(l => l.Id == location.Id)
-            .FirstOrDefaultAsync();
+        return null;
     }
 
     /// <inheritdoc />
