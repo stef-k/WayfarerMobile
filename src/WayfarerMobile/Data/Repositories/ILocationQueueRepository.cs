@@ -66,7 +66,8 @@ public interface ILocationQueueRepository
 
     /// <summary>
     /// Records a sync failure and resets SyncStatus to Pending for retry.
-    /// Increments SyncAttempts for diagnostics.
+    /// If ServerConfirmed is true, marks as Synced instead to avoid duplicate sends.
+    /// Increments SyncAttempts for diagnostics when not ServerConfirmed.
     /// </summary>
     /// <param name="id">The location ID.</param>
     /// <param name="error">The error message.</param>
@@ -83,12 +84,14 @@ public interface ILocationQueueRepository
     /// <summary>
     /// Increments the retry count and resets SyncStatus to Pending for retry.
     /// Used for transient failures (network errors, server errors) where retry is appropriate.
+    /// If ServerConfirmed is true, marks as Synced instead to avoid duplicate sends.
     /// </summary>
     /// <param name="id">The location ID.</param>
     Task IncrementRetryCountAsync(int id);
 
     /// <summary>
     /// Resets a location back to pending status for retry after transient failures.
+    /// If ServerConfirmed is true, marks as Synced instead to avoid duplicate sends.
     /// </summary>
     /// <param name="id">The location ID.</param>
     Task ResetLocationToPendingAsync(int id);
@@ -129,6 +132,7 @@ public interface ILocationQueueRepository
     /// <summary>
     /// Resets multiple locations from Syncing back to Pending in a single batch operation.
     /// Used for failure recovery when batch sync fails or is interrupted.
+    /// If ServerConfirmed is true, marks as Synced instead to avoid duplicate sends.
     /// </summary>
     /// <param name="ids">The IDs of locations to reset.</param>
     /// <returns>Number of rows updated.</returns>

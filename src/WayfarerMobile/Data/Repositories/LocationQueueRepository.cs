@@ -205,12 +205,12 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
         // Previously only tracked error without reset, requiring batch reset or periodic cleanup
         await db.ExecuteAsync(
             @"UPDATE QueuedLocations
-              SET SyncStatus = ?,
-                  SyncAttempts = SyncAttempts + 1,
+              SET SyncStatus = CASE WHEN ServerConfirmed = 1 THEN ? ELSE ? END,
+                  SyncAttempts = SyncAttempts + CASE WHEN ServerConfirmed = 1 THEN 0 ELSE 1 END,
                   LastSyncAttempt = ?,
                   LastError = ?
               WHERE Id = ?",
-            (int)SyncStatus.Pending, DateTime.UtcNow, error, id);
+            (int)SyncStatus.Synced, (int)SyncStatus.Pending, DateTime.UtcNow, error, id);
     }
 
     /// <inheritdoc />
@@ -237,11 +237,11 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
         // Also increment attempt count for diagnostics
         await db.ExecuteAsync(
             @"UPDATE QueuedLocations
-              SET SyncStatus = ?,
-                  SyncAttempts = SyncAttempts + 1,
+              SET SyncStatus = CASE WHEN ServerConfirmed = 1 THEN ? ELSE ? END,
+                  SyncAttempts = SyncAttempts + CASE WHEN ServerConfirmed = 1 THEN 0 ELSE 1 END,
                   LastSyncAttempt = ?
               WHERE Id = ?",
-            (int)SyncStatus.Pending, DateTime.UtcNow, id);
+            (int)SyncStatus.Synced, (int)SyncStatus.Pending, DateTime.UtcNow, id);
     }
 
     /// <inheritdoc />
@@ -251,10 +251,10 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
 
         await db.ExecuteAsync(
             @"UPDATE QueuedLocations
-              SET SyncStatus = ?,
+              SET SyncStatus = CASE WHEN ServerConfirmed = 1 THEN ? ELSE ? END,
                   LastSyncAttempt = ?
               WHERE Id = ?",
-            (int)SyncStatus.Pending, DateTime.UtcNow, id);
+            (int)SyncStatus.Synced, (int)SyncStatus.Pending, DateTime.UtcNow, id);
     }
 
     /// <inheritdoc />
@@ -411,12 +411,13 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
         {
             // batch is already int[] from Chunk()
             var placeholders = string.Join(",", Enumerable.Repeat("?", batch.Length));
-            var query = $"UPDATE QueuedLocations SET SyncStatus = ? WHERE Id IN ({placeholders})";
+            var query = $"UPDATE QueuedLocations SET SyncStatus = CASE WHEN ServerConfirmed = 1 THEN ? ELSE ? END WHERE Id IN ({placeholders})";
 
-            var parameters = new object[batch.Length + 1];
-            parameters[0] = (int)SyncStatus.Pending;
+            var parameters = new object[batch.Length + 2];
+            parameters[0] = (int)SyncStatus.Synced;
+            parameters[1] = (int)SyncStatus.Pending;
             for (var i = 0; i < batch.Length; i++)
-                parameters[i + 1] = batch[i];
+                parameters[i + 2] = batch[i];
 
             totalUpdated += await db.ExecuteAsync(query, parameters);
         }
