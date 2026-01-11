@@ -59,6 +59,7 @@ public class AppDiagnosticService
         try
         {
             var pendingCount = await _locationQueueRepository.GetPendingCountAsync();
+            var retryingCount = await _locationQueueRepository.GetRetryingCountAsync();
             var syncedCount = await _locationQueueRepository.GetSyncedLocationCountAsync();
             var rejectedCount = await _locationQueueRepository.GetRejectedLocationCountAsync();
             var oldestPending = await _locationQueueRepository.GetOldestPendingLocationAsync();
@@ -67,6 +68,7 @@ public class AppDiagnosticService
             return new LocationQueueDiagnostics
             {
                 PendingCount = pendingCount,
+                RetryingCount = retryingCount,
                 SyncedCount = syncedCount,
                 RejectedCount = rejectedCount,
                 TotalCount = pendingCount + syncedCount + rejectedCount,
@@ -364,6 +366,7 @@ public class AppDiagnosticService
         report.AppendLine("\nLOCATION QUEUE:");
         report.AppendLine($"  Status: {queueDiag.QueueHealthStatus}");
         report.AppendLine($"  Pending: {queueDiag.PendingCount}");
+        report.AppendLine($"  Retrying: {queueDiag.RetryingCount}");
         report.AppendLine($"  Synced: {queueDiag.SyncedCount}");
         report.AppendLine($"  Rejected: {queueDiag.RejectedCount}");
         if (queueDiag.OldestPendingTimestamp.HasValue)
@@ -424,6 +427,7 @@ public class AppDiagnosticService
 public class LocationQueueDiagnostics
 {
     public int PendingCount { get; set; }
+    public int RetryingCount { get; set; }
     public int SyncedCount { get; set; }
     public int RejectedCount { get; set; }
     public int TotalCount { get; set; }

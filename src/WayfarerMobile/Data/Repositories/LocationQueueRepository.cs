@@ -529,6 +529,16 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
     }
 
     /// <inheritdoc />
+    public async Task<int> GetRetryingCountAsync()
+    {
+        var db = await GetConnectionAsync();
+
+        return await db.Table<QueuedLocation>()
+            .Where(l => l.SyncStatus == SyncStatus.Pending && !l.IsRejected && l.SyncAttempts > 0)
+            .CountAsync();
+    }
+
+    /// <inheritdoc />
     public async Task<int> GetRejectedLocationCountAsync()
     {
         var db = await GetConnectionAsync();

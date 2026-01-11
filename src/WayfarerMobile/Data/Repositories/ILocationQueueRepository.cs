@@ -173,6 +173,11 @@ public interface ILocationQueueRepository
     Task<int> GetPendingCountAsync();
 
     /// <summary>
+    /// Gets the count of pending locations that are retrying (SyncAttempts > 0).
+    /// </summary>
+    Task<int> GetRetryingCountAsync();
+
+    /// <summary>
     /// Gets the count of rejected locations (for diagnostics).
     /// </summary>
     Task<int> GetRejectedLocationCountAsync();

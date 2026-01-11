@@ -236,6 +236,9 @@ public partial class DiagnosticsViewModel : BaseViewModel
     private int _pendingLocations;
 
     [ObservableProperty]
+    private int _retryingLocations;
+
+    [ObservableProperty]
     private int _syncedLocations;
 
     [ObservableProperty]
@@ -910,6 +913,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
     {
         QueueHealthStatus = diag.QueueHealthStatus;
         PendingLocations = diag.PendingCount;
+        RetryingLocations = diag.RetryingCount;
         SyncedLocations = diag.SyncedCount;
         RejectedLocations = diag.RejectedCount;
 
