@@ -26,12 +26,6 @@ public interface ILocationQueueRepository
     Task<List<QueuedLocation>> GetPendingLocationsAsync(int limit = 100);
 
     /// <summary>
-    /// Gets the oldest pending location for queue drain processing.
-    /// </summary>
-    /// <returns>The oldest pending location or null if queue is empty.</returns>
-    Task<QueuedLocation?> GetOldestPendingForDrainAsync();
-
-    /// <summary>
     /// Gets all locations for a specific date.
     /// </summary>
     /// <param name="date">The date to retrieve locations for.</param>
@@ -191,11 +185,6 @@ public interface ILocationQueueRepository
     /// Gets the count of synced locations (for diagnostics).
     /// </summary>
     Task<int> GetSyncedLocationCountAsync();
-
-    /// <summary>
-    /// Gets the count of failed locations (for diagnostics).
-    /// </summary>
-    Task<int> GetFailedLocationCountAsync();
 
     /// <summary>
     /// Gets the oldest pending location (for diagnostics).

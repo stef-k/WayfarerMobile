@@ -61,7 +61,6 @@ public class AppDiagnosticService
             var pendingCount = await _locationQueueRepository.GetPendingCountAsync();
             var syncedCount = await _locationQueueRepository.GetSyncedLocationCountAsync();
             var rejectedCount = await _locationQueueRepository.GetRejectedLocationCountAsync();
-            var failedCount = await _locationQueueRepository.GetFailedLocationCountAsync();
             var oldestPending = await _locationQueueRepository.GetOldestPendingLocationAsync();
             var lastSynced = await _locationQueueRepository.GetLastSyncedLocationAsync();
 
@@ -70,11 +69,10 @@ public class AppDiagnosticService
                 PendingCount = pendingCount,
                 SyncedCount = syncedCount,
                 RejectedCount = rejectedCount,
-                FailedCount = failedCount,
                 TotalCount = pendingCount + syncedCount + rejectedCount,
                 OldestPendingTimestamp = oldestPending?.Timestamp,
                 LastSyncedTimestamp = lastSynced?.LastSyncAttempt,
-                QueueHealthStatus = CalculateQueueHealth(pendingCount, failedCount),
+                QueueHealthStatus = CalculateQueueHealth(pendingCount),
                 IsTrackingEnabled = _settingsService.TimelineTrackingEnabled,
                 IsServerConfigured = _settingsService.IsConfigured
             };
@@ -91,9 +89,8 @@ public class AppDiagnosticService
         }
     }
 
-    private static string CalculateQueueHealth(int pending, int failed)
+    private static string CalculateQueueHealth(int pending)
     {
-        if (failed > 0) return "Warning"; // Server errors or network issues
         if (pending > 1000) return "Warning"; // Large backlog
         return "Healthy";
     }
@@ -429,7 +426,6 @@ public class LocationQueueDiagnostics
     public int PendingCount { get; set; }
     public int SyncedCount { get; set; }
     public int RejectedCount { get; set; }
-    public int FailedCount { get; set; }
     public int TotalCount { get; set; }
     public DateTime? OldestPendingTimestamp { get; set; }
     public DateTime? LastSyncedTimestamp { get; set; }

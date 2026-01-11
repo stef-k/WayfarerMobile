@@ -242,9 +242,6 @@ public partial class DiagnosticsViewModel : BaseViewModel
     private int _rejectedLocations;
 
     [ObservableProperty]
-    private int _failedLocations;
-
-    [ObservableProperty]
     private string _oldestPendingAge = "N/A";
 
     [ObservableProperty]
@@ -729,8 +726,8 @@ public partial class DiagnosticsViewModel : BaseViewModel
                 {
                     Core.Enums.SyncStatus.Pending => loc.IsRejected ? "Rejected" :
                                          loc.SyncAttempts > 0 ? $"Retrying({loc.SyncAttempts})" : "Pending",
+                    Core.Enums.SyncStatus.Syncing => "Syncing",
                     Core.Enums.SyncStatus.Synced => "Synced",
-                    Core.Enums.SyncStatus.Failed => "Failed", // Legacy status
                     _ => "Unknown"
                 };
 
@@ -842,8 +839,8 @@ public partial class DiagnosticsViewModel : BaseViewModel
                 {
                     Core.Enums.SyncStatus.Pending => loc.IsRejected ? "REJECTED" :
                                          loc.SyncAttempts > 0 ? $"RETRY({loc.SyncAttempts})" : "PENDING",
+                    Core.Enums.SyncStatus.Syncing => "SYNCING",
                     Core.Enums.SyncStatus.Synced => "SYNCED",
-                    Core.Enums.SyncStatus.Failed => "FAILED", // Legacy status
                     _ => "?"
                 };
 
@@ -916,7 +913,6 @@ public partial class DiagnosticsViewModel : BaseViewModel
         PendingLocations = diag.PendingCount;
         SyncedLocations = diag.SyncedCount;
         RejectedLocations = diag.RejectedCount;
-        FailedLocations = diag.FailedCount;
 
         if (diag.OldestPendingTimestamp.HasValue)
         {

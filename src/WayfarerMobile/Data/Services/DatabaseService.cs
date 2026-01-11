@@ -233,20 +233,35 @@ public class DatabaseService : IAsyncDisposable
     }
 
     /// <summary>
-    /// Cleans up old locations if queue is too large.
+    /// Cleans up old locations if queue is at capacity.
+    /// Gradual deletion: removes just 1 location to make room for new one.
+    /// Priority: 1) Oldest Synced, 2) Oldest Rejected, 3) Oldest Pending (last resort).
     /// </summary>
     private async Task CleanupOldLocationsAsync()
     {
         var count = await _database!.Table<QueuedLocation>().CountAsync();
-        if (count > MaxQueuedLocations)
-        {
-            // Remove oldest synced locations first
-            await _database.ExecuteAsync(
-                "DELETE FROM QueuedLocations WHERE Id IN (SELECT Id FROM QueuedLocations WHERE SyncStatus = ? ORDER BY Timestamp LIMIT ?)",
-                (int)SyncStatus.Synced, count - MaxQueuedLocations + 1000);
+        if (count < MaxQueuedLocations)
+            return;
 
-            Console.WriteLine("[DatabaseService] Cleaned up old synced locations");
-        }
+        // 1. Try to delete 1 oldest synced location (safe - already uploaded)
+        var deleted = await _database.ExecuteAsync(
+            "DELETE FROM QueuedLocations WHERE Id = (SELECT Id FROM QueuedLocations WHERE SyncStatus = ? ORDER BY Timestamp LIMIT 1)",
+            (int)SyncStatus.Synced);
+
+        if (deleted > 0)
+            return;
+
+        // 2. Try to delete 1 oldest rejected location (safe - won't sync anyway)
+        deleted = await _database.ExecuteAsync(
+            "DELETE FROM QueuedLocations WHERE Id = (SELECT Id FROM QueuedLocations WHERE IsRejected = 1 ORDER BY Timestamp LIMIT 1)");
+
+        if (deleted > 0)
+            return;
+
+        // 3. Last resort: delete 1 oldest pending location (DATA LOSS - but prevents unbounded growth)
+        await _database.ExecuteAsync(
+            "DELETE FROM QueuedLocations WHERE Id = (SELECT Id FROM QueuedLocations WHERE SyncStatus = ? ORDER BY Timestamp LIMIT 1)",
+            (int)SyncStatus.Pending);
     }
 
     #endregion

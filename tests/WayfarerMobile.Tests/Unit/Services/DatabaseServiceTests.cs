@@ -151,7 +151,7 @@ public class DatabaseServiceTests : IAsyncLifetime
         // Arrange
         await InsertQueuedLocationAsync(CreateLocationData(51.0, -0.1), SyncStatus.Pending);
         await InsertQueuedLocationAsync(CreateLocationData(52.0, -0.2), SyncStatus.Synced);
-        await InsertQueuedLocationAsync(CreateLocationData(53.0, -0.3), SyncStatus.Failed);
+        await InsertQueuedLocationAsync(CreateLocationData(53.0, -0.3), SyncStatus.Syncing);
         await InsertQueuedLocationAsync(CreateLocationData(54.0, -0.4), SyncStatus.Pending);
 
         // Act
@@ -503,26 +503,6 @@ public class DatabaseServiceTests : IAsyncLifetime
 
         await InsertQueuedLocationAsync(CreateLocationData(51.0, -0.1), SyncStatus.Pending, createdAt: veryOldDate);
         await InsertQueuedLocationAsync(CreateLocationData(52.0, -0.2), SyncStatus.Pending, createdAt: recentDate);
-
-        // Act
-        var deleted = await PurgeSyncedLocationsAsync(daysOld: 7);
-
-        // Assert
-        deleted.Should().BeGreaterThan(0);
-        var remaining = await _database.Table<QueuedLocation>().ToListAsync();
-        remaining.Should().HaveCount(1);
-        remaining[0].Latitude.Should().Be(52.0);
-    }
-
-    [Fact]
-    public async Task PurgeSyncedLocationsAsync_DeletesOldFailedLocations()
-    {
-        // Arrange - Failed locations older than 3 days
-        var oldDate = DateTime.UtcNow.AddDays(-5);
-        var recentDate = DateTime.UtcNow.AddDays(-1);
-
-        await InsertQueuedLocationAsync(CreateLocationData(51.0, -0.1), SyncStatus.Failed, createdAt: oldDate);
-        await InsertQueuedLocationAsync(CreateLocationData(52.0, -0.2), SyncStatus.Failed, createdAt: recentDate);
 
         // Act
         var deleted = await PurgeSyncedLocationsAsync(daysOld: 7);
@@ -1240,22 +1220,6 @@ public class DatabaseServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetFailedCountAsync_ReturnsCorrectCount()
-    {
-        // Arrange
-        await InsertQueuedLocationAsync(CreateLocationData(51.0, -0.1), SyncStatus.Failed);
-        await InsertQueuedLocationAsync(CreateLocationData(52.0, -0.2), SyncStatus.Pending);
-
-        // Act
-        var count = await _database.Table<QueuedLocation>()
-            .Where(l => l.SyncStatus == SyncStatus.Failed)
-            .CountAsync();
-
-        // Assert
-        count.Should().Be(1);
-    }
-
-    [Fact]
     public async Task GetOldestPendingLocationAsync_ReturnsOldest()
     {
         // Arrange
@@ -1454,12 +1418,7 @@ public class DatabaseServiceTests : IAsyncLifetime
             "DELETE FROM QueuedLocations WHERE SyncStatus = ? AND CreatedAt < ?",
             (int)SyncStatus.Pending, pendingCutoff);
 
-        var failedCutoff = DateTime.UtcNow.AddDays(-3);
-        var deletedFailed = await _database.ExecuteAsync(
-            "DELETE FROM QueuedLocations WHERE SyncStatus = ? AND CreatedAt < ?",
-            (int)SyncStatus.Failed, failedCutoff);
-
-        return deletedSynced + deletedRejected + deletedOldPending + deletedFailed;
+        return deletedSynced + deletedRejected + deletedOldPending;
     }
 
     /// <summary>

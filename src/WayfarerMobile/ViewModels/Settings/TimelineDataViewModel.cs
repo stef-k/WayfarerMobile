@@ -151,8 +151,8 @@ public partial class TimelineDataViewModel : ObservableObject
                 {
                     SyncStatus.Pending => loc.IsRejected ? "Rejected" :
                                          loc.SyncAttempts > 0 ? $"Retrying({loc.SyncAttempts})" : "Pending",
+                    SyncStatus.Syncing => "Syncing",
                     SyncStatus.Synced => "Synced",
-                    SyncStatus.Failed => "Failed",
                     _ => "Unknown"
                 };
 

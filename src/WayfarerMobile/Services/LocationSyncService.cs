@@ -25,6 +25,7 @@ public class LocationSyncService : IDisposable
     private Timer? _syncTimer;
     private Timer? _cleanupTimer;
     private readonly SemaphoreSlim _syncLock = new(1, 1);
+    private readonly object _startStopLock = new();
     private CancellationTokenSource? _cancellationTokenSource;
     private volatile bool _isSyncing;
     private bool _disposed;
@@ -189,40 +190,76 @@ public class LocationSyncService : IDisposable
 
     /// <summary>
     /// Starts the background sync timer and cleanup timer.
+    /// Thread-safe: uses lock to prevent race conditions when called concurrently.
     /// </summary>
     public void Start()
     {
-        if (_syncTimer != null)
-            return;
+        lock (_startStopLock)
+        {
+            if (_syncTimer != null)
+                return;
 
-        _logger.LogInformation("Starting location sync service");
+            _logger.LogInformation("Starting location sync service");
 
-        // Create cancellation token source for graceful shutdown
-        _cancellationTokenSource = new CancellationTokenSource();
+            // Create cancellation token source for graceful shutdown
+            _cancellationTokenSource = new CancellationTokenSource();
 
-        // Add random jitter to initial delay to prevent timer alignment with other services
-        var jitteredDelay = InitialDelaySeconds + Jitter.Next(MaxJitterSeconds);
+            // Add random jitter to initial delay to prevent timer alignment with other services
+            var jitteredDelay = InitialDelaySeconds + Jitter.Next(MaxJitterSeconds);
 
-        // Sync timer - checks every 30 seconds if sync should run
-        _syncTimer = new Timer(
-            async _ => await TrySyncAsync(),
-            null,
-            TimeSpan.FromSeconds(jitteredDelay),
-            TimeSpan.FromSeconds(TimerIntervalSeconds));
+            // Sync timer - checks every 30 seconds if sync should run
+            // Note: Timer callbacks compile to async void, so we must catch all exceptions
+            _syncTimer = new Timer(
+                async _ =>
+                {
+                    try
+                    {
+                        await TrySyncAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Unhandled exception in sync timer callback");
+                    }
+                },
+                null,
+                TimeSpan.FromSeconds(jitteredDelay),
+                TimeSpan.FromSeconds(TimerIntervalSeconds));
 
-        // Cleanup timer - runs every 6 hours (lesson learned: separate from sync)
-        _cleanupTimer = new Timer(
-            async _ => await RunCleanupAsync(),
-            null,
-            TimeSpan.FromMinutes(FirstCleanupDelayMinutes),
-            TimeSpan.FromHours(CleanupIntervalHours));
+            // Cleanup timer - runs every 6 hours (lesson learned: separate from sync)
+            // Note: Timer callbacks compile to async void, so we must catch all exceptions
+            _cleanupTimer = new Timer(
+                async _ =>
+                {
+                    try
+                    {
+                        await RunCleanupAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Unhandled exception in cleanup timer callback");
+                    }
+                },
+                null,
+                TimeSpan.FromMinutes(FirstCleanupDelayMinutes),
+                TimeSpan.FromHours(CleanupIntervalHours));
+        }
     }
 
     /// <summary>
     /// Stops the background sync timer and cleanup timer.
     /// Waits for any in-progress sync to complete.
+    /// Note: This method blocks the calling thread. Use <see cref="StopAsync"/> for non-blocking stop.
     /// </summary>
     public void Stop()
+    {
+        StopAsync().GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Asynchronously stops the background sync timer and cleanup timer.
+    /// Waits for any in-progress sync to complete without blocking the calling thread.
+    /// </summary>
+    public async Task StopAsync()
     {
         _logger.LogInformation("Stopping location sync service");
 
@@ -240,7 +277,7 @@ public class LocationSyncService : IDisposable
             var waitStart = DateTime.UtcNow;
             while (_isSyncing && (DateTime.UtcNow - waitStart).TotalSeconds < StopTimeoutSeconds)
             {
-                Thread.Sleep(StopPollIntervalMs);
+                await Task.Delay(StopPollIntervalMs);
             }
 
             if (_isSyncing)
@@ -767,15 +804,17 @@ public class LocationSyncService : IDisposable
     #region IDisposable
 
     /// <summary>
-    /// Disposes resources.
+    /// Disposes resources. Calls Stop() first to ensure graceful shutdown.
     /// </summary>
     public void Dispose()
     {
         if (_disposed)
             return;
 
+        // Stop first to wait for in-progress operations and stop timers
+        Stop();
+
         _disposed = true;
-        _cancellationTokenSource?.Cancel();
         _cancellationTokenSource?.Dispose();
         _syncTimer?.Dispose();
         _cleanupTimer?.Dispose();
