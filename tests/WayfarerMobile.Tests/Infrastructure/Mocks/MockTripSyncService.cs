@@ -48,12 +48,13 @@ public class MockTripSyncService : ITripSyncService
     /// <summary>
     /// Raises the SyncRejected event.
     /// </summary>
-    public void RaiseSyncRejected(Guid entityId, string error, bool isClientError = false) =>
+    public void RaiseSyncRejected(Guid entityId, string error, bool isClientError = false, string? entityType = null) =>
         SyncRejected?.Invoke(this, new SyncFailureEventArgs
         {
             EntityId = entityId,
             ErrorMessage = error,
-            IsClientError = isClientError
+            IsClientError = isClientError,
+            EntityType = entityType
         });
 
     /// <summary>
@@ -85,7 +86,7 @@ public class MockTripSyncService : ITripSyncService
     public Task UpdatePlaceAsync(Guid placeId, Guid tripId, string? name = null,
         double? latitude = null, double? longitude = null, string? notes = null,
         bool includeNotes = false, string? iconName = null, string? markerColor = null,
-        int? displayOrder = null)
+        int? displayOrder = null, Guid? regionId = null)
     {
         _operations.Add(new SyncOperation("UpdatePlace", tripId, placeId));
         return Task.CompletedTask;

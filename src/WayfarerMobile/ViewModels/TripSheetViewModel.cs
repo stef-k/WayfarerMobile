@@ -1,11 +1,13 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
+using WayfarerMobile.Messages;
 
 namespace WayfarerMobile.ViewModels;
 
@@ -15,7 +17,7 @@ namespace WayfarerMobile.ViewModels;
 /// Editing operations are delegated to TripItemEditorViewModel.
 /// Extracted from MainViewModel to handle trip sheet-specific concerns.
 /// </summary>
-public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallbacks
+public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallbacks, IRecipient<PlaceMarkerChangedMessage>
 {
     #region Constants
 
@@ -29,6 +31,7 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
     #region Fields
 
     private readonly ITripStateManager _tripStateManager;
+    private readonly ITripSyncService _tripSyncService;
     private readonly ITripRepository _tripRepository;
     private readonly IPlaceRepository _placeRepository;
     private readonly ISegmentRepository _segmentRepository;
@@ -494,6 +497,7 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
     public TripSheetViewModel(
         TripItemEditorViewModel editor,
         ITripStateManager tripStateManager,
+        ITripSyncService tripSyncService,
         ITripRepository tripRepository,
         IPlaceRepository placeRepository,
         ISegmentRepository segmentRepository,
@@ -505,6 +509,7 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
     {
         Editor = editor;
         _tripStateManager = tripStateManager;
+        _tripSyncService = tripSyncService;
         _tripRepository = tripRepository;
         _placeRepository = placeRepository;
         _segmentRepository = segmentRepository;
@@ -519,6 +524,12 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
 
         // Subscribe to trip state changes to update UI bindings
         _tripStateManager.LoadedTripChanged += OnLoadedTripChanged;
+
+        // Subscribe to sync rejection events to revert in-memory state
+        _tripSyncService.SyncRejected += OnSyncRejected;
+
+        // Register for marker change messages to refresh map layers
+        WeakReferenceMessenger.Default.Register(this);
     }
 
     #endregion
@@ -559,6 +570,201 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
         OnPropertyChanged(nameof(TripNotesHtml));
         OnPropertyChanged(nameof(TripSheetTitle));
         OnPropertyChanged(nameof(TripSheetSubtitle));
+    }
+
+    /// <summary>
+    /// Handles sync rejected event (server 4xx error).
+    /// Reverts in-memory state by reloading from offline storage after database rollback.
+    /// </summary>
+    private async void OnSyncRejected(object? sender, SyncFailureEventArgs e)
+    {
+        await MainThread.InvokeOnMainThreadAsync(async () =>
+        {
+            _logger.LogWarning("Sync rejected for {EntityType} {EntityId}: {Error}",
+                e.EntityType, e.EntityId, e.ErrorMessage);
+
+            // Show error toast
+            await _toastService.ShowErrorAsync($"Save failed: {e.ErrorMessage}");
+
+            // Revert in-memory state based on entity type
+            if (LoadedTrip == null)
+                return;
+
+            var needsMapRefresh = false;
+
+            switch (e.EntityType)
+            {
+                case "Place":
+                    needsMapRefresh = await RevertPlaceFromOfflineAsync(e.EntityId);
+                    break;
+
+                case "Region":
+                    await RevertRegionFromOfflineAsync(e.EntityId);
+                    break;
+
+                case "Segment":
+                    await RevertSegmentFromOfflineAsync(e.EntityId);
+                    break;
+
+                case "Area":
+                    await RevertAreaFromOfflineAsync(e.EntityId);
+                    break;
+
+                case "Trip":
+                    await RevertTripFromOfflineAsync(e.EntityId);
+                    break;
+            }
+
+            // Refresh map if needed (place marker/position changes)
+            if (needsMapRefresh)
+            {
+                await (_callbacks?.RefreshTripLayersAsync(LoadedTrip) ?? Task.CompletedTask);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Reverts a place's in-memory state from offline storage.
+    /// </summary>
+    /// <returns>True if map refresh is needed (marker/position changed).</returns>
+    private async Task<bool> RevertPlaceFromOfflineAsync(Guid placeId)
+    {
+        var offlinePlace = await _placeRepository.GetOfflinePlaceByServerIdAsync(placeId);
+        if (offlinePlace == null || LoadedTrip == null)
+            return false;
+
+        // Find the place in loaded trip
+        TripPlace? tripPlace = null;
+        TripRegion? containingRegion = null;
+        foreach (var region in LoadedTrip.Regions)
+        {
+            tripPlace = region.Places.FirstOrDefault(p => p.Id == placeId);
+            if (tripPlace != null)
+            {
+                containingRegion = region;
+                break;
+            }
+        }
+
+        if (tripPlace == null)
+            return false;
+
+        // Track if map-affecting properties changed
+        var needsMapRefresh = tripPlace.Icon != offlinePlace.IconName ||
+                              tripPlace.MarkerColor != offlinePlace.MarkerColor ||
+                              Math.Abs(tripPlace.Latitude - offlinePlace.Latitude) > 0.000001 ||
+                              Math.Abs(tripPlace.Longitude - offlinePlace.Longitude) > 0.000001;
+
+        // Revert in-memory values from offline storage
+        tripPlace.Name = offlinePlace.Name ?? string.Empty;
+        tripPlace.Notes = offlinePlace.Notes;
+        tripPlace.Latitude = offlinePlace.Latitude;
+        tripPlace.Longitude = offlinePlace.Longitude;
+        tripPlace.Icon = offlinePlace.IconName;
+        tripPlace.MarkerColor = offlinePlace.MarkerColor;
+
+        // Handle region change reversion (move place to correct region)
+        if (offlinePlace.RegionId != containingRegion?.Id)
+        {
+            var targetRegion = LoadedTrip.Regions.FirstOrDefault(r => r.Id == offlinePlace.RegionId);
+            if (targetRegion != null && containingRegion != null)
+            {
+                containingRegion.Places.Remove(tripPlace);
+                targetRegion.Places.Add(tripPlace);
+                needsMapRefresh = true; // Region change affects display
+            }
+        }
+
+        // Refresh UI
+        LoadedTrip.NotifySortedRegionsChanged();
+        OnPropertyChanged(nameof(LoadedTrip));
+        OnPropertyChanged(nameof(SelectedTripPlaceNotesHtml));
+        OnPropertyChanged(nameof(TripSheetTitle));
+
+        return needsMapRefresh;
+    }
+
+    /// <summary>
+    /// Reverts a region's in-memory state from offline storage.
+    /// </summary>
+    private async Task RevertRegionFromOfflineAsync(Guid regionId)
+    {
+        var offlineArea = await _areaRepository.GetOfflineAreaByServerIdAsync(regionId);
+        if (offlineArea == null || LoadedTrip == null)
+            return;
+
+        var tripRegion = LoadedTrip.Regions.FirstOrDefault(r => r.Id == regionId);
+        if (tripRegion == null)
+            return;
+
+        // Revert in-memory values
+        tripRegion.Name = offlineArea.Name ?? string.Empty;
+        tripRegion.Notes = offlineArea.Notes;
+
+        // Refresh UI
+        LoadedTrip.NotifySortedRegionsChanged();
+        OnPropertyChanged(nameof(LoadedTrip));
+        OnPropertyChanged(nameof(SelectedTripRegionNotesHtml));
+        OnPropertyChanged(nameof(TripSheetTitle));
+    }
+
+    /// <summary>
+    /// Reverts a segment's in-memory state from offline storage.
+    /// </summary>
+    private async Task RevertSegmentFromOfflineAsync(Guid segmentId)
+    {
+        var offlineSegment = await _segmentRepository.GetOfflineSegmentByServerIdAsync(segmentId);
+        if (offlineSegment == null || LoadedTrip == null)
+            return;
+
+        var tripSegment = LoadedTrip.Segments.FirstOrDefault(s => s.Id == segmentId);
+        if (tripSegment == null)
+            return;
+
+        // Revert in-memory values
+        tripSegment.Notes = offlineSegment.Notes;
+
+        // Refresh UI
+        OnPropertyChanged(nameof(SelectedTripSegmentNotesHtml));
+    }
+
+    /// <summary>
+    /// Reverts an area's (polygon) in-memory state from offline storage.
+    /// </summary>
+    private async Task RevertAreaFromOfflineAsync(Guid areaId)
+    {
+        var offlinePolygon = await _areaRepository.GetOfflinePolygonByServerIdAsync(areaId);
+        if (offlinePolygon == null || LoadedTrip == null)
+            return;
+
+        var tripArea = LoadedTrip.AllAreas.FirstOrDefault(a => a.Id == areaId);
+        if (tripArea == null)
+            return;
+
+        // Revert in-memory values
+        tripArea.Notes = offlinePolygon.Notes;
+
+        // Refresh UI
+        OnPropertyChanged(nameof(SelectedTripAreaNotesHtml));
+    }
+
+    /// <summary>
+    /// Reverts a trip's in-memory state from offline storage.
+    /// </summary>
+    private async Task RevertTripFromOfflineAsync(Guid tripId)
+    {
+        var offlineTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripId);
+        if (offlineTrip == null || LoadedTrip == null || LoadedTrip.Id != tripId)
+            return;
+
+        // Revert in-memory values
+        LoadedTrip.Name = offlineTrip.Name ?? string.Empty;
+        LoadedTrip.Notes = offlineTrip.Notes;
+
+        // Refresh UI
+        OnPropertyChanged(nameof(TripNotesPreview));
+        OnPropertyChanged(nameof(TripNotesHtml));
+        OnPropertyChanged(nameof(TripSheetTitle));
     }
 
     #endregion
@@ -1150,6 +1356,19 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
         OnPropertyChanged(nameof(LoadedTrip));
     }
 
+    /// <summary>
+    /// Handles place marker changed messages by refreshing map layers.
+    /// </summary>
+    public void Receive(PlaceMarkerChangedMessage message)
+    {
+        // Only refresh if this is for the currently loaded trip
+        if (LoadedTrip == null || LoadedTrip.Id != message.TripId)
+            return;
+
+        // Refresh map layers to show updated marker
+        _ = _callbacks?.RefreshTripLayersAsync(LoadedTrip);
+    }
+
     #endregion
 
     #region Partial Methods
@@ -1174,13 +1393,14 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
 
     /// <summary>
     /// Cleans up event subscriptions to prevent memory leaks.
-    /// TripSheetViewModel is Transient but subscribes to Singleton ITripStateManager,
+    /// TripSheetViewModel is Transient but subscribes to Singleton ITripStateManager and ITripSyncService,
     /// so we must unsubscribe to prevent accumulation of handlers.
     /// </summary>
     protected override void Cleanup()
     {
-        // Unsubscribe from Singleton ITripStateManager events
+        // Unsubscribe from Singleton service events
         _tripStateManager.LoadedTripChanged -= OnLoadedTripChanged;
+        _tripSyncService.SyncRejected -= OnSyncRejected;
 
         base.Cleanup();
     }

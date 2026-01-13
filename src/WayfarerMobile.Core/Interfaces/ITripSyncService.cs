@@ -67,7 +67,8 @@ public interface ITripSyncService
         bool includeNotes = false,
         string? iconName = null,
         string? markerColor = null,
-        int? displayOrder = null);
+        int? displayOrder = null,
+        Guid? regionId = null);
 
     /// <summary>
     /// Delete a place with optimistic UI pattern.

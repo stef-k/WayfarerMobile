@@ -164,9 +164,10 @@ public class TripSyncService : ITripSyncService
         bool includeNotes = false,
         string? iconName = null,
         string? markerColor = null,
-        int? displayOrder = null)
+        int? displayOrder = null,
+        Guid? regionId = null)
     {
-        var result = await _placeOps.UpdatePlaceAsync(placeId, tripId, name, latitude, longitude, notes, includeNotes, iconName, markerColor, displayOrder);
+        var result = await _placeOps.UpdatePlaceAsync(placeId, tripId, name, latitude, longitude, notes, includeNotes, iconName, markerColor, displayOrder, regionId);
 
         RaisePlaceEvents(result, isCreate: false);
     }
@@ -216,7 +217,8 @@ public class TripSyncService : ITripSyncService
                 {
                     EntityId = result.EntityId ?? Guid.Empty,
                     ErrorMessage = result.Message ?? "Server rejected",
-                    IsClientError = true
+                    IsClientError = true,
+                    EntityType = "Place"
                 });
                 break;
         }
@@ -321,13 +323,14 @@ public class TripSyncService : ITripSyncService
                 {
                     EntityId = result.EntityId ?? Guid.Empty,
                     ErrorMessage = result.Message ?? "Server rejected",
-                    IsClientError = true
+                    IsClientError = true,
+                    EntityType = "Region"
                 });
                 break;
         }
     }
 
-    private void RaiseEntityEvents(EntityOperationResult result)
+    private void RaiseEntityEvents(EntityOperationResult result, string entityType)
     {
         switch (result.ResultType)
         {
@@ -348,7 +351,8 @@ public class TripSyncService : ITripSyncService
                 {
                     EntityId = result.EntityId ?? Guid.Empty,
                     ErrorMessage = result.Message ?? "Server rejected",
-                    IsClientError = true
+                    IsClientError = true,
+                    EntityType = entityType
                 });
                 break;
         }
@@ -369,7 +373,7 @@ public class TripSyncService : ITripSyncService
         bool includeNotes = false)
     {
         var result = await _entityOps.UpdateTripAsync(tripId, name, notes, includeNotes);
-        RaiseEntityEvents(result);
+        RaiseEntityEvents(result, "Trip");
     }
 
     #endregion
@@ -386,7 +390,7 @@ public class TripSyncService : ITripSyncService
         string? notes)
     {
         var result = await _entityOps.UpdateSegmentNotesAsync(segmentId, tripId, notes);
-        RaiseEntityEvents(result);
+        RaiseEntityEvents(result, "Segment");
     }
 
     #endregion
@@ -403,7 +407,7 @@ public class TripSyncService : ITripSyncService
         string? notes)
     {
         var result = await _entityOps.UpdateAreaNotesAsync(tripId, areaId, notes);
-        RaiseEntityEvents(result);
+        RaiseEntityEvents(result, "Area");
     }
 
     #endregion
@@ -443,7 +447,13 @@ public class TripSyncService : ITripSyncService
                 // Roll back optimistic changes since they can never be synced
                 await _mutationQueue.RestoreOriginalValuesAsync(mutation);
                 await _mutationQueue.MarkMutationRejectedAsync(mutation.Id, $"Server: {ex.Message}");
-                SyncRejected?.Invoke(this, new SyncFailureEventArgs { EntityId = mutation.EntityId, ErrorMessage = ex.Message, IsClientError = true });
+                SyncRejected?.Invoke(this, new SyncFailureEventArgs
+                {
+                    EntityId = mutation.EntityId,
+                    ErrorMessage = ex.Message,
+                    IsClientError = true,
+                    EntityType = mutation.EntityType
+                });
             }
             catch (HttpRequestException ex)
             {
@@ -540,7 +550,8 @@ public class TripSyncService : ITripSyncService
             Notes = mutation.IncludeNotes ? mutation.Notes : null,
             IconName = mutation.IconName,
             MarkerColor = mutation.MarkerColor,
-            DisplayOrder = mutation.DisplayOrder
+            DisplayOrder = mutation.DisplayOrder,
+            RegionId = mutation.RegionId
         };
 
         var response = await _apiClient.UpdatePlaceAsync(mutation.EntityId, request);

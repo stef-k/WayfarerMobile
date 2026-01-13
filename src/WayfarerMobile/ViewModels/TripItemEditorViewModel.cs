@@ -44,6 +44,12 @@ public partial class TripItemEditorViewModel : BaseViewModel
     /// </summary>
     private readonly HashSet<Guid> _inFlightRegionCreates = new();
 
+    /// <summary>
+    /// Tracks Place temp IDs that are currently being created (API call in-flight).
+    /// Used to prevent Place editing/moving/deleting while CREATE is in progress.
+    /// </summary>
+    private readonly HashSet<Guid> _inFlightPlaceCreates = new();
+
     #endregion
 
     #region Observable Properties - Coordinate Editing State
@@ -189,8 +195,18 @@ public partial class TripItemEditorViewModel : BaseViewModel
     /// <summary>
     /// Enters place coordinate editing mode for the specified place.
     /// </summary>
-    public void EnterPlaceCoordinateEditMode(TripPlace place)
+    /// <param name="place">The place to edit coordinates for.</param>
+    /// <param name="isNewPlace">True if this is a new place being created (skip in-flight check).</param>
+    public void EnterPlaceCoordinateEditMode(TripPlace place, bool isNewPlace = false)
     {
+        // Block coordinate edits while place CREATE is in-flight (for existing places only)
+        // New places being created skip this check since they haven't been sent to server yet
+        if (!isNewPlace && _inFlightPlaceCreates.Contains(place.Id))
+        {
+            _toastService.ShowWarningAsync("Place is still saving - try again in a moment");
+            return;
+        }
+
         PlaceBeingEditedForCoordinates = place;
         PendingPlaceLatitude = place.Latitude;
         PendingPlaceLongitude = place.Longitude;
@@ -343,7 +359,7 @@ public partial class TripItemEditorViewModel : BaseViewModel
             "Edit Place",
             "Cancel",
             "Delete",
-            "Edit Name", "Edit Notes", "Edit Coordinates", "Edit Marker") ?? Task.FromResult<string?>(null));
+            "Edit Name", "Edit Notes", "Edit Coordinates", "Edit Marker", "Change Region") ?? Task.FromResult<string?>(null));
 
         if (string.IsNullOrEmpty(selected) || selected == "Cancel")
             return;
@@ -361,6 +377,9 @@ public partial class TripItemEditorViewModel : BaseViewModel
                 break;
             case "Edit Marker":
                 await EditPlaceMarkerAsync(selectedPlace);
+                break;
+            case "Change Region":
+                await ChangePlaceRegionAsync(selectedPlace);
                 break;
             case "Delete":
                 await DeletePlaceAsync(selectedPlace);
@@ -421,21 +440,30 @@ public partial class TripItemEditorViewModel : BaseViewModel
             if (isNewPlace && targetRegion != null)
             {
                 // Create new place on server and get the server-assigned ID
-                // Pass the place's temp ID so EntityCreated event can reconcile the in-memory object
-                var serverId = await _tripSyncService.CreatePlaceAsync(
-                    loadedTrip.Id,
-                    targetRegion.Id,
-                    place.Name ?? "New Place",
-                    newLat,
-                    newLon,
-                    displayOrder: place.SortOrder,
-                    clientTempId: place.Id);
-
-                // Update the in-memory place with the server ID so subsequent updates work
-                // Note: This is also handled by EntityCreated event subscription (D2)
-                if (serverId != Guid.Empty && serverId != place.Id)
+                // Track in-flight state to prevent editing while CREATE is in progress
+                var tempId = place.Id;  // Capture before potential reconciliation
+                _inFlightPlaceCreates.Add(tempId);
+                try
                 {
-                    place.Id = serverId;
+                    var serverId = await _tripSyncService.CreatePlaceAsync(
+                        loadedTrip.Id,
+                        targetRegion.Id,
+                        place.Name ?? "New Place",
+                        newLat,
+                        newLon,
+                        displayOrder: place.SortOrder,
+                        clientTempId: tempId);
+
+                    // Immediate reconciliation - deterministic, doesn't rely on EntityCreated timing
+                    if (serverId != Guid.Empty && serverId != place.Id)
+                    {
+                        place.Id = serverId;
+                        _callbacks?.NotifyTripPlacesChanged();
+                    }
+                }
+                finally
+                {
+                    _inFlightPlaceCreates.Remove(tempId);  // Always remove by original tempId
                 }
 
                 await _toastService.ShowSuccessAsync("Place added");
@@ -759,8 +787,15 @@ public partial class TripItemEditorViewModel : BaseViewModel
         if (index <= 0)
             return;
 
-        // Swap sort orders
+        // Get the adjacent place for the swap
         var prevPlace = places[index - 1];
+
+        // Block moves while either place CREATE is in-flight to prevent temp ID usage
+        if (_inFlightPlaceCreates.Contains(place.Id) || _inFlightPlaceCreates.Contains(prevPlace.Id))
+        {
+            await _toastService.ShowWarningAsync("Place is still saving - try again in a moment");
+            return;
+        }
         (targetPlace.SortOrder, prevPlace.SortOrder) = (prevPlace.SortOrder, targetPlace.SortOrder);
 
         // Notify UI to refresh places list
@@ -799,8 +834,15 @@ public partial class TripItemEditorViewModel : BaseViewModel
         if (index < 0 || index >= places.Count - 1)
             return;
 
-        // Swap sort orders
+        // Get the adjacent place for the swap
         var nextPlace = places[index + 1];
+
+        // Block moves while either place CREATE is in-flight to prevent temp ID usage
+        if (_inFlightPlaceCreates.Contains(place.Id) || _inFlightPlaceCreates.Contains(nextPlace.Id))
+        {
+            await _toastService.ShowWarningAsync("Place is still saving - try again in a moment");
+            return;
+        }
         (targetPlace.SortOrder, nextPlace.SortOrder) = (nextPlace.SortOrder, targetPlace.SortOrder);
 
         // Notify UI to refresh places list
@@ -987,6 +1029,9 @@ public partial class TripItemEditorViewModel : BaseViewModel
                             place.Id = e.ServerId;
                             _logger.LogDebug("EntityCreated: Updated Place TempId {TempId} -> ServerId {ServerId}",
                                 e.TempClientId, e.ServerId);
+
+                            // Refresh places list so UI-bound Place copies have the updated server ID
+                            _callbacks?.NotifyTripPlacesChanged();
                             break;
                         }
                     }
@@ -1008,6 +1053,13 @@ public partial class TripItemEditorViewModel : BaseViewModel
     /// </summary>
     private async Task EditPlaceNameAsync(TripPlace place)
     {
+        // Block edits while place CREATE is in-flight to prevent temp ID usage
+        if (_inFlightPlaceCreates.Contains(place.Id))
+        {
+            await _toastService.ShowWarningAsync("Place is still saving - try again in a moment");
+            return;
+        }
+
         var newName = await (_callbacks?.DisplayPromptAsync(
             "Edit Place Name",
             "Enter the new name:",
@@ -1040,6 +1092,13 @@ public partial class TripItemEditorViewModel : BaseViewModel
     /// </summary>
     private async Task EditPlaceNotesAsync(TripPlace place)
     {
+        // Block edits while place CREATE is in-flight to prevent temp ID usage
+        if (_inFlightPlaceCreates.Contains(place.Id))
+        {
+            await _toastService.ShowWarningAsync("Place is still saving - try again in a moment");
+            return;
+        }
+
         var loadedTrip = _callbacks?.LoadedTrip;
         if (loadedTrip == null)
             return;
@@ -1059,6 +1118,13 @@ public partial class TripItemEditorViewModel : BaseViewModel
     /// </summary>
     private async Task EditPlaceMarkerAsync(TripPlace place)
     {
+        // Block edits while place CREATE is in-flight to prevent temp ID usage
+        if (_inFlightPlaceCreates.Contains(place.Id))
+        {
+            await _toastService.ShowWarningAsync("Place is still saving - try again in a moment");
+            return;
+        }
+
         var loadedTrip = _callbacks?.LoadedTrip;
         if (loadedTrip == null)
             return;
@@ -1077,6 +1143,13 @@ public partial class TripItemEditorViewModel : BaseViewModel
     /// </summary>
     private async Task DeletePlaceAsync(TripPlace place)
     {
+        // Block deletes while place CREATE is in-flight to prevent temp ID usage
+        if (_inFlightPlaceCreates.Contains(place.Id))
+        {
+            await _toastService.ShowWarningAsync("Place is still saving - try again in a moment");
+            return;
+        }
+
         var loadedTrip = _callbacks?.LoadedTrip;
         if (loadedTrip == null)
             return;
@@ -1110,6 +1183,86 @@ public partial class TripItemEditorViewModel : BaseViewModel
         await _tripSyncService.DeletePlaceAsync(place.Id, loadedTrip.Id);
 
         await _toastService.ShowSuccessAsync("Place deleted");
+    }
+
+    /// <summary>
+    /// Changes the region for a place (moves place between regions).
+    /// </summary>
+    private async Task ChangePlaceRegionAsync(TripPlace place)
+    {
+        // Block changes while place CREATE is in-flight to prevent temp ID usage
+        if (_inFlightPlaceCreates.Contains(place.Id))
+        {
+            await _toastService.ShowWarningAsync("Place is still saving - try again in a moment");
+            return;
+        }
+
+        var loadedTrip = _callbacks?.LoadedTrip;
+        if (loadedTrip == null)
+            return;
+
+        // Find the current region containing this place
+        var currentRegion = loadedTrip.Regions.FirstOrDefault(r => r.Places.Any(p => p.Id == place.Id));
+        if (currentRegion == null)
+            return;
+
+        // Get available regions (exclude unassigned and current region)
+        var availableRegions = loadedTrip.Regions
+            .Where(r => !r.IsUnassignedRegion && r.Id != currentRegion.Id)
+            .ToList();
+
+        if (availableRegions.Count == 0)
+        {
+            await _toastService.ShowWarningAsync("No other regions available. Create another region first.");
+            return;
+        }
+
+        // Show region picker
+        var regionNames = availableRegions.Select(r => r.Name).ToArray();
+        var selectedRegionName = await (_callbacks?.DisplayActionSheetAsync(
+            "Move to Region",
+            "Cancel",
+            null,
+            regionNames) ?? Task.FromResult<string?>(null));
+
+        if (string.IsNullOrEmpty(selectedRegionName) || selectedRegionName == "Cancel")
+            return;
+
+        var targetRegion = availableRegions.FirstOrDefault(r => r.Name == selectedRegionName);
+        if (targetRegion == null)
+            return;
+
+        // Guard against in-flight destination region
+        if (_inFlightRegionCreates.Contains(targetRegion.Id))
+        {
+            await _toastService.ShowWarningAsync("Destination region is still saving - try again in a moment");
+            return;
+        }
+
+        // Find the actual place instance
+        var targetPlace = currentRegion.Places.FirstOrDefault(p => p.Id == place.Id);
+        if (targetPlace == null)
+            return;
+
+        // Move place between regions in memory
+        currentRegion.Places.Remove(targetPlace);
+        targetPlace.SortOrder = targetRegion.Places.Count;  // Add to end of new region
+        targetRegion.Places.Add(targetPlace);
+
+        // Notify UI to refresh places list
+        _callbacks?.NotifyTripPlacesChanged();
+
+        // Refresh map layers
+        await (_callbacks?.RefreshTripLayersAsync(loadedTrip) ?? Task.CompletedTask);
+
+        // Sync to server
+        await _tripSyncService.UpdatePlaceAsync(
+            targetPlace.Id,
+            loadedTrip.Id,
+            regionId: targetRegion.Id,
+            displayOrder: targetPlace.SortOrder);
+
+        await _toastService.ShowSuccessAsync($"Place moved to {targetRegion.Name}");
     }
 
     #endregion
@@ -1183,13 +1336,25 @@ public partial class TripItemEditorViewModel : BaseViewModel
             return;
         }
 
+        // Resolve canonical region from LoadedTrip to get the correct ID and Notes
+        // (parameter may be from SortedRegions which creates new TripRegion objects with stale data)
+        var targetRegion = loadedTrip.Regions.FirstOrDefault(r => r.Id == region.Id);
+        if (targetRegion == null)
+        {
+            // UI clone has stale/temp ID that no longer exists in canonical state after reconciliation
+            // Refresh UI clones to get updated IDs, then prompt user to retry
+            _callbacks?.NotifyTripRegionsChanged();
+            await _toastService.ShowWarningAsync("Region is still syncing - try again in a moment");
+            return;
+        }
+
         await (_callbacks?.NavigateToPageAsync("notesEditor", new Dictionary<string, object>
         {
             { "tripId", loadedTrip.Id.ToString() },
-            { "entityId", region.Id.ToString() },
+            { "entityId", targetRegion.Id.ToString() },
             { "entityType", "region" },
-            { "entityName", region.Name ?? "Region" },
-            { "notes", region.Notes ?? string.Empty }
+            { "entityName", targetRegion.Name ?? "Region" },
+            { "notes", targetRegion.Notes ?? string.Empty }
         }) ?? Task.CompletedTask);
     }
 
@@ -1356,7 +1521,7 @@ public partial class TripItemEditorViewModel : BaseViewModel
         // Mark that we're creating a new place (affects save/cancel behavior)
         IsCreatingNewPlace = true;
         NewPlaceTargetRegion = region;
-        EnterPlaceCoordinateEditMode(newPlace);
+        EnterPlaceCoordinateEditMode(newPlace, isNewPlace: true);
 
         await _toastService.ShowAsync("Tap on map to adjust location, then save");
     }

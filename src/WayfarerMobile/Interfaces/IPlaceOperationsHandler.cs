@@ -48,6 +48,7 @@ public interface IPlaceOperationsHandler
     /// <param name="iconName">Optional new icon name.</param>
     /// <param name="markerColor">Optional new marker color.</param>
     /// <param name="displayOrder">Optional new display order.</param>
+    /// <param name="regionId">Optional new region ID for moving place between regions.</param>
     /// <returns>Operation result.</returns>
     Task<PlaceOperationResult> UpdatePlaceAsync(
         Guid placeId,
@@ -59,7 +60,8 @@ public interface IPlaceOperationsHandler
         bool includeNotes = false,
         string? iconName = null,
         string? markerColor = null,
-        int? displayOrder = null);
+        int? displayOrder = null,
+        Guid? regionId = null);
 
     /// <summary>
     /// Deletes a place with optimistic UI pattern.

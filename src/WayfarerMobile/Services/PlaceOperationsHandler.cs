@@ -184,7 +184,8 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
         bool includeNotes = false,
         string? iconName = null,
         string? markerColor = null,
-        int? displayOrder = null)
+        int? displayOrder = null,
+        Guid? regionId = null)
     {
         await EnsureInitializedAsync();
 
@@ -198,7 +199,9 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
         {
             // Reuse existing merge logic - EnqueuePlaceMutationAsync handles merging
             // into existing non-Delete mutations (including CREATE)
-            await EnqueuePlaceMutationAsync("Update", placeId, tripId, pendingCreate.RegionId,
+            // Use provided regionId or fall back to pending CREATE's regionId
+            var effectiveRegionId = regionId ?? pendingCreate.RegionId;
+            await EnqueuePlaceMutationAsync("Update", placeId, tripId, effectiveRegionId,
                 name, latitude, longitude, notes, iconName, markerColor, displayOrder, includeNotes, null);
 
             // Also update offline entry for immediate UI consistency
@@ -212,6 +215,7 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
                 if (iconName != null) offlinePlaceForMerge.IconName = iconName;
                 if (markerColor != null) offlinePlaceForMerge.MarkerColor = markerColor;
                 if (displayOrder.HasValue) offlinePlaceForMerge.SortOrder = displayOrder.Value;
+                if (regionId.HasValue) offlinePlaceForMerge.RegionId = regionId.Value;
                 await _placeRepository.UpdateOfflinePlaceAsync(offlinePlaceForMerge);
             }
 
@@ -227,6 +231,7 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
         string? originalIconName = offlinePlace?.IconName;
         string? originalMarkerColor = offlinePlace?.MarkerColor;
         int? originalDisplayOrder = offlinePlace?.SortOrder;
+        Guid? originalRegionId = offlinePlace?.RegionId;
 
         // 2. Update offline table with new values (optimistic update)
         if (offlinePlace != null)
@@ -238,6 +243,7 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
             if (iconName != null) offlinePlace.IconName = iconName;
             if (markerColor != null) offlinePlace.MarkerColor = markerColor;
             if (displayOrder.HasValue) offlinePlace.SortOrder = displayOrder.Value;
+            if (regionId.HasValue) offlinePlace.RegionId = regionId.Value;
             await _placeRepository.UpdateOfflinePlaceAsync(offlinePlace);
         }
 
@@ -249,15 +255,16 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
             Notes = includeNotes ? notes : null,
             IconName = iconName,
             MarkerColor = markerColor,
-            DisplayOrder = displayOrder
+            DisplayOrder = displayOrder,
+            RegionId = regionId
         };
 
         if (!IsConnected)
         {
             // 3. Store original values in queue for restoration
-            await EnqueuePlaceMutationWithOriginalAsync("Update", placeId, tripId, null,
+            await EnqueuePlaceMutationWithOriginalAsync("Update", placeId, tripId, regionId,
                 name, latitude, longitude, notes, iconName, markerColor, displayOrder, includeNotes, null,
-                originalName, originalLatitude, originalLongitude, originalNotes, originalIconName, originalMarkerColor, originalDisplayOrder);
+                originalName, originalLatitude, originalLongitude, originalNotes, originalIconName, originalMarkerColor, originalDisplayOrder, originalRegionId);
             return PlaceOperationResult.Queued(placeId, "Saved offline - will sync when online");
         }
 
@@ -284,15 +291,16 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
                     offlinePlace.IconName = originalIconName;
                     offlinePlace.MarkerColor = originalMarkerColor;
                     if (originalDisplayOrder.HasValue) offlinePlace.SortOrder = originalDisplayOrder.Value;
+                    if (originalRegionId.HasValue) offlinePlace.RegionId = originalRegionId.Value;
                     await _placeRepository.UpdateOfflinePlaceAsync(offlinePlace);
                 }
                 return PlaceOperationResult.Rejected($"Server rejected: {response.Error}");
             }
 
             // Response was null or non-4xx failure - queue for retry
-            await EnqueuePlaceMutationWithOriginalAsync("Update", placeId, tripId, null,
+            await EnqueuePlaceMutationWithOriginalAsync("Update", placeId, tripId, regionId,
                 name, latitude, longitude, notes, iconName, markerColor, displayOrder, includeNotes, null,
-                originalName, originalLatitude, originalLongitude, originalNotes, originalIconName, originalMarkerColor, originalDisplayOrder);
+                originalName, originalLatitude, originalLongitude, originalNotes, originalIconName, originalMarkerColor, originalDisplayOrder, originalRegionId);
             return PlaceOperationResult.Queued(placeId, response?.Error ?? "Sync failed - will retry");
         }
         catch (HttpRequestException ex) when (IsClientError(ex))
@@ -307,6 +315,7 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
                 offlinePlace.IconName = originalIconName;
                 offlinePlace.MarkerColor = originalMarkerColor;
                 if (originalDisplayOrder.HasValue) offlinePlace.SortOrder = originalDisplayOrder.Value;
+                if (originalRegionId.HasValue) offlinePlace.RegionId = originalRegionId.Value;
                 await _placeRepository.UpdateOfflinePlaceAsync(offlinePlace);
             }
             return PlaceOperationResult.Rejected($"Server rejected: {ex.Message}");
@@ -314,25 +323,25 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
         catch (HttpRequestException ex)
         {
             // Network error - queue for retry with original values
-            await EnqueuePlaceMutationWithOriginalAsync("Update", placeId, tripId, null,
+            await EnqueuePlaceMutationWithOriginalAsync("Update", placeId, tripId, regionId,
                 name, latitude, longitude, notes, iconName, markerColor, displayOrder, includeNotes, null,
-                originalName, originalLatitude, originalLongitude, originalNotes, originalIconName, originalMarkerColor, originalDisplayOrder);
+                originalName, originalLatitude, originalLongitude, originalNotes, originalIconName, originalMarkerColor, originalDisplayOrder, originalRegionId);
             return PlaceOperationResult.Queued(placeId, $"Network error: {ex.Message} - will retry");
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
         {
             // Timeout - queue for retry with original values
-            await EnqueuePlaceMutationWithOriginalAsync("Update", placeId, tripId, null,
+            await EnqueuePlaceMutationWithOriginalAsync("Update", placeId, tripId, regionId,
                 name, latitude, longitude, notes, iconName, markerColor, displayOrder, includeNotes, null,
-                originalName, originalLatitude, originalLongitude, originalNotes, originalIconName, originalMarkerColor, originalDisplayOrder);
+                originalName, originalLatitude, originalLongitude, originalNotes, originalIconName, originalMarkerColor, originalDisplayOrder, originalRegionId);
             return PlaceOperationResult.Queued(placeId, "Request timed out - will retry");
         }
         catch (Exception ex)
         {
             // Unexpected error - queue for retry with original values
-            await EnqueuePlaceMutationWithOriginalAsync("Update", placeId, tripId, null,
+            await EnqueuePlaceMutationWithOriginalAsync("Update", placeId, tripId, regionId,
                 name, latitude, longitude, notes, iconName, markerColor, displayOrder, includeNotes, null,
-                originalName, originalLatitude, originalLongitude, originalNotes, originalIconName, originalMarkerColor, originalDisplayOrder);
+                originalName, originalLatitude, originalLongitude, originalNotes, originalIconName, originalMarkerColor, originalDisplayOrder, originalRegionId);
             return PlaceOperationResult.Queued(placeId, $"Unexpected error: {ex.Message} - will retry");
         }
     }
@@ -448,6 +457,7 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
                 if (iconName != null) existing.IconName = iconName;
                 if (markerColor != null) existing.MarkerColor = markerColor;
                 if (displayOrder.HasValue) existing.DisplayOrder = displayOrder;
+                if (regionId.HasValue) existing.RegionId = regionId;
                 existing.CreatedAt = DateTime.UtcNow;
                 await _database.UpdateAsync(existing);
                 return;
@@ -495,7 +505,8 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
         string? originalNotes,
         string? originalIconName,
         string? originalMarkerColor,
-        int? originalDisplayOrder)
+        int? originalDisplayOrder,
+        Guid? originalRegionId = null)
     {
         // For updates, check if there's an existing mutation to merge
         if (operationType == "Update")
@@ -514,6 +525,7 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
                 if (iconName != null) existing.IconName = iconName;
                 if (markerColor != null) existing.MarkerColor = markerColor;
                 if (displayOrder.HasValue) existing.DisplayOrder = displayOrder;
+                if (regionId.HasValue) existing.RegionId = regionId;
                 // Keep original values from first mutation (don't overwrite)
                 existing.CreatedAt = DateTime.UtcNow;
                 await _database.UpdateAsync(existing);
@@ -545,6 +557,7 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
             OriginalIconName = originalIconName,
             OriginalMarkerColor = originalMarkerColor,
             OriginalDisplayOrder = originalDisplayOrder,
+            OriginalRegionId = originalRegionId,
             CreatedAt = DateTime.UtcNow
         };
         await _database!.InsertAsync(mutation);

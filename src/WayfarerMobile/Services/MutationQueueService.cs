@@ -370,6 +370,7 @@ public class MutationQueueService : IMutationQueueService
                 if (mutation.OriginalIconName != null) existingPlace.IconName = mutation.OriginalIconName;
                 if (mutation.OriginalMarkerColor != null) existingPlace.MarkerColor = mutation.OriginalMarkerColor;
                 if (mutation.OriginalDisplayOrder.HasValue) existingPlace.SortOrder = mutation.OriginalDisplayOrder.Value;
+                if (mutation.OriginalRegionId.HasValue) existingPlace.RegionId = mutation.OriginalRegionId.Value;
                 await _placeRepository.UpdateOfflinePlaceAsync(existingPlace);
             }
         }

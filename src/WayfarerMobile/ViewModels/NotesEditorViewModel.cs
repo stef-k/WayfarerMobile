@@ -380,6 +380,10 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
             {
                 region.Notes = notes;
             }
+
+            // Refresh SortedRegions so UI-bound Region copies have the updated notes
+            // (SortedRegions creates new TripRegion objects from canonical regions)
+            loadedTrip.NotifySortedRegionsChanged();
         }
 
         // Queue server sync
