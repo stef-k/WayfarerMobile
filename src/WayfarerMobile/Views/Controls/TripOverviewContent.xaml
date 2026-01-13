@@ -167,7 +167,8 @@
                             <Border.StrokeShape>
                                 <RoundRectangle CornerRadius="8" />
                             </Border.StrokeShape>
-                            <Image Source="{Binding TripSheet.LoadedTrip.CleanCoverImageUrl}"
+                            <!-- Use TripCoverImageUrl for visibility-aware image loading (D5 fix) -->
+                            <Image Source="{Binding TripCoverImageUrl}"
                                    Aspect="AspectFill" />
                         </Border>
 

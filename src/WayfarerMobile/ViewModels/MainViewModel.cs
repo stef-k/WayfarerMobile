@@ -35,6 +35,12 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     /// </summary>
     private CancellationTokenSource _pageLifetimeCts = new();
 
+    /// <summary>
+    /// Tracks whether the page is currently visible.
+    /// Used to suppress image loading when page is not visible.
+    /// </summary>
+    private bool _isPageVisible;
+
     #endregion
 
     #region Child ViewModels
@@ -1218,6 +1224,9 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     /// </summary>
     public override async Task OnAppearingAsync()
     {
+        // Mark page visible and restore image bindings
+        MarkPageVisible();
+
         // Process any pending selection restore from sub-editor navigation
         await TripSheet.ProcessPendingSelectionRestoreAsync();
 
@@ -1289,17 +1298,41 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     public CancellationToken PageLifetimeToken => _pageLifetimeCts.Token;
 
     /// <summary>
+    /// Gets the trip cover image URL, or null when page is not visible.
+    /// Bind to this instead of TripSheet.LoadedTrip.CleanCoverImageUrl to enable
+    /// automatic cancellation of image loads when the page disappears.
+    /// </summary>
+    public string? TripCoverImageUrl => _isPageVisible ? TripSheet.LoadedTrip?.CleanCoverImageUrl : null;
+
+    /// <summary>
     /// Cancels all pending page-lifetime operations and creates a fresh CTS.
     /// Called in OnDisappearingAsync to abort in-flight image loads and other async work.
     /// </summary>
     private void CancelPendingOperations()
     {
+        _isPageVisible = false;
+
         // Cancel and dispose the old CTS
         _pageLifetimeCts.Cancel();
         _pageLifetimeCts.Dispose();
 
         // Create a fresh CTS for the next appearance
         _pageLifetimeCts = new CancellationTokenSource();
+
+        // Set TripCoverImageUrl to null to cancel any pending image load
+        // MAUI will cancel the native load when the ImageSource is set to null
+        OnPropertyChanged(nameof(TripCoverImageUrl));
+    }
+
+    /// <summary>
+    /// Marks the page as visible and restores image bindings.
+    /// Called at start of OnAppearingAsync.
+    /// </summary>
+    private void MarkPageVisible()
+    {
+        _isPageVisible = true;
+        // Restore TripCoverImageUrl binding (will now return actual URL)
+        OnPropertyChanged(nameof(TripCoverImageUrl));
     }
 
     /// <summary>
