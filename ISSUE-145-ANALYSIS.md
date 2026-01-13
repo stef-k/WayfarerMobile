@@ -927,8 +927,8 @@ public async Task<Guid> CreatePlaceAsync(
 Track each fix: implement → build → test → verify finding resolved.
 
 ### Phase 0: Prerequisite
-- [ ] **D0**: Align TempId between ViewModel and Service
-- [ ] **D0 Verify**: builds, tests pass, F7 resolved
+- [x] **D0**: Align TempId between ViewModel and Service
+- [x] **D0 Verify**: builds, tests pass, F7 resolved
 
 ### Phase 1: Core Fixes
 - [ ] **D2**: Subscribe to EntityCreated and update in-memory collections
@@ -962,7 +962,7 @@ Track each fix: implement → build → test → verify finding resolved.
 | Date | Action | Status |
 |------|--------|--------|
 | 2026-01-13 | Document merged to develop branch | ✅ |
-| | D0 implementation | Pending |
+| 2026-01-13 | D0 implementation | ✅ Commit bf01e80 |
 | | D2 implementation | Pending |
 | | D1 implementation | Pending |
 | | D3 implementation | Pending |
