@@ -17,6 +17,7 @@ public class RegionOperationsHandler : IRegionOperationsHandler
     private readonly IApiClient _apiClient;
     private readonly DatabaseService _databaseService;
     private readonly IAreaRepository _areaRepository;
+    private readonly IPlaceRepository _placeRepository;
     private readonly ITripRepository _tripRepository;
     private readonly IConnectivity _connectivity;
     private readonly SemaphoreSlim _initLock = new(1, 1);
@@ -30,12 +31,14 @@ public class RegionOperationsHandler : IRegionOperationsHandler
         IApiClient apiClient,
         DatabaseService databaseService,
         IAreaRepository areaRepository,
+        IPlaceRepository placeRepository,
         ITripRepository tripRepository,
         IConnectivity connectivity)
     {
         _apiClient = apiClient;
         _databaseService = databaseService;
         _areaRepository = areaRepository;
+        _placeRepository = placeRepository;
         _tripRepository = tripRepository;
         _connectivity = connectivity;
     }
@@ -275,6 +278,47 @@ public class RegionOperationsHandler : IRegionOperationsHandler
     public async Task<RegionOperationResult> DeleteRegionAsync(Guid regionId, Guid tripId)
     {
         await EnsureInitializedAsync();
+
+        // D4: If entity was never synced (pending CREATE exists), just cancel the CREATE
+        var pendingCreate = await _database!.Table<PendingTripMutation>()
+            .Where(m => m.EntityId == regionId && m.EntityType == "Region" && m.OperationType == "Create")
+            .FirstOrDefaultAsync();
+
+        if (pendingCreate != null)
+        {
+            // Entity was never synced - remove from queue and offline table
+            await _database.DeleteAsync(pendingCreate);
+            await _areaRepository.DeleteOfflineAreaByServerIdAsync(regionId);
+
+            // Delete any other pending mutations for this region
+            var relatedMutations = await _database.Table<PendingTripMutation>()
+                .Where(m => m.EntityId == regionId && m.EntityType == "Region")
+                .ToListAsync();
+            foreach (var m in relatedMutations)
+                await _database.DeleteAsync(m);
+
+            // D4: Clean up orphaned Place CREATE mutations that reference this Region's TempId
+            var orphanedPlaceCreates = await _database.Table<PendingTripMutation>()
+                .Where(m => m.RegionId == regionId && m.EntityType == "Place")
+                .ToListAsync();
+            foreach (var m in orphanedPlaceCreates)
+                await _database.DeleteAsync(m);
+
+            // D4: Get orphaned offline Place rows, clean up their UPDATE/DELETE mutations, then delete them
+            var orphanedPlaces = await _placeRepository.GetOfflinePlacesByRegionIdAsync(regionId);
+            foreach (var place in orphanedPlaces)
+            {
+                var placeMutations = await _database.Table<PendingTripMutation>()
+                    .Where(m => m.EntityId == place.ServerId && m.EntityType == "Place")
+                    .ToListAsync();
+                foreach (var m in placeMutations)
+                    await _database.DeleteAsync(m);
+
+                await _placeRepository.DeleteOfflinePlaceByServerIdAsync(place.ServerId);
+            }
+
+            return RegionOperationResult.Completed(regionId, message: "Cancelled - entity was never synced");
+        }
 
         // 1. Read full region data for restoration
         var offlineArea = await _areaRepository.GetOfflineAreaByServerIdAsync(regionId);

@@ -28,6 +28,12 @@ public partial class MainPage : ContentPage, IQueryAttributable
     private TripDetails? _pendingTrip;
     private WritableLayer? _tempMarkerLayer;
 
+    // D5: Ordering guard flags to prevent image load crash
+    // _isLoaded: Visual tree is attached (Loaded event fired) - safe to load images
+    // _isAppearingComplete: ViewModel initialization (OnAppearingAsync) is done
+    private bool _isLoaded;
+    private bool _isAppearingComplete;
+
     /// <summary>
     /// Creates a new instance of MainPage.
     /// </summary>
@@ -39,6 +45,10 @@ public partial class MainPage : ContentPage, IQueryAttributable
         _viewModel = viewModel;
         _logger = logger;
         BindingContext = viewModel;
+
+        // D5: Use Loaded event - fires when visual tree is attached to window
+        // This ensures Android Activity is ready before image loads can occur
+        Loaded += OnPageLoaded;
 
         // Subscribe to map info events for tap handling (page-owned control)
         MapControl.Info += OnMapInfo;
@@ -236,25 +246,59 @@ public partial class MainPage : ContentPage, IQueryAttributable
     }
 
     /// <summary>
+    /// D5: Called when the visual tree is attached to the window.
+    /// This is the safe point to trigger image loads on Android.
+    /// </summary>
+    private async void OnPageLoaded(object? sender, EventArgs e)
+    {
+        _logger.LogDebug("OnPageLoaded: Visual tree attached, _isAppearingComplete={Flag}", _isAppearingComplete);
+        _isLoaded = true;
+        await LoadPendingTripIfReadyAsync();
+    }
+
+    /// <summary>
     /// Called when the page appears.
     /// </summary>
     protected override async void OnAppearing()
     {
-        _logger.LogDebug("OnAppearing: Start, _pendingTrip={HasPending}, HasLoadedTrip={HasLoaded}",
-            _pendingTrip != null, _viewModel.HasLoadedTrip);
+        _logger.LogDebug("OnAppearing: Start, _pendingTrip={HasPending}, HasLoadedTrip={HasLoaded}, _isLoaded={IsLoaded}",
+            _pendingTrip != null, _viewModel.HasLoadedTrip, _isLoaded);
 
         base.OnAppearing();
+
+        // Initialize map state, permissions, etc.
         await _viewModel.OnAppearingAsync();
 
-        // Load pending trip if navigated with LoadTrip parameter
+        // D5: Mark appearing complete AFTER initialization finishes
+        _isAppearingComplete = true;
+        _logger.LogDebug("OnAppearing: OnAppearingAsync complete, _isLoaded={IsLoaded}", _isLoaded);
+
+        // D5: Try to load trip (will only proceed if Loaded has also fired)
+        await LoadPendingTripIfReadyAsync();
+    }
+
+    /// <summary>
+    /// D5: Loads the pending trip only when both ordering guard conditions are met.
+    /// 1. Visual tree is attached (Loaded fired - Android Activity ready)
+    /// 2. ViewModel initialization complete (OnAppearingAsync finished)
+    /// </summary>
+    private async Task LoadPendingTripIfReadyAsync()
+    {
+        // ORDERING GUARD: Only load when BOTH conditions are met
+        if (!_isLoaded || !_isAppearingComplete)
+        {
+            _logger.LogDebug("LoadPendingTripIfReadyAsync: Not ready - _isLoaded={IsLoaded}, _isAppearingComplete={IsAppearing}",
+                _isLoaded, _isAppearingComplete);
+            return;
+        }
+
         if (_pendingTrip != null)
         {
-            _logger.LogDebug("OnAppearing: Loading pending trip {TripName}", _pendingTrip.Name);
-            var tripToLoad = _pendingTrip;
+            _logger.LogDebug("LoadPendingTripIfReadyAsync: Loading pending trip {TripName}", _pendingTrip.Name);
+            var trip = _pendingTrip;
             _pendingTrip = null;
-            await _viewModel.LoadTripForNavigationAsync(tripToLoad);
-
-            _logger.LogDebug("OnAppearing: After load, HasLoadedTrip={HasLoaded}", _viewModel.HasLoadedTrip);
+            await _viewModel.LoadTripForNavigationAsync(trip);
+            _logger.LogDebug("LoadPendingTripIfReadyAsync: After load, HasLoadedTrip={HasLoaded}", _viewModel.HasLoadedTrip);
         }
     }
 
@@ -270,6 +314,10 @@ public partial class MainPage : ContentPage, IQueryAttributable
         {
             _logger.LogDebug("ApplyQueryAttributes: Setting pending trip {TripName} ({TripId})", trip.Name, trip.Id);
             _pendingTrip = trip;
+
+            // D5: Edge case - If both flags already true (re-navigation), trigger load immediately
+            // This handles the case where ApplyQueryAttributes is called after page is fully ready
+            _ = LoadPendingTripIfReadyAsync();
         }
 
         // Handle UnloadTrip signal (when trip is deleted from TripsPage)
@@ -304,7 +352,13 @@ public partial class MainPage : ContentPage, IQueryAttributable
     protected override async void OnDisappearing()
     {
         base.OnDisappearing();
+
+        // Call existing ViewModel cleanup
         await _viewModel.OnDisappearingAsync();
+
+        // D5: Reset appearing flag for next appearance cycle
+        // Note: _isLoaded stays true - Loaded fires once per page instance (visual tree attachment)
+        _isAppearingComplete = false;
     }
 
     /// <summary>

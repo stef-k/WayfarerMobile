@@ -507,6 +507,17 @@ public class TripSyncService : ITripSyncService
                 await _placeRepository.UpdateOfflinePlaceAsync(offlinePlace);
             }
 
+            // D3: Rewrite pending mutations for this Place from TempId to ServerId
+            var pendingMutations = await _database!.Table<PendingTripMutation>()
+                .Where(m => m.EntityId == tempId && m.EntityType == "Place")
+                .ToListAsync();
+
+            foreach (var pending in pendingMutations)
+            {
+                pending.EntityId = response.Id;
+                await _database.UpdateAsync(pending);
+            }
+
             EntityCreated?.Invoke(this, new EntityCreatedEventArgs
             {
                 TempClientId = tempId,
@@ -559,6 +570,36 @@ public class TripSyncService : ITripSyncService
             {
                 offlineArea.ServerId = response.Id;
                 await _areaRepository.UpdateOfflineAreaAsync(offlineArea);
+            }
+
+            // D3: Rewrite pending mutations for this Region from TempId to ServerId
+            var pendingMutations = await _database!.Table<PendingTripMutation>()
+                .Where(m => m.EntityId == tempId && m.EntityType == "Region")
+                .ToListAsync();
+
+            foreach (var pending in pendingMutations)
+            {
+                pending.EntityId = response.Id;
+                await _database.UpdateAsync(pending);
+            }
+
+            // D3: Rewrite RegionId in pending Place mutations that reference this Region's TempId
+            var placeMutationsWithRegion = await _database.Table<PendingTripMutation>()
+                .Where(m => m.RegionId == tempId && m.EntityType == "Place")
+                .ToListAsync();
+
+            foreach (var placeMutation in placeMutationsWithRegion)
+            {
+                placeMutation.RegionId = response.Id;
+                await _database.UpdateAsync(placeMutation);
+            }
+
+            // D3: Rewrite RegionId in offline Place rows that reference this Region's TempId
+            var offlinePlaces = await _placeRepository.GetOfflinePlacesByRegionIdAsync(tempId);
+            foreach (var offlinePlace in offlinePlaces)
+            {
+                offlinePlace.RegionId = response.Id;
+                await _placeRepository.UpdateOfflinePlaceAsync(offlinePlace);
             }
 
             EntityCreated?.Invoke(this, new EntityCreatedEventArgs

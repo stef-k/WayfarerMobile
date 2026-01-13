@@ -85,4 +85,13 @@ public class PlaceRepository : RepositoryBase, IPlaceRepository
         var db = await GetConnectionAsync();
         await db.ExecuteAsync("DELETE FROM OfflinePlaces WHERE TripId = ?", tripId);
     }
+
+    /// <inheritdoc />
+    public async Task<List<OfflinePlaceEntity>> GetOfflinePlacesByRegionIdAsync(Guid regionId)
+    {
+        var db = await GetConnectionAsync();
+        return await db.Table<OfflinePlaceEntity>()
+            .Where(p => p.RegionId == regionId)
+            .ToListAsync();
+    }
 }

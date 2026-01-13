@@ -934,22 +934,22 @@ Track each fix: implement → build → test → verify finding resolved.
 - [x] **D2**: Subscribe to EntityCreated and update in-memory collections
 - [x] **D2 Verify**: builds, tests pass, F2 resolved
 
-- [ ] **D1**: Persist offline entry on CREATE (all paths)
-- [ ] **D1 Verify**: builds, tests pass, F1 resolved
+- [x] **D1**: Persist offline entry on CREATE (all paths)
+- [x] **D1 Verify**: builds, tests pass, F1 resolved (already implemented in PlaceOperationsHandler/RegionOperationsHandler)
 
-- [ ] **D3**: Reconcile pending mutations and offline data after CREATE sync
-- [ ] **D3 Verify**: builds, tests pass, F3 and F4 resolved
+- [x] **D3**: Reconcile pending mutations and offline data after CREATE sync
+- [x] **D3 Verify**: builds, tests pass, F3 and F4 resolved
 
 ### Phase 2: Dependency Ordering
-- [ ] **D6**: Queue Place CREATE when parent Region is pending
-- [ ] **D6 Verify**: builds, tests pass, F4 fully resolved
+- [x] **D6**: Queue Place CREATE when parent Region is pending
+- [x] **D6 Verify**: builds, tests pass, F4 fully resolved
 
 ### Phase 3: Edge Cases & Crash Fix
-- [ ] **D4**: Cancel CREATE on DELETE for unsynced entities
-- [ ] **D4 Verify**: builds, tests pass, orphan cleanup works
+- [x] **D4**: Cancel CREATE on DELETE for unsynced entities
+- [x] **D4 Verify**: builds, tests pass, orphan cleanup works
 
-- [ ] **D5**: Use Loaded event for trip loading (prevent image crash)
-- [ ] **D5 Verify**: builds, tests pass, F5 crash resolved
+- [x] **D5**: Use Loaded event for trip loading (prevent image crash)
+- [x] **D5 Verify**: builds, tests pass, F5 crash resolved
 
 ### Final Validation
 - [ ] **Manual Test**: Add Region → Edit → Verify update succeeds
@@ -964,8 +964,8 @@ Track each fix: implement → build → test → verify finding resolved.
 | 2026-01-13 | Document merged to develop branch | ✅ |
 | 2026-01-13 | D0 implementation | ✅ Commit bf01e80 |
 | 2026-01-13 | D2 implementation | ✅ Commit 9f76617 |
-| | D1 implementation | Pending |
-| | D3 implementation | Pending |
-| | D6 implementation | Pending |
-| | D4 implementation | Pending |
-| | D5 implementation | Pending |
+| 2026-01-13 | D1 verification | ✅ Already implemented in handlers |
+| 2026-01-13 | D3 implementation | ✅ |
+| 2026-01-13 | D6 implementation | ✅ |
+| 2026-01-13 | D4 implementation | ✅ |
+| 2026-01-13 | D5 implementation | ✅ |

@@ -87,6 +87,47 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
         // Use caller's temp ID if provided, otherwise generate one
         var tempClientId = clientTempId ?? Guid.NewGuid();
 
+        // D6: If RegionId has a pending CREATE, queue this Place CREATE to maintain dependency ordering
+        // This prevents 400 errors when online but parent Region hasn't synced yet
+        if (regionId.HasValue)
+        {
+            var pendingRegionCreate = await _database!.Table<PendingTripMutation>()
+                .Where(m => m.EntityId == regionId.Value
+                         && m.EntityType == "Region"
+                         && m.OperationType == "Create")
+                .FirstOrDefaultAsync();
+
+            if (pendingRegionCreate != null)
+            {
+                // Create offline entry with TempId (D1 pattern)
+                var localTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripId);
+                if (localTrip != null)
+                {
+                    var existingPlace = await _placeRepository.GetOfflinePlaceByServerIdAsync(tempClientId);
+                    if (existingPlace == null)
+                    {
+                        var offlinePlace = new OfflinePlaceEntity
+                        {
+                            TripId = localTrip.Id,
+                            ServerId = tempClientId,
+                            RegionId = regionId.Value,
+                            Name = name,
+                            Latitude = latitude,
+                            Longitude = longitude,
+                            Notes = notes,
+                            IconName = iconName,
+                            MarkerColor = markerColor,
+                            SortOrder = displayOrder ?? 0
+                        };
+                        await _placeRepository.InsertOfflinePlaceAsync(offlinePlace);
+                    }
+                }
+
+                await EnqueuePlaceMutationAsync("Create", tempClientId, tripId, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder, true, tempClientId);
+                return PlaceOperationResult.Queued(tempClientId, "Queued - parent Region pending sync");
+            }
+        }
+
         var request = new PlaceCreateRequest
         {
             RegionId = regionId,
@@ -297,6 +338,27 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
     public async Task<PlaceOperationResult> DeletePlaceAsync(Guid placeId, Guid tripId)
     {
         await EnsureInitializedAsync();
+
+        // D4: If entity was never synced (pending CREATE exists), just cancel the CREATE
+        var pendingCreate = await _database!.Table<PendingTripMutation>()
+            .Where(m => m.EntityId == placeId && m.EntityType == "Place" && m.OperationType == "Create")
+            .FirstOrDefaultAsync();
+
+        if (pendingCreate != null)
+        {
+            // Entity was never synced - remove from queue and offline table
+            await _database.DeleteAsync(pendingCreate);
+            await _placeRepository.DeleteOfflinePlaceByServerIdAsync(placeId);
+
+            // Also delete any pending mutations for this place
+            var relatedMutations = await _database.Table<PendingTripMutation>()
+                .Where(m => m.EntityId == placeId && m.EntityType == "Place")
+                .ToListAsync();
+            foreach (var m in relatedMutations)
+                await _database.DeleteAsync(m);
+
+            return PlaceOperationResult.Completed(placeId, message: "Cancelled - entity was never synced");
+        }
 
         // 1. Read full place data for restoration
         var offlinePlace = await _placeRepository.GetOfflinePlaceByServerIdAsync(placeId);

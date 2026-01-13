@@ -53,4 +53,12 @@ public interface IPlaceRepository
     /// </summary>
     /// <param name="tripId">The local trip ID.</param>
     Task DeletePlacesForTripAsync(int tripId);
+
+    /// <summary>
+    /// Gets all offline places that belong to a specific region.
+    /// Used for D3 reconciliation when Region CREATE syncs.
+    /// </summary>
+    /// <param name="regionId">The region ID (may be temp ID or server ID).</param>
+    /// <returns>List of places in this region.</returns>
+    Task<List<OfflinePlaceEntity>> GetOfflinePlacesByRegionIdAsync(Guid regionId);
 }
