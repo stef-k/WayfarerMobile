@@ -132,8 +132,8 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
 
             if (response?.Success == true && response.Id != Guid.Empty)
             {
-                // Success: create offline entry with server ID (upsert in case temp entry exists)
-                await EnsureOfflinePlaceEntryAsync(tripId, response.Id, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder);
+                // Success: create/reconcile offline entry with server ID (pass tempClientId for reconciliation)
+                await EnsureOfflinePlaceEntryAsync(tripId, response.Id, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder, tempClientId);
                 return PlaceOperationResult.Completed(response.Id, tempClientId);
             }
 
@@ -545,7 +545,19 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
     /// <summary>
     /// Ensures an offline place entry exists with upsert pattern.
     /// Used when queuing CREATE mutations - the offline entry must exist for subsequent updates/deletes.
+    /// Handles tempId→serverId reconciliation when a queued CREATE succeeds on retry.
     /// </summary>
+    /// <param name="tripId">The trip's server ID.</param>
+    /// <param name="serverId">The server ID (or temp ID if not yet synced).</param>
+    /// <param name="regionId">The region ID.</param>
+    /// <param name="name">The place name.</param>
+    /// <param name="latitude">The latitude.</param>
+    /// <param name="longitude">The longitude.</param>
+    /// <param name="notes">Optional notes.</param>
+    /// <param name="iconName">Optional icon name.</param>
+    /// <param name="markerColor">Optional marker color.</param>
+    /// <param name="displayOrder">Optional display order.</param>
+    /// <param name="tempClientId">Optional temp ID to reconcile if entry exists with temp ID.</param>
     private async Task EnsureOfflinePlaceEntryAsync(
         Guid tripId,
         Guid serverId,
@@ -556,17 +568,39 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
         string? notes,
         string? iconName,
         string? markerColor,
-        int? displayOrder)
+        int? displayOrder,
+        Guid? tempClientId = null)
     {
         var localTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripId);
         if (localTrip == null)
             return;
 
-        // Upsert pattern: check if entry already exists
+        // Check if entry already exists with the target serverId
         var existing = await _placeRepository.GetOfflinePlaceByServerIdAsync(serverId);
         if (existing != null)
-            return; // Already exists, no action needed
+            return; // Already exists with correct ID, no action needed
 
+        // If tempClientId provided, check for existing entry with temp ID that needs reconciliation
+        if (tempClientId.HasValue && tempClientId.Value != serverId)
+        {
+            var tempEntry = await _placeRepository.GetOfflinePlaceByServerIdAsync(tempClientId.Value);
+            if (tempEntry != null)
+            {
+                // Reconcile: update temp ID entry to use real server ID
+                tempEntry.ServerId = serverId;
+                tempEntry.Name = name;
+                tempEntry.Latitude = latitude;
+                tempEntry.Longitude = longitude;
+                tempEntry.Notes = notes;
+                tempEntry.IconName = iconName;
+                tempEntry.MarkerColor = markerColor;
+                tempEntry.SortOrder = displayOrder ?? tempEntry.SortOrder;
+                await _placeRepository.UpdateOfflinePlaceAsync(tempEntry);
+                return;
+            }
+        }
+
+        // No existing entry found - insert new one
         var offlinePlace = new OfflinePlaceEntity
         {
             TripId = localTrip.Id,

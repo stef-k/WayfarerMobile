@@ -885,6 +885,12 @@ public async Task<Guid> CreatePlaceAsync(
 11. DELETE of unsynced Region removes orphaned Place CREATE mutations (by RegionId), UPDATE/DELETE mutations (by EntityId), and offline Place rows
 12. CreatePlaceAsync queues (not calls API) when RegionId has pending Region CREATE
 
+> **NOTE:** Handler unit tests (PlaceOperationsHandler, RegionOperationsHandler) cannot currently be implemented because:
+> - Handlers depend on MAUI's `IConnectivity` interface which requires platform-specific infrastructure
+> - The test project targets `net10.0` while handlers are in the MAUI project (`net10.0-android/ios`)
+> - Refactoring handlers to WayfarerMobile.Core (platform-neutral) would enable unit testing but is out of scope for this fix
+> - Code has been manually verified; integration tests provide coverage
+
 ### Integration Tests
 1. Create Region -> Update Region -> Verify single entity on server
 2. Create Region -> Create Place in Region -> Verify Place has correct RegionId

@@ -112,8 +112,8 @@ public class RegionOperationsHandler : IRegionOperationsHandler
 
             if (response?.Success == true && response.Id != Guid.Empty)
             {
-                // Success: create offline entry with server ID (upsert in case temp entry exists)
-                await EnsureOfflineAreaEntryAsync(tripId, response.Id, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder);
+                // Success: create/reconcile offline entry with server ID (pass tempClientId for reconciliation)
+                await EnsureOfflineAreaEntryAsync(tripId, response.Id, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, tempClientId);
                 return RegionOperationResult.Completed(response.Id, tempClientId);
             }
 
@@ -515,7 +515,17 @@ public class RegionOperationsHandler : IRegionOperationsHandler
     /// <summary>
     /// Ensures an offline area entry exists with upsert pattern.
     /// Used when queuing CREATE mutations - the offline entry must exist for subsequent updates/deletes.
+    /// Handles tempId→serverId reconciliation when a queued CREATE succeeds on retry.
     /// </summary>
+    /// <param name="tripId">The trip's server ID.</param>
+    /// <param name="serverId">The server ID (or temp ID if not yet synced).</param>
+    /// <param name="name">The region name.</param>
+    /// <param name="notes">Optional notes.</param>
+    /// <param name="coverImageUrl">Optional cover image URL.</param>
+    /// <param name="centerLatitude">Optional center latitude.</param>
+    /// <param name="centerLongitude">Optional center longitude.</param>
+    /// <param name="displayOrder">Optional display order.</param>
+    /// <param name="tempClientId">Optional temp ID to reconcile if entry exists with temp ID.</param>
     private async Task EnsureOfflineAreaEntryAsync(
         Guid tripId,
         Guid serverId,
@@ -524,17 +534,38 @@ public class RegionOperationsHandler : IRegionOperationsHandler
         string? coverImageUrl,
         double? centerLatitude,
         double? centerLongitude,
-        int? displayOrder)
+        int? displayOrder,
+        Guid? tempClientId = null)
     {
         var localTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripId);
         if (localTrip == null)
             return;
 
-        // Upsert pattern: check if entry already exists
+        // Check if entry already exists with the target serverId
         var existing = await _areaRepository.GetOfflineAreaByServerIdAsync(serverId);
         if (existing != null)
-            return; // Already exists, no action needed
+            return; // Already exists with correct ID, no action needed
 
+        // If tempClientId provided, check for existing entry with temp ID that needs reconciliation
+        if (tempClientId.HasValue && tempClientId.Value != serverId)
+        {
+            var tempEntry = await _areaRepository.GetOfflineAreaByServerIdAsync(tempClientId.Value);
+            if (tempEntry != null)
+            {
+                // Reconcile: update temp ID entry to use real server ID
+                tempEntry.ServerId = serverId;
+                tempEntry.Name = name;
+                tempEntry.Notes = notes;
+                tempEntry.CoverImageUrl = coverImageUrl;
+                tempEntry.CenterLatitude = centerLatitude;
+                tempEntry.CenterLongitude = centerLongitude;
+                tempEntry.SortOrder = displayOrder ?? tempEntry.SortOrder;
+                await _areaRepository.UpdateOfflineAreaAsync(tempEntry);
+                return;
+            }
+        }
+
+        // No existing entry found - insert new one
         var offlineArea = new OfflineAreaEntity
         {
             TripId = localTrip.Id,
