@@ -38,6 +38,12 @@ public partial class TripItemEditorViewModel : BaseViewModel
     // Callbacks to parent ViewModel
     private ITripItemEditorCallbacks? _callbacks;
 
+    /// <summary>
+    /// Tracks Region temp IDs that are currently being created (API call in-flight).
+    /// Used to prevent Place creation with temp RegionId while Region CREATE is in progress.
+    /// </summary>
+    private readonly HashSet<Guid> _inFlightRegionCreates = new();
+
     #endregion
 
     #region Observable Properties - Coordinate Editing State
@@ -1197,12 +1203,21 @@ public partial class TripItemEditorViewModel : BaseViewModel
 
             // Sync to server
             // Pass the region's temp ID so EntityCreated event can reconcile the in-memory object
+            // Track in-flight state to prevent Place creation with temp RegionId during API call
             _logger.LogInformation("AddRegion: Syncing to server");
-            await _tripSyncService.CreateRegionAsync(
-                loadedTrip.Id,
-                name,
-                displayOrder: newRegion.SortOrder,
-                clientTempId: newRegion.Id);
+            _inFlightRegionCreates.Add(newRegion.Id);
+            try
+            {
+                await _tripSyncService.CreateRegionAsync(
+                    loadedTrip.Id,
+                    name,
+                    displayOrder: newRegion.SortOrder,
+                    clientTempId: newRegion.Id);
+            }
+            finally
+            {
+                _inFlightRegionCreates.Remove(newRegion.Id);
+            }
 
             _logger.LogInformation("AddRegion: Completed successfully for region {RegionId}", newRegion.Id);
             await _toastService.ShowSuccessAsync("Region added");
@@ -1252,6 +1267,13 @@ public partial class TripItemEditorViewModel : BaseViewModel
         var region = regions.FirstOrDefault(r => r.Name == selectedRegionName);
         if (region == null)
             return;
+
+        // Check if region is currently being created (API call in-flight)
+        if (_inFlightRegionCreates.Contains(region.Id))
+        {
+            await _toastService.ShowWarningAsync("Region is still saving - try again in a moment");
+            return;
+        }
 
         // Step 2: Prompt for place name
         var name = await (_callbacks?.DisplayPromptAsync(

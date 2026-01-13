@@ -28,6 +28,13 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     private readonly UnifiedTileCacheService _tileCacheService;
     private readonly ILogger<MainViewModel> _logger;
 
+    /// <summary>
+    /// Cancellation token source for image loads and other async operations.
+    /// Cancelled in OnDisappearingAsync to prevent "destroyed activity" crashes
+    /// when image loads complete after the page is detached.
+    /// </summary>
+    private CancellationTokenSource _pageLifetimeCts = new();
+
     #endregion
 
     #region Child ViewModels
@@ -1255,6 +1262,10 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     /// </summary>
     public override async Task OnDisappearingAsync()
     {
+        // D5 fix (after-detach path): Cancel any pending image loads and async operations
+        // to prevent "destroyed activity" crashes when loads complete after page detaches
+        CancelPendingOperations();
+
         // Close the trip sheet when navigating away (but keep trip loaded in memory)
         // Don't close if navigating to sub-editors (notes, marker)
         if (!IsNavigatingToSubEditor)
@@ -1272,6 +1283,26 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     }
 
     /// <summary>
+    /// Gets the cancellation token for page-lifetime operations.
+    /// Use this for any async operations that should be cancelled when the page disappears.
+    /// </summary>
+    public CancellationToken PageLifetimeToken => _pageLifetimeCts.Token;
+
+    /// <summary>
+    /// Cancels all pending page-lifetime operations and creates a fresh CTS.
+    /// Called in OnDisappearingAsync to abort in-flight image loads and other async work.
+    /// </summary>
+    private void CancelPendingOperations()
+    {
+        // Cancel and dispose the old CTS
+        _pageLifetimeCts.Cancel();
+        _pageLifetimeCts.Dispose();
+
+        // Create a fresh CTS for the next appearance
+        _pageLifetimeCts = new CancellationTokenSource();
+    }
+
+    /// <summary>
     /// Cleans up event subscriptions to prevent memory leaks.
     /// Note: MainViewModel is Transient, but most child VMs are Singleton.
     /// We only unsubscribe from events here - Singleton children must NOT be disposed
@@ -1279,6 +1310,10 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     /// </summary>
     protected override void Cleanup()
     {
+        // Cancel and dispose the page lifetime CTS
+        _pageLifetimeCts.Cancel();
+        _pageLifetimeCts.Dispose();
+
         // Unsubscribe from location bridge events
         _locationBridge.LocationReceived -= OnLocationReceived;
 
