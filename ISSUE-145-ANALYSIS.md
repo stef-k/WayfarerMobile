@@ -919,3 +919,53 @@ public async Task<Guid> CreatePlaceAsync(
 - The `EntityCreated` event infrastructure already exists but is unused
 - Issue #145 documents a comprehensive implementation plan that aligns with these findings
 - The log file appears to be from an older version (references `TripItemEditorViewModel` which doesn't exist in current codebase), but the defects identified are still present in current code
+
+---
+
+## Implementation Progress
+
+Track each fix: implement → build → test → verify finding resolved.
+
+### Phase 0: Prerequisite
+- [ ] **D0**: Align TempId between ViewModel and Service
+- [ ] **D0 Verify**: builds, tests pass, F7 resolved
+
+### Phase 1: Core Fixes
+- [ ] **D2**: Subscribe to EntityCreated and update in-memory collections
+- [ ] **D2 Verify**: builds, tests pass, F2 resolved
+
+- [ ] **D1**: Persist offline entry on CREATE (all paths)
+- [ ] **D1 Verify**: builds, tests pass, F1 resolved
+
+- [ ] **D3**: Reconcile pending mutations and offline data after CREATE sync
+- [ ] **D3 Verify**: builds, tests pass, F3 and F4 resolved
+
+### Phase 2: Dependency Ordering
+- [ ] **D6**: Queue Place CREATE when parent Region is pending
+- [ ] **D6 Verify**: builds, tests pass, F4 fully resolved
+
+### Phase 3: Edge Cases & Crash Fix
+- [ ] **D4**: Cancel CREATE on DELETE for unsynced entities
+- [ ] **D4 Verify**: builds, tests pass, orphan cleanup works
+
+- [ ] **D5**: Use Loaded event for trip loading (prevent image crash)
+- [ ] **D5 Verify**: builds, tests pass, F5 crash resolved
+
+### Final Validation
+- [ ] **Manual Test**: Add Region → Edit → Verify update succeeds
+- [ ] **Close Issues**: Confirm #145, #118, #119 resolved
+
+---
+
+## Change Log
+
+| Date | Action | Status |
+|------|--------|--------|
+| 2026-01-13 | Document merged to develop branch | ✅ |
+| | D0 implementation | Pending |
+| | D2 implementation | Pending |
+| | D1 implementation | Pending |
+| | D3 implementation | Pending |
+| | D6 implementation | Pending |
+| | D4 implementation | Pending |
+| | D5 implementation | Pending |
