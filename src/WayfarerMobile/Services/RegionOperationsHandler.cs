@@ -515,7 +515,7 @@ public class RegionOperationsHandler : IRegionOperationsHandler
     /// <summary>
     /// Ensures an offline area entry exists with upsert pattern.
     /// Used when queuing CREATE mutations - the offline entry must exist for subsequent updates/deletes.
-    /// Handles tempId→serverId reconciliation when a queued CREATE succeeds on retry.
+    /// Handles tempId-to-serverId reconciliation when a queued CREATE succeeds on retry.
     /// </summary>
     /// <param name="tripId">The trip's server ID.</param>
     /// <param name="serverId">The server ID (or temp ID if not yet synced).</param>

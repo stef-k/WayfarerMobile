@@ -89,6 +89,10 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
 
         // D6: If RegionId has a pending CREATE, queue this Place CREATE to maintain dependency ordering
         // This prevents 400 errors when online but parent Region hasn't synced yet
+        // NOTE: This check covers queued mutations. In-flight Region CREATEs (API call in progress)
+        // are not tracked, but this is an unlikely edge case requiring user to add Place within
+        // ~200-500ms of adding Region. If this becomes an issue, add IAreaRepository and check
+        // if RegionId has no offline entry (indicating in-flight or unsynced state).
         if (regionId.HasValue)
         {
             var pendingRegionCreate = await _database!.Table<PendingTripMutation>()
@@ -545,7 +549,7 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
     /// <summary>
     /// Ensures an offline place entry exists with upsert pattern.
     /// Used when queuing CREATE mutations - the offline entry must exist for subsequent updates/deletes.
-    /// Handles tempId→serverId reconciliation when a queued CREATE succeeds on retry.
+    /// Handles tempId-to-serverId reconciliation when a queued CREATE succeeds on retry.
     /// </summary>
     /// <param name="tripId">The trip's server ID.</param>
     /// <param name="serverId">The server ID (or temp ID if not yet synced).</param>
