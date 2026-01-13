@@ -544,7 +544,20 @@ public class TripSyncService : ITripSyncService
         };
 
         var response = await _apiClient.UpdatePlaceAsync(mutation.EntityId, request);
-        return response != null;
+
+        // Fix 4: Check response.Success and throw for 4xx to trigger rejection handling
+        if (response?.Success == true)
+            return true;
+
+        if (response != null && !response.Success && TryGetHttpStatusFromError(response.Error, out var statusCode))
+        {
+            if (statusCode >= 400 && statusCode < 500 && statusCode != 429)
+            {
+                throw new HttpRequestException(response.Error, null, (System.Net.HttpStatusCode)statusCode);
+            }
+        }
+
+        return false;
     }
 
     private async Task<bool> ProcessRegionCreateAsync(PendingTripMutation mutation)
@@ -627,7 +640,20 @@ public class TripSyncService : ITripSyncService
         };
 
         var response = await _apiClient.UpdateRegionAsync(mutation.EntityId, request);
-        return response != null;
+
+        // Fix 4: Check response.Success and throw for 4xx to trigger rejection handling
+        if (response?.Success == true)
+            return true;
+
+        if (response != null && !response.Success && TryGetHttpStatusFromError(response.Error, out var statusCode))
+        {
+            if (statusCode >= 400 && statusCode < 500 && statusCode != 429)
+            {
+                throw new HttpRequestException(response.Error, null, (System.Net.HttpStatusCode)statusCode);
+            }
+        }
+
+        return false;
     }
 
     private async Task<bool> ProcessTripUpdateAsync(PendingTripMutation mutation)
@@ -745,6 +771,69 @@ public class TripSyncService : ITripSyncService
     /// </summary>
     public Task CancelPendingMutationsForTripAsync(Guid tripId)
         => _mutationQueue.CancelPendingMutationsForTripAsync(tripId);
+
+    /// <summary>
+    /// Attempts to parse an HTTP status code from an error string.
+    /// Handles formats like "HTTP 404", "404 Not Found", etc.
+    /// </summary>
+    private static bool TryGetHttpStatusFromError(string? error, out int statusCode)
+    {
+        statusCode = 0;
+        if (string.IsNullOrWhiteSpace(error))
+            return false;
+
+        // Pattern 1: "HTTP {statusCode}" (e.g., "HTTP 404")
+        if (error.StartsWith("HTTP ", StringComparison.OrdinalIgnoreCase))
+        {
+            var parts = error.Split(' ');
+            if (parts.Length >= 2 && int.TryParse(parts[1], out statusCode))
+            {
+                return true;
+            }
+        }
+
+        // Pattern 2: "{statusCode} {reason}" (e.g., "404 Not Found")
+        var firstWord = error.Split(' ')[0];
+        if (int.TryParse(firstWord, out statusCode))
+        {
+            return true;
+        }
+
+        // Pattern 3: Named status codes
+        var lowerError = error.ToLowerInvariant();
+        if (lowerError.Contains("notfound") || lowerError.Contains("not found"))
+        {
+            statusCode = 404;
+            return true;
+        }
+        if (lowerError.Contains("badrequest") || lowerError.Contains("bad request"))
+        {
+            statusCode = 400;
+            return true;
+        }
+        if (lowerError.Contains("unauthorized"))
+        {
+            statusCode = 401;
+            return true;
+        }
+        if (lowerError.Contains("forbidden"))
+        {
+            statusCode = 403;
+            return true;
+        }
+        if (lowerError.Contains("conflict"))
+        {
+            statusCode = 409;
+            return true;
+        }
+        if (lowerError.Contains("gone"))
+        {
+            statusCode = 410;
+            return true;
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Determines if the HTTP error is a permanent client error (should not be retried).

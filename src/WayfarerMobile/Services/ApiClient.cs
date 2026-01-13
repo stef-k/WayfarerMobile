@@ -323,8 +323,16 @@ public class ApiClient : IApiClient, IVisitApiClient
 
             if (response.IsSuccessStatusCode)
             {
-                var place = await response.Content.ReadFromJsonAsync<TripPlace>(JsonOptions, cancellationToken);
-                return new PlaceResponse { Success = true, Id = place?.Id ?? Guid.Empty, Place = place };
+                // Server returns { "success": true, "place": {...} } - parse as PlaceResponse
+                var result = await response.Content.ReadFromJsonAsync<PlaceResponse>(JsonOptions, cancellationToken);
+                if (result != null)
+                {
+                    // Ensure Id is set from the nested place object if not directly provided
+                    if (result.Id == Guid.Empty && result.Place != null)
+                        result.Id = result.Place.Id;
+                    return result;
+                }
+                return new PlaceResponse { Success = false, Error = "Failed to parse response" };
             }
 
             _logger.LogWarning("Failed to create place: {StatusCode}", response.StatusCode);
@@ -369,8 +377,16 @@ public class ApiClient : IApiClient, IVisitApiClient
 
             if (response.IsSuccessStatusCode)
             {
-                var place = await response.Content.ReadFromJsonAsync<TripPlace>(JsonOptions, cancellationToken);
-                return new PlaceResponse { Success = true, Id = placeId, Place = place };
+                // Server returns { "success": true, "place": {...} } - parse as PlaceResponse
+                var result = await response.Content.ReadFromJsonAsync<PlaceResponse>(JsonOptions, cancellationToken);
+                if (result != null)
+                {
+                    // Ensure Id is set (from nested place or use the original placeId)
+                    if (result.Id == Guid.Empty)
+                        result.Id = result.Place?.Id ?? placeId;
+                    return result;
+                }
+                return new PlaceResponse { Success = false, Error = "Failed to parse response" };
             }
 
             _logger.LogWarning("Failed to update place {PlaceId}: {StatusCode}", placeId, response.StatusCode);
@@ -616,8 +632,16 @@ public class ApiClient : IApiClient, IVisitApiClient
 
             if (response.IsSuccessStatusCode)
             {
-                var region = await response.Content.ReadFromJsonAsync<TripRegion>(JsonOptions, cancellationToken);
-                return new RegionResponse { Success = true, Id = region?.Id ?? Guid.Empty, Region = region };
+                // Server returns { "success": true, "region": {...} } - parse as RegionResponse
+                var result = await response.Content.ReadFromJsonAsync<RegionResponse>(JsonOptions, cancellationToken);
+                if (result != null)
+                {
+                    // Ensure Id is set from the nested region object if not directly provided
+                    if (result.Id == Guid.Empty && result.Region != null)
+                        result.Id = result.Region.Id;
+                    return result;
+                }
+                return new RegionResponse { Success = false, Error = "Failed to parse response" };
             }
 
             _logger.LogWarning("Failed to create region: {StatusCode}", response.StatusCode);
@@ -662,8 +686,16 @@ public class ApiClient : IApiClient, IVisitApiClient
 
             if (response.IsSuccessStatusCode)
             {
-                var region = await response.Content.ReadFromJsonAsync<TripRegion>(JsonOptions, cancellationToken);
-                return new RegionResponse { Success = true, Id = regionId, Region = region };
+                // Server returns { "success": true, "region": {...} } - parse as RegionResponse
+                var result = await response.Content.ReadFromJsonAsync<RegionResponse>(JsonOptions, cancellationToken);
+                if (result != null)
+                {
+                    // Ensure Id is set (from nested region or use the original regionId)
+                    if (result.Id == Guid.Empty)
+                        result.Id = result.Region?.Id ?? regionId;
+                    return result;
+                }
+                return new RegionResponse { Success = false, Error = "Failed to parse response" };
             }
 
             _logger.LogWarning("Failed to update region {RegionId}: {StatusCode}", regionId, response.StatusCode);

@@ -188,6 +188,36 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
     {
         await EnsureInitializedAsync();
 
+        // Fix 3: Check if this entity has a pending CREATE (offline-created, not yet synced)
+        // If so, merge the update into the pending CREATE instead of calling API with temp ID
+        var pendingCreate = await _database!.Table<PendingTripMutation>()
+            .Where(m => m.EntityId == placeId && m.EntityType == "Place" && m.OperationType == "Create" && !m.IsRejected)
+            .FirstOrDefaultAsync();
+
+        if (pendingCreate != null)
+        {
+            // Reuse existing merge logic - EnqueuePlaceMutationAsync handles merging
+            // into existing non-Delete mutations (including CREATE)
+            await EnqueuePlaceMutationAsync("Update", placeId, tripId, pendingCreate.RegionId,
+                name, latitude, longitude, notes, iconName, markerColor, displayOrder, includeNotes, null);
+
+            // Also update offline entry for immediate UI consistency
+            var offlinePlaceForMerge = await _placeRepository.GetOfflinePlaceByServerIdAsync(placeId);
+            if (offlinePlaceForMerge != null)
+            {
+                if (name != null) offlinePlaceForMerge.Name = name;
+                if (latitude.HasValue) offlinePlaceForMerge.Latitude = latitude.Value;
+                if (longitude.HasValue) offlinePlaceForMerge.Longitude = longitude.Value;
+                if (includeNotes) offlinePlaceForMerge.Notes = notes;
+                if (iconName != null) offlinePlaceForMerge.IconName = iconName;
+                if (markerColor != null) offlinePlaceForMerge.MarkerColor = markerColor;
+                if (displayOrder.HasValue) offlinePlaceForMerge.SortOrder = displayOrder.Value;
+                await _placeRepository.UpdateOfflinePlaceAsync(offlinePlaceForMerge);
+            }
+
+            return PlaceOperationResult.Queued(placeId, "Merged into pending create - will sync when online");
+        }
+
         // 1. Read current value from offline table (for restoration if needed)
         var offlinePlace = await _placeRepository.GetOfflinePlaceByServerIdAsync(placeId);
         string? originalName = offlinePlace?.Name;
@@ -235,16 +265,35 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
         {
             var response = await _apiClient.UpdatePlaceAsync(placeId, request);
 
-            if (response != null)
+            // Fix 4: Check response.Success instead of just response != null
+            if (response?.Success == true)
             {
                 return PlaceOperationResult.Completed(placeId);
             }
 
-            // Sync failed - queue for retry with original values for restoration
+            // Response was null or Success was false
+            if (response != null && !response.Success && IsClientErrorFromResponse(response.Error))
+            {
+                // Server rejected with 4xx - restore original values and reject
+                if (offlinePlace != null)
+                {
+                    offlinePlace.Name = originalName ?? offlinePlace.Name;
+                    if (originalLatitude.HasValue) offlinePlace.Latitude = originalLatitude.Value;
+                    if (originalLongitude.HasValue) offlinePlace.Longitude = originalLongitude.Value;
+                    if (includeNotes) offlinePlace.Notes = originalNotes;
+                    offlinePlace.IconName = originalIconName;
+                    offlinePlace.MarkerColor = originalMarkerColor;
+                    if (originalDisplayOrder.HasValue) offlinePlace.SortOrder = originalDisplayOrder.Value;
+                    await _placeRepository.UpdateOfflinePlaceAsync(offlinePlace);
+                }
+                return PlaceOperationResult.Rejected($"Server rejected: {response.Error}");
+            }
+
+            // Response was null or non-4xx failure - queue for retry
             await EnqueuePlaceMutationWithOriginalAsync("Update", placeId, tripId, null,
                 name, latitude, longitude, notes, iconName, markerColor, displayOrder, includeNotes, null,
                 originalName, originalLatitude, originalLongitude, originalNotes, originalIconName, originalMarkerColor, originalDisplayOrder);
-            return PlaceOperationResult.Queued(placeId, "Sync failed - will retry");
+            return PlaceOperationResult.Queued(placeId, response?.Error ?? "Sync failed - will retry");
         }
         catch (HttpRequestException ex) when (IsClientError(ex))
         {
@@ -544,6 +593,47 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
             return false;
 
         return statusCode >= 400 && statusCode < 500;
+    }
+
+    /// <summary>
+    /// Determines if the error string indicates a permanent client error (4xx).
+    /// Parses error strings in formats like "HTTP 404", "NotFound", "400 Bad Request", etc.
+    /// Excludes 429 Too Many Requests which is temporary and should be retried.
+    /// </summary>
+    private static bool IsClientErrorFromResponse(string? error)
+    {
+        if (string.IsNullOrWhiteSpace(error))
+            return false;
+
+        // Common error string patterns from ApiClient
+        // Pattern 1: "HTTP {statusCode}" (e.g., "HTTP 404")
+        if (error.StartsWith("HTTP ", StringComparison.OrdinalIgnoreCase))
+        {
+            var parts = error.Split(' ');
+            if (parts.Length >= 2 && int.TryParse(parts[1], out var statusCode))
+            {
+                return statusCode >= 400 && statusCode < 500 && statusCode != 429;
+            }
+        }
+
+        // Pattern 2: "{statusCode} {reason}" (e.g., "404 Not Found")
+        var firstWord = error.Split(' ')[0];
+        if (int.TryParse(firstWord, out var code))
+        {
+            return code >= 400 && code < 500 && code != 429;
+        }
+
+        // Pattern 3: Named status codes
+        var lowerError = error.ToLowerInvariant();
+        if (lowerError.Contains("notfound") || lowerError.Contains("not found") ||
+            lowerError.Contains("badrequest") || lowerError.Contains("bad request") ||
+            lowerError.Contains("unauthorized") || lowerError.Contains("forbidden") ||
+            lowerError.Contains("conflict") || lowerError.Contains("gone"))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>

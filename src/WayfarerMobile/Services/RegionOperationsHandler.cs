@@ -163,6 +163,34 @@ public class RegionOperationsHandler : IRegionOperationsHandler
     {
         await EnsureInitializedAsync();
 
+        // Fix 3: Check if this entity has a pending CREATE (offline-created, not yet synced)
+        // If so, merge the update into the pending CREATE instead of calling API with temp ID
+        var pendingCreate = await _database!.Table<PendingTripMutation>()
+            .Where(m => m.EntityId == regionId && m.EntityType == "Region" && m.OperationType == "Create" && !m.IsRejected)
+            .FirstOrDefaultAsync();
+
+        if (pendingCreate != null)
+        {
+            // Reuse existing merge logic - EnqueueRegionMutationAsync handles merging
+            // into existing non-Delete mutations (including CREATE)
+            await EnqueueRegionMutationAsync("Update", regionId, tripId, name, notes, coverImageUrl,
+                centerLatitude, centerLongitude, displayOrder, includeNotes, null);
+
+            // Also update offline entry for immediate UI consistency
+            var offlineAreaForMerge = await _areaRepository.GetOfflineAreaByServerIdAsync(regionId);
+            if (offlineAreaForMerge != null)
+            {
+                if (name != null) offlineAreaForMerge.Name = name;
+                if (includeNotes) offlineAreaForMerge.Notes = notes;
+                if (displayOrder.HasValue) offlineAreaForMerge.SortOrder = displayOrder.Value;
+                if (centerLatitude.HasValue) offlineAreaForMerge.CenterLatitude = centerLatitude;
+                if (centerLongitude.HasValue) offlineAreaForMerge.CenterLongitude = centerLongitude;
+                await _areaRepository.UpdateOfflineAreaAsync(offlineAreaForMerge);
+            }
+
+            return RegionOperationResult.Queued(regionId, "Merged into pending create - will sync when online");
+        }
+
         // 1. Read current value from offline table (for restoration if needed)
         var offlineArea = await _areaRepository.GetOfflineAreaByServerIdAsync(regionId);
         string? originalName = offlineArea?.Name;
@@ -204,14 +232,32 @@ public class RegionOperationsHandler : IRegionOperationsHandler
         {
             var response = await _apiClient.UpdateRegionAsync(regionId, request);
 
-            if (response != null)
+            // Fix 4: Check response.Success instead of just response != null
+            if (response?.Success == true)
             {
                 return RegionOperationResult.Completed(regionId);
             }
 
+            // Response was null or Success was false
+            if (response != null && !response.Success && IsClientErrorFromResponse(response.Error))
+            {
+                // Server rejected with 4xx - restore original values and reject
+                if (offlineArea != null)
+                {
+                    offlineArea.Name = originalName ?? offlineArea.Name;
+                    if (includeNotes) offlineArea.Notes = originalNotes;
+                    if (originalDisplayOrder.HasValue) offlineArea.SortOrder = originalDisplayOrder.Value;
+                    if (originalCenterLatitude.HasValue) offlineArea.CenterLatitude = originalCenterLatitude;
+                    if (originalCenterLongitude.HasValue) offlineArea.CenterLongitude = originalCenterLongitude;
+                    await _areaRepository.UpdateOfflineAreaAsync(offlineArea);
+                }
+                return RegionOperationResult.Rejected($"Server rejected: {response.Error}");
+            }
+
+            // Response was null or non-4xx failure - queue for retry
             await EnqueueRegionMutationWithOriginalAsync("Update", regionId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, includeNotes, null,
                 originalName, originalNotes, null, originalCenterLatitude, originalCenterLongitude, originalDisplayOrder);
-            return RegionOperationResult.Queued(regionId, "Sync failed - will retry");
+            return RegionOperationResult.Queued(regionId, response?.Error ?? "Sync failed - will retry");
         }
         catch (HttpRequestException ex) when (IsClientError(ex))
         {
@@ -510,6 +556,47 @@ public class RegionOperationsHandler : IRegionOperationsHandler
             return false;
 
         return statusCode >= 400 && statusCode < 500;
+    }
+
+    /// <summary>
+    /// Determines if the error string indicates a permanent client error (4xx).
+    /// Parses error strings in formats like "HTTP 404", "NotFound", "400 Bad Request", etc.
+    /// Excludes 429 Too Many Requests which is temporary and should be retried.
+    /// </summary>
+    private static bool IsClientErrorFromResponse(string? error)
+    {
+        if (string.IsNullOrWhiteSpace(error))
+            return false;
+
+        // Common error string patterns from ApiClient
+        // Pattern 1: "HTTP {statusCode}" (e.g., "HTTP 404")
+        if (error.StartsWith("HTTP ", StringComparison.OrdinalIgnoreCase))
+        {
+            var parts = error.Split(' ');
+            if (parts.Length >= 2 && int.TryParse(parts[1], out var statusCode))
+            {
+                return statusCode >= 400 && statusCode < 500 && statusCode != 429;
+            }
+        }
+
+        // Pattern 2: "{statusCode} {reason}" (e.g., "404 Not Found")
+        var firstWord = error.Split(' ')[0];
+        if (int.TryParse(firstWord, out var code))
+        {
+            return code >= 400 && code < 500 && code != 429;
+        }
+
+        // Pattern 3: Named status codes
+        var lowerError = error.ToLowerInvariant();
+        if (lowerError.Contains("notfound") || lowerError.Contains("not found") ||
+            lowerError.Contains("badrequest") || lowerError.Contains("bad request") ||
+            lowerError.Contains("unauthorized") || lowerError.Contains("forbidden") ||
+            lowerError.Contains("conflict") || lowerError.Contains("gone"))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>

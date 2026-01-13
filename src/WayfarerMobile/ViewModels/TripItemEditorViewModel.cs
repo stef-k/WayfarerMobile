@@ -554,6 +554,13 @@ public partial class TripItemEditorViewModel : BaseViewModel
         if (region == null || loadedTrip == null)
             return;
 
+        // Block deletes while region CREATE is in-flight to prevent temp ID usage
+        if (_inFlightRegionCreates.Contains(region.Id))
+        {
+            await _toastService.ShowWarningAsync("Region is still saving - try again in a moment");
+            return;
+        }
+
         var confirmed = await (_callbacks?.DisplayAlertAsync(
             "Delete Region",
             $"Are you sure you want to delete '{region.Name}'? All places in this region will be moved to {UnassignedRegionName}.",
@@ -619,8 +626,17 @@ public partial class TripItemEditorViewModel : BaseViewModel
                 return;
             }
 
-            // Swap sort orders
+            // Get the adjacent region for the swap
             var prevRegion = regions[index - 1];
+
+            // Block moves while either region CREATE is in-flight to prevent temp ID usage
+            if (_inFlightRegionCreates.Contains(region.Id) || _inFlightRegionCreates.Contains(prevRegion.Id))
+            {
+                await _toastService.ShowWarningAsync("Region is still saving - try again in a moment");
+                return;
+            }
+
+            // Swap sort orders
             (targetRegion.SortOrder, prevRegion.SortOrder) = (prevRegion.SortOrder, targetRegion.SortOrder);
             _logger.LogInformation("MoveRegionUp: Swapped sort orders - target={TargetOrder}, prev={PrevOrder}",
                 targetRegion.SortOrder, prevRegion.SortOrder);
@@ -680,8 +696,17 @@ public partial class TripItemEditorViewModel : BaseViewModel
                 return;
             }
 
-            // Swap sort orders
+            // Get the adjacent region for the swap
             var nextRegion = regions[index + 1];
+
+            // Block moves while either region CREATE is in-flight to prevent temp ID usage
+            if (_inFlightRegionCreates.Contains(region.Id) || _inFlightRegionCreates.Contains(nextRegion.Id))
+            {
+                await _toastService.ShowWarningAsync("Region is still saving - try again in a moment");
+                return;
+            }
+
+            // Swap sort orders
             (targetRegion.SortOrder, nextRegion.SortOrder) = (nextRegion.SortOrder, targetRegion.SortOrder);
             _logger.LogInformation("MoveRegionDown: Swapped sort orders - target={TargetOrder}, next={NextOrder}",
                 targetRegion.SortOrder, nextRegion.SortOrder);
@@ -940,6 +965,10 @@ public partial class TripItemEditorViewModel : BaseViewModel
                         region.Id = e.ServerId;
                         _logger.LogDebug("EntityCreated: Updated Region TempId {TempId} -> ServerId {ServerId}",
                             e.TempClientId, e.ServerId);
+
+                        // Refresh SortedRegions so UI-bound Region copies have the updated server ID
+                        // (SortedRegions creates new TripRegion objects, so ID updates don't propagate automatically)
+                        _callbacks?.NotifyTripRegionsChanged();
                     }
                     else
                     {
@@ -1096,6 +1125,13 @@ public partial class TripItemEditorViewModel : BaseViewModel
         if (loadedTrip == null)
             return;
 
+        // Block edits while region CREATE is in-flight to prevent temp ID usage
+        if (_inFlightRegionCreates.Contains(region.Id))
+        {
+            await _toastService.ShowWarningAsync("Region is still saving - try again in a moment");
+            return;
+        }
+
         // Find the actual region instance by ID (parameter may be from SortedRegions which creates new objects)
         var targetRegion = loadedTrip.Regions.FirstOrDefault(r => r.Id == region.Id);
         if (targetRegion == null)
@@ -1139,6 +1175,13 @@ public partial class TripItemEditorViewModel : BaseViewModel
         var loadedTrip = _callbacks?.LoadedTrip;
         if (loadedTrip == null)
             return;
+
+        // Block edits while region CREATE is in-flight to prevent temp ID usage
+        if (_inFlightRegionCreates.Contains(region.Id))
+        {
+            await _toastService.ShowWarningAsync("Region is still saving - try again in a moment");
+            return;
+        }
 
         await (_callbacks?.NavigateToPageAsync("notesEditor", new Dictionary<string, object>
         {
@@ -1205,18 +1248,28 @@ public partial class TripItemEditorViewModel : BaseViewModel
             // Pass the region's temp ID so EntityCreated event can reconcile the in-memory object
             // Track in-flight state to prevent Place creation with temp RegionId during API call
             _logger.LogInformation("AddRegion: Syncing to server");
-            _inFlightRegionCreates.Add(newRegion.Id);
+            var tempId = newRegion.Id;  // Capture before potential reconciliation
+            _inFlightRegionCreates.Add(tempId);
             try
             {
-                await _tripSyncService.CreateRegionAsync(
+                var serverId = await _tripSyncService.CreateRegionAsync(
                     loadedTrip.Id,
                     name,
                     displayOrder: newRegion.SortOrder,
-                    clientTempId: newRegion.Id);
+                    clientTempId: tempId);
+
+                // Immediate reconciliation - deterministic, doesn't rely on EntityCreated timing
+                if (serverId != Guid.Empty && serverId != newRegion.Id)
+                {
+                    _logger.LogInformation("AddRegion: Reconciling tempId {TempId} -> serverId {ServerId}",
+                        tempId, serverId);
+                    newRegion.Id = serverId;
+                    _callbacks?.NotifyTripRegionsChanged();
+                }
             }
             finally
             {
-                _inFlightRegionCreates.Remove(newRegion.Id);
+                _inFlightRegionCreates.Remove(tempId);  // Always remove by original tempId
             }
 
             _logger.LogInformation("AddRegion: Completed successfully for region {RegionId}", newRegion.Id);
