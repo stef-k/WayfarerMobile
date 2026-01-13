@@ -31,6 +31,17 @@ public interface ITripSyncService
     /// <summary>
     /// Create a new place with optimistic UI pattern.
     /// </summary>
+    /// <param name="tripId">The trip ID.</param>
+    /// <param name="regionId">The optional region ID.</param>
+    /// <param name="name">The place name.</param>
+    /// <param name="latitude">The latitude.</param>
+    /// <param name="longitude">The longitude.</param>
+    /// <param name="notes">Optional notes.</param>
+    /// <param name="iconName">Optional icon name.</param>
+    /// <param name="markerColor">Optional marker color.</param>
+    /// <param name="displayOrder">Optional display order.</param>
+    /// <param name="clientTempId">Optional client-generated temp ID. If provided, used for reconciliation with in-memory objects.</param>
+    /// <returns>The entity ID (server ID if online, temp ID if queued).</returns>
     Task<Guid> CreatePlaceAsync(
         Guid tripId,
         Guid? regionId,
@@ -40,7 +51,8 @@ public interface ITripSyncService
         string? notes = null,
         string? iconName = null,
         string? markerColor = null,
-        int? displayOrder = null);
+        int? displayOrder = null,
+        Guid? clientTempId = null);
 
     /// <summary>
     /// Update a place with optimistic UI pattern.
@@ -69,6 +81,15 @@ public interface ITripSyncService
     /// <summary>
     /// Create a new region with optimistic UI pattern.
     /// </summary>
+    /// <param name="tripId">The trip ID.</param>
+    /// <param name="name">The region name.</param>
+    /// <param name="notes">Optional notes.</param>
+    /// <param name="coverImageUrl">Optional cover image URL.</param>
+    /// <param name="centerLatitude">Optional center latitude.</param>
+    /// <param name="centerLongitude">Optional center longitude.</param>
+    /// <param name="displayOrder">Optional display order.</param>
+    /// <param name="clientTempId">Optional client-generated temp ID. If provided, used for reconciliation with in-memory objects.</param>
+    /// <returns>The entity ID (server ID if online, temp ID if queued).</returns>
     Task<Guid> CreateRegionAsync(
         Guid tripId,
         string name,
@@ -76,7 +97,8 @@ public interface ITripSyncService
         string? coverImageUrl = null,
         double? centerLatitude = null,
         double? centerLongitude = null,
-        int? displayOrder = null);
+        int? displayOrder = null,
+        Guid? clientTempId = null);
 
     /// <summary>
     /// Update a region with optimistic UI pattern.

@@ -79,11 +79,13 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
         string? notes = null,
         string? iconName = null,
         string? markerColor = null,
-        int? displayOrder = null)
+        int? displayOrder = null,
+        Guid? clientTempId = null)
     {
         await EnsureInitializedAsync();
 
-        var tempClientId = Guid.NewGuid();
+        // Use caller's temp ID if provided, otherwise generate one
+        var tempClientId = clientTempId ?? Guid.NewGuid();
 
         var request = new PlaceCreateRequest
         {
@@ -149,7 +151,7 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
                     await _placeRepository.InsertOfflinePlaceAsync(offlinePlace);
                 }
 
-                return PlaceOperationResult.Completed(response.Id);
+                return PlaceOperationResult.Completed(response.Id, tempClientId);
             }
 
             await EnqueuePlaceMutationAsync("Create", tempClientId, tripId, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder, true, tempClientId);

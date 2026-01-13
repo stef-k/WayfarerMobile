@@ -37,6 +37,12 @@ public record PlaceOperationResult
     public Guid? EntityId { get; init; }
 
     /// <summary>
+    /// The temporary client ID used before server sync (for create operations).
+    /// Used to reconcile in-memory objects with server-assigned IDs.
+    /// </summary>
+    public Guid? TempClientId { get; init; }
+
+    /// <summary>
     /// The type of sync result.
     /// </summary>
     public SyncResultType ResultType { get; init; }
@@ -47,22 +53,22 @@ public record PlaceOperationResult
     public string? Message { get; init; }
 
     /// <summary>
-    /// Creates a successful completed result.
+    /// Creates a successful completed result with temp ID tracking.
     /// </summary>
-    public static PlaceOperationResult Completed(Guid entityId, string? message = null)
-        => new() { Success = true, EntityId = entityId, ResultType = SyncResultType.Completed, Message = message };
+    public static PlaceOperationResult Completed(Guid entityId, Guid? tempClientId = null, string? message = null)
+        => new() { Success = true, EntityId = entityId, TempClientId = tempClientId, ResultType = SyncResultType.Completed, Message = message };
 
     /// <summary>
     /// Creates a successful queued result.
     /// </summary>
     public static PlaceOperationResult Queued(Guid entityId, string? message = null)
-        => new() { Success = true, EntityId = entityId, ResultType = SyncResultType.Queued, Message = message };
+        => new() { Success = true, EntityId = entityId, TempClientId = entityId, ResultType = SyncResultType.Queued, Message = message };
 
     /// <summary>
     /// Creates a rejected result.
     /// </summary>
     public static PlaceOperationResult Rejected(string message)
-        => new() { Success = false, EntityId = null, ResultType = SyncResultType.Rejected, Message = message };
+        => new() { Success = false, EntityId = null, TempClientId = null, ResultType = SyncResultType.Rejected, Message = message };
 }
 
 /// <summary>
@@ -81,6 +87,12 @@ public record RegionOperationResult
     public Guid? EntityId { get; init; }
 
     /// <summary>
+    /// The temporary client ID used before server sync (for create operations).
+    /// Used to reconcile in-memory objects with server-assigned IDs.
+    /// </summary>
+    public Guid? TempClientId { get; init; }
+
+    /// <summary>
     /// The type of sync result.
     /// </summary>
     public SyncResultType ResultType { get; init; }
@@ -91,22 +103,22 @@ public record RegionOperationResult
     public string? Message { get; init; }
 
     /// <summary>
-    /// Creates a successful completed result.
+    /// Creates a successful completed result with temp ID tracking.
     /// </summary>
-    public static RegionOperationResult Completed(Guid entityId, string? message = null)
-        => new() { Success = true, EntityId = entityId, ResultType = SyncResultType.Completed, Message = message };
+    public static RegionOperationResult Completed(Guid entityId, Guid? tempClientId = null, string? message = null)
+        => new() { Success = true, EntityId = entityId, TempClientId = tempClientId, ResultType = SyncResultType.Completed, Message = message };
 
     /// <summary>
     /// Creates a successful queued result.
     /// </summary>
     public static RegionOperationResult Queued(Guid entityId, string? message = null)
-        => new() { Success = true, EntityId = entityId, ResultType = SyncResultType.Queued, Message = message };
+        => new() { Success = true, EntityId = entityId, TempClientId = entityId, ResultType = SyncResultType.Queued, Message = message };
 
     /// <summary>
     /// Creates a rejected result.
     /// </summary>
     public static RegionOperationResult Rejected(string message)
-        => new() { Success = false, EntityId = null, ResultType = SyncResultType.Rejected, Message = message };
+        => new() { Success = false, EntityId = null, TempClientId = null, ResultType = SyncResultType.Rejected, Message = message };
 }
 
 /// <summary>

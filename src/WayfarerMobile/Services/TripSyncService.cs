@@ -120,6 +120,17 @@ public class TripSyncService : ITripSyncService
     /// Creates a new place with optimistic UI pattern.
     /// Delegates to PlaceOperationsHandler and raises events based on result.
     /// </summary>
+    /// <param name="tripId">The trip ID.</param>
+    /// <param name="regionId">The optional region ID.</param>
+    /// <param name="name">The place name.</param>
+    /// <param name="latitude">The latitude.</param>
+    /// <param name="longitude">The longitude.</param>
+    /// <param name="notes">Optional notes.</param>
+    /// <param name="iconName">Optional icon name.</param>
+    /// <param name="markerColor">Optional marker color.</param>
+    /// <param name="displayOrder">Optional display order.</param>
+    /// <param name="clientTempId">Optional client-generated temp ID for reconciliation with in-memory objects.</param>
+    /// <returns>The entity ID (server ID if online, temp ID if queued).</returns>
     public async Task<Guid> CreatePlaceAsync(
         Guid tripId,
         Guid? regionId,
@@ -129,9 +140,10 @@ public class TripSyncService : ITripSyncService
         string? notes = null,
         string? iconName = null,
         string? markerColor = null,
-        int? displayOrder = null)
+        int? displayOrder = null,
+        Guid? clientTempId = null)
     {
-        var result = await _placeOps.CreatePlaceAsync(tripId, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder);
+        var result = await _placeOps.CreatePlaceAsync(tripId, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder, clientTempId);
 
         RaisePlaceEvents(result, isCreate: true);
 
@@ -180,10 +192,10 @@ public class TripSyncService : ITripSyncService
             case SyncResultType.Completed:
                 if (isCreate && result.EntityId.HasValue)
                 {
-                    // For creates, the EntityId is the server ID
+                    // For creates, fire EntityCreated with TempClientId for in-memory reconciliation
                     EntityCreated?.Invoke(this, new EntityCreatedEventArgs
                     {
-                        TempClientId = Guid.Empty, // Handler doesn't track temp ID
+                        TempClientId = result.TempClientId ?? Guid.Empty,
                         ServerId = result.EntityId.Value,
                         EntityType = "Place"
                     });
@@ -218,6 +230,15 @@ public class TripSyncService : ITripSyncService
     /// Creates a new region with optimistic UI pattern.
     /// Delegates to RegionOperationsHandler and raises events based on result.
     /// </summary>
+    /// <param name="tripId">The trip ID.</param>
+    /// <param name="name">The region name.</param>
+    /// <param name="notes">Optional notes.</param>
+    /// <param name="coverImageUrl">Optional cover image URL.</param>
+    /// <param name="centerLatitude">Optional center latitude.</param>
+    /// <param name="centerLongitude">Optional center longitude.</param>
+    /// <param name="displayOrder">Optional display order.</param>
+    /// <param name="clientTempId">Optional client-generated temp ID for reconciliation with in-memory objects.</param>
+    /// <returns>The entity ID (server ID if online, temp ID if queued).</returns>
     public async Task<Guid> CreateRegionAsync(
         Guid tripId,
         string name,
@@ -225,9 +246,10 @@ public class TripSyncService : ITripSyncService
         string? coverImageUrl = null,
         double? centerLatitude = null,
         double? centerLongitude = null,
-        int? displayOrder = null)
+        int? displayOrder = null,
+        Guid? clientTempId = null)
     {
-        var result = await _regionOps.CreateRegionAsync(tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder);
+        var result = await _regionOps.CreateRegionAsync(tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, clientTempId);
 
         RaiseRegionEvents(result, isCreate: true);
 
@@ -275,10 +297,10 @@ public class TripSyncService : ITripSyncService
             case SyncResultType.Completed:
                 if (isCreate && result.EntityId.HasValue)
                 {
-                    // For creates, the EntityId is the server ID
+                    // For creates, fire EntityCreated with TempClientId for in-memory reconciliation
                     EntityCreated?.Invoke(this, new EntityCreatedEventArgs
                     {
-                        TempClientId = Guid.Empty, // Handler doesn't track temp ID
+                        TempClientId = result.TempClientId ?? Guid.Empty,
                         ServerId = result.EntityId.Value,
                         EntityType = "Region"
                     });

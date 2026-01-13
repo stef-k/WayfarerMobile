@@ -72,9 +72,11 @@ public class MockTripSyncService : ITripSyncService
     /// <inheritdoc/>
     public Task<Guid> CreatePlaceAsync(Guid tripId, Guid? regionId, string name,
         double latitude, double longitude, string? notes = null,
-        string? iconName = null, string? markerColor = null, int? displayOrder = null)
+        string? iconName = null, string? markerColor = null, int? displayOrder = null,
+        Guid? clientTempId = null)
     {
-        var id = Guid.NewGuid();
+        // Use client's temp ID if provided, otherwise generate a new one
+        var id = clientTempId ?? Guid.NewGuid();
         _operations.Add(new SyncOperation("CreatePlace", tripId, id));
         return Task.FromResult(id);
     }
@@ -103,9 +105,11 @@ public class MockTripSyncService : ITripSyncService
     /// <inheritdoc/>
     public Task<Guid> CreateRegionAsync(Guid tripId, string name, string? notes = null,
         string? coverImageUrl = null, double? centerLatitude = null,
-        double? centerLongitude = null, int? displayOrder = null)
+        double? centerLongitude = null, int? displayOrder = null,
+        Guid? clientTempId = null)
     {
-        var id = Guid.NewGuid();
+        // Use client's temp ID if provided, otherwise generate a new one
+        var id = clientTempId ?? Guid.NewGuid();
         _operations.Add(new SyncOperation("CreateRegion", tripId, id));
         return Task.FromResult(id);
     }

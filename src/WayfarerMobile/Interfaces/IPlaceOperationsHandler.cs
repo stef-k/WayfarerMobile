@@ -20,7 +20,8 @@ public interface IPlaceOperationsHandler
     /// <param name="iconName">Optional icon name.</param>
     /// <param name="markerColor">Optional marker color.</param>
     /// <param name="displayOrder">Optional display order.</param>
-    /// <returns>Operation result with entity ID (server ID or temp client ID).</returns>
+    /// <param name="clientTempId">Optional client-generated temp ID. If provided, used instead of generating a new one.</param>
+    /// <returns>Operation result with entity ID (server ID or temp client ID) and TempClientId for reconciliation.</returns>
     Task<PlaceOperationResult> CreatePlaceAsync(
         Guid tripId,
         Guid? regionId,
@@ -30,7 +31,8 @@ public interface IPlaceOperationsHandler
         string? notes = null,
         string? iconName = null,
         string? markerColor = null,
-        int? displayOrder = null);
+        int? displayOrder = null,
+        Guid? clientTempId = null);
 
     /// <summary>
     /// Updates a place with optimistic UI pattern.

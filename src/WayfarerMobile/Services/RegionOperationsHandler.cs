@@ -77,11 +77,13 @@ public class RegionOperationsHandler : IRegionOperationsHandler
         string? coverImageUrl = null,
         double? centerLatitude = null,
         double? centerLongitude = null,
-        int? displayOrder = null)
+        int? displayOrder = null,
+        Guid? clientTempId = null)
     {
         await EnsureInitializedAsync();
 
-        var tempClientId = Guid.NewGuid();
+        // Use caller's temp ID if provided, otherwise generate one
+        var tempClientId = clientTempId ?? Guid.NewGuid();
 
         var request = new RegionCreateRequest
         {
@@ -141,7 +143,7 @@ public class RegionOperationsHandler : IRegionOperationsHandler
                     await _areaRepository.InsertOfflineAreaAsync(offlineArea);
                 }
 
-                return RegionOperationResult.Completed(response.Id);
+                return RegionOperationResult.Completed(response.Id, tempClientId);
             }
 
             await EnqueueRegionMutationAsync("Create", tempClientId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, true, tempClientId);

@@ -397,16 +397,19 @@ public partial class TripItemEditorViewModel : BaseViewModel
             if (isNewPlace && targetRegion != null)
             {
                 // Create new place on server and get the server-assigned ID
+                // Pass the place's temp ID so EntityCreated event can reconcile the in-memory object
                 var serverId = await _tripSyncService.CreatePlaceAsync(
                     loadedTrip.Id,
                     targetRegion.Id,
                     place.Name ?? "New Place",
                     newLat,
                     newLon,
-                    displayOrder: place.SortOrder);
+                    displayOrder: place.SortOrder,
+                    clientTempId: place.Id);
 
                 // Update the in-memory place with the server ID so subsequent updates work
-                if (serverId != Guid.Empty)
+                // Note: This is also handled by EntityCreated event subscription (D2)
+                if (serverId != Guid.Empty && serverId != place.Id)
                 {
                     place.Id = serverId;
                 }
@@ -1113,11 +1116,13 @@ public partial class TripItemEditorViewModel : BaseViewModel
             });
 
             // Sync to server
+            // Pass the region's temp ID so EntityCreated event can reconcile the in-memory object
             _logger.LogInformation("AddRegion: Syncing to server");
             await _tripSyncService.CreateRegionAsync(
                 loadedTrip.Id,
                 name,
-                displayOrder: newRegion.SortOrder);
+                displayOrder: newRegion.SortOrder,
+                clientTempId: newRegion.Id);
 
             _logger.LogInformation("AddRegion: Completed successfully for region {RegionId}", newRegion.Id);
             await _toastService.ShowSuccessAsync("Region added");

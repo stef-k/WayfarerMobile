@@ -18,7 +18,8 @@ public interface IRegionOperationsHandler
     /// <param name="centerLatitude">Optional center latitude.</param>
     /// <param name="centerLongitude">Optional center longitude.</param>
     /// <param name="displayOrder">Optional display order.</param>
-    /// <returns>Operation result with entity ID (server ID or temp client ID).</returns>
+    /// <param name="clientTempId">Optional client-generated temp ID. If provided, used instead of generating a new one.</param>
+    /// <returns>Operation result with entity ID (server ID or temp client ID) and TempClientId for reconciliation.</returns>
     Task<RegionOperationResult> CreateRegionAsync(
         Guid tripId,
         string name,
@@ -26,7 +27,8 @@ public interface IRegionOperationsHandler
         string? coverImageUrl = null,
         double? centerLatitude = null,
         double? centerLongitude = null,
-        int? displayOrder = null);
+        int? displayOrder = null,
+        Guid? clientTempId = null);
 
     /// <summary>
     /// Updates a region with optimistic UI pattern.
