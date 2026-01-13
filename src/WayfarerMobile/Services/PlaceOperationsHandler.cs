@@ -99,30 +99,8 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
 
             if (pendingRegionCreate != null)
             {
-                // Create offline entry with TempId (D1 pattern)
-                var localTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripId);
-                if (localTrip != null)
-                {
-                    var existingPlace = await _placeRepository.GetOfflinePlaceByServerIdAsync(tempClientId);
-                    if (existingPlace == null)
-                    {
-                        var offlinePlace = new OfflinePlaceEntity
-                        {
-                            TripId = localTrip.Id,
-                            ServerId = tempClientId,
-                            RegionId = regionId.Value,
-                            Name = name,
-                            Latitude = latitude,
-                            Longitude = longitude,
-                            Notes = notes,
-                            IconName = iconName,
-                            MarkerColor = markerColor,
-                            SortOrder = displayOrder ?? 0
-                        };
-                        await _placeRepository.InsertOfflinePlaceAsync(offlinePlace);
-                    }
-                }
-
+                // Ensure offline entry exists with upsert pattern
+                await EnsureOfflinePlaceEntryAsync(tripId, tempClientId, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder);
                 await EnqueuePlaceMutationAsync("Create", tempClientId, tripId, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder, true, tempClientId);
                 return PlaceOperationResult.Queued(tempClientId, "Queued - parent Region pending sync");
             }
@@ -142,26 +120,8 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
 
         if (!IsConnected)
         {
-            // Create offline entry immediately with temp ID so subsequent updates work
-            var localTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripId);
-            if (localTrip != null)
-            {
-                var offlinePlace = new OfflinePlaceEntity
-                {
-                    TripId = localTrip.Id,
-                    ServerId = tempClientId,
-                    RegionId = regionId,
-                    Name = name,
-                    Latitude = latitude,
-                    Longitude = longitude,
-                    Notes = notes,
-                    IconName = iconName,
-                    MarkerColor = markerColor,
-                    SortOrder = displayOrder ?? 0
-                };
-                await _placeRepository.InsertOfflinePlaceAsync(offlinePlace);
-            }
-
+            // Ensure offline entry exists with upsert pattern (temp ID as placeholder ServerId)
+            await EnsureOfflinePlaceEntryAsync(tripId, tempClientId, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder);
             await EnqueuePlaceMutationAsync("Create", tempClientId, tripId, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder, true, tempClientId);
             return PlaceOperationResult.Queued(tempClientId, "Created offline - will sync when online");
         }
@@ -172,29 +132,13 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
 
             if (response?.Success == true && response.Id != Guid.Empty)
             {
-                // Create offline entry so subsequent updates can find it
-                var localTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripId);
-                if (localTrip != null)
-                {
-                    var offlinePlace = new OfflinePlaceEntity
-                    {
-                        TripId = localTrip.Id,
-                        ServerId = response.Id,
-                        RegionId = regionId,
-                        Name = name,
-                        Latitude = latitude,
-                        Longitude = longitude,
-                        Notes = notes,
-                        IconName = iconName,
-                        MarkerColor = markerColor,
-                        SortOrder = displayOrder ?? 0
-                    };
-                    await _placeRepository.InsertOfflinePlaceAsync(offlinePlace);
-                }
-
+                // Success: create offline entry with server ID (upsert in case temp entry exists)
+                await EnsureOfflinePlaceEntryAsync(tripId, response.Id, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder);
                 return PlaceOperationResult.Completed(response.Id, tempClientId);
             }
 
+            // Null/failed response: queue for retry and ensure offline entry exists
+            await EnsureOfflinePlaceEntryAsync(tripId, tempClientId, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder);
             await EnqueuePlaceMutationAsync("Create", tempClientId, tripId, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder, true, tempClientId);
             return PlaceOperationResult.Queued(tempClientId, "Sync failed - will retry");
         }
@@ -204,16 +148,22 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
         }
         catch (HttpRequestException ex)
         {
+            // Network error: queue for retry and ensure offline entry exists
+            await EnsureOfflinePlaceEntryAsync(tripId, tempClientId, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder);
             await EnqueuePlaceMutationAsync("Create", tempClientId, tripId, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder, true, tempClientId);
             return PlaceOperationResult.Queued(tempClientId, $"Network error: {ex.Message} - will retry");
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
         {
+            // Timeout: queue for retry and ensure offline entry exists
+            await EnsureOfflinePlaceEntryAsync(tripId, tempClientId, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder);
             await EnqueuePlaceMutationAsync("Create", tempClientId, tripId, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder, true, tempClientId);
             return PlaceOperationResult.Queued(tempClientId, "Request timed out - will retry");
         }
         catch (Exception ex)
         {
+            // Unexpected error: queue for retry and ensure offline entry exists
+            await EnsureOfflinePlaceEntryAsync(tripId, tempClientId, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder);
             await EnqueuePlaceMutationAsync("Create", tempClientId, tripId, regionId, name, latitude, longitude, notes, iconName, markerColor, displayOrder, true, tempClientId);
             return PlaceOperationResult.Queued(tempClientId, $"Unexpected error: {ex.Message} - will retry");
         }
@@ -590,6 +540,47 @@ public class PlaceOperationsHandler : IPlaceOperationsHandler
             return false;
 
         return statusCode >= 400 && statusCode < 500;
+    }
+
+    /// <summary>
+    /// Ensures an offline place entry exists with upsert pattern.
+    /// Used when queuing CREATE mutations - the offline entry must exist for subsequent updates/deletes.
+    /// </summary>
+    private async Task EnsureOfflinePlaceEntryAsync(
+        Guid tripId,
+        Guid serverId,
+        Guid? regionId,
+        string name,
+        double latitude,
+        double longitude,
+        string? notes,
+        string? iconName,
+        string? markerColor,
+        int? displayOrder)
+    {
+        var localTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripId);
+        if (localTrip == null)
+            return;
+
+        // Upsert pattern: check if entry already exists
+        var existing = await _placeRepository.GetOfflinePlaceByServerIdAsync(serverId);
+        if (existing != null)
+            return; // Already exists, no action needed
+
+        var offlinePlace = new OfflinePlaceEntity
+        {
+            TripId = localTrip.Id,
+            ServerId = serverId,
+            RegionId = regionId,
+            Name = name,
+            Latitude = latitude,
+            Longitude = longitude,
+            Notes = notes,
+            IconName = iconName,
+            MarkerColor = markerColor,
+            SortOrder = displayOrder ?? 0
+        };
+        await _placeRepository.InsertOfflinePlaceAsync(offlinePlace);
     }
 
     #endregion

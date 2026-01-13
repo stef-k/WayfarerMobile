@@ -100,24 +100,8 @@ public class RegionOperationsHandler : IRegionOperationsHandler
 
         if (!IsConnected)
         {
-            // Create offline entry immediately with temp ID so subsequent updates work
-            var localTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripId);
-            if (localTrip != null)
-            {
-                var offlineArea = new OfflineAreaEntity
-                {
-                    TripId = localTrip.Id,
-                    ServerId = tempClientId,
-                    Name = name,
-                    Notes = notes,
-                    CoverImageUrl = coverImageUrl,
-                    CenterLatitude = centerLatitude,
-                    CenterLongitude = centerLongitude,
-                    SortOrder = displayOrder ?? 0
-                };
-                await _areaRepository.InsertOfflineAreaAsync(offlineArea);
-            }
-
+            // Ensure offline entry exists with upsert pattern (temp ID as placeholder ServerId)
+            await EnsureOfflineAreaEntryAsync(tripId, tempClientId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder);
             await EnqueueRegionMutationAsync("Create", tempClientId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, true, tempClientId);
             return RegionOperationResult.Queued(tempClientId, "Created offline - will sync when online");
         }
@@ -128,27 +112,13 @@ public class RegionOperationsHandler : IRegionOperationsHandler
 
             if (response?.Success == true && response.Id != Guid.Empty)
             {
-                // Create offline entry so subsequent updates can find it
-                var localTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripId);
-                if (localTrip != null)
-                {
-                    var offlineArea = new OfflineAreaEntity
-                    {
-                        TripId = localTrip.Id,
-                        ServerId = response.Id,
-                        Name = name,
-                        Notes = notes,
-                        CoverImageUrl = coverImageUrl,
-                        CenterLatitude = centerLatitude,
-                        CenterLongitude = centerLongitude,
-                        SortOrder = displayOrder ?? 0
-                    };
-                    await _areaRepository.InsertOfflineAreaAsync(offlineArea);
-                }
-
+                // Success: create offline entry with server ID (upsert in case temp entry exists)
+                await EnsureOfflineAreaEntryAsync(tripId, response.Id, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder);
                 return RegionOperationResult.Completed(response.Id, tempClientId);
             }
 
+            // Null/failed response: queue for retry and ensure offline entry exists
+            await EnsureOfflineAreaEntryAsync(tripId, tempClientId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder);
             await EnqueueRegionMutationAsync("Create", tempClientId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, true, tempClientId);
             return RegionOperationResult.Queued(tempClientId, "Sync failed - will retry");
         }
@@ -158,16 +128,22 @@ public class RegionOperationsHandler : IRegionOperationsHandler
         }
         catch (HttpRequestException ex)
         {
+            // Network error: queue for retry and ensure offline entry exists
+            await EnsureOfflineAreaEntryAsync(tripId, tempClientId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder);
             await EnqueueRegionMutationAsync("Create", tempClientId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, true, tempClientId);
             return RegionOperationResult.Queued(tempClientId, $"Network error: {ex.Message} - will retry");
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
         {
+            // Timeout: queue for retry and ensure offline entry exists
+            await EnsureOfflineAreaEntryAsync(tripId, tempClientId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder);
             await EnqueueRegionMutationAsync("Create", tempClientId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, true, tempClientId);
             return RegionOperationResult.Queued(tempClientId, "Request timed out - will retry");
         }
         catch (Exception ex)
         {
+            // Unexpected error: queue for retry and ensure offline entry exists
+            await EnsureOfflineAreaEntryAsync(tripId, tempClientId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder);
             await EnqueueRegionMutationAsync("Create", tempClientId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, true, tempClientId);
             return RegionOperationResult.Queued(tempClientId, $"Unexpected error: {ex.Message} - will retry");
         }
@@ -534,6 +510,43 @@ public class RegionOperationsHandler : IRegionOperationsHandler
             return false;
 
         return statusCode >= 400 && statusCode < 500;
+    }
+
+    /// <summary>
+    /// Ensures an offline area entry exists with upsert pattern.
+    /// Used when queuing CREATE mutations - the offline entry must exist for subsequent updates/deletes.
+    /// </summary>
+    private async Task EnsureOfflineAreaEntryAsync(
+        Guid tripId,
+        Guid serverId,
+        string name,
+        string? notes,
+        string? coverImageUrl,
+        double? centerLatitude,
+        double? centerLongitude,
+        int? displayOrder)
+    {
+        var localTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripId);
+        if (localTrip == null)
+            return;
+
+        // Upsert pattern: check if entry already exists
+        var existing = await _areaRepository.GetOfflineAreaByServerIdAsync(serverId);
+        if (existing != null)
+            return; // Already exists, no action needed
+
+        var offlineArea = new OfflineAreaEntity
+        {
+            TripId = localTrip.Id,
+            ServerId = serverId,
+            Name = name,
+            Notes = notes,
+            CoverImageUrl = coverImageUrl,
+            CenterLatitude = centerLatitude,
+            CenterLongitude = centerLongitude,
+            SortOrder = displayOrder ?? 0
+        };
+        await _areaRepository.InsertOfflineAreaAsync(offlineArea);
     }
 
     #endregion
