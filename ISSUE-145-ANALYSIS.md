@@ -931,8 +931,8 @@ Track each fix: implement → build → test → verify finding resolved.
 - [x] **D0 Verify**: builds, tests pass, F7 resolved
 
 ### Phase 1: Core Fixes
-- [ ] **D2**: Subscribe to EntityCreated and update in-memory collections
-- [ ] **D2 Verify**: builds, tests pass, F2 resolved
+- [x] **D2**: Subscribe to EntityCreated and update in-memory collections
+- [x] **D2 Verify**: builds, tests pass, F2 resolved
 
 - [ ] **D1**: Persist offline entry on CREATE (all paths)
 - [ ] **D1 Verify**: builds, tests pass, F1 resolved
@@ -963,7 +963,7 @@ Track each fix: implement → build → test → verify finding resolved.
 |------|--------|--------|
 | 2026-01-13 | Document merged to develop branch | ✅ |
 | 2026-01-13 | D0 implementation | ✅ Commit bf01e80 |
-| | D2 implementation | Pending |
+| 2026-01-13 | D2 implementation | ✅ Commit 9f76617 |
 | | D1 implementation | Pending |
 | | D3 implementation | Pending |
 | | D6 implementation | Pending |
