@@ -894,6 +894,8 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
                 // Update observable properties from actual state
                 HasLoadedTrip = TripSheet.HasLoadedTrip;
                 PageTitle = TripSheet.LoadedTrip?.Name ?? "Map";
+                // Update cover image binding (visibility-aware property)
+                OnPropertyChanged(nameof(TripCoverImageUrl));
                 break;
 
             case nameof(TripSheetViewModel.HasLoadedTrip):
