@@ -133,6 +133,24 @@ public partial class TripItemEditorViewModel : BaseViewModel
         _toastService = toastService;
         _settingsService = settingsService;
         _logger = logger;
+
+        // Subscribe to EntityCreated to reconcile temp IDs with server IDs (D2)
+        _tripSyncService.EntityCreated += OnEntityCreated;
+    }
+
+    #endregion
+
+    #region Cleanup
+
+    /// <summary>
+    /// Unsubscribes from events when the ViewModel is disposed.
+    /// </summary>
+    protected override void Cleanup()
+    {
+        // Unsubscribe from events to prevent memory leaks
+        _tripSyncService.EntityCreated -= OnEntityCreated;
+
+        base.Cleanup();
     }
 
     #endregion
@@ -882,6 +900,68 @@ public partial class TripItemEditorViewModel : BaseViewModel
     private void ClearLoadedTrip()
     {
         _callbacks?.UnloadTrip();
+    }
+
+    #endregion
+
+    #region Event Handlers
+
+    /// <summary>
+    /// Handles the EntityCreated event from TripSyncService.
+    /// Updates in-memory objects with server-assigned IDs to replace temp IDs.
+    /// This enables subsequent update/delete operations to work correctly.
+    /// </summary>
+    /// <param name="sender">The event sender.</param>
+    /// <param name="e">Event arguments containing temp ID, server ID, and entity type.</param>
+    private void OnEntityCreated(object? sender, EntityCreatedEventArgs e)
+    {
+        // Must run on UI thread since we're modifying observable collections
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            var loadedTrip = _callbacks?.LoadedTrip;
+            if (loadedTrip == null)
+            {
+                _logger.LogDebug("EntityCreated: No loaded trip, skipping ID reconciliation");
+                return;
+            }
+
+            switch (e.EntityType)
+            {
+                case "Region":
+                    var region = loadedTrip.Regions.FirstOrDefault(r => r.Id == e.TempClientId);
+                    if (region != null)
+                    {
+                        region.Id = e.ServerId;
+                        _logger.LogDebug("EntityCreated: Updated Region TempId {TempId} -> ServerId {ServerId}",
+                            e.TempClientId, e.ServerId);
+                    }
+                    else
+                    {
+                        _logger.LogDebug("EntityCreated: Region with TempId {TempId} not found in loaded trip",
+                            e.TempClientId);
+                    }
+                    break;
+
+                case "Place":
+                    // Search through all regions to find the place
+                    foreach (var reg in loadedTrip.Regions)
+                    {
+                        var place = reg.Places.FirstOrDefault(p => p.Id == e.TempClientId);
+                        if (place != null)
+                        {
+                            place.Id = e.ServerId;
+                            _logger.LogDebug("EntityCreated: Updated Place TempId {TempId} -> ServerId {ServerId}",
+                                e.TempClientId, e.ServerId);
+                            break;
+                        }
+                    }
+                    break;
+
+                default:
+                    _logger.LogDebug("EntityCreated: Unhandled entity type {EntityType}", e.EntityType);
+                    break;
+            }
+        });
     }
 
     #endregion
