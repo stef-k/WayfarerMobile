@@ -92,6 +92,7 @@ public class SettingsSyncService
             // Track what changed
             var oldTimeThreshold = _settingsService.LocationTimeThresholdMinutes;
             var oldDistanceThreshold = _settingsService.LocationDistanceThresholdMeters;
+            var oldAccuracyThreshold = _settingsService.LocationAccuracyThresholdMeters;
 
             // Update local settings
             if (serverSettings.LocationTimeThresholdMinutes > 0)
@@ -104,17 +105,24 @@ public class SettingsSyncService
                 _settingsService.LocationDistanceThresholdMeters = serverSettings.LocationDistanceThresholdMeters;
             }
 
+            if (serverSettings.LocationAccuracyThresholdMeters > 0)
+            {
+                _settingsService.LocationAccuracyThresholdMeters = serverSettings.LocationAccuracyThresholdMeters;
+            }
+
             // Record sync time
             Preferences.Set(LastSettingsSyncKey, DateTime.UtcNow.Ticks);
 
             var thresholdsChanged =
                 oldTimeThreshold != _settingsService.LocationTimeThresholdMinutes ||
-                oldDistanceThreshold != _settingsService.LocationDistanceThresholdMeters;
+                oldDistanceThreshold != _settingsService.LocationDistanceThresholdMeters ||
+                oldAccuracyThreshold != _settingsService.LocationAccuracyThresholdMeters;
 
             _logger.LogInformation(
-                "Settings synced: Time={Time}min, Distance={Distance}m (changed: {Changed})",
+                "Settings synced: Time={Time}min, Distance={Distance}m, Accuracy={Accuracy}m (changed: {Changed})",
                 _settingsService.LocationTimeThresholdMinutes,
                 _settingsService.LocationDistanceThresholdMeters,
+                _settingsService.LocationAccuracyThresholdMeters,
                 thresholdsChanged);
 
             // Notify listeners if thresholds changed
@@ -123,8 +131,15 @@ public class SettingsSyncService
                 SettingsUpdated?.Invoke(this, new SettingsUpdatedEventArgs
                 {
                     TimeThresholdMinutes = _settingsService.LocationTimeThresholdMinutes,
-                    DistanceThresholdMeters = _settingsService.LocationDistanceThresholdMeters
+                    DistanceThresholdMeters = _settingsService.LocationDistanceThresholdMeters,
+                    AccuracyThresholdMeters = _settingsService.LocationAccuracyThresholdMeters
                 });
+
+                // Notify platform location services to update their filters
+                LocationServiceCallbacks.NotifyThresholdsUpdated(
+                    _settingsService.LocationTimeThresholdMinutes,
+                    _settingsService.LocationDistanceThresholdMeters,
+                    _settingsService.LocationAccuracyThresholdMeters);
             }
 
             // Also sync activity types
@@ -195,4 +210,9 @@ public class SettingsUpdatedEventArgs : EventArgs
     /// Gets or sets the updated distance threshold in meters.
     /// </summary>
     public int DistanceThresholdMeters { get; set; }
+
+    /// <summary>
+    /// Gets or sets the updated accuracy threshold in meters.
+    /// </summary>
+    public int AccuracyThresholdMeters { get; set; }
 }

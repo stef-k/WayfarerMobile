@@ -123,6 +123,11 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     // Approach phase flag: prevents repeated RestartLocationUpdates during approach
     private bool _inApproachPhase;
 
+    // Stationary user cooldown: prevents oscillation between HighAccuracy and Balanced
+    // When timeout triggers without a successful log (stationary user), we enter cooldown
+    // to stay in Balanced for a full threshold period before allowing HighAccuracy again
+    private DateTime _stationaryCooldownUntil = DateTime.MinValue;
+
     #endregion
 
     #region Service Lifecycle
@@ -246,11 +251,15 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         Log.Debug(LogTag, $"TimelineTrackingEnabled: {_timelineTrackingEnabled}");
 
         // Load server thresholds for location filtering (respects server configuration)
-        // Defaults match SettingsService: 5 min / 15 m
+        // Defaults match SettingsService: 5 min / 15 m / 50 m accuracy
         var timeThreshold = Preferences.Get("location_time_threshold", 5);
         var distanceThreshold = Preferences.Get("location_distance_threshold", 15);
-        _thresholdFilter.UpdateThresholds(timeThreshold, distanceThreshold);
-        Log.Debug(LogTag, $"Thresholds: {timeThreshold}min / {distanceThreshold}m");
+        var accuracyThreshold = Preferences.Get("location_accuracy_threshold", 50);
+        _thresholdFilter.UpdateThresholds(timeThreshold, distanceThreshold, accuracyThreshold);
+        Log.Debug(LogTag, $"Thresholds: {timeThreshold}min / {distanceThreshold}m / {accuracyThreshold}m accuracy");
+
+        // Subscribe to threshold updates from server sync
+        LocationServiceCallbacks.ThresholdsUpdated += OnThresholdsUpdated;
 
         // Check for Google Play Services availability (can be slow - system IPC call)
         _hasPlayServices = GoogleApiAvailability.Instance
@@ -357,6 +366,9 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     public override void OnDestroy()
     {
         Log.Info(LogTag, "Service destroying - stopping foreground");
+
+        // Unsubscribe from static events to prevent memory leaks and duplicate handlers
+        LocationServiceCallbacks.ThresholdsUpdated -= OnThresholdsUpdated;
 
         StopLocationUpdates();
 
@@ -671,6 +683,37 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         if (thresholdSeconds <= 120)
         {
             return Priority.PriorityHighAccuracy;
+        }
+
+        // BATTERY FIX: Prevent indefinite HighAccuracy for stationary users
+        // With AND logic (time + distance), a stationary user will never satisfy distance,
+        // so GetSecondsUntilNextLog() keeps returning <= 0. Without this check, they'd
+        // stay in HighAccuracy forever, draining battery.
+        //
+        // Solution: When timeout triggers without a log, enter a cooldown period where
+        // we stay in Balanced for a full threshold period. This prevents oscillation
+        // between HighAccuracy and Balanced (180s HA → brief Balanced → 180s HA → ...).
+
+        // Check if we're still in cooldown from a previous stationary timeout
+        if (DateTime.UtcNow < _stationaryCooldownUntil)
+        {
+            var cooldownRemaining = (_stationaryCooldownUntil - DateTime.UtcNow).TotalSeconds;
+            Log.Debug(LogTag, $"In stationary cooldown, {cooldownRemaining:F0}s remaining");
+            return Priority.PriorityBalancedPowerAccuracy;
+        }
+
+        // Check if currently in HighAccuracy and timeout has expired
+        if (_currentlyUsingHighAccuracy)
+        {
+            var timeInHighAccuracy = (DateTime.UtcNow - _highAccuracyStartTime).TotalSeconds;
+            if (timeInHighAccuracy >= HighAccuracyTimeoutSeconds)
+            {
+                // Enter cooldown: stay in Balanced for a full threshold period
+                // This ensures the device sleeps properly before the next wake cycle
+                _stationaryCooldownUntil = DateTime.UtcNow.AddSeconds(thresholdSeconds);
+                Log.Info(LogTag, $"HighAccuracy timeout ({timeInHighAccuracy:F0}s), entering {thresholdSeconds}s cooldown");
+                return Priority.PriorityBalancedPowerAccuracy;
+            }
         }
 
         // Query ThresholdFilter for time until next log (single source of truth)
@@ -995,6 +1038,13 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
                 // Clear stored sample after successful log
                 _bestWakePhaseLocation = null;
                 _bestWakePhaseAccuracy = float.MaxValue;
+
+                // Clear stationary cooldown - user is moving, allow normal wake/sleep
+                if (_stationaryCooldownUntil > DateTime.MinValue)
+                {
+                    Log.Info(LogTag, "Cleared stationary cooldown - user is moving");
+                    _stationaryCooldownUntil = DateTime.MinValue;
+                }
             }
         }
 
@@ -1314,10 +1364,19 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     /// </summary>
     /// <param name="timeMinutes">Minimum time between logged locations.</param>
     /// <param name="distanceMeters">Minimum distance between logged locations.</param>
-    public void UpdateThresholds(int timeMinutes, int distanceMeters)
+    /// <param name="accuracyMeters">Maximum acceptable GPS accuracy in meters.</param>
+    public void UpdateThresholds(int timeMinutes, int distanceMeters, int accuracyMeters)
     {
-        _thresholdFilter?.UpdateThresholds(timeMinutes, distanceMeters);
-        Log.Debug(LogTag, $"Thresholds updated: {timeMinutes}min / {distanceMeters}m");
+        _thresholdFilter?.UpdateThresholds(timeMinutes, distanceMeters, accuracyMeters);
+        Log.Debug(LogTag, $"Thresholds updated: {timeMinutes}min / {distanceMeters}m / {accuracyMeters}m accuracy");
+    }
+
+    /// <summary>
+    /// Handles threshold updates from server sync via LocationServiceCallbacks.
+    /// </summary>
+    private void OnThresholdsUpdated(object? sender, ThresholdsUpdatedEventArgs e)
+    {
+        UpdateThresholds(e.TimeThresholdMinutes, e.DistanceThresholdMeters, e.AccuracyThresholdMeters);
     }
 
     #endregion
