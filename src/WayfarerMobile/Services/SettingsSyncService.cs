@@ -134,6 +134,12 @@ public class SettingsSyncService
                     DistanceThresholdMeters = _settingsService.LocationDistanceThresholdMeters,
                     AccuracyThresholdMeters = _settingsService.LocationAccuracyThresholdMeters
                 });
+
+                // Notify platform location services to update their filters
+                LocationServiceCallbacks.NotifyThresholdsUpdated(
+                    _settingsService.LocationTimeThresholdMinutes,
+                    _settingsService.LocationDistanceThresholdMeters,
+                    _settingsService.LocationAccuracyThresholdMeters);
             }
 
             // Also sync activity types

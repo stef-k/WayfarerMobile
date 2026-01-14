@@ -271,12 +271,12 @@ public class SettingsService : ISettingsService
     /// <summary>
     /// Gets or sets the maximum acceptable GPS accuracy for location logging (from server config).
     /// Locations with accuracy worse (higher) than this value are rejected.
-    /// Default: 50 meters.
+    /// Default: 50 meters. Valid range: 10-500 meters.
     /// </summary>
     public int LocationAccuracyThresholdMeters
     {
         get => Preferences.Get(KeyLocationAccuracyThreshold, 50);
-        set => Preferences.Set(KeyLocationAccuracyThreshold, value);
+        set => Preferences.Set(KeyLocationAccuracyThreshold, Math.Clamp(value, 10, 500));
     }
 
     /// <summary>

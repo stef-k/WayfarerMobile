@@ -145,9 +145,12 @@ public class ThresholdFilter
     /// <param name="accuracyMeters">New accuracy threshold in meters.</param>
     public void UpdateThresholds(int timeMinutes, int distanceMeters, int accuracyMeters)
     {
-        TimeThresholdMinutes = timeMinutes;
-        DistanceThresholdMeters = distanceMeters;
-        AccuracyThresholdMeters = accuracyMeters;
+        lock (_lock)
+        {
+            TimeThresholdMinutes = timeMinutes;
+            DistanceThresholdMeters = distanceMeters;
+            AccuracyThresholdMeters = accuracyMeters;
+        }
     }
 
     /// <summary>

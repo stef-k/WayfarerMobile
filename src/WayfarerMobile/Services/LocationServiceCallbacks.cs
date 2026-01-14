@@ -54,6 +54,12 @@ public static class LocationServiceCallbacks
     public static event EventHandler? StopRequested;
 
     /// <summary>
+    /// Event raised when location thresholds are updated from the server.
+    /// Platform-specific location services should subscribe to this event to update their filters.
+    /// </summary>
+    public static event EventHandler<ThresholdsUpdatedEventArgs>? ThresholdsUpdated;
+
+    /// <summary>
     /// Notifies listeners of a new location.
     /// Called by platform-specific location services.
     /// </summary>
@@ -134,6 +140,22 @@ public static class LocationServiceCallbacks
             StopRequested?.Invoke(null, EventArgs.Empty);
         });
     }
+
+    /// <summary>
+    /// Notifies platform services that location thresholds have been updated.
+    /// Called by SettingsSyncService after syncing new thresholds from the server.
+    /// </summary>
+    /// <param name="timeMinutes">New time threshold in minutes.</param>
+    /// <param name="distanceMeters">New distance threshold in meters.</param>
+    /// <param name="accuracyMeters">New accuracy threshold in meters.</param>
+    public static void NotifyThresholdsUpdated(int timeMinutes, int distanceMeters, int accuracyMeters)
+    {
+        // Platform services may be on background threads, so use MainThread
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            ThresholdsUpdated?.Invoke(null, new ThresholdsUpdatedEventArgs(timeMinutes, distanceMeters, accuracyMeters));
+        });
+    }
 }
 
 /// <summary>
@@ -160,5 +182,39 @@ public class CheckInEventArgs : EventArgs
     {
         Success = success;
         ErrorMessage = errorMessage;
+    }
+}
+
+/// <summary>
+/// Event arguments for threshold update events.
+/// </summary>
+public class ThresholdsUpdatedEventArgs : EventArgs
+{
+    /// <summary>
+    /// Gets the new time threshold in minutes.
+    /// </summary>
+    public int TimeThresholdMinutes { get; }
+
+    /// <summary>
+    /// Gets the new distance threshold in meters.
+    /// </summary>
+    public int DistanceThresholdMeters { get; }
+
+    /// <summary>
+    /// Gets the new accuracy threshold in meters.
+    /// </summary>
+    public int AccuracyThresholdMeters { get; }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ThresholdsUpdatedEventArgs"/> class.
+    /// </summary>
+    /// <param name="timeMinutes">New time threshold in minutes.</param>
+    /// <param name="distanceMeters">New distance threshold in meters.</param>
+    /// <param name="accuracyMeters">New accuracy threshold in meters.</param>
+    public ThresholdsUpdatedEventArgs(int timeMinutes, int distanceMeters, int accuracyMeters)
+    {
+        TimeThresholdMinutes = timeMinutes;
+        DistanceThresholdMeters = distanceMeters;
+        AccuracyThresholdMeters = accuracyMeters;
     }
 }

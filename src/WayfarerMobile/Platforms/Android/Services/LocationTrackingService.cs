@@ -253,6 +253,9 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         _thresholdFilter.UpdateThresholds(timeThreshold, distanceThreshold, accuracyThreshold);
         Log.Debug(LogTag, $"Thresholds: {timeThreshold}min / {distanceThreshold}m / {accuracyThreshold}m accuracy");
 
+        // Subscribe to threshold updates from server sync
+        LocationServiceCallbacks.ThresholdsUpdated += OnThresholdsUpdated;
+
         // Check for Google Play Services availability (can be slow - system IPC call)
         _hasPlayServices = GoogleApiAvailability.Instance
             .IsGooglePlayServicesAvailable(this) == ConnectionResult.Success;
@@ -672,6 +675,21 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         if (thresholdSeconds <= 120)
         {
             return Priority.PriorityHighAccuracy;
+        }
+
+        // BATTERY FIX: Prevent indefinite HighAccuracy for stationary users
+        // With AND logic (time + distance), a stationary user will never satisfy distance,
+        // so GetSecondsUntilNextLog() keeps returning <= 0. Without this check, they'd
+        // stay in HighAccuracy forever, draining battery.
+        // After the timeout, force a switch to Balanced to start a new sleep/wake cycle.
+        if (_currentlyUsingHighAccuracy)
+        {
+            var timeInHighAccuracy = (DateTime.UtcNow - _highAccuracyStartTime).TotalSeconds;
+            if (timeInHighAccuracy >= HighAccuracyTimeoutSeconds)
+            {
+                Log.Info(LogTag, $"HighAccuracy timeout ({timeInHighAccuracy:F0}s >= {HighAccuracyTimeoutSeconds}s), forcing Balanced");
+                return Priority.PriorityBalancedPowerAccuracy;
+            }
         }
 
         // Query ThresholdFilter for time until next log (single source of truth)
@@ -1304,6 +1322,14 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     public void SetTimelineTrackingEnabled(bool enabled)
     {
         _timelineTrackingEnabled = enabled;
+    }
+
+    /// <summary>
+    /// Handles threshold updates from server sync via LocationServiceCallbacks.
+    /// </summary>
+    private void OnThresholdsUpdated(object? sender, ThresholdsUpdatedEventArgs e)
+    {
+        UpdateThresholds(e.TimeThresholdMinutes, e.DistanceThresholdMeters, e.AccuracyThresholdMeters);
     }
 
     /// <summary>
