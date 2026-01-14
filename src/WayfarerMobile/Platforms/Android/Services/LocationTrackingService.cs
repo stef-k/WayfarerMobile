@@ -367,6 +367,9 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     {
         Log.Info(LogTag, "Service destroying - stopping foreground");
 
+        // Unsubscribe from static events to prevent memory leaks and duplicate handlers
+        LocationServiceCallbacks.ThresholdsUpdated -= OnThresholdsUpdated;
+
         StopLocationUpdates();
 
         // CRITICAL: Stop foreground mode before destruction to clear Android's tracking state.
