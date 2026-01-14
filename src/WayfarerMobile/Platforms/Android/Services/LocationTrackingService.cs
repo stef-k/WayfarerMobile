@@ -246,11 +246,12 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         Log.Debug(LogTag, $"TimelineTrackingEnabled: {_timelineTrackingEnabled}");
 
         // Load server thresholds for location filtering (respects server configuration)
-        // Defaults match SettingsService: 5 min / 15 m
+        // Defaults match SettingsService: 5 min / 15 m / 50 m accuracy
         var timeThreshold = Preferences.Get("location_time_threshold", 5);
         var distanceThreshold = Preferences.Get("location_distance_threshold", 15);
-        _thresholdFilter.UpdateThresholds(timeThreshold, distanceThreshold);
-        Log.Debug(LogTag, $"Thresholds: {timeThreshold}min / {distanceThreshold}m");
+        var accuracyThreshold = Preferences.Get("location_accuracy_threshold", 50);
+        _thresholdFilter.UpdateThresholds(timeThreshold, distanceThreshold, accuracyThreshold);
+        Log.Debug(LogTag, $"Thresholds: {timeThreshold}min / {distanceThreshold}m / {accuracyThreshold}m accuracy");
 
         // Check for Google Play Services availability (can be slow - system IPC call)
         _hasPlayServices = GoogleApiAvailability.Instance
@@ -1310,10 +1311,11 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     /// </summary>
     /// <param name="timeMinutes">Minimum time between logged locations.</param>
     /// <param name="distanceMeters">Minimum distance between logged locations.</param>
-    public void UpdateThresholds(int timeMinutes, int distanceMeters)
+    /// <param name="accuracyMeters">Maximum acceptable GPS accuracy in meters.</param>
+    public void UpdateThresholds(int timeMinutes, int distanceMeters, int accuracyMeters)
     {
-        _thresholdFilter?.UpdateThresholds(timeMinutes, distanceMeters);
-        Log.Debug(LogTag, $"Thresholds updated: {timeMinutes}min / {distanceMeters}m");
+        _thresholdFilter?.UpdateThresholds(timeMinutes, distanceMeters, accuracyMeters);
+        Log.Debug(LogTag, $"Thresholds updated: {timeMinutes}min / {distanceMeters}m / {accuracyMeters}m accuracy");
     }
 
     #endregion

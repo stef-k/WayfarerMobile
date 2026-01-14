@@ -324,6 +324,12 @@ public class ServerSettings
     public int LocationDistanceThresholdMeters { get; set; }
 
     /// <summary>
+    /// Gets or sets the maximum acceptable GPS accuracy for location logging (meters).
+    /// Locations with accuracy worse (higher) than this value are rejected.
+    /// </summary>
+    public int LocationAccuracyThresholdMeters { get; set; }
+
+    /// <summary>
     /// Gets or sets the user's display name.
     /// </summary>
     public string? DisplayName { get; set; }

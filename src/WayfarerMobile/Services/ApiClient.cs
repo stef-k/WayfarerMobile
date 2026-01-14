@@ -133,8 +133,8 @@ public class ApiClient : IApiClient, IVisitApiClient
             if (response.IsSuccessStatusCode)
             {
                 var settings = await response.Content.ReadFromJsonAsync<ServerSettings>(JsonOptions, cancellationToken);
-                _logger.LogInformation("Fetched server settings: TimeThreshold={Time}min, DistanceThreshold={Distance}m",
-                    settings?.LocationTimeThresholdMinutes, settings?.LocationDistanceThresholdMeters);
+                _logger.LogInformation("Fetched server settings: TimeThreshold={Time}min, DistanceThreshold={Distance}m, AccuracyThreshold={Accuracy}m",
+                    settings?.LocationTimeThresholdMinutes, settings?.LocationDistanceThresholdMeters, settings?.LocationAccuracyThresholdMeters);
                 return settings;
             }
 

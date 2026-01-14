@@ -278,6 +278,7 @@ public class AppDiagnosticService
                 LastLocationLongitude = lastLocation?.Longitude,
                 TimeThresholdMinutes = _settingsService.LocationTimeThresholdMinutes,
                 DistanceThresholdMeters = _settingsService.LocationDistanceThresholdMeters,
+                AccuracyThresholdMeters = _settingsService.LocationAccuracyThresholdMeters,
                 TrackingHealthStatus = CalculateTrackingHealth(hasForeground, hasBackground, _locationBridge.CurrentState.ToString())
             };
         }
@@ -503,6 +504,7 @@ public class TrackingDiagnostics
     public double? LastLocationLongitude { get; set; }
     public int TimeThresholdMinutes { get; set; }
     public int DistanceThresholdMeters { get; set; }
+    public int AccuracyThresholdMeters { get; set; }
     public string TrackingHealthStatus { get; set; } = "Unknown";
 }
 

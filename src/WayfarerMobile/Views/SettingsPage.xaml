@@ -130,6 +130,14 @@
                                    FontSize="12"
                                    TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                         </VerticalStackLayout>
+
+                        <VerticalStackLayout Spacing="5">
+                            <Label Text="{Binding LocationAccuracyThreshold, StringFormat='Accuracy threshold: {0} m'}"
+                                   FontSize="14" />
+                            <Label Text="Maximum acceptable GPS accuracy (rejects poor accuracy)"
+                                   FontSize="12"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        </VerticalStackLayout>
                     </VerticalStackLayout>
                 </sfExpander:SfExpander.Content>
             </sfExpander:SfExpander>

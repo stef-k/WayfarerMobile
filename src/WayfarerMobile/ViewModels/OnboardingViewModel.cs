@@ -394,13 +394,17 @@ public partial class OnboardingViewModel : BaseViewModel
     {
         try
         {
-            // Fetch server settings (time/distance thresholds)
+            // Fetch server settings (time/distance/accuracy thresholds)
             var serverSettings = await _apiClient.GetSettingsAsync();
             if (serverSettings != null)
             {
                 _settingsService.LocationTimeThresholdMinutes = serverSettings.LocationTimeThresholdMinutes;
                 _settingsService.LocationDistanceThresholdMeters = serverSettings.LocationDistanceThresholdMeters;
-                Console.WriteLine($"[Onboarding] Fetched settings: {serverSettings.LocationTimeThresholdMinutes}min, {serverSettings.LocationDistanceThresholdMeters}m");
+                if (serverSettings.LocationAccuracyThresholdMeters > 0)
+                {
+                    _settingsService.LocationAccuracyThresholdMeters = serverSettings.LocationAccuracyThresholdMeters;
+                }
+                Console.WriteLine($"[Onboarding] Fetched settings: {serverSettings.LocationTimeThresholdMinutes}min, {serverSettings.LocationDistanceThresholdMeters}m, {serverSettings.LocationAccuracyThresholdMeters}m accuracy");
             }
 
             // Sync activities from server

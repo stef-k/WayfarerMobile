@@ -3,9 +3,20 @@ using WayfarerMobile.Core.Models;
 namespace WayfarerMobile.Core.Algorithms;
 
 /// <summary>
-/// Filters locations based on time and distance thresholds.
-/// Used to determine if a location should be logged to the server.
+/// Filters locations based on time, distance, and accuracy thresholds.
+/// Used to determine if a location should be queued for server upload.
 /// </summary>
+/// <remarks>
+/// <para>
+/// This filter uses AND logic: a location passes only if:
+/// - Accuracy is acceptable (≤ threshold)
+/// - BOTH time AND distance thresholds are exceeded
+/// </para>
+/// <para>
+/// The AND logic matches server behavior, ensuring only locations that will
+/// actually be stored on the server are queued for upload.
+/// </para>
+/// </remarks>
 public class ThresholdFilter
 {
     private LocationData? _lastLoggedLocation;
@@ -22,6 +33,12 @@ public class ThresholdFilter
     public int DistanceThresholdMeters { get; set; } = 50;
 
     /// <summary>
+    /// Gets or sets the maximum acceptable GPS accuracy in meters.
+    /// Locations with accuracy worse (higher) than this are rejected.
+    /// </summary>
+    public int AccuracyThresholdMeters { get; set; } = 50;
+
+    /// <summary>
     /// Gets the last location that passed the filter.
     /// </summary>
     public LocationData? LastLoggedLocation
@@ -31,25 +48,38 @@ public class ThresholdFilter
 
     /// <summary>
     /// Determines if a location passes the threshold filter.
-    /// A location passes if either:
-    /// - It's the first location
-    /// - Enough time has passed since the last logged location
-    /// - Enough distance has been traveled since the last logged location
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A location passes if ALL conditions are met:
+    /// <list type="bullet">
+    /// <item>Accuracy is acceptable (≤ AccuracyThresholdMeters) or null</item>
+    /// <item>It's the first location, OR both time AND distance thresholds are exceeded</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// Accuracy is checked first as a hard reject gate. If accuracy is poor,
+    /// the location is rejected immediately without checking time/distance.
+    /// </para>
+    /// </remarks>
     /// <param name="location">The location to check.</param>
     /// <returns>True if the location should be logged.</returns>
     public bool ShouldLog(LocationData location)
     {
         lock (_lock)
         {
-            // First location always passes
+            // Accuracy check is a hard reject gate (checked first)
+            // Null accuracy is acceptable (older data may lack accuracy info)
+            if (location.Accuracy.HasValue && location.Accuracy.Value > AccuracyThresholdMeters)
+                return false;
+
+            // First location always passes (if accuracy is acceptable)
             if (_lastLoggedLocation == null)
                 return true;
 
             // Check time threshold
             var timeDiff = location.Timestamp - _lastLoggedLocation.Timestamp;
-            if (timeDiff.TotalMinutes >= TimeThresholdMinutes)
-                return true;
+            var timeExceeded = timeDiff.TotalMinutes >= TimeThresholdMinutes;
 
             // Check distance threshold
             var distance = GeoMath.CalculateDistance(
@@ -57,11 +87,10 @@ public class ThresholdFilter
                 _lastLoggedLocation.Longitude,
                 location.Latitude,
                 location.Longitude);
+            var distanceExceeded = distance >= DistanceThresholdMeters;
 
-            if (distance >= DistanceThresholdMeters)
-                return true;
-
-            return false;
+            // AND logic: both time AND distance must be exceeded
+            return timeExceeded && distanceExceeded;
         }
     }
 
@@ -113,10 +142,12 @@ public class ThresholdFilter
     /// </summary>
     /// <param name="timeMinutes">New time threshold in minutes.</param>
     /// <param name="distanceMeters">New distance threshold in meters.</param>
-    public void UpdateThresholds(int timeMinutes, int distanceMeters)
+    /// <param name="accuracyMeters">New accuracy threshold in meters.</param>
+    public void UpdateThresholds(int timeMinutes, int distanceMeters, int accuracyMeters)
     {
         TimeThresholdMinutes = timeMinutes;
         DistanceThresholdMeters = distanceMeters;
+        AccuracyThresholdMeters = accuracyMeters;
     }
 
     /// <summary>

@@ -73,6 +73,12 @@ public partial class SettingsViewModel : BaseViewModel
     private int _locationDistanceThreshold;
 
     /// <summary>
+    /// Gets or sets the location accuracy threshold (max acceptable GPS accuracy in meters).
+    /// </summary>
+    [ObservableProperty]
+    private int _locationAccuracyThreshold;
+
+    /// <summary>
     /// Gets or sets the theme preference: "System", "Light", or "Dark".
     /// </summary>
     [ObservableProperty]
@@ -401,6 +407,7 @@ public partial class SettingsViewModel : BaseViewModel
         ServerUrl = _settingsService.ServerUrl ?? string.Empty;
         LocationTimeThreshold = _settingsService.LocationTimeThresholdMinutes;
         LocationDistanceThreshold = _settingsService.LocationDistanceThresholdMeters;
+        LocationAccuracyThreshold = _settingsService.LocationAccuracyThresholdMeters;
         MapOfflineCacheEnabled = _settingsService.MapOfflineCacheEnabled;
 
         // Theme and language settings

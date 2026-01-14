@@ -15,6 +15,7 @@ public class LocalTimelineFilterTests
         _mockSettings = new Mock<ISettingsService>();
         _mockSettings.Setup(s => s.LocationTimeThresholdMinutes).Returns(1);
         _mockSettings.Setup(s => s.LocationDistanceThresholdMeters).Returns(50);
+        _mockSettings.Setup(s => s.LocationAccuracyThresholdMeters).Returns(50);
 
         _filter = new LocalTimelineFilter(_mockSettings.Object);
     }
@@ -508,16 +509,185 @@ public class LocalTimelineFilterTests
 
     #region Helper Methods
 
-    private static LocationData CreateLocation(double latitude, double longitude, DateTime timestamp)
+    private static LocationData CreateLocation(double latitude, double longitude, DateTime timestamp, double? accuracy = 10)
     {
         return new LocationData
         {
             Latitude = latitude,
             Longitude = longitude,
             Timestamp = timestamp,
-            Accuracy = 10,
+            Accuracy = accuracy,
             Provider = "test"
         };
+    }
+
+    #endregion
+
+    #region Accuracy Threshold Tests
+
+    [Fact]
+    public void AccuracyThresholdMeters_ReturnsValueFromSettings()
+    {
+        // Arrange
+        _mockSettings.Setup(s => s.LocationAccuracyThresholdMeters).Returns(75);
+
+        // Act
+        var result = _filter.AccuracyThresholdMeters;
+
+        // Assert
+        result.Should().Be(75);
+    }
+
+    [Fact]
+    public void ShouldStore_PoorAccuracy_ReturnsFalse()
+    {
+        // Arrange - accuracy 100m exceeds threshold of 50m
+        var baseTime = DateTime.UtcNow;
+        var location1 = CreateLocation(51.5074, -0.1278, baseTime, accuracy: 10);
+        _filter.MarkAsStored(location1);
+
+        // Move enough distance and time but with poor accuracy
+        var (newLat, _) = GeoMath.CalculateDestination(51.5074, -0.1278, 0, 100);
+        var location2 = CreateLocation(newLat, -0.1278, baseTime.AddMinutes(2), accuracy: 100); // Poor accuracy
+
+        // Act
+        var result = _filter.ShouldStore(location2);
+
+        // Assert
+        result.Should().BeFalse("accuracy 100m > threshold 50m should reject");
+    }
+
+    [Fact]
+    public void ShouldStore_GoodAccuracy_PassesToTimeDistanceCheck()
+    {
+        // Arrange - accuracy 20m is within threshold of 50m
+        var baseTime = DateTime.UtcNow;
+        var location1 = CreateLocation(51.5074, -0.1278, baseTime, accuracy: 10);
+        _filter.MarkAsStored(location1);
+
+        // Move enough distance and time with good accuracy
+        var (newLat, _) = GeoMath.CalculateDestination(51.5074, -0.1278, 0, 100);
+        var location2 = CreateLocation(newLat, -0.1278, baseTime.AddMinutes(2), accuracy: 20); // Good accuracy
+
+        // Act
+        var result = _filter.ShouldStore(location2);
+
+        // Assert
+        result.Should().BeTrue("good accuracy allows time/distance check to proceed (which passes)");
+    }
+
+    [Fact]
+    public void ShouldStore_NullAccuracy_PassesToTimeDistanceCheck()
+    {
+        // Arrange - null accuracy should be treated as acceptable (older data may lack accuracy)
+        var baseTime = DateTime.UtcNow;
+        var location1 = CreateLocation(51.5074, -0.1278, baseTime, accuracy: 10);
+        _filter.MarkAsStored(location1);
+
+        // Move enough distance and time with null accuracy
+        var (newLat, _) = GeoMath.CalculateDestination(51.5074, -0.1278, 0, 100);
+        var location2 = CreateLocation(newLat, -0.1278, baseTime.AddMinutes(2), accuracy: null);
+
+        // Act
+        var result = _filter.ShouldStore(location2);
+
+        // Assert
+        result.Should().BeTrue("null accuracy should be treated as acceptable");
+    }
+
+    [Fact]
+    public void ShouldStore_AccuracyAtExactThreshold_Passes()
+    {
+        // Arrange - accuracy exactly at 50m threshold should pass
+        var baseTime = DateTime.UtcNow;
+        var location1 = CreateLocation(51.5074, -0.1278, baseTime, accuracy: 10);
+        _filter.MarkAsStored(location1);
+
+        // Move enough distance and time with accuracy exactly at threshold
+        var (newLat, _) = GeoMath.CalculateDestination(51.5074, -0.1278, 0, 100);
+        var location2 = CreateLocation(newLat, -0.1278, baseTime.AddMinutes(2), accuracy: 50); // Exactly at threshold
+
+        // Act
+        var result = _filter.ShouldStore(location2);
+
+        // Assert
+        result.Should().BeTrue("accuracy exactly at threshold (<=) should pass");
+    }
+
+    [Fact]
+    public void ShouldStore_FirstLocation_PoorAccuracy_ReturnsFalse()
+    {
+        // Arrange - even first location should be rejected if accuracy is poor
+        var location = CreateLocation(51.5074, -0.1278, DateTime.UtcNow, accuracy: 100);
+
+        // Act
+        var result = _filter.ShouldStore(location);
+
+        // Assert
+        result.Should().BeFalse("first location with poor accuracy should still be rejected");
+    }
+
+    [Fact]
+    public void ShouldStore_FirstLocation_GoodAccuracy_ReturnsTrue()
+    {
+        // Arrange - first location with good accuracy should pass
+        var location = CreateLocation(51.5074, -0.1278, DateTime.UtcNow, accuracy: 20);
+
+        // Act
+        var result = _filter.ShouldStore(location);
+
+        // Assert
+        result.Should().BeTrue("first location with good accuracy should pass");
+    }
+
+    [Fact]
+    public void ShouldStore_FirstLocation_NullAccuracy_ReturnsTrue()
+    {
+        // Arrange - first location with null accuracy should pass
+        var location = CreateLocation(51.5074, -0.1278, DateTime.UtcNow, accuracy: null);
+
+        // Act
+        var result = _filter.ShouldStore(location);
+
+        // Assert
+        result.Should().BeTrue("first location with null accuracy should pass");
+    }
+
+    [Fact]
+    public void TryStore_PoorAccuracy_ReturnsFalseAndDoesNotMark()
+    {
+        // Arrange
+        var baseTime = DateTime.UtcNow;
+        var location1 = CreateLocation(51.5074, -0.1278, baseTime, accuracy: 10);
+        _filter.TryStore(location1);
+
+        var (newLat, _) = GeoMath.CalculateDestination(51.5074, -0.1278, 0, 100);
+        var location2 = CreateLocation(newLat, -0.1278, baseTime.AddMinutes(2), accuracy: 100);
+
+        // Act
+        var result = _filter.TryStore(location2);
+
+        // Assert
+        result.Should().BeFalse("poor accuracy should reject");
+        _filter.LastStoredLocation.Should().Be(location1, "last stored should not change");
+    }
+
+    [Fact]
+    public void ShouldStore_AccuracySlightlyAboveThreshold_ReturnsFalse()
+    {
+        // Arrange - accuracy 51m exceeds threshold of 50m
+        var baseTime = DateTime.UtcNow;
+        var location1 = CreateLocation(51.5074, -0.1278, baseTime, accuracy: 10);
+        _filter.MarkAsStored(location1);
+
+        var (newLat, _) = GeoMath.CalculateDestination(51.5074, -0.1278, 0, 100);
+        var location2 = CreateLocation(newLat, -0.1278, baseTime.AddMinutes(2), accuracy: 51);
+
+        // Act
+        var result = _filter.ShouldStore(location2);
+
+        // Assert
+        result.Should().BeFalse("accuracy 51m > threshold 50m should reject");
     }
 
     #endregion

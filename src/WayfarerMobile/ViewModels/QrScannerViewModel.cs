@@ -225,10 +225,16 @@ public partial class QrScannerViewModel : BaseViewModel
                     _settingsService.LocationDistanceThresholdMeters = serverSettings.LocationDistanceThresholdMeters;
                 }
 
+                if (serverSettings.LocationAccuracyThresholdMeters > 0)
+                {
+                    _settingsService.LocationAccuracyThresholdMeters = serverSettings.LocationAccuracyThresholdMeters;
+                }
+
                 _logger.LogInformation(
-                    "Server settings applied: Time={Time}min, Distance={Distance}m",
+                    "Server settings applied: Time={Time}min, Distance={Distance}m, Accuracy={Accuracy}m",
                     _settingsService.LocationTimeThresholdMinutes,
-                    _settingsService.LocationDistanceThresholdMeters);
+                    _settingsService.LocationDistanceThresholdMeters,
+                    _settingsService.LocationAccuracyThresholdMeters);
             }
             else
             {

@@ -37,6 +37,12 @@ public sealed class QueueDrainService : IDisposable
     private int DistanceThresholdMeters => _settings.LocationDistanceThresholdMeters;
 
     /// <summary>
+    /// Gets accuracy threshold in meters from settings (synced from server).
+    /// Locations with accuracy worse (higher) than this are rejected.
+    /// </summary>
+    private int AccuracyThresholdMeters => _settings.LocationAccuracyThresholdMeters;
+
+    /// <summary>
     /// Timer interval for checking queue (seconds).
     /// </summary>
     private const int TimerIntervalSeconds = 30;
@@ -514,14 +520,30 @@ public sealed class QueueDrainService : IDisposable
     #region Threshold Filtering
 
     /// <summary>
-    /// Determines if a location should be synced based on time AND distance thresholds.
+    /// Determines if a location should be synced based on accuracy, time, and distance thresholds.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A location is synced only if ALL conditions are met:
+    /// <list type="bullet">
+    /// <item>Accuracy is acceptable (≤ AccuracyThresholdMeters) or null</item>
+    /// <item>It's the first location, OR both time AND distance thresholds are exceeded</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
     private (bool ShouldSync, string? Reason) ShouldSyncLocation(QueuedLocation location)
     {
+        // Accuracy check is a hard reject gate (checked first)
+        // Null accuracy is acceptable (older data may lack accuracy info)
+        if (location.Accuracy.HasValue && location.Accuracy.Value > AccuracyThresholdMeters)
+        {
+            return (false, $"Accuracy: {location.Accuracy:F0}m > threshold {AccuracyThresholdMeters}m");
+        }
+
         // Atomically get sync reference to avoid race with logout/clear
         if (!_settings.TryGetSyncReference(out var refLat, out var refLon, out var refTime))
         {
-            // First sync - no reference point, always sync
+            // First sync - no reference point, always sync (if accuracy is acceptable)
             _logger.LogDebug("No sync reference, first location will sync");
             return (true, null);
         }
