@@ -190,7 +190,6 @@ public static class MauiProgram
         services.AddSingleton<ApiClient>();
         services.AddSingleton<IApiClient>(sp => sp.GetRequiredService<ApiClient>());
         services.AddSingleton<IVisitApiClient>(sp => sp.GetRequiredService<ApiClient>());
-        services.AddSingleton<LocationSyncService>();
         services.AddSingleton<QueueDrainService>(); // Drains offline queue via check-in endpoint
         services.AddSingleton<IPlaceOperationsHandler, PlaceOperationsHandler>();
         services.AddSingleton<IRegionOperationsHandler, RegionOperationsHandler>();

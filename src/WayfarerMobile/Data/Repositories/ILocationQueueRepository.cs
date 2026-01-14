@@ -107,8 +107,7 @@ public interface ILocationQueueRepository
 
     /// <summary>
     /// Atomically claims pending locations by marking them as Syncing and returns them.
-    /// Only returns locations that were successfully claimed (prevents race conditions
-    /// between LocationSyncService and QueueDrainService).
+    /// Only returns locations that were successfully claimed (prevents race conditions).
     /// </summary>
     /// <param name="limit">Maximum locations to claim.</param>
     /// <returns>List of claimed locations (already marked as Syncing).</returns>

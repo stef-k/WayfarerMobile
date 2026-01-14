@@ -196,11 +196,6 @@ public partial class App : Application
                 _logger.LogDebug("Secure settings preload started");
             }
 
-            // Start location sync service (server sync)
-            var syncService = _serviceProvider.GetService<LocationSyncService>();
-            syncService?.Start();
-            _logger.LogDebug("Background sync service started");
-
             // Start queue drain service (offline queue sync via check-in endpoint)
             var queueDrainService = _serviceProvider.GetService<QueueDrainService>();
             SafeFireAndForget(queueDrainService?.StartAsync(), "QueueDrainService");

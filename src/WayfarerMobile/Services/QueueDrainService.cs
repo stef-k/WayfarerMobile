@@ -93,6 +93,21 @@ public sealed class QueueDrainService : IDisposable
     /// </summary>
     private const int MaxErrorMessageLength = 200;
 
+    /// <summary>
+    /// Number of days after which synced locations are purged from the database.
+    /// </summary>
+    private const int PurgeSyncedDaysOld = 7;
+
+    /// <summary>
+    /// Cleanup interval in hours for purging old synced locations.
+    /// </summary>
+    private const int CleanupIntervalHours = 6;
+
+    /// <summary>
+    /// Delay before first cleanup run (minutes).
+    /// </summary>
+    private const int FirstCleanupDelayMinutes = 30;
+
     #endregion
 
     #region Fields
@@ -108,6 +123,7 @@ public sealed class QueueDrainService : IDisposable
     private readonly Queue<DateTime> _drainHistory = new();
 
     private Timer? _drainTimer;
+    private Timer? _cleanupTimer;
     private CancellationTokenSource? _timerCts;
     private DateTime _lastDrainTime = DateTime.MinValue;
     private int _consecutiveFailures;
@@ -189,6 +205,13 @@ public sealed class QueueDrainService : IDisposable
                 TimeSpan.FromSeconds(jitteredDelay),
                 TimeSpan.FromSeconds(TimerIntervalSeconds));
 
+            // Start the cleanup timer for purging old synced locations
+            _cleanupTimer = new Timer(
+                OnCleanupTimerElapsed,
+                null,
+                TimeSpan.FromMinutes(FirstCleanupDelayMinutes),
+                TimeSpan.FromHours(CleanupIntervalHours));
+
             _isStarted = true;
             _logger.LogInformation("QueueDrainService started successfully");
         }
@@ -216,6 +239,10 @@ public sealed class QueueDrainService : IDisposable
         _drainTimer?.Dispose();
         _drainTimer = null;
 
+        _cleanupTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+        _cleanupTimer?.Dispose();
+        _cleanupTimer = null;
+
         _timerCts?.Dispose();
         _timerCts = null;
 
@@ -236,6 +263,51 @@ public sealed class QueueDrainService : IDisposable
         _isDisposed = true;
         Stop();
         _drainLock.Dispose();
+    }
+
+    /// <summary>
+    /// Gets the count of pending locations in the queue.
+    /// </summary>
+    /// <returns>Number of pending locations.</returns>
+    public Task<int> GetPendingCountAsync()
+    {
+        return _locationQueue.GetPendingCountAsync();
+    }
+
+    /// <summary>
+    /// Triggers an immediate drain cycle outside the normal timer schedule.
+    /// Used by AppLifecycleService to flush pending locations on suspend/resume.
+    /// </summary>
+    /// <remarks>
+    /// This is a best-effort operation that respects rate limits.
+    /// If the service is not started or disposed, returns immediately.
+    /// </remarks>
+    public async Task TriggerDrainAsync()
+    {
+        if (_isDisposed || !_isStarted)
+        {
+            _logger.LogDebug("TriggerDrainAsync: Service not ready (disposed={Disposed}, started={Started})",
+                _isDisposed, _isStarted);
+            return;
+        }
+
+        var cts = _timerCts;
+        if (cts == null || cts.IsCancellationRequested)
+            return;
+
+        try
+        {
+            _logger.LogDebug("TriggerDrainAsync: Manual drain triggered");
+            await DrainOneAsync(cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Normal shutdown, ignore
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during manual drain trigger");
+        }
     }
 
     #endregion
@@ -312,6 +384,49 @@ public sealed class QueueDrainService : IDisposable
         {
             // Never let timer callback exceptions crash the app
             _logger.LogError(ex, "Unhandled exception in drain timer callback");
+        }
+    }
+
+    /// <summary>
+    /// Cleanup timer callback - purges old synced locations from the database.
+    /// </summary>
+    private async void OnCleanupTimerElapsed(object? state)
+    {
+        if (_isDisposed || !_isStarted)
+            return;
+
+        try
+        {
+            await PurgeOldLocationsAsync();
+        }
+        catch (Exception ex)
+        {
+            // Never let timer callback exceptions crash the app
+            _logger.LogError(ex, "Unhandled exception in cleanup timer callback");
+        }
+    }
+
+    /// <summary>
+    /// Purges synced locations older than <see cref="PurgeSyncedDaysOld"/> days.
+    /// Prevents unbounded database growth from accumulated sync history.
+    /// </summary>
+    private async Task PurgeOldLocationsAsync()
+    {
+        try
+        {
+            var purged = await _locationQueue.PurgeSyncedLocationsAsync(daysOld: PurgeSyncedDaysOld);
+            if (purged > 0)
+            {
+                _logger.LogInformation("Purged {Count} old synced locations (>{Days} days old)", purged, PurgeSyncedDaysOld);
+            }
+        }
+        catch (SQLiteException ex)
+        {
+            _logger.LogWarning(ex, "Database error purging old locations");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Unexpected error purging old locations");
         }
     }
 
@@ -398,9 +513,8 @@ public sealed class QueueDrainService : IDisposable
 
         try
         {
-            // CRITICAL FIX: Atomically claim the oldest pending location.
-            // This prevents race condition with LocationSyncService's batch claims
-            // and avoids no-op cycles when the oldest item is claimed by another service.
+            // Atomically claim the oldest pending location.
+            // Avoids no-op cycles when the oldest item is claimed by another caller.
             location = await _locationQueue.ClaimOldestPendingLocationAsync(DrainClaimBatchSize);
             if (location == null)
             {
