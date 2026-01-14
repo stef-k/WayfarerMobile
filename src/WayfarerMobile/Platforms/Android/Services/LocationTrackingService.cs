@@ -123,6 +123,11 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     // Approach phase flag: prevents repeated RestartLocationUpdates during approach
     private bool _inApproachPhase;
 
+    // Stationary user cooldown: prevents oscillation between HighAccuracy and Balanced
+    // When timeout triggers without a successful log (stationary user), we enter cooldown
+    // to stay in Balanced for a full threshold period before allowing HighAccuracy again
+    private DateTime _stationaryCooldownUntil = DateTime.MinValue;
+
     #endregion
 
     #region Service Lifecycle
@@ -681,13 +686,29 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         // With AND logic (time + distance), a stationary user will never satisfy distance,
         // so GetSecondsUntilNextLog() keeps returning <= 0. Without this check, they'd
         // stay in HighAccuracy forever, draining battery.
-        // After the timeout, force a switch to Balanced to start a new sleep/wake cycle.
+        //
+        // Solution: When timeout triggers without a log, enter a cooldown period where
+        // we stay in Balanced for a full threshold period. This prevents oscillation
+        // between HighAccuracy and Balanced (180s HA → brief Balanced → 180s HA → ...).
+
+        // Check if we're still in cooldown from a previous stationary timeout
+        if (DateTime.UtcNow < _stationaryCooldownUntil)
+        {
+            var cooldownRemaining = (_stationaryCooldownUntil - DateTime.UtcNow).TotalSeconds;
+            Log.Debug(LogTag, $"In stationary cooldown, {cooldownRemaining:F0}s remaining");
+            return Priority.PriorityBalancedPowerAccuracy;
+        }
+
+        // Check if currently in HighAccuracy and timeout has expired
         if (_currentlyUsingHighAccuracy)
         {
             var timeInHighAccuracy = (DateTime.UtcNow - _highAccuracyStartTime).TotalSeconds;
             if (timeInHighAccuracy >= HighAccuracyTimeoutSeconds)
             {
-                Log.Info(LogTag, $"HighAccuracy timeout ({timeInHighAccuracy:F0}s >= {HighAccuracyTimeoutSeconds}s), forcing Balanced");
+                // Enter cooldown: stay in Balanced for a full threshold period
+                // This ensures the device sleeps properly before the next wake cycle
+                _stationaryCooldownUntil = DateTime.UtcNow.AddSeconds(thresholdSeconds);
+                Log.Info(LogTag, $"HighAccuracy timeout ({timeInHighAccuracy:F0}s), entering {thresholdSeconds}s cooldown");
                 return Priority.PriorityBalancedPowerAccuracy;
             }
         }
@@ -1014,6 +1035,13 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
                 // Clear stored sample after successful log
                 _bestWakePhaseLocation = null;
                 _bestWakePhaseAccuracy = float.MaxValue;
+
+                // Clear stationary cooldown - user is moving, allow normal wake/sleep
+                if (_stationaryCooldownUntil > DateTime.MinValue)
+                {
+                    Log.Info(LogTag, "Cleared stationary cooldown - user is moving");
+                    _stationaryCooldownUntil = DateTime.MinValue;
+                }
             }
         }
 
