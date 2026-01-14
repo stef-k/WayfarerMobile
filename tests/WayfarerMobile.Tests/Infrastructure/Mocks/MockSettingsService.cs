@@ -20,6 +20,7 @@ public class MockSettingsService : ISettingsService
     public string? ApiToken { get; set; } = "test-token";
     public int LocationTimeThresholdMinutes { get; set; } = 5;
     public int LocationDistanceThresholdMeters { get; set; } = 100;
+    public int LocationAccuracyThresholdMeters { get; set; } = 50;
 
     public bool IsConfigured =>
         !string.IsNullOrEmpty(ServerUrl) && !string.IsNullOrEmpty(ApiToken);
@@ -170,6 +171,7 @@ public class MockSettingsService : ISettingsService
         ApiToken = null;
         LocationTimeThresholdMinutes = 5;
         LocationDistanceThresholdMeters = 100;
+        LocationAccuracyThresholdMeters = 50;
         MaxConcurrentTileDownloads = 2;
         MinTileRequestDelayMs = 100;
         MaxLiveCacheSizeMB = 500;
