@@ -48,7 +48,7 @@ public static class LocationSyncCallbacks
 
     /// <summary>
     /// Notifies listeners that a location was successfully synced to the server.
-    /// Called by <c>LocationSyncService</c> or <c>QueueDrainService</c> after successful sync.
+    /// Called by <c>QueueDrainService</c> after successful sync.
     /// </summary>
     /// <param name="queuedLocationId">The local queued location ID.</param>
     /// <param name="serverId">The server-assigned location ID.</param>
@@ -91,7 +91,7 @@ public static class LocationSyncCallbacks
 
     /// <summary>
     /// Notifies listeners that a location sync was skipped by the server.
-    /// Called by <c>LocationSyncService</c> or <c>QueueDrainService</c> when server returns skipped status.
+    /// Called by <c>QueueDrainService</c> when server returns skipped status.
     /// </summary>
     /// <param name="queuedLocationId">The local queued location ID.</param>
     /// <param name="timestamp">The location timestamp (UTC).</param>

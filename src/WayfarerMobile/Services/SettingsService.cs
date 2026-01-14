@@ -28,6 +28,7 @@ public class SettingsService : ISettingsService
     private const string KeyApiToken = "api_token";
     private const string KeyLocationTimeThreshold = "location_time_threshold";
     private const string KeyLocationDistanceThreshold = "location_distance_threshold";
+    private const string KeyLocationAccuracyThreshold = "location_accuracy_threshold";
     private const string KeyLastSyncTime = "last_sync_time";
     private const string KeyThemePreference = "theme_preference";
     private const string KeyLanguagePreference = "language_preference";
@@ -265,6 +266,17 @@ public class SettingsService : ISettingsService
     {
         get => Preferences.Get(KeyLocationDistanceThreshold, 15);
         set => Preferences.Set(KeyLocationDistanceThreshold, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the maximum acceptable GPS accuracy for location logging (from server config).
+    /// Locations with accuracy worse (higher) than this value are rejected.
+    /// Default: 50 meters. Server validates the range (10-1000m).
+    /// </summary>
+    public int LocationAccuracyThresholdMeters
+    {
+        get => Preferences.Get(KeyLocationAccuracyThreshold, 50);
+        set => Preferences.Set(KeyLocationAccuracyThreshold, value);
     }
 
     /// <summary>

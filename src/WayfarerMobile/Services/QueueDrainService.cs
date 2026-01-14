@@ -37,6 +37,12 @@ public sealed class QueueDrainService : IDisposable
     private int DistanceThresholdMeters => _settings.LocationDistanceThresholdMeters;
 
     /// <summary>
+    /// Gets accuracy threshold in meters from settings (synced from server).
+    /// Locations with accuracy worse (higher) than this are rejected.
+    /// </summary>
+    private int AccuracyThresholdMeters => _settings.LocationAccuracyThresholdMeters;
+
+    /// <summary>
     /// Timer interval for checking queue (seconds).
     /// </summary>
     private const int TimerIntervalSeconds = 30;
@@ -87,6 +93,21 @@ public sealed class QueueDrainService : IDisposable
     /// </summary>
     private const int MaxErrorMessageLength = 200;
 
+    /// <summary>
+    /// Number of days after which synced locations are purged from the database.
+    /// </summary>
+    private const int PurgeSyncedDaysOld = 7;
+
+    /// <summary>
+    /// Cleanup interval in hours for purging old synced locations.
+    /// </summary>
+    private const int CleanupIntervalHours = 6;
+
+    /// <summary>
+    /// Delay before first cleanup run (minutes).
+    /// </summary>
+    private const int FirstCleanupDelayMinutes = 30;
+
     #endregion
 
     #region Fields
@@ -102,6 +123,7 @@ public sealed class QueueDrainService : IDisposable
     private readonly Queue<DateTime> _drainHistory = new();
 
     private Timer? _drainTimer;
+    private Timer? _cleanupTimer;
     private CancellationTokenSource? _timerCts;
     private DateTime _lastDrainTime = DateTime.MinValue;
     private int _consecutiveFailures;
@@ -183,6 +205,13 @@ public sealed class QueueDrainService : IDisposable
                 TimeSpan.FromSeconds(jitteredDelay),
                 TimeSpan.FromSeconds(TimerIntervalSeconds));
 
+            // Start the cleanup timer for purging old synced locations
+            _cleanupTimer = new Timer(
+                OnCleanupTimerElapsed,
+                null,
+                TimeSpan.FromMinutes(FirstCleanupDelayMinutes),
+                TimeSpan.FromHours(CleanupIntervalHours));
+
             _isStarted = true;
             _logger.LogInformation("QueueDrainService started successfully");
         }
@@ -210,6 +239,10 @@ public sealed class QueueDrainService : IDisposable
         _drainTimer?.Dispose();
         _drainTimer = null;
 
+        _cleanupTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+        _cleanupTimer?.Dispose();
+        _cleanupTimer = null;
+
         _timerCts?.Dispose();
         _timerCts = null;
 
@@ -230,6 +263,51 @@ public sealed class QueueDrainService : IDisposable
         _isDisposed = true;
         Stop();
         _drainLock.Dispose();
+    }
+
+    /// <summary>
+    /// Gets the count of pending locations in the queue.
+    /// </summary>
+    /// <returns>Number of pending locations.</returns>
+    public Task<int> GetPendingCountAsync()
+    {
+        return _locationQueue.GetPendingCountAsync();
+    }
+
+    /// <summary>
+    /// Triggers an immediate drain cycle outside the normal timer schedule.
+    /// Used by AppLifecycleService to flush pending locations on suspend/resume.
+    /// </summary>
+    /// <remarks>
+    /// This is a best-effort operation that respects rate limits.
+    /// If the service is not started or disposed, returns immediately.
+    /// </remarks>
+    public async Task TriggerDrainAsync()
+    {
+        if (_isDisposed || !_isStarted)
+        {
+            _logger.LogDebug("TriggerDrainAsync: Service not ready (disposed={Disposed}, started={Started})",
+                _isDisposed, _isStarted);
+            return;
+        }
+
+        var cts = _timerCts;
+        if (cts == null || cts.IsCancellationRequested)
+            return;
+
+        try
+        {
+            _logger.LogDebug("TriggerDrainAsync: Manual drain triggered");
+            await DrainOneAsync(cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Normal shutdown, ignore
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during manual drain trigger");
+        }
     }
 
     #endregion
@@ -306,6 +384,49 @@ public sealed class QueueDrainService : IDisposable
         {
             // Never let timer callback exceptions crash the app
             _logger.LogError(ex, "Unhandled exception in drain timer callback");
+        }
+    }
+
+    /// <summary>
+    /// Cleanup timer callback - purges old synced locations from the database.
+    /// </summary>
+    private async void OnCleanupTimerElapsed(object? state)
+    {
+        if (_isDisposed || !_isStarted)
+            return;
+
+        try
+        {
+            await PurgeOldLocationsAsync();
+        }
+        catch (Exception ex)
+        {
+            // Never let timer callback exceptions crash the app
+            _logger.LogError(ex, "Unhandled exception in cleanup timer callback");
+        }
+    }
+
+    /// <summary>
+    /// Purges synced locations older than <see cref="PurgeSyncedDaysOld"/> days.
+    /// Prevents unbounded database growth from accumulated sync history.
+    /// </summary>
+    private async Task PurgeOldLocationsAsync()
+    {
+        try
+        {
+            var purged = await _locationQueue.PurgeSyncedLocationsAsync(daysOld: PurgeSyncedDaysOld);
+            if (purged > 0)
+            {
+                _logger.LogInformation("Purged {Count} old synced locations (>{Days} days old)", purged, PurgeSyncedDaysOld);
+            }
+        }
+        catch (SQLiteException ex)
+        {
+            _logger.LogWarning(ex, "Database error purging old locations");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Unexpected error purging old locations");
         }
     }
 
@@ -392,9 +513,8 @@ public sealed class QueueDrainService : IDisposable
 
         try
         {
-            // CRITICAL FIX: Atomically claim the oldest pending location.
-            // This prevents race condition with LocationSyncService's batch claims
-            // and avoids no-op cycles when the oldest item is claimed by another service.
+            // Atomically claim the oldest pending location.
+            // Avoids no-op cycles when the oldest item is claimed by another caller.
             location = await _locationQueue.ClaimOldestPendingLocationAsync(DrainClaimBatchSize);
             if (location == null)
             {
@@ -617,14 +737,30 @@ public sealed class QueueDrainService : IDisposable
     #region Threshold Filtering
 
     /// <summary>
-    /// Determines if a location should be synced based on time AND distance thresholds.
+    /// Determines if a location should be synced based on accuracy, time, and distance thresholds.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A location is synced only if ALL conditions are met:
+    /// <list type="bullet">
+    /// <item>Accuracy is acceptable (≤ AccuracyThresholdMeters) or null</item>
+    /// <item>It's the first location, OR both time AND distance thresholds are exceeded</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
     private (bool ShouldSync, string? Reason) ShouldSyncLocation(QueuedLocation location)
     {
+        // Accuracy check is a hard reject gate (checked first)
+        // Null accuracy is acceptable (older data may lack accuracy info)
+        if (location.Accuracy.HasValue && location.Accuracy.Value > AccuracyThresholdMeters)
+        {
+            return (false, $"Accuracy: {location.Accuracy:F0}m > threshold {AccuracyThresholdMeters}m");
+        }
+
         // Atomically get sync reference to avoid race with logout/clear
         if (!_settings.TryGetSyncReference(out var refLat, out var refLon, out var refTime))
         {
-            // First sync - no reference point, always sync
+            // First sync - no reference point, always sync (if accuracy is acceptable)
             _logger.LogDebug("No sync reference, first location will sync");
             return (true, null);
         }

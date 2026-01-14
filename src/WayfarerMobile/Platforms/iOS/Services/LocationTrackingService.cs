@@ -1,6 +1,7 @@
 using CoreLocation;
 using Foundation;
 using UIKit;
+using WayfarerMobile.Core.Algorithms;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Services;
@@ -33,11 +34,15 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
     private PerformanceMode _currentMode = PerformanceMode.Normal;
     private LocationData? _lastLocation;
     private DatabaseService? _database;
+    private ThresholdFilter? _thresholdFilter;
 
     // Filtering state
     private DateTime _lastLocationTime = DateTime.MinValue;
     private const double MinTimeBetweenUpdatesSeconds = 5.0;
     private const double MinDistanceMeters = 10.0;
+
+    // Timeline tracking control
+    private bool _timelineTrackingEnabled = true;
 
     #endregion
 
@@ -46,6 +51,7 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
     private LocationTrackingService()
     {
         InitializeDatabase();
+        InitializeThresholdFilter();
         SubscribeToCallbacks();
     }
 
@@ -57,6 +63,7 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
         LocationServiceCallbacks.PauseRequested += OnPauseRequested;
         LocationServiceCallbacks.ResumeRequested += OnResumeRequested;
         LocationServiceCallbacks.StopRequested += OnStopRequested;
+        LocationServiceCallbacks.ThresholdsUpdated += OnThresholdsUpdated;
     }
 
     /// <summary>
@@ -67,6 +74,15 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
         LocationServiceCallbacks.PauseRequested -= OnPauseRequested;
         LocationServiceCallbacks.ResumeRequested -= OnResumeRequested;
         LocationServiceCallbacks.StopRequested -= OnStopRequested;
+        LocationServiceCallbacks.ThresholdsUpdated -= OnThresholdsUpdated;
+    }
+
+    /// <summary>
+    /// Handles threshold updates from server sync via LocationServiceCallbacks.
+    /// </summary>
+    private void OnThresholdsUpdated(object? sender, ThresholdsUpdatedEventArgs e)
+    {
+        UpdateThresholds(e.TimeThresholdMinutes, e.DistanceThresholdMeters, e.AccuracyThresholdMeters);
     }
 
     /// <summary>
@@ -110,6 +126,49 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
         {
             Console.WriteLine($"[iOS LocationService] Database init failed: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Initializes the threshold filter with server-configured thresholds.
+    /// </summary>
+    private void InitializeThresholdFilter()
+    {
+        _thresholdFilter = new ThresholdFilter();
+
+        // Load timeline tracking setting
+        _timelineTrackingEnabled = Preferences.Get("timeline_tracking_enabled", true);
+
+        // Load server thresholds for location filtering
+        // Defaults match SettingsService: 5 min / 15 m / 50 m accuracy
+        var timeThreshold = Preferences.Get("location_time_threshold", 5);
+        var distanceThreshold = Preferences.Get("location_distance_threshold", 15);
+        var accuracyThreshold = Preferences.Get("location_accuracy_threshold", 50);
+
+        _thresholdFilter.UpdateThresholds(timeThreshold, distanceThreshold, accuracyThreshold);
+
+        Console.WriteLine($"[iOS LocationService] Thresholds: {timeThreshold}min / {distanceThreshold}m / {accuracyThreshold}m accuracy");
+    }
+
+    /// <summary>
+    /// Updates the threshold filter settings.
+    /// </summary>
+    /// <param name="timeMinutes">Time threshold in minutes.</param>
+    /// <param name="distanceMeters">Distance threshold in meters.</param>
+    /// <param name="accuracyMeters">Accuracy threshold in meters.</param>
+    public void UpdateThresholds(int timeMinutes, int distanceMeters, int accuracyMeters)
+    {
+        _thresholdFilter?.UpdateThresholds(timeMinutes, distanceMeters, accuracyMeters);
+        Console.WriteLine($"[iOS LocationService] Thresholds updated: {timeMinutes}min / {distanceMeters}m / {accuracyMeters}m accuracy");
+    }
+
+    /// <summary>
+    /// Sets whether timeline tracking is enabled.
+    /// </summary>
+    /// <param name="enabled">True to enable timeline tracking.</param>
+    public void SetTimelineTrackingEnabled(bool enabled)
+    {
+        _timelineTrackingEnabled = enabled;
+        Console.WriteLine($"[iOS LocationService] Timeline tracking: {(enabled ? "enabled" : "disabled")}");
     }
 
     #endregion
@@ -307,13 +366,27 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
         _lastLocation = location;
         _lastLocationTime = now;
 
-        // Notify listeners via static callbacks
+        // Notify listeners via static callbacks (always - for map updates, etc.)
         LocationServiceCallbacks.NotifyLocationReceived(location);
 
-        // Queue for sync
-        _ = QueueLocationAsync(location);
-
-        Console.WriteLine($"[iOS LocationService] Location: {location.Latitude:F6}, {location.Longitude:F6}, accuracy: {location.Accuracy:F1}m");
+        // Apply threshold filter before queuing for server sync
+        // Only queue if timeline tracking is enabled and location passes filter
+        if (_timelineTrackingEnabled && _thresholdFilter != null)
+        {
+            if (_thresholdFilter.TryLog(location))
+            {
+                _ = QueueLocationAsync(location);
+                Console.WriteLine($"[iOS LocationService] Queued: {location.Latitude:F6}, {location.Longitude:F6}, accuracy: {location.Accuracy:F1}m");
+            }
+            else
+            {
+                Console.WriteLine($"[iOS LocationService] Filtered: {location.Latitude:F6}, {location.Longitude:F6}, accuracy: {location.Accuracy:F1}m (below threshold)");
+            }
+        }
+        else if (!_timelineTrackingEnabled)
+        {
+            Console.WriteLine($"[iOS LocationService] Skipped: timeline tracking disabled");
+        }
     }
 
     /// <summary>

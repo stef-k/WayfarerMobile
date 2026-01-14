@@ -10,7 +10,7 @@ namespace WayfarerMobile.Services;
 /// </summary>
 public class AppLifecycleService : IAppLifecycleService
 {
-    private readonly LocationSyncService _syncService;
+    private readonly QueueDrainService _queueDrainService;
     private readonly SettingsSyncService _settingsSyncService;
     private readonly IWakeLockService _wakeLockService;
     private readonly ISettingsService _settingsService;
@@ -32,19 +32,19 @@ public class AppLifecycleService : IAppLifecycleService
     /// <summary>
     /// Creates a new instance of AppLifecycleService.
     /// </summary>
-    /// <param name="syncService">The location sync service.</param>
+    /// <param name="queueDrainService">The queue drain service for syncing offline locations.</param>
     /// <param name="settingsSyncService">The settings sync service.</param>
     /// <param name="wakeLockService">The wake lock service.</param>
     /// <param name="settingsService">The settings service.</param>
     /// <param name="logger">The logger instance.</param>
     public AppLifecycleService(
-        LocationSyncService syncService,
+        QueueDrainService queueDrainService,
         SettingsSyncService settingsSyncService,
         IWakeLockService wakeLockService,
         ISettingsService settingsService,
         ILogger<AppLifecycleService> logger)
     {
-        _syncService = syncService;
+        _queueDrainService = queueDrainService;
         _settingsSyncService = settingsSyncService;
         _wakeLockService = wakeLockService;
         _settingsService = settingsService;
@@ -64,12 +64,12 @@ public class AppLifecycleService : IAppLifecycleService
             // Notify subscribers
             AppSuspending?.Invoke(this, EventArgs.Empty);
 
-            // Trigger a sync to push any pending locations before suspend
-            var pendingCount = await _syncService.GetPendingCountAsync();
+            // Trigger a drain to push any pending locations before suspend
+            var pendingCount = await _queueDrainService.GetPendingCountAsync();
             if (pendingCount > 0)
             {
-                _logger.LogDebug("Syncing {Count} pending locations before suspend", pendingCount);
-                await _syncService.SyncAsync();
+                _logger.LogDebug("Triggering drain for {Count} pending locations before suspend", pendingCount);
+                await _queueDrainService.TriggerDrainAsync();
             }
 
             // Release any wake locks (screen can turn off in background)
@@ -108,15 +108,15 @@ public class AppLifecycleService : IAppLifecycleService
             // Notify subscribers
             AppResuming?.Invoke(this, EventArgs.Empty);
 
-            // Restart sync service if it was stopped
-            _syncService.Start();
+            // Note: QueueDrainService is started in App.xaml.cs during startup
+            // and continues running with its timer. We just trigger a drain on resume.
 
-            // Trigger a sync to push any locations accumulated in background
-            var pendingCount = await _syncService.GetPendingCountAsync();
+            // Trigger a drain to push any locations accumulated in background
+            var pendingCount = await _queueDrainService.GetPendingCountAsync();
             if (pendingCount > 0)
             {
-                _logger.LogDebug("Syncing {Count} pending locations on resume", pendingCount);
-                _ = _syncService.SyncAsync(); // Fire and forget
+                _logger.LogDebug("Triggering drain for {Count} pending locations on resume", pendingCount);
+                _ = _queueDrainService.TriggerDrainAsync(); // Fire and forget
             }
 
             // Sync settings from server if due (6-hour interval)

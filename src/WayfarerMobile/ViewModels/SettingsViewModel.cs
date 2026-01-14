@@ -96,6 +96,12 @@ public partial class SettingsViewModel : BaseViewModel
     private int _locationDistanceThreshold;
 
     /// <summary>
+    /// Gets or sets the location accuracy threshold (from server).
+    /// </summary>
+    [ObservableProperty]
+    private int _locationAccuracyThreshold;
+
+    /// <summary>
     /// Gets whether the user is logged in.
     /// </summary>
     [ObservableProperty]
@@ -168,6 +174,7 @@ public partial class SettingsViewModel : BaseViewModel
         ServerUrl = _settingsService.ServerUrl ?? string.Empty;
         LocationTimeThreshold = _settingsService.LocationTimeThresholdMinutes;
         LocationDistanceThreshold = _settingsService.LocationDistanceThresholdMeters;
+        LocationAccuracyThreshold = _settingsService.LocationAccuracyThresholdMeters;
 
         IsLoggedIn = _settingsService.IsConfigured;
 

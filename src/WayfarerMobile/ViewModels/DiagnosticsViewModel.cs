@@ -989,7 +989,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
     {
         TrackingState = diag.TrackingState;
         PerformanceMode = diag.PerformanceMode;
-        TrackingThresholds = $"{diag.TimeThresholdMinutes} min / {diag.DistanceThresholdMeters} m";
+        TrackingThresholds = $"{diag.TimeThresholdMinutes} min / {diag.DistanceThresholdMeters} m / {diag.AccuracyThresholdMeters} m accuracy";
 
         if (diag.LastLocationTimestamp.HasValue)
         {
