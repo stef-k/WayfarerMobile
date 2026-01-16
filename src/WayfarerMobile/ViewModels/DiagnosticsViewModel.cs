@@ -758,7 +758,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
             }
 
             var csv = new StringBuilder();
-            csv.AppendLine("Id,Timestamp,Latitude,Longitude,Altitude,Accuracy,Speed,Bearing,Provider,SyncStatus,SyncAttempts,LastSyncAttempt,IsRejected,RejectionReason,LastError");
+            csv.AppendLine("Id,Timestamp,Latitude,Longitude,Altitude,Accuracy,Speed,Bearing,Provider,SyncStatus,SyncAttempts,LastSyncAttempt,IsRejected,RejectionReason,LastError,IsUserInvoked,ActivityTypeId,CheckInNotes");
 
             foreach (var loc in locations)
             {
@@ -787,7 +787,10 @@ public partial class DiagnosticsViewModel : BaseViewModel
                     $"{(loc.LastSyncAttempt.HasValue ? loc.LastSyncAttempt.Value.ToString("yyyy-MM-dd HH:mm:ss") : "")}," +
                     $"{loc.IsRejected}," +
                     $"\"{loc.RejectionReason?.Replace("\"", "\"\"") ?? ""}\"," +
-                    $"\"{loc.LastError?.Replace("\"", "\"\"") ?? ""}\"");
+                    $"\"{loc.LastError?.Replace("\"", "\"\"") ?? ""}\"," +
+                    $"{loc.IsUserInvoked}," +
+                    $"{loc.ActivityTypeId?.ToString(inv) ?? ""}," +
+                    $"\"{loc.CheckInNotes?.Replace("\"", "\"\"") ?? ""}\"");
             }
 
             var fileName = $"wayfarer_locations_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
@@ -883,8 +886,11 @@ public partial class DiagnosticsViewModel : BaseViewModel
                     _ => "?"
                 };
 
+                // Add USER indicator for user-invoked locations (manual check-ins)
+                var userTag = loc.IsUserInvoked ? " [USER]" : "";
+
                 var inv = System.Globalization.CultureInfo.InvariantCulture;
-                sb.AppendLine($"[{loc.Timestamp:HH:mm:ss}] {status}");
+                sb.AppendLine($"[{loc.Timestamp:HH:mm:ss}] {status}{userTag}");
                 sb.AppendLine($"  Loc: {loc.Latitude.ToString("F5", inv)}, {loc.Longitude.ToString("F5", inv)}");
 
                 if (loc.Accuracy.HasValue)
@@ -893,6 +899,10 @@ public partial class DiagnosticsViewModel : BaseViewModel
                     sb.Append($"  Spd: {loc.Speed.Value.ToString("F1", inv)}m/s");
                 if (loc.Accuracy.HasValue || loc.Speed.HasValue)
                     sb.AppendLine();
+
+                // Show check-in notes for user-invoked locations
+                if (!string.IsNullOrEmpty(loc.CheckInNotes))
+                    sb.AppendLine($"  Notes: {loc.CheckInNotes}");
 
                 if (!string.IsNullOrEmpty(loc.LastError))
                     sb.AppendLine($"  Err: {loc.LastError}");
