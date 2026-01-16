@@ -257,6 +257,116 @@ public class QueueDrainServiceTests
 
     #endregion
 
+    #region User-Invoked Bypass Tests (Issue #160)
+
+    [Fact]
+    public void ShouldSyncLocation_UserInvoked_SkipsAllFilters()
+    {
+        // User-invoked locations (manual check-ins) skip all client-side filtering
+        // Server is authoritative for these
+
+        var filter = new ThresholdFilterWithUserInvoked(
+            refLat: 40.7128,
+            refLon: -74.0060,
+            refTime: DateTime.UtcNow.AddSeconds(-10), // Only 10 seconds ago (normally filtered)
+            isUserInvoked: true);
+
+        // Same location, very recent - normally would be filtered
+        var result = filter.ShouldSync(40.7128, -74.0060, DateTime.UtcNow);
+
+        result.ShouldSync.Should().BeTrue("user-invoked should skip all filters");
+        result.Reason.Should().BeNull();
+    }
+
+    [Fact]
+    public void ShouldSyncLocation_Background_AppliesFilters()
+    {
+        // Background/live locations should apply normal filtering
+
+        var filter = new ThresholdFilterWithUserInvoked(
+            refLat: 40.7128,
+            refLon: -74.0060,
+            refTime: DateTime.UtcNow.AddSeconds(-10), // Only 10 seconds ago
+            isUserInvoked: false);
+
+        // Same location, very recent - should be filtered for background
+        var result = filter.ShouldSync(40.7128, -74.0060, DateTime.UtcNow);
+
+        result.ShouldSync.Should().BeFalse("background should apply filters");
+        result.Reason.Should().Contain("Time:");
+    }
+
+    [Fact]
+    public void ShouldSyncLocation_UserInvoked_BypassesTimeThreshold()
+    {
+        // User-invoked bypasses time threshold even when very recent
+
+        var filter = new ThresholdFilterWithUserInvoked(
+            refLat: 40.7128,
+            refLon: -74.0060,
+            refTime: DateTime.UtcNow.AddSeconds(-1), // Only 1 second ago!
+            isUserInvoked: true);
+
+        // Far enough away, but time threshold definitely not met
+        var result = filter.ShouldSync(40.8000, -74.0060, DateTime.UtcNow);
+
+        result.ShouldSync.Should().BeTrue("user-invoked should bypass time threshold");
+    }
+
+    [Fact]
+    public void ShouldSyncLocation_UserInvoked_BypassesDistanceThreshold()
+    {
+        // User-invoked bypasses distance threshold even at exact same location
+
+        var filter = new ThresholdFilterWithUserInvoked(
+            refLat: 40.7128,
+            refLon: -74.0060,
+            refTime: DateTime.UtcNow.AddMinutes(-10), // Time threshold met
+            isUserInvoked: true);
+
+        // Exact same location - normally would be filtered by distance
+        var result = filter.ShouldSync(40.7128, -74.0060, DateTime.UtcNow);
+
+        result.ShouldSync.Should().BeTrue("user-invoked should bypass distance threshold");
+    }
+
+    [Fact]
+    public void ShouldSyncLocation_UserInvoked_BypassesAccuracyThreshold()
+    {
+        // User-invoked bypasses accuracy threshold even with poor GPS
+
+        var filter = new ThresholdFilterWithUserInvoked(
+            refLat: 40.7128,
+            refLon: -74.0060,
+            refTime: DateTime.UtcNow.AddMinutes(-10),
+            isUserInvoked: true,
+            accuracyMeters: 500.0); // Very poor accuracy
+
+        var result = filter.ShouldSync(40.8000, -74.0060, DateTime.UtcNow);
+
+        result.ShouldSync.Should().BeTrue("user-invoked should bypass accuracy threshold");
+    }
+
+    [Fact]
+    public void ShouldSyncLocation_Background_WithPoorAccuracy_Filters()
+    {
+        // Background with poor accuracy should be filtered
+
+        var filter = new ThresholdFilterWithUserInvoked(
+            refLat: 40.7128,
+            refLon: -74.0060,
+            refTime: DateTime.UtcNow.AddMinutes(-10),
+            isUserInvoked: false,
+            accuracyMeters: 500.0); // Very poor accuracy
+
+        var result = filter.ShouldSync(40.8000, -74.0060, DateTime.UtcNow);
+
+        result.ShouldSync.Should().BeFalse("background with poor accuracy should be filtered");
+        result.Reason.Should().Contain("Accuracy:");
+    }
+
+    #endregion
+
     #region Distance Calculation Tests
 
     [Fact]
@@ -326,6 +436,83 @@ public class QueueDrainServiceTests
             }
 
             // Handle out-of-order locations - skip if older than or equal to reference
+            if (timestamp <= _refTime.Value)
+            {
+                return (false, $"Out-of-order: timestamp {timestamp:u} <= reference {_refTime.Value:u}");
+            }
+
+            var timeSince = timestamp - _refTime.Value;
+            var timeThresholdMet = timeSince.TotalMinutes >= TimeThresholdMinutes;
+
+            var distance = GeoCalculator.DistanceMeters(_refLat.Value, _refLon.Value, lat, lon);
+            var distanceThresholdMet = distance >= DistanceThresholdMeters;
+
+            // AND logic - both must be met
+            if (timeThresholdMet && distanceThresholdMet)
+            {
+                return (true, null);
+            }
+
+            var reasons = new List<string>();
+            if (!timeThresholdMet)
+                reasons.Add($"Time: {timeSince.TotalMinutes:F1}min, threshold {TimeThresholdMinutes}min");
+            if (!distanceThresholdMet)
+                reasons.Add($"Distance: {distance:F0}m, threshold {DistanceThresholdMeters}m");
+
+            return (false, string.Join("; ", reasons));
+        }
+    }
+
+    /// <summary>
+    /// Threshold filter implementation with IsUserInvoked support for issue #160 tests.
+    /// User-invoked locations (manual check-ins) skip all client-side filtering.
+    /// </summary>
+    private sealed class ThresholdFilterWithUserInvoked
+    {
+        private readonly double? _refLat;
+        private readonly double? _refLon;
+        private readonly DateTime? _refTime;
+        private readonly bool _isUserInvoked;
+        private readonly double? _accuracyMeters;
+
+        private const double DefaultAccuracyThreshold = 100.0; // meters
+
+        public ThresholdFilterWithUserInvoked(
+            double? refLat,
+            double? refLon,
+            DateTime? refTime,
+            bool isUserInvoked,
+            double? accuracyMeters = null)
+        {
+            _refLat = refLat;
+            _refLon = refLon;
+            _refTime = refTime;
+            _isUserInvoked = isUserInvoked;
+            _accuracyMeters = accuracyMeters;
+        }
+
+        public (bool ShouldSync, string? Reason) ShouldSync(double lat, double lon, DateTime timestamp)
+        {
+            // User-invoked locations skip ALL client-side filtering
+            // Server is authoritative for these
+            if (_isUserInvoked)
+            {
+                return (true, null);
+            }
+
+            // No reference - first sync
+            if (!_refLat.HasValue || !_refLon.HasValue || !_refTime.HasValue)
+            {
+                return (true, null);
+            }
+
+            // Check accuracy threshold for background locations
+            if (_accuracyMeters.HasValue && _accuracyMeters.Value > DefaultAccuracyThreshold)
+            {
+                return (false, $"Accuracy: {_accuracyMeters.Value:F0}m exceeds threshold {DefaultAccuracyThreshold:F0}m");
+            }
+
+            // Handle out-of-order locations
             if (timestamp <= _refTime.Value)
             {
                 return (false, $"Out-of-order: timestamp {timestamp:u} <= reference {_refTime.Value:u}");
