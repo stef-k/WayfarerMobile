@@ -513,9 +513,9 @@ public sealed class QueueDrainService : IDisposable
 
         try
         {
-            // Atomically claim the oldest pending location.
-            // Avoids no-op cycles when the oldest item is claimed by another caller.
-            location = await _locationQueue.ClaimOldestPendingLocationAsync(DrainClaimBatchSize);
+            // Atomically claim the next pending location, prioritizing user-invoked.
+            // User-invoked locations (manual check-ins) sync before background locations.
+            location = await _locationQueue.ClaimNextPendingLocationWithPriorityAsync();
             if (location == null)
             {
                 _logger.LogDebug("QueueDrain: No pending locations to claim");
@@ -741,7 +741,8 @@ public sealed class QueueDrainService : IDisposable
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A location is synced only if ALL conditions are met:
+    /// User-invoked locations skip all client-side filtering (server is authoritative).
+    /// For background locations, sync only if ALL conditions are met:
     /// <list type="bullet">
     /// <item>Accuracy is acceptable (≤ AccuracyThresholdMeters) or null</item>
     /// <item>It's the first location, OR both time AND distance thresholds are exceeded</item>
@@ -750,6 +751,16 @@ public sealed class QueueDrainService : IDisposable
     /// </remarks>
     private (bool ShouldSync, string? Reason) ShouldSyncLocation(QueuedLocation location)
     {
+        // User-invoked locations (manual check-ins) skip all client-side filtering.
+        // Server is authoritative for these - it will apply its own rules.
+        if (location.IsUserInvoked)
+        {
+            _logger.LogDebug(
+                "Location {Id} is user-invoked, skipping client-side filtering",
+                location.Id);
+            return (true, null);
+        }
+
         // Accuracy check is a hard reject gate (checked first)
         // Null accuracy is acceptable (older data may lack accuracy info)
         if (location.Accuracy.HasValue && location.Accuracy.Value > AccuracyThresholdMeters)

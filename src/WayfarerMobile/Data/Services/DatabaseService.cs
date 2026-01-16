@@ -208,8 +208,16 @@ public class DatabaseService : IAsyncDisposable
     /// For DI-enabled services, use <see cref="WayfarerMobile.Data.Repositories.ILocationQueueRepository"/>.
     /// </summary>
     /// <param name="location">The location data to queue.</param>
+    /// <param name="isUserInvoked">True for manual check-ins (skip filtering, prioritize sync).</param>
+    /// <param name="activityTypeId">Optional activity type ID (for user-invoked check-ins).</param>
+    /// <param name="notes">Optional notes (for user-invoked check-ins).</param>
+    /// <returns>The ID of the queued location.</returns>
     /// <exception cref="ArgumentException">Thrown when coordinates are invalid.</exception>
-    public async Task QueueLocationAsync(LocationData location)
+    public async Task<int> QueueLocationAsync(
+        LocationData location,
+        bool isUserInvoked = false,
+        int? activityTypeId = null,
+        string? notes = null)
     {
         // Validate coordinates to prevent corrupted data (parity with LocationQueueRepository)
         if (!IsValidCoordinate(location.Latitude, location.Longitude))
@@ -232,14 +240,19 @@ public class DatabaseService : IAsyncDisposable
             Timestamp = location.Timestamp,
             Provider = location.Provider,
             SyncStatus = SyncStatus.Pending,
-            IdempotencyKey = Guid.NewGuid().ToString("N")
+            IdempotencyKey = Guid.NewGuid().ToString("N"),
+            IsUserInvoked = isUserInvoked,
+            ActivityTypeId = activityTypeId,
+            CheckInNotes = notes
         };
 
         await _database!.InsertAsync(queued);
-        Console.WriteLine($"[DatabaseService] Location queued: {location}");
+        Console.WriteLine($"[DatabaseService] Location queued (IsUserInvoked={isUserInvoked}): {location}");
 
         // Cleanup old locations if queue is too large
         await CleanupOldLocationsAsync();
+
+        return queued.Id;
     }
 
     /// <summary>

@@ -156,5 +156,29 @@ public interface ITimelineRepository
     /// <returns>List of entries with ServerId = null.</returns>
     Task<List<LocalTimelineEntry>> GetEntriesMissingServerIdAsync(DateTime? sinceTimestamp = null);
 
+    /// <summary>
+    /// Updates the ServerId for a local timeline entry by QueuedLocationId.
+    /// Used for stable queue↔timeline mapping on sync completion.
+    /// </summary>
+    /// <param name="queuedLocationId">The queued location ID.</param>
+    /// <param name="serverId">The server-assigned ID.</param>
+    /// <returns>True if an entry was updated.</returns>
+    Task<bool> UpdateServerIdByQueuedLocationIdAsync(int queuedLocationId, int serverId);
+
+    /// <summary>
+    /// Deletes a local timeline entry by QueuedLocationId.
+    /// Used for stable queue↔timeline mapping when entry is filtered/rejected.
+    /// </summary>
+    /// <param name="queuedLocationId">The queued location ID.</param>
+    /// <returns>Number of entries deleted.</returns>
+    Task<int> DeleteByQueuedLocationIdAsync(int queuedLocationId);
+
+    /// <summary>
+    /// Gets a local timeline entry by QueuedLocationId.
+    /// </summary>
+    /// <param name="queuedLocationId">The queued location ID.</param>
+    /// <returns>The entry or null if not found.</returns>
+    Task<LocalTimelineEntry?> GetByQueuedLocationIdAsync(int queuedLocationId);
+
     #endregion
 }

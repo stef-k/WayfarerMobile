@@ -27,6 +27,24 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
 
     #endregion
 
+    #region Static Delegates
+
+    /// <summary>
+    /// Delegate for submitting a location directly to the server (online path).
+    /// When online, this bypasses the queue and gets immediate server response.
+    /// Returns the server ID if accepted, null if skipped/failed.
+    /// </summary>
+    public static Func<LocationData, Task<int?>>? OnlineSubmitDelegate { get; set; }
+
+    /// <summary>
+    /// Delegate for queueing a location for later sync (offline path).
+    /// When offline or online fails, locations go to the queue for background sync.
+    /// Returns the queued location ID.
+    /// </summary>
+    public static Func<LocationData, Task<int>>? OfflineQueueDelegate { get; set; }
+
+    #endregion
+
     #region Fields
 
     private CLLocationManager? _locationManager;
@@ -437,20 +455,59 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
     #region Database
 
     /// <summary>
-    /// Queues a location for sync to the server.
+    /// Logs a location using the online/offline path decision.
+    /// Online path: Submit directly to server via log-location endpoint (server authority).
+    /// Offline path: Queue for background sync via QueueDrainService.
     /// </summary>
     private async Task QueueLocationAsync(LocationData location)
     {
-        if (_database == null)
-            return;
-
         try
         {
-            await _database.QueueLocationAsync(location);
+            // ONLINE PATH: Try direct server submission if delegate is wired
+            var onlineSubmit = OnlineSubmitDelegate;
+            if (onlineSubmit != null)
+            {
+                try
+                {
+                    var serverId = await onlineSubmit(location);
+                    if (serverId.HasValue)
+                    {
+                        // Server accepted the location - authoritative response
+                        Console.WriteLine($"[iOS LocationService] Online submitted: ServerId={serverId}");
+                        // LocalTimelineStorageService handles timeline via the delegate
+                        return;
+                    }
+                    // Server skipped (threshold not met) - don't queue, server is authoritative
+                    Console.WriteLine("[iOS LocationService] Online skipped by server (threshold not met)");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    // Online failed - fall through to offline path
+                    Console.WriteLine($"[iOS LocationService] Online submit failed, falling back to offline: {ex.Message}");
+                }
+            }
 
-            // Notify that location was queued - used by LocalTimelineStorageService
-            // to store with correct coordinates (matches what will be synced)
-            LocationServiceCallbacks.NotifyLocationQueued(location);
+            // OFFLINE PATH: Queue for background sync
+            var offlineQueue = OfflineQueueDelegate;
+            if (offlineQueue != null)
+            {
+                var queuedId = await offlineQueue(location);
+                Console.WriteLine($"[iOS LocationService] Queued for offline sync: Id={queuedId}");
+                // LocalTimelineStorageService handles timeline via the delegate
+                return;
+            }
+
+            // FALLBACK: Direct database queue (no delegates wired)
+            if (_database != null)
+            {
+                await _database.QueueLocationAsync(location);
+                Console.WriteLine($"[iOS LocationService] Queued via database: {location}");
+
+                // Notify that location was queued - used by LocalTimelineStorageService
+                // to store with correct coordinates (matches what will be synced)
+                LocationServiceCallbacks.NotifyLocationQueued(location);
+            }
         }
         catch (Exception ex)
         {

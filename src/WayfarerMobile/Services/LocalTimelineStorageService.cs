@@ -415,6 +415,7 @@ public class LocalTimelineStorageService : IDisposable
 
     /// <summary>
     /// Handles sync completion by updating the ServerId on the matching local entry.
+    /// Prefers QueuedLocationId for stable mapping, falls back to timestamp matching.
     /// </summary>
     /// <remarks>
     /// Uses async void because this is an event handler. Exceptions are caught and logged
@@ -428,24 +429,37 @@ public class LocalTimelineStorageService : IDisposable
             // Run on background thread to avoid blocking MainThread
             await Task.Run(async () =>
             {
-                var updated = await _timelineRepository.UpdateLocalTimelineServerIdAsync(
-                    e.Timestamp,
-                    e.Latitude,
-                    e.Longitude,
-                    e.ServerId);
+                bool updated;
+
+                // Prefer QueuedLocationId for stable mapping
+                if (e.QueuedLocationId > 0)
+                {
+                    updated = await _timelineRepository.UpdateServerIdByQueuedLocationIdAsync(
+                        e.QueuedLocationId,
+                        e.ServerId);
+                }
+                else
+                {
+                    // Fallback to timestamp matching (for direct online path or legacy entries)
+                    updated = await _timelineRepository.UpdateLocalTimelineServerIdAsync(
+                        e.Timestamp,
+                        e.Latitude,
+                        e.Longitude,
+                        e.ServerId);
+                }
 
                 if (updated)
                 {
                     _logger.LogDebug(
-                        "Updated local entry with ServerId {ServerId} for timestamp {Timestamp:u}",
+                        "Updated local entry with ServerId {ServerId} (QueuedId={QueuedId})",
                         e.ServerId,
-                        e.Timestamp);
+                        e.QueuedLocationId);
                 }
                 else
                 {
                     _logger.LogDebug(
-                        "No matching local entry found for timestamp {Timestamp:u} to update ServerId",
-                        e.Timestamp);
+                        "No matching local entry found for QueuedId={QueuedId}",
+                        e.QueuedLocationId);
                 }
             });
         }
@@ -462,6 +476,7 @@ public class LocalTimelineStorageService : IDisposable
     /// <summary>
     /// Handles sync skip by removing the entry from local timeline.
     /// Server's AND filter is stricter - if server skipped it, we should too.
+    /// Prefers QueuedLocationId for stable mapping, falls back to timestamp matching.
     /// </summary>
     /// <remarks>
     /// Uses async void because this is an event handler. Exceptions are caught and logged
@@ -475,24 +490,35 @@ public class LocalTimelineStorageService : IDisposable
             // Run on background thread to avoid blocking MainThread
             await Task.Run(async () =>
             {
-                var deleted = await _timelineRepository.DeleteLocalTimelineEntryByTimestampAsync(
-                    e.Timestamp,
-                    e.Latitude,
-                    e.Longitude);
+                int deleted;
+
+                // Prefer QueuedLocationId for stable mapping
+                if (e.QueuedLocationId > 0)
+                {
+                    deleted = await _timelineRepository.DeleteByQueuedLocationIdAsync(e.QueuedLocationId);
+                }
+                else
+                {
+                    // Fallback to timestamp matching
+                    deleted = await _timelineRepository.DeleteLocalTimelineEntryByTimestampAsync(
+                        e.Timestamp,
+                        e.Latitude,
+                        e.Longitude);
+                }
 
                 if (deleted > 0)
                 {
                     _logger.LogDebug(
-                        "Removed {Count} local entry for skipped location at {Timestamp:u}: {Reason}",
+                        "Removed {Count} local entry for skipped location (QueuedId={QueuedId}): {Reason}",
                         deleted,
-                        e.Timestamp,
+                        e.QueuedLocationId,
                         e.Reason);
                 }
                 else
                 {
                     _logger.LogDebug(
-                        "No matching local entry found for skipped timestamp {Timestamp:u}",
-                        e.Timestamp);
+                        "No matching local entry found for QueuedId={QueuedId}",
+                        e.QueuedLocationId);
                 }
             });
         }
@@ -521,6 +547,97 @@ public class LocalTimelineStorageService : IDisposable
     {
         _filter.Reset();
         _logger.LogInformation("Local timeline filter reset");
+    }
+
+    /// <summary>
+    /// Adds a timeline entry for a location accepted by the server (online log-location path).
+    /// Called directly when server accepts a live location.
+    /// </summary>
+    /// <param name="location">The location data.</param>
+    /// <param name="serverId">The server-assigned location ID.</param>
+    public async Task AddAcceptedLocationAsync(LocationData location, int serverId)
+    {
+        try
+        {
+            var entry = new LocalTimelineEntry
+            {
+                Latitude = location.Latitude,
+                Longitude = location.Longitude,
+                Timestamp = location.Timestamp,
+                Accuracy = location.Accuracy,
+                Altitude = location.Altitude,
+                Speed = location.Speed,
+                Bearing = location.Bearing,
+                Provider = location.Provider,
+                ServerId = serverId,
+                QueuedLocationId = null, // Direct online path - not from queue
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await _timelineRepository.InsertLocalTimelineEntryAsync(entry);
+            _filter.MarkAsStored(location);
+
+            _logger.LogDebug(
+                "Added accepted location to timeline: ServerId={ServerId}, ({Lat:F4}, {Lon:F4}) at {Timestamp:u}",
+                serverId,
+                location.Latitude,
+                location.Longitude,
+                location.Timestamp);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding accepted location to timeline");
+        }
+    }
+
+    /// <summary>
+    /// Adds a pending timeline entry for a queued location (offline path).
+    /// Entry will be updated/removed when queue drains.
+    /// </summary>
+    /// <param name="location">The location data.</param>
+    /// <param name="queuedLocationId">The ID of the queued location for stable mapping.</param>
+    public async Task AddPendingLocationAsync(LocationData location, int queuedLocationId)
+    {
+        try
+        {
+            // Apply filter - pending entries also need to meet thresholds
+            if (!_filter.ShouldStore(location))
+            {
+                _logger.LogDebug(
+                    "Pending location at {Timestamp:u} filtered out",
+                    location.Timestamp);
+                return;
+            }
+
+            var entry = new LocalTimelineEntry
+            {
+                Latitude = location.Latitude,
+                Longitude = location.Longitude,
+                Timestamp = location.Timestamp,
+                Accuracy = location.Accuracy,
+                Altitude = location.Altitude,
+                Speed = location.Speed,
+                Bearing = location.Bearing,
+                Provider = location.Provider,
+                ServerId = null, // Pending - not yet synced
+                QueuedLocationId = queuedLocationId,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await _timelineRepository.InsertLocalTimelineEntryAsync(entry);
+            _filter.MarkAsStored(location);
+
+            _logger.LogDebug(
+                "Added pending location to timeline: QueuedId={QueuedId}, ({Lat:F4}, {Lon:F4}) at {Timestamp:u}",
+                queuedLocationId,
+                location.Latitude,
+                location.Longitude,
+                location.Timestamp);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding pending location to timeline");
+        }
     }
 
     /// <summary>

@@ -148,6 +148,14 @@ public class LocalTimelineEntry
     /// </summary>
     public DateTime? LastEnrichedAt { get; set; }
 
+    /// <summary>
+    /// Gets or sets the ID of the QueuedLocation that created this entry.
+    /// Used for stable mapping between queue and timeline (update/remove on sync).
+    /// Null for entries created from direct online submissions (log-location path).
+    /// </summary>
+    [Indexed]
+    public int? QueuedLocationId { get; set; }
+
     #endregion
 
     #region Computed Properties

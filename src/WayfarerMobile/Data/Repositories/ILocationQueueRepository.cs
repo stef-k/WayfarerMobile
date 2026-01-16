@@ -15,7 +15,15 @@ public interface ILocationQueueRepository
     /// Queues a location for server synchronization.
     /// </summary>
     /// <param name="location">The location data to queue.</param>
-    Task QueueLocationAsync(LocationData location);
+    /// <param name="isUserInvoked">True for manual check-ins (skip filtering, prioritize sync).</param>
+    /// <param name="activityTypeId">Optional activity type ID (for user-invoked check-ins).</param>
+    /// <param name="notes">Optional notes (for user-invoked check-ins).</param>
+    /// <returns>The ID of the queued location.</returns>
+    Task<int> QueueLocationAsync(
+        LocationData location,
+        bool isUserInvoked = false,
+        int? activityTypeId = null,
+        string? notes = null);
 
     /// <summary>
     /// Gets all locations for a specific date.
@@ -120,6 +128,13 @@ public interface ILocationQueueRepository
     /// </summary>
     /// <returns>The claimed location (already marked as Syncing), or null if none available.</returns>
     Task<QueuedLocation?> ClaimOldestPendingLocationAsync(int candidateLimit = 5);
+
+    /// <summary>
+    /// Claims the next pending location, prioritizing user-invoked items.
+    /// User-invoked locations sync before background locations.
+    /// </summary>
+    /// <returns>The claimed location (already marked as Syncing), or null if none available.</returns>
+    Task<QueuedLocation?> ClaimNextPendingLocationWithPriorityAsync();
 
     /// <summary>
     /// Resets multiple locations from Syncing back to Pending in a single batch operation.

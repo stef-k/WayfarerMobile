@@ -92,6 +92,24 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
 
     #endregion
 
+    #region Static Delegates
+
+    /// <summary>
+    /// Delegate for submitting a location directly to the server (online path).
+    /// When online, this bypasses the queue and gets immediate server response.
+    /// Returns the server ID if accepted, null if skipped/failed.
+    /// </summary>
+    public static Func<LocationData, Task<int?>>? OnlineSubmitDelegate { get; set; }
+
+    /// <summary>
+    /// Delegate for queueing a location for later sync (offline path).
+    /// When offline or online fails, locations go to the queue for background sync.
+    /// Returns the queued location ID.
+    /// </summary>
+    public static Func<LocationData, Task<int>>? OfflineQueueDelegate { get; set; }
+
+    #endregion
+
     #region Fields
 
     // Google Play Services (primary - better accuracy)
@@ -1206,21 +1224,59 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
     }
 
     /// <summary>
-    /// Logs a location to the sync queue (SQLite).
+    /// Logs a location using the online/offline path decision.
+    /// Online path: Submit directly to server via log-location endpoint (server authority).
+    /// Offline path: Queue for background sync via QueueDrainService.
     /// </summary>
     private async void LogLocationToQueue(LocationData location)
     {
-        if (_databaseService == null)
-            return;
-
         try
         {
-            await _databaseService.QueueLocationAsync(location);
-            Log.Debug(LogTag, $"Queued for sync: {location}");
+            // ONLINE PATH: Try direct server submission if delegate is wired
+            var onlineSubmit = OnlineSubmitDelegate;
+            if (onlineSubmit != null)
+            {
+                try
+                {
+                    var serverId = await onlineSubmit(location);
+                    if (serverId.HasValue)
+                    {
+                        // Server accepted the location - authoritative response
+                        Log.Info(LogTag, $"Online submitted: ServerId={serverId}");
+                        // LocalTimelineStorageService handles timeline via the delegate
+                        return;
+                    }
+                    // Server skipped (threshold not met) - don't queue, server is authoritative
+                    Log.Debug(LogTag, "Online skipped by server (threshold not met)");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    // Online failed - fall through to offline path
+                    Log.Warn(LogTag, $"Online submit failed, falling back to offline: {ex.Message}");
+                }
+            }
 
-            // Notify that location was queued - used by LocalTimelineStorageService
-            // to store with correct coordinates (may differ from broadcast when using best-wake-sample)
-            LocationServiceCallbacks.NotifyLocationQueued(location);
+            // OFFLINE PATH: Queue for background sync
+            var offlineQueue = OfflineQueueDelegate;
+            if (offlineQueue != null)
+            {
+                var queuedId = await offlineQueue(location);
+                Log.Debug(LogTag, $"Queued for offline sync: Id={queuedId}");
+                // LocalTimelineStorageService handles timeline via the delegate
+                return;
+            }
+
+            // FALLBACK: Direct database queue (no delegates wired)
+            if (_databaseService != null)
+            {
+                await _databaseService.QueueLocationAsync(location);
+                Log.Debug(LogTag, $"Queued via DatabaseService: {location}");
+
+                // Notify that location was queued - used by LocalTimelineStorageService
+                // to store with correct coordinates (may differ from broadcast when using best-wake-sample)
+                LocationServiceCallbacks.NotifyLocationQueued(location);
+            }
         }
         catch (SQLiteException ex)
         {
@@ -1228,7 +1284,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
         }
         catch (Exception ex)
         {
-            Log.Error(LogTag, $"Failed to queue location: {ex.Message}");
+            Log.Error(LogTag, $"Failed to log location: {ex.Message}");
         }
     }
 
