@@ -2,6 +2,12 @@
 
 ## 1.0
 
+### 2026-01-17 (PR #170)
+- **UI: Improved heading and accuracy indicator visibility (#166)**
+  - Heading cone: increased opacity (alpha 80→120) and size (length 35→50px, inner radius 12→14px)
+  - Accuracy circle: increased fill opacity (alpha 30-60→50-90), outline opacity (100→150), and width (1→1.5px)
+  - Both indicators now more prominent and easier to see against the map background
+
 ### 2026-01-17 (PR #168)
 - **Performance: Faster Offline Queue Sync (#101)**
   - Reduced sync rate limit from 65s to 12s (server allows 10s, 2s safety margin)

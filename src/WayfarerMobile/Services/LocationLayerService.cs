@@ -299,8 +299,8 @@ public class LocationLayerService : ILocationLayerService
     /// </summary>
     private static Polygon CreateHeadingCone(MPoint center, double bearingDegrees, double coneAngleDegrees = 45.0)
     {
-        const double coneLength = 35.0;
-        const double innerRadius = 12.0;
+        const double coneLength = 50.0;
+        const double innerRadius = 14.0;
         const int arcSegments = 12;
 
         // Convert bearing to radians (bearing 0 = North, clockwise)
@@ -362,13 +362,13 @@ public class LocationLayerService : ILocationLayerService
     {
         var color = MapsuiColorHelper.ParseHexColor(hexColor);
 
-        var alpha = (int)(40 + (pulseScale - 1.0) * 100);
-        alpha = Math.Clamp(alpha, 30, 60);
+        var alpha = (int)(60 + (pulseScale - 1.0) * 100);
+        alpha = Math.Clamp(alpha, 50, 90);
 
         return new VectorStyle
         {
             Fill = new Brush(Color.FromArgb(alpha, color.R, color.G, color.B)),
-            Outline = new Pen(Color.FromArgb(100, color.R, color.G, color.B), 1)
+            Outline = new Pen(Color.FromArgb(150, color.R, color.G, color.B), 1.5)
         };
     }
 
@@ -379,7 +379,7 @@ public class LocationLayerService : ILocationLayerService
     {
         return new VectorStyle
         {
-            Fill = new Brush(Color.FromArgb(80, 66, 133, 244)),
+            Fill = new Brush(Color.FromArgb(120, 66, 133, 244)),
             Outline = null
         };
     }
