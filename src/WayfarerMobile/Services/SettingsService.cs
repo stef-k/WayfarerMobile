@@ -454,10 +454,11 @@ public class SettingsService : ISettingsService
 
     /// <summary>
     /// Gets or sets the navigation audio volume (0.0 to 1.0).
+    /// Default is 0.7 (70%) to avoid startling users.
     /// </summary>
     public float NavigationVolume
     {
-        get => Preferences.Get(KeyNavigationVolume, 1.0f);
+        get => Preferences.Get(KeyNavigationVolume, 0.7f);
         set => Preferences.Set(KeyNavigationVolume, Math.Clamp(value, 0.0f, 1.0f));
     }
 

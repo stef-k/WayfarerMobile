@@ -761,29 +761,23 @@
                 </sfExpander:SfExpander.Content>
             </sfExpander:SfExpander>
 
-            <!-- Diagnostics Section -->
-            <sfExpander:SfExpander IsExpanded="False">
-                <sfExpander:SfExpander.Header>
-                    <Grid HeightRequest="48" Padding="10,0">
-                        <Label Text="Diagnostics"
-                               FontSize="16"
-                               FontAttributes="Bold"
-                               VerticalOptions="Center" />
-                    </Grid>
-                </sfExpander:SfExpander.Header>
-                <sfExpander:SfExpander.Content>
-                    <VerticalStackLayout Padding="15" Spacing="10">
-                        <Label Text="{Binding AppVersion}"
-                               FontSize="14"
-                               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-
-                        <Button Text="View Diagnostics"
-                                Command="{Binding ShowDiagnosticsCommand}"
-                                Style="{StaticResource DarkButton}"
-                                HeightRequest="44" />
-                    </VerticalStackLayout>
-                </sfExpander:SfExpander.Content>
-            </sfExpander:SfExpander>
+            <!-- Diagnostics Section (simplified - single button) -->
+            <Grid HeightRequest="48" Padding="10,0" ColumnDefinitions="*,Auto">
+                <VerticalStackLayout Grid.Column="0" VerticalOptions="Center">
+                    <Label Text="Diagnostics"
+                           FontSize="16"
+                           FontAttributes="Bold" />
+                    <Label Text="{Binding AppVersion}"
+                           FontSize="12"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                </VerticalStackLayout>
+                <Button Grid.Column="1"
+                        Text="View"
+                        Command="{Binding ShowDiagnosticsCommand}"
+                        Style="{StaticResource DarkButton}"
+                        HeightRequest="36"
+                        VerticalOptions="Center" />
+            </Grid>
 
         </VerticalStackLayout>
     </ScrollView>
