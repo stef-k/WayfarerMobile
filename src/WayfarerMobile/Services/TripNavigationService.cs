@@ -59,6 +59,8 @@ public class TripNavigationService : ITripNavigationService
     public Guid? CurrentTripId => _currentTrip?.Id;
 
     // Turn announcement tracking
+    // Note: HashSet is not thread-safe, but all access is from main thread
+    // (location updates marshaled via MainThread.BeginInvokeOnMainThread in LocationServiceCallbacks)
     private readonly HashSet<string> _announcedStepKeys = new();
     private DateTime _lastAnnouncementTime = DateTime.MinValue;
     private const double TurnAnnouncementDistanceMeters = 100; // Announce when within 100m of waypoint
