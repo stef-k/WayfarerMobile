@@ -9,6 +9,7 @@ namespace WayfarerMobile.ViewModels.Settings;
 public partial class AppearanceSettingsViewModel : ObservableObject
 {
     private readonly ISettingsService _settingsService;
+    private readonly IWakeLockService _wakeLockService;
 
     #region Observable Properties
 
@@ -59,9 +60,11 @@ public partial class AppearanceSettingsViewModel : ObservableObject
     /// Creates a new instance of AppearanceSettingsViewModel.
     /// </summary>
     /// <param name="settingsService">The settings service.</param>
-    public AppearanceSettingsViewModel(ISettingsService settingsService)
+    /// <param name="wakeLockService">The wake lock service for keeping screen on.</param>
+    public AppearanceSettingsViewModel(ISettingsService settingsService, IWakeLockService wakeLockService)
     {
         _settingsService = settingsService;
+        _wakeLockService = wakeLockService;
     }
 
     #endregion
@@ -106,7 +109,16 @@ public partial class AppearanceSettingsViewModel : ObservableObject
     partial void OnKeepScreenOnChanged(bool value)
     {
         _settingsService.KeepScreenOn = value;
-        ApplyKeepScreenOn(value);
+
+        // Use native wake lock service for reliable screen-on behavior
+        if (value)
+        {
+            _wakeLockService.AcquireWakeLock(keepScreenOn: true);
+        }
+        else
+        {
+            _wakeLockService.ReleaseWakeLock();
+        }
     }
 
     /// <summary>
@@ -144,17 +156,6 @@ public partial class AppearanceSettingsViewModel : ObservableObject
             "Dark" => AppTheme.Dark,
             _ => AppTheme.Unspecified // "System" - follows device theme
         };
-    }
-
-    /// <summary>
-    /// Applies the keep screen on setting immediately using MAUI's DeviceDisplay API.
-    /// </summary>
-    private static void ApplyKeepScreenOn(bool keepScreenOn)
-    {
-        MainThread.BeginInvokeOnMainThread(() =>
-        {
-            DeviceDisplay.Current.KeepScreenOn = keepScreenOn;
-        });
     }
 
     #endregion

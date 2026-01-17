@@ -761,29 +761,12 @@
                 </sfExpander:SfExpander.Content>
             </sfExpander:SfExpander>
 
-            <!-- Diagnostics Section -->
-            <sfExpander:SfExpander IsExpanded="False">
-                <sfExpander:SfExpander.Header>
-                    <Grid HeightRequest="48" Padding="10,0">
-                        <Label Text="Diagnostics"
-                               FontSize="16"
-                               FontAttributes="Bold"
-                               VerticalOptions="Center" />
-                    </Grid>
-                </sfExpander:SfExpander.Header>
-                <sfExpander:SfExpander.Content>
-                    <VerticalStackLayout Padding="15" Spacing="10">
-                        <Label Text="{Binding AppVersion}"
-                               FontSize="14"
-                               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-
-                        <Button Text="View Diagnostics"
-                                Command="{Binding ShowDiagnosticsCommand}"
-                                Style="{StaticResource DarkButton}"
-                                HeightRequest="44" />
-                    </VerticalStackLayout>
-                </sfExpander:SfExpander.Content>
-            </sfExpander:SfExpander>
+            <!-- Diagnostics Button -->
+            <Button Text="Diagnostics"
+                    Command="{Binding ShowDiagnosticsCommand}"
+                    Style="{StaticResource DarkButton}"
+                    Margin="10,5"
+                    HeightRequest="44" />
 
         </VerticalStackLayout>
     </ScrollView>
