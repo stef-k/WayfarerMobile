@@ -816,15 +816,10 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         CurrentLocation = location;
         Tracking.IncrementLocationCount();
 
-        // Update location indicator on map
+        // Update location indicator on map (dot moves, but map doesn't recenter)
+        // Map is centered once on page appear - user can pan freely after that
+        // Use "Center on Location" button to manually recenter if needed
         MapDisplay.UpdateLocationIndicator(location);
-
-        // Center map if following and not navigating or browsing a trip
-        // Don't auto-center when a trip is loaded - user needs to browse places
-        if (MapDisplay.IsFollowingLocation && !IsNavigating && !HasLoadedTrip)
-        {
-            MapDisplay.CenterOnLocation(location.Latitude, location.Longitude);
-        }
 
         // Update heading properties after LocationLayerService updates the indicator service
         // This ensures HeadingText uses the smoothed heading calculated by LocationIndicatorService
@@ -1206,14 +1201,11 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         // Clear all trip layers
         MapDisplay.ClearTripLayers();
 
-        // Resume following user location when trip is unloaded
-        MapDisplay.IsFollowingLocation = true;
-
-        // Recenter map on user location
+        // Recenter map on user location at street level
         var location = CurrentLocation ?? _locationBridge.LastLocation;
         if (location != null)
         {
-            MapDisplay.CenterOnLocation(location.Latitude, location.Longitude);
+            MapDisplay.CenterOnLocation(location.Latitude, location.Longitude, zoomLevel: 16);
         }
     }
 
@@ -1245,10 +1237,11 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         if (CurrentLocation != null)
         {
             MapDisplay.UpdateLocationIndicator(CurrentLocation);
-            // Only center on user if no trip is loaded
+            // Center + zoom to street level when page appears (only if no trip loaded)
+            // This is a one-time operation - subsequent location updates won't recenter
             if (!HasLoadedTrip)
             {
-                MapDisplay.CenterOnLocation(CurrentLocation.Latitude, CurrentLocation.Longitude);
+                MapDisplay.CenterOnLocation(CurrentLocation.Latitude, CurrentLocation.Longitude, zoomLevel: 16);
             }
         }
 
