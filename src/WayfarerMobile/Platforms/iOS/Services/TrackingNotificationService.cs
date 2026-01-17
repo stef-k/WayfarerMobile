@@ -2,6 +2,7 @@ using Foundation;
 using UserNotifications;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Services;
 
 namespace WayfarerMobile.Platforms.iOS.Services;
@@ -230,6 +231,7 @@ public class TrackingNotificationService : NSObject, IUNUserNotificationCenterDe
 
     /// <summary>
     /// Performs a manual check-in using the last received location.
+    /// Supports offline fallback - queues check-in if server is unavailable.
     /// </summary>
     private async Task PerformCheckInAsync()
     {
@@ -243,7 +245,12 @@ public class TrackingNotificationService : NSObject, IUNUserNotificationCenterDe
 
         try
         {
-            var apiClient = IPlatformApplication.Current?.Services.GetService<IApiClient>();
+            // Get services from DI container
+            var services = IPlatformApplication.Current?.Services;
+            var apiClient = services?.GetService<IApiClient>();
+            var locationQueue = services?.GetService<ILocationQueueRepository>();
+            var timelineStorage = services?.GetService<LocalTimelineStorageService>();
+
             if (apiClient == null)
             {
                 LocationServiceCallbacks.NotifyCheckInPerformed(false, "Service unavailable");
@@ -269,14 +276,60 @@ public class TrackingNotificationService : NSObject, IUNUserNotificationCenterDe
                 Provider = "notification-checkin"
             };
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            var result = await apiClient.CheckInAsync(request, cts.Token);
+            // ONLINE PATH: Try direct server submission
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                var result = await apiClient.CheckInAsync(request, Guid.NewGuid().ToString("N"), cts.Token);
 
-            LocationServiceCallbacks.NotifyCheckInPerformed(
-                result.Success,
-                result.Success ? "Checked in successfully" : result.Message);
+                if (result.Success)
+                {
+                    // Add to local timeline with server-assigned ID
+                    if (result.LocationId.HasValue && timelineStorage != null)
+                    {
+                        await timelineStorage.AddAcceptedLocationAsync(lastLocation, result.LocationId.Value);
+                    }
 
-            Console.WriteLine($"[iOS TrackingNotificationService] Check-in {(result.Success ? "successful" : $"failed: {result.Message}")}");
+                    LocationServiceCallbacks.NotifyCheckInPerformed(true, "Checked in successfully");
+                    Console.WriteLine("[iOS TrackingNotificationService] Check-in successful");
+                    return;
+                }
+
+                // Server rejected (non-network failure)
+                LocationServiceCallbacks.NotifyCheckInPerformed(false, result.Message);
+                Console.WriteLine($"[iOS TrackingNotificationService] Check-in failed: {result.Message}");
+                return;
+            }
+            catch (HttpRequestException ex)
+            {
+                Console.WriteLine($"[iOS TrackingNotificationService] Network error, falling back to offline: {ex.Message}");
+            }
+            catch (OperationCanceledException ex) when (!ex.CancellationToken.IsCancellationRequested)
+            {
+                Console.WriteLine("[iOS TrackingNotificationService] Timeout, falling back to offline");
+            }
+
+            // OFFLINE PATH: Queue for background sync
+            if (locationQueue == null)
+            {
+                LocationServiceCallbacks.NotifyCheckInPerformed(false, "Offline check-in unavailable");
+                Console.WriteLine("[iOS TrackingNotificationService] Check-in failed: ILocationQueueRepository not available");
+                return;
+            }
+
+            // Queue with isUserInvoked=true (manual check-in)
+            var queuedId = await locationQueue.QueueLocationAsync(
+                lastLocation,
+                isUserInvoked: true);
+
+            // Add pending entry to local timeline
+            if (timelineStorage != null)
+            {
+                await timelineStorage.AddPendingLocationAsync(lastLocation, queuedId);
+            }
+
+            LocationServiceCallbacks.NotifyCheckInPerformed(true, "Queued for sync");
+            Console.WriteLine("[iOS TrackingNotificationService] Check-in queued for offline sync");
         }
         catch (OperationCanceledException)
         {

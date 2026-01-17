@@ -21,8 +21,9 @@ public interface IGroupLayerService
     /// </summary>
     /// <param name="layer">The layer to update.</param>
     /// <param name="members">The group members to display.</param>
+    /// <param name="liveMarkerPulseScale">Optional scale multiplier for live marker pulse animation (1.0 to 1.35).</param>
     /// <returns>List of points for optional zoom-to-fit.</returns>
-    List<MPoint> UpdateGroupMemberMarkers(WritableLayer layer, IEnumerable<GroupMemberLocation> members);
+    List<MPoint> UpdateGroupMemberMarkers(WritableLayer layer, IEnumerable<GroupMemberLocation> members, double liveMarkerPulseScale = 1.0);
 
     /// <summary>
     /// Updates historical location markers on the specified layer.

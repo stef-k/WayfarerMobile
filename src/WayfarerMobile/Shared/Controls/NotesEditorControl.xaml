@@ -70,7 +70,8 @@
 
                     <!-- Editor WebView -->
                     <WebView x:Name="NotesWebViewModal"
-                             Grid.Row="1" />
+                             Grid.Row="1"
+                             Navigating="OnNotesWebViewNavigating" />
 
                     <!-- Footer Actions -->
                     <Grid Grid.Row="2"

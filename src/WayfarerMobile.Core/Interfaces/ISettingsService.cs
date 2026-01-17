@@ -43,6 +43,13 @@ public interface ISettingsService
     int LocationDistanceThresholdMeters { get; set; }
 
     /// <summary>
+    /// Gets or sets the maximum acceptable GPS accuracy for location logging (from server).
+    /// Locations with accuracy worse (higher) than this value are rejected.
+    /// Default: 50 meters.
+    /// </summary>
+    int LocationAccuracyThresholdMeters { get; set; }
+
+    /// <summary>
     /// Gets whether the app is properly configured (has server URL and token).
     /// </summary>
     bool IsConfigured { get; }

@@ -1,0 +1,671 @@
+using SQLite;
+using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Models;
+using WayfarerMobile.Data.Entities;
+using WayfarerMobile.Data.Repositories;
+using WayfarerMobile.Data.Services;
+using WayfarerMobile.Interfaces;
+
+namespace WayfarerMobile.Services;
+
+/// <summary>
+/// Handles region CRUD operations with optimistic UI pattern.
+/// Returns operation results instead of raising events directly.
+/// </summary>
+public class RegionOperationsHandler : IRegionOperationsHandler
+{
+    private readonly IApiClient _apiClient;
+    private readonly DatabaseService _databaseService;
+    private readonly IAreaRepository _areaRepository;
+    private readonly IPlaceRepository _placeRepository;
+    private readonly ITripRepository _tripRepository;
+    private readonly IConnectivity _connectivity;
+    private readonly SemaphoreSlim _initLock = new(1, 1);
+    private SQLiteAsyncConnection? _database;
+    private bool _initialized;
+
+    /// <summary>
+    /// Creates a new instance of RegionOperationsHandler.
+    /// </summary>
+    public RegionOperationsHandler(
+        IApiClient apiClient,
+        DatabaseService databaseService,
+        IAreaRepository areaRepository,
+        IPlaceRepository placeRepository,
+        ITripRepository tripRepository,
+        IConnectivity connectivity)
+    {
+        _apiClient = apiClient;
+        _databaseService = databaseService;
+        _areaRepository = areaRepository;
+        _placeRepository = placeRepository;
+        _tripRepository = tripRepository;
+        _connectivity = connectivity;
+    }
+
+    /// <summary>
+    /// Ensures the database connection is initialized.
+    /// </summary>
+    private async Task EnsureInitializedAsync()
+    {
+        if (_initialized) return;
+
+        await _initLock.WaitAsync();
+        try
+        {
+            if (_initialized) return;
+
+            _database = await _databaseService.GetConnectionAsync();
+            await _database.CreateTableAsync<PendingTripMutation>();
+
+            _initialized = true;
+        }
+        finally
+        {
+            _initLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Gets whether the device is currently connected to the internet.
+    /// </summary>
+    private bool IsConnected =>
+        _connectivity.NetworkAccess == NetworkAccess.Internet;
+
+    /// <inheritdoc/>
+    public async Task<RegionOperationResult> CreateRegionAsync(
+        Guid tripId,
+        string name,
+        string? notes = null,
+        string? coverImageUrl = null,
+        double? centerLatitude = null,
+        double? centerLongitude = null,
+        int? displayOrder = null,
+        Guid? clientTempId = null)
+    {
+        await EnsureInitializedAsync();
+
+        // Use caller's temp ID if provided, otherwise generate one
+        var tempClientId = clientTempId ?? Guid.NewGuid();
+
+        var request = new RegionCreateRequest
+        {
+            Name = name,
+            Notes = notes,
+            CoverImageUrl = coverImageUrl,
+            CenterLatitude = centerLatitude,
+            CenterLongitude = centerLongitude,
+            DisplayOrder = displayOrder
+        };
+
+        if (!IsConnected)
+        {
+            // Ensure offline entry exists with upsert pattern (temp ID as placeholder ServerId)
+            await EnsureOfflineAreaEntryAsync(tripId, tempClientId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder);
+            await EnqueueRegionMutationAsync("Create", tempClientId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, true, tempClientId);
+            return RegionOperationResult.Queued(tempClientId, "Created offline - will sync when online");
+        }
+
+        try
+        {
+            var response = await _apiClient.CreateRegionAsync(tripId, request);
+
+            if (response?.Success == true && response.Id != Guid.Empty)
+            {
+                // Success: create/reconcile offline entry with server ID (pass tempClientId for reconciliation)
+                await EnsureOfflineAreaEntryAsync(tripId, response.Id, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, tempClientId);
+                return RegionOperationResult.Completed(response.Id, tempClientId);
+            }
+
+            // Null/failed response: queue for retry and ensure offline entry exists
+            await EnsureOfflineAreaEntryAsync(tripId, tempClientId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder);
+            await EnqueueRegionMutationAsync("Create", tempClientId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, true, tempClientId);
+            return RegionOperationResult.Queued(tempClientId, "Sync failed - will retry");
+        }
+        catch (HttpRequestException ex) when (IsClientError(ex))
+        {
+            return RegionOperationResult.Rejected($"Server rejected: {ex.Message}");
+        }
+        catch (HttpRequestException ex)
+        {
+            // Network error: queue for retry and ensure offline entry exists
+            await EnsureOfflineAreaEntryAsync(tripId, tempClientId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder);
+            await EnqueueRegionMutationAsync("Create", tempClientId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, true, tempClientId);
+            return RegionOperationResult.Queued(tempClientId, $"Network error: {ex.Message} - will retry");
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            // Timeout: queue for retry and ensure offline entry exists
+            await EnsureOfflineAreaEntryAsync(tripId, tempClientId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder);
+            await EnqueueRegionMutationAsync("Create", tempClientId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, true, tempClientId);
+            return RegionOperationResult.Queued(tempClientId, "Request timed out - will retry");
+        }
+        catch (Exception ex)
+        {
+            // Unexpected error: queue for retry and ensure offline entry exists
+            await EnsureOfflineAreaEntryAsync(tripId, tempClientId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder);
+            await EnqueueRegionMutationAsync("Create", tempClientId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, true, tempClientId);
+            return RegionOperationResult.Queued(tempClientId, $"Unexpected error: {ex.Message} - will retry");
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<RegionOperationResult> UpdateRegionAsync(
+        Guid regionId,
+        Guid tripId,
+        string? name = null,
+        string? notes = null,
+        bool includeNotes = false,
+        string? coverImageUrl = null,
+        double? centerLatitude = null,
+        double? centerLongitude = null,
+        int? displayOrder = null)
+    {
+        await EnsureInitializedAsync();
+
+        // Fix 3: Check if this entity has a pending CREATE (offline-created, not yet synced)
+        // If so, merge the update into the pending CREATE instead of calling API with temp ID
+        var pendingCreate = await _database!.Table<PendingTripMutation>()
+            .Where(m => m.EntityId == regionId && m.EntityType == "Region" && m.OperationType == "Create" && !m.IsRejected)
+            .FirstOrDefaultAsync();
+
+        if (pendingCreate != null)
+        {
+            // Reuse existing merge logic - EnqueueRegionMutationAsync handles merging
+            // into existing non-Delete mutations (including CREATE)
+            await EnqueueRegionMutationAsync("Update", regionId, tripId, name, notes, coverImageUrl,
+                centerLatitude, centerLongitude, displayOrder, includeNotes, null);
+
+            // Also update offline entry for immediate UI consistency
+            var offlineAreaForMerge = await _areaRepository.GetOfflineAreaByServerIdAsync(regionId);
+            if (offlineAreaForMerge != null)
+            {
+                if (name != null) offlineAreaForMerge.Name = name;
+                if (includeNotes) offlineAreaForMerge.Notes = notes;
+                if (displayOrder.HasValue) offlineAreaForMerge.SortOrder = displayOrder.Value;
+                if (centerLatitude.HasValue) offlineAreaForMerge.CenterLatitude = centerLatitude;
+                if (centerLongitude.HasValue) offlineAreaForMerge.CenterLongitude = centerLongitude;
+                await _areaRepository.UpdateOfflineAreaAsync(offlineAreaForMerge);
+            }
+
+            return RegionOperationResult.Queued(regionId, "Merged into pending create - will sync when online");
+        }
+
+        // 1. Read current value from offline table (for restoration if needed)
+        var offlineArea = await _areaRepository.GetOfflineAreaByServerIdAsync(regionId);
+        string? originalName = offlineArea?.Name;
+        string? originalNotes = offlineArea?.Notes;
+        int? originalDisplayOrder = offlineArea?.SortOrder;
+        double? originalCenterLatitude = offlineArea?.CenterLatitude;
+        double? originalCenterLongitude = offlineArea?.CenterLongitude;
+
+        // 2. Update offline table with new values (optimistic update)
+        if (offlineArea != null)
+        {
+            if (name != null) offlineArea.Name = name;
+            if (includeNotes) offlineArea.Notes = notes;
+            if (displayOrder.HasValue) offlineArea.SortOrder = displayOrder.Value;
+            if (centerLatitude.HasValue) offlineArea.CenterLatitude = centerLatitude;
+            if (centerLongitude.HasValue) offlineArea.CenterLongitude = centerLongitude;
+            await _areaRepository.UpdateOfflineAreaAsync(offlineArea);
+        }
+
+        var request = new RegionUpdateRequest
+        {
+            Name = name,
+            Notes = includeNotes ? notes : null,
+            CoverImageUrl = coverImageUrl,
+            CenterLatitude = centerLatitude,
+            CenterLongitude = centerLongitude,
+            DisplayOrder = displayOrder
+        };
+
+        if (!IsConnected)
+        {
+            // 3. Store original values in queue for restoration
+            await EnqueueRegionMutationWithOriginalAsync("Update", regionId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, includeNotes, null,
+                originalName, originalNotes, null, originalCenterLatitude, originalCenterLongitude, originalDisplayOrder);
+            return RegionOperationResult.Queued(regionId, "Saved offline - will sync when online");
+        }
+
+        try
+        {
+            var response = await _apiClient.UpdateRegionAsync(regionId, request);
+
+            // Fix 4: Check response.Success instead of just response != null
+            if (response?.Success == true)
+            {
+                return RegionOperationResult.Completed(regionId);
+            }
+
+            // Response was null or Success was false
+            if (response != null && !response.Success && IsClientErrorFromResponse(response.Error))
+            {
+                // Server rejected with 4xx - restore original values and reject
+                if (offlineArea != null)
+                {
+                    offlineArea.Name = originalName ?? offlineArea.Name;
+                    if (includeNotes) offlineArea.Notes = originalNotes;
+                    if (originalDisplayOrder.HasValue) offlineArea.SortOrder = originalDisplayOrder.Value;
+                    if (originalCenterLatitude.HasValue) offlineArea.CenterLatitude = originalCenterLatitude;
+                    if (originalCenterLongitude.HasValue) offlineArea.CenterLongitude = originalCenterLongitude;
+                    await _areaRepository.UpdateOfflineAreaAsync(offlineArea);
+                }
+                return RegionOperationResult.Rejected($"Server rejected: {response.Error}");
+            }
+
+            // Response was null or non-4xx failure - queue for retry
+            await EnqueueRegionMutationWithOriginalAsync("Update", regionId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, includeNotes, null,
+                originalName, originalNotes, null, originalCenterLatitude, originalCenterLongitude, originalDisplayOrder);
+            return RegionOperationResult.Queued(regionId, response?.Error ?? "Sync failed - will retry");
+        }
+        catch (HttpRequestException ex) when (IsClientError(ex))
+        {
+            // Server rejected - restore original values in offline table
+            if (offlineArea != null)
+            {
+                offlineArea.Name = originalName ?? offlineArea.Name;
+                if (includeNotes) offlineArea.Notes = originalNotes;
+                if (originalDisplayOrder.HasValue) offlineArea.SortOrder = originalDisplayOrder.Value;
+                if (originalCenterLatitude.HasValue) offlineArea.CenterLatitude = originalCenterLatitude;
+                if (originalCenterLongitude.HasValue) offlineArea.CenterLongitude = originalCenterLongitude;
+                await _areaRepository.UpdateOfflineAreaAsync(offlineArea);
+            }
+            return RegionOperationResult.Rejected($"Server rejected: {ex.Message}");
+        }
+        catch (HttpRequestException ex)
+        {
+            // Network error - queue for retry with original values
+            await EnqueueRegionMutationWithOriginalAsync("Update", regionId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, includeNotes, null,
+                originalName, originalNotes, null, originalCenterLatitude, originalCenterLongitude, originalDisplayOrder);
+            return RegionOperationResult.Queued(regionId, $"Network error: {ex.Message} - will retry");
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            // Timeout - queue for retry with original values
+            await EnqueueRegionMutationWithOriginalAsync("Update", regionId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, includeNotes, null,
+                originalName, originalNotes, null, originalCenterLatitude, originalCenterLongitude, originalDisplayOrder);
+            return RegionOperationResult.Queued(regionId, "Request timed out - will retry");
+        }
+        catch (Exception ex)
+        {
+            // Unexpected error - queue for retry with original values
+            await EnqueueRegionMutationWithOriginalAsync("Update", regionId, tripId, name, notes, coverImageUrl, centerLatitude, centerLongitude, displayOrder, includeNotes, null,
+                originalName, originalNotes, null, originalCenterLatitude, originalCenterLongitude, originalDisplayOrder);
+            return RegionOperationResult.Queued(regionId, $"Unexpected error: {ex.Message} - will retry");
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<RegionOperationResult> DeleteRegionAsync(Guid regionId, Guid tripId)
+    {
+        await EnsureInitializedAsync();
+
+        // D4: If entity was never synced (pending CREATE exists), just cancel the CREATE
+        var pendingCreate = await _database!.Table<PendingTripMutation>()
+            .Where(m => m.EntityId == regionId && m.EntityType == "Region" && m.OperationType == "Create")
+            .FirstOrDefaultAsync();
+
+        if (pendingCreate != null)
+        {
+            // Entity was never synced - remove from queue and offline table
+            await _database.DeleteAsync(pendingCreate);
+            await _areaRepository.DeleteOfflineAreaByServerIdAsync(regionId);
+
+            // Delete any other pending mutations for this region
+            var relatedMutations = await _database.Table<PendingTripMutation>()
+                .Where(m => m.EntityId == regionId && m.EntityType == "Region")
+                .ToListAsync();
+            foreach (var m in relatedMutations)
+                await _database.DeleteAsync(m);
+
+            // D4: Clean up orphaned Place CREATE mutations that reference this Region's TempId
+            var orphanedPlaceCreates = await _database.Table<PendingTripMutation>()
+                .Where(m => m.RegionId == regionId && m.EntityType == "Place")
+                .ToListAsync();
+            foreach (var m in orphanedPlaceCreates)
+                await _database.DeleteAsync(m);
+
+            // D4: Get orphaned offline Place rows, clean up their UPDATE/DELETE mutations, then delete them
+            var orphanedPlaces = await _placeRepository.GetOfflinePlacesByRegionIdAsync(regionId);
+            foreach (var place in orphanedPlaces)
+            {
+                var placeMutations = await _database.Table<PendingTripMutation>()
+                    .Where(m => m.EntityId == place.ServerId && m.EntityType == "Place")
+                    .ToListAsync();
+                foreach (var m in placeMutations)
+                    await _database.DeleteAsync(m);
+
+                await _placeRepository.DeleteOfflinePlaceByServerIdAsync(place.ServerId);
+            }
+
+            return RegionOperationResult.Completed(regionId, message: "Cancelled - entity was never synced");
+        }
+
+        // 1. Read full region data for restoration
+        var offlineArea = await _areaRepository.GetOfflineAreaByServerIdAsync(regionId);
+
+        // 2. Delete from offline table (optimistic)
+        await _areaRepository.DeleteOfflineAreaByServerIdAsync(regionId);
+
+        if (!IsConnected)
+        {
+            // 3. Store original data in queue for restoration if user cancels
+            await EnqueueDeleteRegionMutationWithOriginalAsync(regionId, tripId, offlineArea);
+            return RegionOperationResult.Queued(regionId, "Deleted offline - will sync when online");
+        }
+
+        try
+        {
+            var success = await _apiClient.DeleteRegionAsync(regionId);
+
+            if (success)
+            {
+                return RegionOperationResult.Completed(regionId);
+            }
+
+            await EnqueueDeleteRegionMutationWithOriginalAsync(regionId, tripId, offlineArea);
+            return RegionOperationResult.Queued(regionId, "Delete failed - will retry");
+        }
+        catch (HttpRequestException ex) when (IsClientError(ex))
+        {
+            // Server rejected - restore the region in offline table
+            if (offlineArea != null)
+            {
+                offlineArea.Id = 0; // Reset for insert
+                await _areaRepository.InsertOfflineAreaAsync(offlineArea);
+            }
+            return RegionOperationResult.Rejected($"Server rejected: {ex.Message}");
+        }
+        catch (HttpRequestException ex)
+        {
+            await EnqueueDeleteRegionMutationWithOriginalAsync(regionId, tripId, offlineArea);
+            return RegionOperationResult.Queued(regionId, $"Network error: {ex.Message} - will retry");
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            await EnqueueDeleteRegionMutationWithOriginalAsync(regionId, tripId, offlineArea);
+            return RegionOperationResult.Queued(regionId, "Request timed out - will retry");
+        }
+        catch (Exception ex)
+        {
+            await EnqueueDeleteRegionMutationWithOriginalAsync(regionId, tripId, offlineArea);
+            return RegionOperationResult.Queued(regionId, $"Unexpected error: {ex.Message} - will retry");
+        }
+    }
+
+    #region Private Helper Methods
+
+    private async Task EnqueueRegionMutationAsync(
+        string operationType,
+        Guid entityId,
+        Guid tripId,
+        string? name,
+        string? notes,
+        string? coverImageUrl,
+        double? centerLatitude,
+        double? centerLongitude,
+        int? displayOrder,
+        bool includeNotes,
+        Guid? tempClientId)
+    {
+        if (operationType == "Update")
+        {
+            var existing = await _database!.Table<PendingTripMutation>()
+                .Where(m => m.EntityId == entityId && m.EntityType == "Region" && !m.IsRejected && m.OperationType != "Delete")
+                .FirstOrDefaultAsync();
+
+            if (existing != null)
+            {
+                if (name != null) existing.Name = name;
+                if (includeNotes) { existing.Notes = notes; existing.IncludeNotes = true; }
+                if (coverImageUrl != null) existing.CoverImageUrl = coverImageUrl;
+                if (centerLatitude.HasValue) existing.CenterLatitude = centerLatitude;
+                if (centerLongitude.HasValue) existing.CenterLongitude = centerLongitude;
+                if (displayOrder.HasValue) existing.DisplayOrder = displayOrder;
+                existing.CreatedAt = DateTime.UtcNow;
+                await _database.UpdateAsync(existing);
+                return;
+            }
+        }
+
+        var mutation = new PendingTripMutation
+        {
+            EntityType = "Region",
+            OperationType = operationType,
+            EntityId = entityId,
+            TripId = tripId,
+            TempClientId = tempClientId,
+            Name = name,
+            Notes = notes,
+            IncludeNotes = includeNotes,
+            CoverImageUrl = coverImageUrl,
+            CenterLatitude = centerLatitude,
+            CenterLongitude = centerLongitude,
+            DisplayOrder = displayOrder,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _database!.InsertAsync(mutation);
+    }
+
+    private async Task EnqueueRegionMutationWithOriginalAsync(
+        string operationType,
+        Guid entityId,
+        Guid tripId,
+        string? name,
+        string? notes,
+        string? coverImageUrl,
+        double? centerLatitude,
+        double? centerLongitude,
+        int? displayOrder,
+        bool includeNotes,
+        Guid? tempClientId,
+        string? originalName,
+        string? originalNotes,
+        string? originalCoverImageUrl,
+        double? originalCenterLatitude,
+        double? originalCenterLongitude,
+        int? originalDisplayOrder)
+    {
+        // For updates, check if there's an existing mutation to merge
+        if (operationType == "Update")
+        {
+            var existing = await _database!.Table<PendingTripMutation>()
+                .Where(m => m.EntityId == entityId && m.EntityType == "Region" && !m.IsRejected && m.OperationType != "Delete")
+                .FirstOrDefaultAsync();
+
+            if (existing != null)
+            {
+                // Update new values
+                if (name != null) existing.Name = name;
+                if (includeNotes) { existing.Notes = notes; existing.IncludeNotes = true; }
+                if (coverImageUrl != null) existing.CoverImageUrl = coverImageUrl;
+                if (centerLatitude.HasValue) existing.CenterLatitude = centerLatitude;
+                if (centerLongitude.HasValue) existing.CenterLongitude = centerLongitude;
+                if (displayOrder.HasValue) existing.DisplayOrder = displayOrder;
+                // Keep original values from first mutation (don't overwrite)
+                existing.CreatedAt = DateTime.UtcNow;
+                await _database.UpdateAsync(existing);
+                return;
+            }
+        }
+
+        var mutation = new PendingTripMutation
+        {
+            EntityType = "Region",
+            OperationType = operationType,
+            EntityId = entityId,
+            TripId = tripId,
+            TempClientId = tempClientId,
+            Name = name,
+            Notes = notes,
+            IncludeNotes = includeNotes,
+            CoverImageUrl = coverImageUrl,
+            CenterLatitude = centerLatitude,
+            CenterLongitude = centerLongitude,
+            DisplayOrder = displayOrder,
+            // Store original values for restoration
+            OriginalName = originalName,
+            OriginalNotes = originalNotes,
+            OriginalCoverImageUrl = originalCoverImageUrl,
+            OriginalCenterLatitude = originalCenterLatitude,
+            OriginalCenterLongitude = originalCenterLongitude,
+            OriginalDisplayOrder = originalDisplayOrder,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _database!.InsertAsync(mutation);
+    }
+
+    private async Task EnqueueDeleteRegionMutationWithOriginalAsync(Guid entityId, Guid tripId, OfflineAreaEntity? originalArea)
+    {
+        // Remove any pending creates/updates for this entity
+        await _database!.Table<PendingTripMutation>()
+            .Where(m => m.EntityId == entityId && m.EntityType == "Region")
+            .DeleteAsync();
+
+        var mutation = new PendingTripMutation
+        {
+            EntityType = "Region",
+            OperationType = "Delete",
+            EntityId = entityId,
+            TripId = tripId,
+            // Store original values for restoration if user cancels
+            OriginalName = originalArea?.Name,
+            OriginalNotes = originalArea?.Notes,
+            OriginalCenterLatitude = originalArea?.CenterLatitude,
+            OriginalCenterLongitude = originalArea?.CenterLongitude,
+            OriginalDisplayOrder = originalArea?.SortOrder,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _database.InsertAsync(mutation);
+    }
+
+    /// <summary>
+    /// Determines if the HTTP error is a permanent client error (should not be retried).
+    /// Excludes 429 Too Many Requests which is temporary and should be retried.
+    /// </summary>
+    private static bool IsClientError(HttpRequestException ex)
+    {
+        if (!ex.StatusCode.HasValue)
+            return false;
+
+        var statusCode = (int)ex.StatusCode.Value;
+
+        // 429 Too Many Requests is NOT a permanent client error - it should be retried
+        if (statusCode == 429)
+            return false;
+
+        return statusCode >= 400 && statusCode < 500;
+    }
+
+    /// <summary>
+    /// Determines if the error string indicates a permanent client error (4xx).
+    /// Parses error strings in formats like "HTTP 404", "NotFound", "400 Bad Request", etc.
+    /// Excludes 429 Too Many Requests which is temporary and should be retried.
+    /// </summary>
+    private static bool IsClientErrorFromResponse(string? error)
+    {
+        if (string.IsNullOrWhiteSpace(error))
+            return false;
+
+        // Common error string patterns from ApiClient
+        // Pattern 1: "HTTP {statusCode}" (e.g., "HTTP 404")
+        if (error.StartsWith("HTTP ", StringComparison.OrdinalIgnoreCase))
+        {
+            var parts = error.Split(' ');
+            if (parts.Length >= 2 && int.TryParse(parts[1], out var statusCode))
+            {
+                return statusCode >= 400 && statusCode < 500 && statusCode != 429;
+            }
+        }
+
+        // Pattern 2: "{statusCode} {reason}" (e.g., "404 Not Found")
+        var firstWord = error.Split(' ')[0];
+        if (int.TryParse(firstWord, out var code))
+        {
+            return code >= 400 && code < 500 && code != 429;
+        }
+
+        // Pattern 3: Named status codes
+        var lowerError = error.ToLowerInvariant();
+        if (lowerError.Contains("notfound") || lowerError.Contains("not found") ||
+            lowerError.Contains("badrequest") || lowerError.Contains("bad request") ||
+            lowerError.Contains("unauthorized") || lowerError.Contains("forbidden") ||
+            lowerError.Contains("conflict") || lowerError.Contains("gone"))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Ensures an offline area entry exists with upsert pattern.
+    /// Used when queuing CREATE mutations - the offline entry must exist for subsequent updates/deletes.
+    /// Handles tempId-to-serverId reconciliation when a queued CREATE succeeds on retry.
+    /// </summary>
+    /// <param name="tripId">The trip's server ID.</param>
+    /// <param name="serverId">The server ID (or temp ID if not yet synced).</param>
+    /// <param name="name">The region name.</param>
+    /// <param name="notes">Optional notes.</param>
+    /// <param name="coverImageUrl">Optional cover image URL.</param>
+    /// <param name="centerLatitude">Optional center latitude.</param>
+    /// <param name="centerLongitude">Optional center longitude.</param>
+    /// <param name="displayOrder">Optional display order.</param>
+    /// <param name="tempClientId">Optional temp ID to reconcile if entry exists with temp ID.</param>
+    private async Task EnsureOfflineAreaEntryAsync(
+        Guid tripId,
+        Guid serverId,
+        string name,
+        string? notes,
+        string? coverImageUrl,
+        double? centerLatitude,
+        double? centerLongitude,
+        int? displayOrder,
+        Guid? tempClientId = null)
+    {
+        var localTrip = await _tripRepository.GetDownloadedTripByServerIdAsync(tripId);
+        if (localTrip == null)
+            return;
+
+        // Check if entry already exists with the target serverId
+        var existing = await _areaRepository.GetOfflineAreaByServerIdAsync(serverId);
+        if (existing != null)
+            return; // Already exists with correct ID, no action needed
+
+        // If tempClientId provided, check for existing entry with temp ID that needs reconciliation
+        if (tempClientId.HasValue && tempClientId.Value != serverId)
+        {
+            var tempEntry = await _areaRepository.GetOfflineAreaByServerIdAsync(tempClientId.Value);
+            if (tempEntry != null)
+            {
+                // Reconcile: update temp ID entry to use real server ID
+                tempEntry.ServerId = serverId;
+                tempEntry.Name = name;
+                tempEntry.Notes = notes;
+                tempEntry.CoverImageUrl = coverImageUrl;
+                tempEntry.CenterLatitude = centerLatitude;
+                tempEntry.CenterLongitude = centerLongitude;
+                tempEntry.SortOrder = displayOrder ?? tempEntry.SortOrder;
+                await _areaRepository.UpdateOfflineAreaAsync(tempEntry);
+                return;
+            }
+        }
+
+        // No existing entry found - insert new one
+        var offlineArea = new OfflineAreaEntity
+        {
+            TripId = localTrip.Id,
+            ServerId = serverId,
+            Name = name,
+            Notes = notes,
+            CoverImageUrl = coverImageUrl,
+            CenterLatitude = centerLatitude,
+            CenterLongitude = centerLongitude,
+            SortOrder = displayOrder ?? 0
+        };
+        await _areaRepository.InsertOfflineAreaAsync(offlineArea);
+    }
+
+    #endregion
+}

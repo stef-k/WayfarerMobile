@@ -6,7 +6,19 @@ using WayfarerMobile.Data.Entities;
 namespace WayfarerMobile.Data.Services;
 
 /// <summary>
-/// Service for managing SQLite database operations including location queue and settings.
+/// Core database service providing initialization, connection management, and platform-specific operations.
+/// Domain-specific operations have been extracted to dedicated repositories:
+/// <list type="bullet">
+///   <item><see cref="WayfarerMobile.Data.Repositories.ILocationQueueRepository"/> - Location queue operations</item>
+///   <item><see cref="WayfarerMobile.Data.Repositories.ITimelineRepository"/> - Timeline entries</item>
+///   <item><see cref="WayfarerMobile.Data.Repositories.ITripRepository"/> - Downloaded trips</item>
+///   <item><see cref="WayfarerMobile.Data.Repositories.IPlaceRepository"/> - Offline places</item>
+///   <item><see cref="WayfarerMobile.Data.Repositories.ISegmentRepository"/> - Offline segments</item>
+///   <item><see cref="WayfarerMobile.Data.Repositories.IAreaRepository"/> - Offline areas and polygons</item>
+///   <item><see cref="WayfarerMobile.Data.Repositories.ITripTileRepository"/> - Trip tiles</item>
+///   <item><see cref="WayfarerMobile.Data.Repositories.ILiveTileCacheRepository"/> - Live tile cache</item>
+///   <item><see cref="WayfarerMobile.Data.Repositories.IDownloadStateRepository"/> - Download state</item>
+/// </list>
 /// </summary>
 public class DatabaseService : IAsyncDisposable
 {
@@ -14,6 +26,8 @@ public class DatabaseService : IAsyncDisposable
 
     private const string DatabaseFilename = "wayfarer.db3";
     private const int MaxQueuedLocations = 25000;
+    private const int CurrentSchemaVersion = 3; // Increment when schema changes
+    private const string SchemaVersionKey = "db_schema_version";
 
     private static readonly SQLiteOpenFlags DbFlags =
         SQLiteOpenFlags.ReadWrite |
@@ -39,8 +53,8 @@ public class DatabaseService : IAsyncDisposable
         Path.Combine(FileSystem.AppDataDirectory, DatabaseFilename);
 
     /// <summary>
-    /// Gets the database connection for sync services.
-    /// Prefer using dedicated methods where available.
+    /// Gets the database connection for services that need direct access.
+    /// Repositories should use the connection factory instead.
     /// </summary>
     public async Task<SQLiteAsyncConnection> GetConnectionAsync()
     {
@@ -53,7 +67,7 @@ public class DatabaseService : IAsyncDisposable
     #region Initialization
 
     /// <summary>
-    /// Ensures the database is initialized.
+    /// Ensures the database is initialized with all required tables.
     /// </summary>
     private async Task EnsureInitializedAsync()
     {
@@ -68,7 +82,7 @@ public class DatabaseService : IAsyncDisposable
 
             _database = new SQLiteAsyncConnection(DatabasePath, DbFlags);
 
-            // Create tables
+            // Create tables (this also adds new columns to existing tables)
             await _database.CreateTableAsync<QueuedLocation>();
             await _database.CreateTableAsync<AppSetting>();
             await _database.CreateTableAsync<DownloadedTripEntity>();
@@ -82,6 +96,9 @@ public class DatabaseService : IAsyncDisposable
             await _database.CreateTableAsync<LocalTimelineEntry>();
             await _database.CreateTableAsync<TripDownloadStateEntity>();
 
+            // Run migrations
+            await RunMigrationsAsync();
+
             _initialized = true;
             Console.WriteLine($"[DatabaseService] Initialized: {DatabasePath}");
         }
@@ -93,338 +110,223 @@ public class DatabaseService : IAsyncDisposable
 
     #endregion
 
-    #region Location Queue
+    #region Migrations
+
+    /// <summary>
+    /// Runs all pending database migrations.
+    /// </summary>
+    private async Task RunMigrationsAsync()
+    {
+        var currentVersion = await GetSchemaVersionAsync();
+        Console.WriteLine($"[DatabaseService] Current schema version: {currentVersion}, target: {CurrentSchemaVersion}");
+
+        if (currentVersion >= CurrentSchemaVersion)
+            return;
+
+        // Run migrations in order
+        // Note: Version 2 migration removed - no users to migrate from legacy Status field
+
+        // Version 3: Add composite index for efficient claim queries
+        if (currentVersion < 3)
+        {
+            await MigrateToVersion3Async();
+        }
+
+        // Update schema version
+        await SetSchemaVersionAsync(CurrentSchemaVersion);
+        Console.WriteLine($"[DatabaseService] Migration complete. Schema version: {CurrentSchemaVersion}");
+    }
+
+    /// <summary>
+    /// Migration to version 3: Add composite index for efficient location claim queries.
+    /// </summary>
+    private async Task MigrateToVersion3Async()
+    {
+        Console.WriteLine("[DatabaseService] Running migration to version 3: Adding composite index");
+
+        // Create composite index for efficient claim queries:
+        // WHERE SyncStatus = Pending AND IsRejected = 0 ORDER BY Timestamp
+        // This dramatically improves ClaimPendingLocationsAsync performance
+        await _database!.ExecuteAsync(
+            @"CREATE INDEX IF NOT EXISTS IX_QueuedLocations_SyncStatus_IsRejected_Timestamp
+              ON QueuedLocations (SyncStatus, IsRejected, Timestamp)");
+
+        // Also add index for ServerConfirmed recovery queries
+        await _database.ExecuteAsync(
+            @"CREATE INDEX IF NOT EXISTS IX_QueuedLocations_ServerConfirmed
+              ON QueuedLocations (ServerConfirmed) WHERE ServerConfirmed = 1");
+
+        Console.WriteLine("[DatabaseService] Version 3 migration complete");
+    }
+
+    /// <summary>
+    /// Gets the current schema version from settings.
+    /// </summary>
+    private async Task<int> GetSchemaVersionAsync()
+    {
+        var setting = await _database!.Table<AppSetting>()
+            .FirstOrDefaultAsync(s => s.Key == SchemaVersionKey);
+
+        if (setting?.Value == null)
+            return 1; // Original schema
+
+        return int.TryParse(setting.Value, out var version) ? version : 1;
+    }
+
+    /// <summary>
+    /// Sets the schema version in settings.
+    /// </summary>
+    private async Task SetSchemaVersionAsync(int version)
+    {
+        var setting = await _database!.Table<AppSetting>()
+            .FirstOrDefaultAsync(s => s.Key == SchemaVersionKey);
+
+        if (setting == null)
+        {
+            setting = new AppSetting
+            {
+                Key = SchemaVersionKey,
+                Value = version.ToString()
+            };
+            await _database.InsertAsync(setting);
+        }
+        else
+        {
+            setting.Value = version.ToString();
+            setting.LastModified = DateTime.UtcNow;
+            await _database.UpdateAsync(setting);
+        }
+    }
+
+    #endregion
+
+    #region Location Queue (Platform Services)
 
     /// <summary>
     /// Queues a location for server synchronization.
+    /// Used by platform-specific LocationTrackingService implementations that cannot use DI.
+    /// For DI-enabled services, use <see cref="WayfarerMobile.Data.Repositories.ILocationQueueRepository"/>.
     /// </summary>
     /// <param name="location">The location data to queue.</param>
-    public async Task QueueLocationAsync(LocationData location)
+    /// <param name="isUserInvoked">True for manual check-ins (skip filtering, prioritize sync).</param>
+    /// <param name="activityTypeId">Optional activity type ID (for user-invoked check-ins).</param>
+    /// <param name="notes">Optional notes (for user-invoked check-ins).</param>
+    /// <returns>The ID of the queued location.</returns>
+    /// <exception cref="ArgumentException">Thrown when coordinates are invalid.</exception>
+    public async Task<int> QueueLocationAsync(
+        LocationData location,
+        bool isUserInvoked = false,
+        int? activityTypeId = null,
+        string? notes = null)
     {
+        // Validate coordinates to prevent corrupted data (parity with LocationQueueRepository)
+        if (!IsValidCoordinate(location.Latitude, location.Longitude))
+        {
+            throw new ArgumentException(
+                $"Invalid coordinates: Lat={location.Latitude}, Lon={location.Longitude}. " +
+                "Coordinates must be finite numbers within valid ranges.");
+        }
+
         await EnsureInitializedAsync();
 
         var queued = new QueuedLocation
         {
             Latitude = location.Latitude,
             Longitude = location.Longitude,
-            Altitude = location.Altitude,
-            Accuracy = location.Accuracy,
-            Speed = location.Speed,
-            Bearing = location.Bearing,
+            Altitude = SanitizeOptionalDouble(location.Altitude),
+            Accuracy = SanitizeOptionalDouble(location.Accuracy),
+            Speed = SanitizeOptionalDouble(location.Speed),
+            Bearing = SanitizeOptionalDouble(location.Bearing),
             Timestamp = location.Timestamp,
             Provider = location.Provider,
-            SyncStatus = SyncStatus.Pending
+            SyncStatus = SyncStatus.Pending,
+            IdempotencyKey = Guid.NewGuid().ToString("N"),
+            IsUserInvoked = isUserInvoked,
+            ActivityTypeId = activityTypeId,
+            CheckInNotes = notes
         };
 
         await _database!.InsertAsync(queued);
-        Console.WriteLine($"[DatabaseService] Location queued: {location}");
+        Console.WriteLine($"[DatabaseService] Location queued (IsUserInvoked={isUserInvoked}): {location}");
 
         // Cleanup old locations if queue is too large
         await CleanupOldLocationsAsync();
+
+        return queued.Id;
     }
 
     /// <summary>
-    /// Gets all pending locations for synchronization.
-    /// Excludes rejected locations (they should not be retried).
-    /// Valid locations retry until 300-day purge regardless of attempt count.
+    /// Validates that latitude and longitude are valid, finite numbers within range.
     /// </summary>
-    /// <param name="limit">Maximum number of locations to retrieve.</param>
-    /// <returns>List of pending locations.</returns>
-    public async Task<List<QueuedLocation>> GetPendingLocationsAsync(int limit = 100)
+    private static bool IsValidCoordinate(double latitude, double longitude)
     {
-        await EnsureInitializedAsync();
-
-        return await _database!.Table<QueuedLocation>()
-            .Where(l => l.SyncStatus == SyncStatus.Pending && !l.IsRejected)
-            .OrderBy(l => l.Timestamp)
-            .Take(limit)
-            .ToListAsync();
-    }
-
-    /// <summary>
-    /// Marks a location as successfully synced.
-    /// Uses single UPDATE statement for efficiency.
-    /// </summary>
-    /// <param name="id">The location ID.</param>
-    public async Task MarkLocationSyncedAsync(int id)
-    {
-        await EnsureInitializedAsync();
-
-        await _database!.ExecuteAsync(
-            "UPDATE QueuedLocations SET SyncStatus = ? WHERE Id = ?",
-            (int)SyncStatus.Synced, id);
-    }
-
-    /// <summary>
-    /// Marks multiple locations as successfully synced in a single batch operation.
-    /// Uses single UPDATE statement with IN clause for efficiency.
-    /// </summary>
-    /// <param name="ids">The location IDs to mark as synced.</param>
-    /// <returns>The number of rows affected.</returns>
-    public async Task<int> MarkLocationsSyncedAsync(IEnumerable<int> ids)
-    {
-        await EnsureInitializedAsync();
-
-        var idList = ids.ToList();
-        if (idList.Count == 0)
-            return 0;
-
-        // Build parameterized query with IN clause
-        var placeholders = string.Join(",", idList.Select((_, i) => $"?{i + 2}"));
-        var query = $"UPDATE QueuedLocations SET SyncStatus = ?1 WHERE Id IN ({placeholders})";
-
-        // Build parameters: first is SyncStatus, rest are IDs
-        var parameters = new object[idList.Count + 1];
-        parameters[0] = (int)SyncStatus.Synced;
-        for (var i = 0; i < idList.Count; i++)
+        // Check for NaN, Infinity
+        if (double.IsNaN(latitude) || double.IsInfinity(latitude) ||
+            double.IsNaN(longitude) || double.IsInfinity(longitude))
         {
-            parameters[i + 1] = idList[i];
+            return false;
         }
 
-        return await _database!.ExecuteAsync(query, parameters);
+        // Check valid ranges
+        if (latitude < -90 || latitude > 90 ||
+            longitude < -180 || longitude > 180)
+        {
+            return false;
+        }
+
+        return true;
     }
 
     /// <summary>
-    /// Records a sync failure for diagnostics. Location stays Pending for retry.
-    /// Valid locations retry until 300-day purge regardless of attempt count.
-    /// SyncAttempts is only for diagnostics, not a retry limit.
+    /// Sanitizes optional double values, replacing NaN/Infinity with null.
     /// </summary>
-    /// <param name="id">The location ID.</param>
-    /// <param name="error">The error message.</param>
-    public async Task MarkLocationFailedAsync(int id, string error)
+    private static double? SanitizeOptionalDouble(double? value)
     {
-        await EnsureInitializedAsync();
+        if (value == null)
+            return null;
 
-        // Increment attempts counter for diagnostics but keep status as Pending
-        // Valid locations should retry until 300-day purge, not 5 attempts
-        await _database!.ExecuteAsync(
-            @"UPDATE QueuedLocations
-              SET SyncAttempts = SyncAttempts + 1,
-                  LastSyncAttempt = ?,
-                  LastError = ?
-              WHERE Id = ?",
-            DateTime.UtcNow, error, id);
+        if (double.IsNaN(value.Value) || double.IsInfinity(value.Value))
+            return null;
+
+        return value;
     }
 
     /// <summary>
-    /// Increments the retry count for a location without marking it as failed.
-    /// Used for transient failures that may succeed on retry.
-    /// Uses single UPDATE statement for efficiency.
+    /// Cleans up old locations if queue is at capacity.
+    /// Gradual deletion: removes just 1 location to make room for new one.
+    /// Priority: 1) Oldest Synced, 2) Oldest Rejected, 3) Oldest Pending (last resort).
     /// </summary>
-    /// <param name="id">The location ID.</param>
-    public async Task IncrementRetryCountAsync(int id)
-    {
-        await EnsureInitializedAsync();
-
-        await _database!.ExecuteAsync(
-            "UPDATE QueuedLocations SET SyncAttempts = SyncAttempts + 1, LastSyncAttempt = ? WHERE Id = ?",
-            DateTime.UtcNow, id);
-    }
-
-    /// <summary>
-    /// Marks a location as rejected (by client threshold check or server).
-    /// Rejected locations should not be retried.
-    /// </summary>
-    /// <param name="id">The location ID.</param>
-    /// <param name="reason">The rejection reason (e.g., "Client: Time 2min &lt; 5min threshold" or "Server: HTTP 400").</param>
-    public async Task MarkLocationRejectedAsync(int id, string reason)
-    {
-        await EnsureInitializedAsync();
-
-        await _database!.ExecuteAsync(
-            @"UPDATE QueuedLocations
-              SET IsRejected = 1,
-                  RejectionReason = ?,
-                  SyncStatus = ?,
-                  LastSyncAttempt = ?
-              WHERE Id = ?",
-            reason, (int)SyncStatus.Synced, DateTime.UtcNow, id);
-    }
-
-    /// <summary>
-    /// Marks a location as currently syncing.
-    /// Used to prevent duplicate processing when lock is released.
-    /// </summary>
-    /// <param name="id">The location ID.</param>
-    public async Task MarkLocationSyncingAsync(int id)
-    {
-        await EnsureInitializedAsync();
-
-        await _database!.ExecuteAsync(
-            "UPDATE QueuedLocations SET SyncStatus = ? WHERE Id = ?",
-            (int)SyncStatus.Syncing, id);
-    }
-
-    /// <summary>
-    /// Resets a location back to pending status for retry after transient failures.
-    /// Used when server returns 5xx or network errors - these are not permanent rejections.
-    /// Does NOT increment SyncAttempts since transient failures shouldn't count toward max retries.
-    /// Valid location data should be retried indefinitely until server is reachable.
-    /// </summary>
-    /// <param name="id">The location ID.</param>
-    public async Task ResetLocationToPendingAsync(int id)
-    {
-        await EnsureInitializedAsync();
-
-        await _database!.ExecuteAsync(
-            @"UPDATE QueuedLocations
-              SET SyncStatus = ?,
-                  LastSyncAttempt = ?
-              WHERE Id = ?",
-            (int)SyncStatus.Pending, DateTime.UtcNow, id);
-    }
-
-    /// <summary>
-    /// Gets the oldest pending location for queue drain processing.
-    /// Excludes rejected locations only - valid locations retry until 300-day purge.
-    /// Returns locations ordered by timestamp (oldest first) for chronological processing.
-    /// </summary>
-    /// <returns>The oldest pending location or null if queue is empty.</returns>
-    public async Task<QueuedLocation?> GetOldestPendingForDrainAsync()
-    {
-        await EnsureInitializedAsync();
-
-        return await _database!.Table<QueuedLocation>()
-            .Where(l => l.SyncStatus == SyncStatus.Pending && !l.IsRejected)
-            .OrderBy(l => l.Timestamp)
-            .FirstOrDefaultAsync();
-    }
-
-    /// <summary>
-    /// Resets locations stuck in "Syncing" status back to "Pending".
-    /// Called on app startup to recover from crashes during sync.
-    /// </summary>
-    /// <returns>Number of locations reset.</returns>
-    public async Task<int> ResetStuckLocationsAsync()
-    {
-        await EnsureInitializedAsync();
-
-        return await _database!.ExecuteAsync(
-            "UPDATE QueuedLocations SET SyncStatus = ? WHERE SyncStatus = ?",
-            (int)SyncStatus.Pending, (int)SyncStatus.Syncing);
-    }
-
-    /// <summary>
-    /// Removes synced locations older than the specified days.
-    /// Also purges rejected and failed locations with appropriate retention periods.
-    /// </summary>
-    /// <param name="daysOld">Number of days old.</param>
-    public async Task<int> PurgeSyncedLocationsAsync(int daysOld = 7)
-    {
-        await EnsureInitializedAsync();
-
-        var cutoff = DateTime.UtcNow.AddDays(-daysOld);
-        var deletedSynced = await _database!.ExecuteAsync(
-            "DELETE FROM QueuedLocations WHERE SyncStatus = ? AND CreatedAt < ?",
-            (int)SyncStatus.Synced, cutoff);
-
-        // Purge rejected locations older than 2 days
-        var rejectedCutoff = DateTime.UtcNow.AddDays(-2);
-        var deletedRejected = await _database.ExecuteAsync(
-            "DELETE FROM QueuedLocations WHERE IsRejected = 1 AND CreatedAt < ?",
-            rejectedCutoff);
-
-        // Safety valve: purge very old pending locations
-        // With 25k queue capacity and ~96 locations/day max, queue holds ~260 days of data.
-        // Use 300 days as cutoff to exceed queue capacity and allow ample time for offline scenarios.
-        var pendingCutoff = DateTime.UtcNow.AddDays(-300);
-        var deletedOldPending = await _database.ExecuteAsync(
-            "DELETE FROM QueuedLocations WHERE SyncStatus = ? AND CreatedAt < ?",
-            (int)SyncStatus.Pending, pendingCutoff);
-
-        // Purge failed locations (max attempts exceeded) older than 3 days
-        var failedCutoff = DateTime.UtcNow.AddDays(-3);
-        var deletedFailed = await _database.ExecuteAsync(
-            "DELETE FROM QueuedLocations WHERE SyncStatus = ? AND CreatedAt < ?",
-            (int)SyncStatus.Failed, failedCutoff);
-
-        return deletedSynced + deletedRejected + deletedOldPending + deletedFailed;
-    }
-
-    /// <summary>
-    /// Gets the count of pending locations that can be synced.
-    /// Excludes rejected locations to match drain logic.
-    /// </summary>
-    public async Task<int> GetPendingCountAsync()
-    {
-        await EnsureInitializedAsync();
-
-        return await _database!.Table<QueuedLocation>()
-            .Where(l => l.SyncStatus == SyncStatus.Pending &&
-                       !l.IsRejected)
-            .CountAsync();
-    }
-
-    /// <summary>
-    /// Clears all pending locations from the queue.
-    /// </summary>
-    /// <returns>The number of locations deleted.</returns>
-    public async Task<int> ClearPendingQueueAsync()
-    {
-        await EnsureInitializedAsync();
-
-        return await _database!.ExecuteAsync(
-            "DELETE FROM QueuedLocations WHERE SyncStatus = ?",
-            (int)SyncStatus.Pending);
-    }
-
-    /// <summary>
-    /// Clears all synced locations from the queue.
-    /// </summary>
-    /// <returns>The number of locations deleted.</returns>
-    public async Task<int> ClearSyncedQueueAsync()
-    {
-        await EnsureInitializedAsync();
-
-        return await _database!.ExecuteAsync(
-            "DELETE FROM QueuedLocations WHERE SyncStatus = ?",
-            (int)SyncStatus.Synced);
-    }
-
-    /// <summary>
-    /// Clears all locations from the queue (pending, synced, and failed).
-    /// </summary>
-    /// <returns>The number of locations deleted.</returns>
-    public async Task<int> ClearAllQueueAsync()
-    {
-        await EnsureInitializedAsync();
-
-        return await _database!.ExecuteAsync("DELETE FROM QueuedLocations");
-    }
-
-    /// <summary>
-    /// Gets all locations for a specific date.
-    /// </summary>
-    /// <param name="date">The date to retrieve locations for.</param>
-    /// <returns>List of locations for that date.</returns>
-    public async Task<List<QueuedLocation>> GetLocationsForDateAsync(DateTime date)
-    {
-        await EnsureInitializedAsync();
-
-        var startOfDay = date.Date.ToUniversalTime();
-        var endOfDay = date.Date.AddDays(1).ToUniversalTime();
-
-        return await _database!.Table<QueuedLocation>()
-            .Where(l => l.Timestamp >= startOfDay && l.Timestamp < endOfDay)
-            .OrderByDescending(l => l.Timestamp)
-            .ToListAsync();
-    }
-
-    /// <summary>
-    /// Cleans up old locations if queue is too large.
-    /// </summary>
+    /// <remarks>
+    /// Note: This logic is duplicated in <see cref="Repositories.LocationQueueRepository.CleanupOldLocationsAsync"/>.
+    /// The duplication is intentional - DatabaseService serves platform services that can't use DI,
+    /// while LocationQueueRepository serves DI-enabled services. Both are thread-safe via SQLite
+    /// subquery-based deletion (concurrent calls safely delete different or same rows).
+    /// </remarks>
     private async Task CleanupOldLocationsAsync()
     {
         var count = await _database!.Table<QueuedLocation>().CountAsync();
-        if (count > MaxQueuedLocations)
-        {
-            // Remove oldest synced locations first
-            await _database.ExecuteAsync(
-                "DELETE FROM QueuedLocations WHERE Id IN (SELECT Id FROM QueuedLocations WHERE SyncStatus = ? ORDER BY Timestamp LIMIT ?)",
-                (int)SyncStatus.Synced, count - MaxQueuedLocations + 1000);
+        if (count < MaxQueuedLocations)
+            return;
 
-            Console.WriteLine("[DatabaseService] Cleaned up old synced locations");
-        }
+        // 1. Try to delete 1 oldest synced location (safe - already uploaded)
+        var deleted = await _database.ExecuteAsync(
+            "DELETE FROM QueuedLocations WHERE Id = (SELECT Id FROM QueuedLocations WHERE SyncStatus = ? ORDER BY Timestamp LIMIT 1)",
+            (int)SyncStatus.Synced);
+
+        if (deleted > 0)
+            return;
+
+        // 2. Try to delete 1 oldest rejected location (safe - won't sync anyway)
+        deleted = await _database.ExecuteAsync(
+            "DELETE FROM QueuedLocations WHERE Id = (SELECT Id FROM QueuedLocations WHERE IsRejected = 1 ORDER BY Timestamp LIMIT 1)");
+
+        if (deleted > 0)
+            return;
+
+        // 3. Last resort: delete 1 oldest pending location (DATA LOSS - but prevents unbounded growth)
+        await _database.ExecuteAsync(
+            "DELETE FROM QueuedLocations WHERE Id = (SELECT Id FROM QueuedLocations WHERE SyncStatus = ? ORDER BY Timestamp LIMIT 1)",
+            (int)SyncStatus.Pending);
     }
 
     #endregion
@@ -464,8 +366,10 @@ public class DatabaseService : IAsyncDisposable
 
             return defaultValue;
         }
-        catch
+        catch (Exception ex)
         {
+            // Log parse failures for diagnostics (previously silent)
+            Console.WriteLine($"[DatabaseService] Failed to parse setting '{key}' as {typeof(T).Name}: {ex.Message}");
             return defaultValue;
         }
     }
@@ -500,944 +404,6 @@ public class DatabaseService : IAsyncDisposable
             setting.LastModified = DateTime.UtcNow;
             await _database.UpdateAsync(setting);
         }
-    }
-
-    #endregion
-
-    #region Downloaded Trips
-
-    /// <summary>
-    /// Gets all downloaded trips.
-    /// </summary>
-    public async Task<List<DownloadedTripEntity>> GetDownloadedTripsAsync()
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<DownloadedTripEntity>()
-            .OrderByDescending(t => t.DownloadedAt)
-            .ToListAsync();
-    }
-
-    /// <summary>
-    /// Gets a downloaded trip by server ID.
-    /// </summary>
-    public async Task<DownloadedTripEntity?> GetDownloadedTripByServerIdAsync(Guid serverId)
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<DownloadedTripEntity>()
-            .FirstOrDefaultAsync(t => t.ServerId == serverId);
-    }
-
-    /// <summary>
-    /// Gets a downloaded trip by local ID.
-    /// </summary>
-    public async Task<DownloadedTripEntity?> GetDownloadedTripAsync(int id)
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<DownloadedTripEntity>()
-            .FirstOrDefaultAsync(t => t.Id == id);
-    }
-
-    /// <summary>
-    /// Saves a downloaded trip (insert or update).
-    /// </summary>
-    public async Task<int> SaveDownloadedTripAsync(DownloadedTripEntity trip)
-    {
-        await EnsureInitializedAsync();
-        trip.UpdatedAt = DateTime.UtcNow;
-
-        if (trip.Id == 0)
-        {
-            await _database!.InsertAsync(trip);
-        }
-        else
-        {
-            await _database!.UpdateAsync(trip);
-        }
-        return trip.Id;
-    }
-
-    /// <summary>
-    /// Deletes a downloaded trip and all associated data.
-    /// </summary>
-    public async Task DeleteDownloadedTripAsync(int tripId)
-    {
-        await EnsureInitializedAsync();
-
-        // Delete associated tiles
-        await _database!.ExecuteAsync(
-            "DELETE FROM TripTiles WHERE TripId = ?", tripId);
-
-        // Delete associated places
-        await _database!.ExecuteAsync(
-            "DELETE FROM OfflinePlaces WHERE TripId = ?", tripId);
-
-        // Delete associated segments
-        await _database!.ExecuteAsync(
-            "DELETE FROM OfflineSegments WHERE TripId = ?", tripId);
-
-        // Delete associated areas
-        await _database!.ExecuteAsync(
-            "DELETE FROM OfflineAreas WHERE TripId = ?", tripId);
-
-        // Delete the trip
-        await _database!.ExecuteAsync(
-            "DELETE FROM DownloadedTrips WHERE Id = ?", tripId);
-    }
-
-    /// <summary>
-    /// Deletes only the cached map tiles for a trip, keeping trip data intact.
-    /// </summary>
-    /// <param name="tripId">The local trip ID.</param>
-    /// <returns>List of file paths that were deleted from database.</returns>
-    public async Task<List<string>> DeleteTripTilesAsync(int tripId)
-    {
-        await EnsureInitializedAsync();
-
-        // Get tile file paths before deleting
-        var tiles = await _database!.Table<TripTileEntity>()
-            .Where(t => t.TripId == tripId)
-            .ToListAsync();
-
-        var filePaths = tiles.Select(t => t.FilePath).ToList();
-
-        // Delete tiles from database
-        await _database!.ExecuteAsync(
-            "DELETE FROM TripTiles WHERE TripId = ?", tripId);
-
-        return filePaths;
-    }
-
-    /// <summary>
-    /// Gets the total size of all downloaded trips.
-    /// </summary>
-    public async Task<long> GetTotalTripCacheSizeAsync()
-    {
-        await EnsureInitializedAsync();
-        var result = await _database!.ExecuteScalarAsync<long>(
-            "SELECT COALESCE(SUM(TotalSizeBytes), 0) FROM DownloadedTrips WHERE Status = ?",
-            TripDownloadStatus.Complete);
-        return result;
-    }
-
-    #endregion
-
-    #region Offline Places
-
-    /// <summary>
-    /// Gets all places for a downloaded trip.
-    /// </summary>
-    public async Task<List<OfflinePlaceEntity>> GetOfflinePlacesAsync(int tripId)
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<OfflinePlaceEntity>()
-            .Where(p => p.TripId == tripId)
-            .OrderBy(p => p.SortOrder)
-            .ToListAsync();
-    }
-
-    /// <summary>
-    /// Saves offline places for a trip.
-    /// Uses bulk insert for efficiency.
-    /// </summary>
-    public async Task SaveOfflinePlacesAsync(int tripId, IEnumerable<OfflinePlaceEntity> places)
-    {
-        await EnsureInitializedAsync();
-
-        // Clear existing places for this trip
-        await _database!.ExecuteAsync(
-            "DELETE FROM OfflinePlaces WHERE TripId = ?", tripId);
-
-        // Set TripId and bulk insert
-        var placeList = places.ToList();
-        foreach (var place in placeList)
-        {
-            place.TripId = tripId;
-        }
-
-        if (placeList.Count > 0)
-        {
-            await _database.InsertAllAsync(placeList);
-        }
-    }
-
-    #endregion
-
-    #region Offline Segments
-
-    /// <summary>
-    /// Gets all segments for a downloaded trip.
-    /// </summary>
-    public async Task<List<OfflineSegmentEntity>> GetOfflineSegmentsAsync(int tripId)
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<OfflineSegmentEntity>()
-            .Where(s => s.TripId == tripId)
-            .OrderBy(s => s.SortOrder)
-            .ToListAsync();
-    }
-
-    /// <summary>
-    /// Saves offline segments for a trip.
-    /// Uses bulk insert for efficiency.
-    /// </summary>
-    public async Task SaveOfflineSegmentsAsync(int tripId, IEnumerable<OfflineSegmentEntity> segments)
-    {
-        await EnsureInitializedAsync();
-
-        // Clear existing segments for this trip
-        await _database!.ExecuteAsync(
-            "DELETE FROM OfflineSegments WHERE TripId = ?", tripId);
-
-        // Set TripId and bulk insert
-        var segmentList = segments.ToList();
-        foreach (var segment in segmentList)
-        {
-            segment.TripId = tripId;
-        }
-
-        if (segmentList.Count > 0)
-        {
-            await _database.InsertAllAsync(segmentList);
-        }
-    }
-
-    /// <summary>
-    /// Gets a segment by origin and destination.
-    /// </summary>
-    public async Task<OfflineSegmentEntity?> GetOfflineSegmentAsync(int tripId, Guid originId, Guid destinationId)
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<OfflineSegmentEntity>()
-            .Where(s => s.TripId == tripId && s.OriginId == originId && s.DestinationId == destinationId)
-            .FirstOrDefaultAsync();
-    }
-
-    #endregion
-
-    #region Offline Areas
-
-    /// <summary>
-    /// Gets all areas/regions for a downloaded trip.
-    /// </summary>
-    public async Task<List<OfflineAreaEntity>> GetOfflineAreasAsync(int tripId)
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<OfflineAreaEntity>()
-            .Where(a => a.TripId == tripId)
-            .OrderBy(a => a.SortOrder)
-            .ToListAsync();
-    }
-
-    /// <summary>
-    /// Saves offline areas for a trip.
-    /// </summary>
-    public async Task SaveOfflineAreasAsync(int tripId, IEnumerable<OfflineAreaEntity> areas)
-    {
-        await EnsureInitializedAsync();
-
-        // Clear existing areas for this trip
-        await _database!.ExecuteAsync(
-            "DELETE FROM OfflineAreas WHERE TripId = ?", tripId);
-
-        // Insert new areas
-        foreach (var area in areas)
-        {
-            area.TripId = tripId;
-            await _database.InsertAsync(area);
-        }
-    }
-
-    /// <summary>
-    /// Gets offline polygons (TripArea zones) for a trip.
-    /// </summary>
-    public async Task<List<OfflinePolygonEntity>> GetOfflinePolygonsAsync(int tripId)
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<OfflinePolygonEntity>()
-            .Where(p => p.TripId == tripId)
-            .OrderBy(p => p.SortOrder)
-            .ToListAsync();
-    }
-
-    /// <summary>
-    /// Saves offline polygons (TripArea zones) for a trip.
-    /// </summary>
-    public async Task SaveOfflinePolygonsAsync(int tripId, IEnumerable<OfflinePolygonEntity> polygons)
-    {
-        await EnsureInitializedAsync();
-
-        // Clear existing polygons for this trip
-        await _database!.ExecuteAsync(
-            "DELETE FROM OfflinePolygons WHERE TripId = ?", tripId);
-
-        // Insert new polygons
-        foreach (var polygon in polygons)
-        {
-            polygon.TripId = tripId;
-            await _database.InsertAsync(polygon);
-        }
-    }
-
-    #endregion
-
-    #region Individual Offline Entity Operations
-
-    /// <summary>
-    /// Gets an offline place by server ID.
-    /// </summary>
-    public async Task<OfflinePlaceEntity?> GetOfflinePlaceByServerIdAsync(Guid serverId)
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<OfflinePlaceEntity>()
-            .Where(p => p.ServerId == serverId)
-            .FirstOrDefaultAsync();
-    }
-
-    /// <summary>
-    /// Updates an offline place.
-    /// </summary>
-    public async Task UpdateOfflinePlaceAsync(OfflinePlaceEntity place)
-    {
-        await EnsureInitializedAsync();
-        await _database!.UpdateAsync(place);
-    }
-
-    /// <summary>
-    /// Deletes an offline place by server ID.
-    /// </summary>
-    public async Task DeleteOfflinePlaceByServerIdAsync(Guid serverId)
-    {
-        await EnsureInitializedAsync();
-        await _database!.ExecuteAsync(
-            "DELETE FROM OfflinePlaces WHERE ServerId = ?", serverId.ToString());
-    }
-
-    /// <summary>
-    /// Gets an offline area/region by server ID.
-    /// </summary>
-    public async Task<OfflineAreaEntity?> GetOfflineAreaByServerIdAsync(Guid serverId)
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<OfflineAreaEntity>()
-            .Where(a => a.ServerId == serverId)
-            .FirstOrDefaultAsync();
-    }
-
-    /// <summary>
-    /// Updates an offline area/region.
-    /// </summary>
-    public async Task UpdateOfflineAreaAsync(OfflineAreaEntity area)
-    {
-        await EnsureInitializedAsync();
-        await _database!.UpdateAsync(area);
-    }
-
-    /// <summary>
-    /// Deletes an offline area/region by server ID.
-    /// </summary>
-    public async Task DeleteOfflineAreaByServerIdAsync(Guid serverId)
-    {
-        await EnsureInitializedAsync();
-        await _database!.ExecuteAsync(
-            "DELETE FROM OfflineAreas WHERE ServerId = ?", serverId.ToString());
-    }
-
-    /// <summary>
-    /// Inserts a new offline place.
-    /// </summary>
-    public async Task InsertOfflinePlaceAsync(OfflinePlaceEntity place)
-    {
-        await EnsureInitializedAsync();
-        await _database!.InsertAsync(place);
-    }
-
-    /// <summary>
-    /// Inserts a new offline area/region.
-    /// </summary>
-    public async Task InsertOfflineAreaAsync(OfflineAreaEntity area)
-    {
-        await EnsureInitializedAsync();
-        await _database!.InsertAsync(area);
-    }
-
-    /// <summary>
-    /// Gets an offline segment by server ID.
-    /// </summary>
-    public async Task<OfflineSegmentEntity?> GetOfflineSegmentByServerIdAsync(Guid serverId)
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<OfflineSegmentEntity>()
-            .Where(s => s.ServerId == serverId)
-            .FirstOrDefaultAsync();
-    }
-
-    /// <summary>
-    /// Updates an offline segment.
-    /// </summary>
-    public async Task UpdateOfflineSegmentAsync(OfflineSegmentEntity segment)
-    {
-        await EnsureInitializedAsync();
-        await _database!.UpdateAsync(segment);
-    }
-
-    /// <summary>
-    /// Gets an offline polygon by server ID.
-    /// </summary>
-    public async Task<OfflinePolygonEntity?> GetOfflinePolygonByServerIdAsync(Guid serverId)
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<OfflinePolygonEntity>()
-            .Where(p => p.ServerId == serverId)
-            .FirstOrDefaultAsync();
-    }
-
-    /// <summary>
-    /// Updates an offline polygon.
-    /// </summary>
-    public async Task UpdateOfflinePolygonAsync(OfflinePolygonEntity polygon)
-    {
-        await EnsureInitializedAsync();
-        await _database!.UpdateAsync(polygon);
-    }
-
-    #endregion
-
-    #region Trip Tiles
-
-    /// <summary>
-    /// Gets a tile for a specific trip.
-    /// </summary>
-    public async Task<TripTileEntity?> GetTripTileAsync(int tripId, int zoom, int x, int y)
-    {
-        await EnsureInitializedAsync();
-        var id = $"{tripId}/{zoom}/{x}/{y}";
-        return await _database!.Table<TripTileEntity>()
-            .FirstOrDefaultAsync(t => t.Id == id);
-    }
-
-    /// <summary>
-    /// Saves a trip tile.
-    /// </summary>
-    public async Task SaveTripTileAsync(TripTileEntity tile)
-    {
-        await EnsureInitializedAsync();
-        await _database!.InsertOrReplaceAsync(tile);
-    }
-
-    /// <summary>
-    /// Gets the count of tiles for a trip.
-    /// </summary>
-    public async Task<int> GetTripTileCountAsync(int tripId)
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<TripTileEntity>()
-            .Where(t => t.TripId == tripId)
-            .CountAsync();
-    }
-
-    #endregion
-
-    #region Trip Download State (Pause/Resume)
-
-    /// <summary>
-    /// Gets a download state for a trip.
-    /// </summary>
-    /// <param name="tripId">The local trip ID.</param>
-    /// <returns>The download state or null if not found.</returns>
-    public async Task<TripDownloadStateEntity?> GetDownloadStateAsync(int tripId)
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<TripDownloadStateEntity>()
-            .FirstOrDefaultAsync(s => s.TripId == tripId);
-    }
-
-    /// <summary>
-    /// Gets a download state by server trip ID.
-    /// </summary>
-    /// <param name="tripServerId">The server-side trip ID.</param>
-    /// <returns>The download state or null if not found.</returns>
-    public async Task<TripDownloadStateEntity?> GetDownloadStateByServerIdAsync(Guid tripServerId)
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<TripDownloadStateEntity>()
-            .FirstOrDefaultAsync(s => s.TripServerId == tripServerId);
-    }
-
-    /// <summary>
-    /// Saves a download state (insert or replace).
-    /// </summary>
-    /// <param name="state">The download state to save.</param>
-    public async Task SaveDownloadStateAsync(TripDownloadStateEntity state)
-    {
-        await EnsureInitializedAsync();
-        state.LastSaveTime = DateTime.UtcNow;
-        await _database!.InsertOrReplaceAsync(state);
-    }
-
-    /// <summary>
-    /// Deletes a download state for a trip.
-    /// Called when download completes or is cancelled with cleanup.
-    /// </summary>
-    /// <param name="tripId">The local trip ID.</param>
-    public async Task DeleteDownloadStateAsync(int tripId)
-    {
-        await EnsureInitializedAsync();
-        await _database!.ExecuteAsync(
-            "DELETE FROM TripDownloadStates WHERE TripId = ?", tripId);
-    }
-
-    /// <summary>
-    /// Gets all paused download states.
-    /// Used to show resumable downloads in UI.
-    /// </summary>
-    /// <returns>List of paused download states.</returns>
-    public async Task<List<TripDownloadStateEntity>> GetPausedDownloadsAsync()
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<TripDownloadStateEntity>()
-            .Where(s => s.Status == DownloadStateStatus.Paused ||
-                       s.Status == DownloadStateStatus.LimitReached)
-            .OrderByDescending(s => s.PausedAt)
-            .ToListAsync();
-    }
-
-    /// <summary>
-    /// Gets all active download states (in progress or paused).
-    /// </summary>
-    /// <returns>List of active download states.</returns>
-    public async Task<List<TripDownloadStateEntity>> GetActiveDownloadStatesAsync()
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<TripDownloadStateEntity>()
-            .Where(s => s.Status != DownloadStateStatus.Cancelled)
-            .ToListAsync();
-    }
-
-    #endregion
-
-    #region Live Tiles
-
-    /// <summary>
-    /// Gets a live cached tile by ID.
-    /// </summary>
-    public async Task<LiveTileEntity?> GetLiveTileAsync(string id)
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<LiveTileEntity>()
-            .FirstOrDefaultAsync(t => t.Id == id);
-    }
-
-    /// <summary>
-    /// Saves a live tile (insert or replace).
-    /// </summary>
-    public async Task SaveLiveTileAsync(LiveTileEntity tile)
-    {
-        await EnsureInitializedAsync();
-        await _database!.InsertOrReplaceAsync(tile);
-    }
-
-    /// <summary>
-    /// Updates the last access time for a live tile.
-    /// </summary>
-    public async Task UpdateLiveTileAccessAsync(string id)
-    {
-        await EnsureInitializedAsync();
-        var tile = await _database!.Table<LiveTileEntity>()
-            .FirstOrDefaultAsync(t => t.Id == id);
-
-        if (tile != null)
-        {
-            tile.LastAccessedAt = DateTime.UtcNow;
-            tile.AccessCount++;
-            await _database.UpdateAsync(tile);
-        }
-    }
-
-    /// <summary>
-    /// Gets the count of live cached tiles.
-    /// </summary>
-    public async Task<int> GetLiveTileCountAsync()
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<LiveTileEntity>().CountAsync();
-    }
-
-    /// <summary>
-    /// Gets the total size of live cached tiles.
-    /// </summary>
-    public async Task<long> GetLiveCacheSizeAsync()
-    {
-        await EnsureInitializedAsync();
-        var result = await _database!.ExecuteScalarAsync<long>(
-            "SELECT COALESCE(SUM(FileSizeBytes), 0) FROM LiveTiles");
-        return result;
-    }
-
-    /// <summary>
-    /// Gets the oldest live tiles for LRU eviction.
-    /// </summary>
-    public async Task<List<LiveTileEntity>> GetOldestLiveTilesAsync(int count)
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<LiveTileEntity>()
-            .OrderBy(t => t.LastAccessedAt)
-            .Take(count)
-            .ToListAsync();
-    }
-
-    /// <summary>
-    /// Deletes a live tile by ID.
-    /// </summary>
-    public async Task DeleteLiveTileAsync(string id)
-    {
-        await EnsureInitializedAsync();
-        await _database!.ExecuteAsync(
-            "DELETE FROM LiveTiles WHERE Id = ?", id);
-    }
-
-    /// <summary>
-    /// Clears all live tiles.
-    /// </summary>
-    public async Task ClearLiveTilesAsync()
-    {
-        await EnsureInitializedAsync();
-        await _database!.ExecuteAsync("DELETE FROM LiveTiles");
-    }
-
-    #endregion
-
-    #region Diagnostic Queries
-
-    /// <summary>
-    /// Gets the count of pending locations that can be synced (for diagnostics).
-    /// Excludes rejected locations to match drain logic.
-    /// </summary>
-    public async Task<int> GetPendingLocationCountAsync()
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<QueuedLocation>()
-            .Where(l => l.SyncStatus == SyncStatus.Pending && !l.IsRejected)
-            .CountAsync();
-    }
-
-    /// <summary>
-    /// Gets the count of rejected locations (for diagnostics).
-    /// These are locations rejected by client threshold filters or server.
-    /// </summary>
-    public async Task<int> GetRejectedLocationCountAsync()
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<QueuedLocation>()
-            .Where(l => l.IsRejected)
-            .CountAsync();
-    }
-
-    /// <summary>
-    /// Gets the count of synced locations for diagnostics.
-    /// </summary>
-    public async Task<int> GetSyncedLocationCountAsync()
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<QueuedLocation>()
-            .Where(l => l.SyncStatus == SyncStatus.Synced)
-            .CountAsync();
-    }
-
-    /// <summary>
-    /// Gets the count of failed locations for diagnostics.
-    /// </summary>
-    public async Task<int> GetFailedLocationCountAsync()
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<QueuedLocation>()
-            .Where(l => l.SyncStatus == SyncStatus.Failed)
-            .CountAsync();
-    }
-
-    /// <summary>
-    /// Gets the oldest pending location for diagnostics.
-    /// </summary>
-    public async Task<QueuedLocation?> GetOldestPendingLocationAsync()
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<QueuedLocation>()
-            .Where(l => l.SyncStatus == SyncStatus.Pending)
-            .OrderBy(l => l.Timestamp)
-            .FirstOrDefaultAsync();
-    }
-
-    /// <summary>
-    /// Gets the last synced location for diagnostics.
-    /// </summary>
-    public async Task<QueuedLocation?> GetLastSyncedLocationAsync()
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<QueuedLocation>()
-            .Where(l => l.SyncStatus == SyncStatus.Synced)
-            .OrderByDescending(l => l.LastSyncAttempt)
-            .FirstOrDefaultAsync();
-    }
-
-    /// <summary>
-    /// Gets all queued locations for export, ordered by timestamp descending.
-    /// </summary>
-    /// <returns>All queued locations regardless of sync status.</returns>
-    public async Task<List<QueuedLocation>> GetAllQueuedLocationsAsync()
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<QueuedLocation>()
-            .OrderByDescending(l => l.Timestamp)
-            .ToListAsync();
-    }
-
-    /// <summary>
-    /// Gets the total count of trip tiles across all trips.
-    /// </summary>
-    public async Task<int> GetTripTileCountAsync()
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<TripTileEntity>().CountAsync();
-    }
-
-    /// <summary>
-    /// Gets the total size of trip tile cache in bytes.
-    /// Uses SQL aggregation to avoid loading all entities into memory.
-    /// </summary>
-    public async Task<long> GetTripCacheSizeAsync()
-    {
-        await EnsureInitializedAsync();
-        return await _database!.ExecuteScalarAsync<long>(
-            "SELECT COALESCE(SUM(FileSizeBytes), 0) FROM TripTiles");
-    }
-
-    #endregion
-
-    #region Local Timeline
-
-    /// <summary>
-    /// Inserts a new local timeline entry.
-    /// </summary>
-    /// <param name="entry">The entry to insert.</param>
-    /// <returns>The inserted entry's ID.</returns>
-    public async Task<int> InsertLocalTimelineEntryAsync(LocalTimelineEntry entry)
-    {
-        await EnsureInitializedAsync();
-        await _database!.InsertAsync(entry);
-        return entry.Id;
-    }
-
-    /// <summary>
-    /// Updates an existing local timeline entry.
-    /// </summary>
-    /// <param name="entry">The entry to update.</param>
-    public async Task UpdateLocalTimelineEntryAsync(LocalTimelineEntry entry)
-    {
-        await EnsureInitializedAsync();
-        await _database!.UpdateAsync(entry);
-    }
-
-    /// <summary>
-    /// Gets a local timeline entry by ID.
-    /// </summary>
-    /// <param name="id">The local ID.</param>
-    /// <returns>The entry or null if not found.</returns>
-    public async Task<LocalTimelineEntry?> GetLocalTimelineEntryAsync(int id)
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<LocalTimelineEntry>()
-            .FirstOrDefaultAsync(e => e.Id == id);
-    }
-
-    /// <summary>
-    /// Gets a local timeline entry by server ID.
-    /// </summary>
-    /// <param name="serverId">The server ID.</param>
-    /// <returns>The entry or null if not found.</returns>
-    public async Task<LocalTimelineEntry?> GetLocalTimelineEntryByServerIdAsync(int serverId)
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<LocalTimelineEntry>()
-            .FirstOrDefaultAsync(e => e.ServerId == serverId);
-    }
-
-    /// <summary>
-    /// Gets a local timeline entry by timestamp (for matching during sync).
-    /// Uses a tolerance window to handle minor timestamp differences.
-    /// </summary>
-    /// <param name="timestamp">The timestamp to match (UTC).</param>
-    /// <param name="toleranceSeconds">Tolerance window in seconds (default 2).</param>
-    /// <returns>The entry or null if not found.</returns>
-    public async Task<LocalTimelineEntry?> GetLocalTimelineEntryByTimestampAsync(
-        DateTime timestamp,
-        int toleranceSeconds = 2)
-    {
-        await EnsureInitializedAsync();
-
-        var minTime = timestamp.AddSeconds(-toleranceSeconds);
-        var maxTime = timestamp.AddSeconds(toleranceSeconds);
-
-        return await _database!.Table<LocalTimelineEntry>()
-            .Where(e => e.Timestamp >= minTime && e.Timestamp <= maxTime)
-            .FirstOrDefaultAsync();
-    }
-
-    /// <summary>
-    /// Gets all local timeline entries for a specific date.
-    /// </summary>
-    /// <param name="date">The date to retrieve entries for.</param>
-    /// <returns>List of entries for that date, ordered by timestamp descending.</returns>
-    public async Task<List<LocalTimelineEntry>> GetLocalTimelineEntriesForDateAsync(DateTime date)
-    {
-        await EnsureInitializedAsync();
-
-        var startOfDay = date.Date.ToUniversalTime();
-        var endOfDay = date.Date.AddDays(1).ToUniversalTime();
-
-        return await _database!.Table<LocalTimelineEntry>()
-            .Where(e => e.Timestamp >= startOfDay && e.Timestamp < endOfDay)
-            .OrderByDescending(e => e.Timestamp)
-            .ToListAsync();
-    }
-
-    /// <summary>
-    /// Gets all local timeline entries within a date range.
-    /// </summary>
-    /// <param name="fromDate">Start date (inclusive).</param>
-    /// <param name="toDate">End date (inclusive).</param>
-    /// <returns>List of entries in the range, ordered by timestamp descending.</returns>
-    public async Task<List<LocalTimelineEntry>> GetLocalTimelineEntriesInRangeAsync(
-        DateTime fromDate,
-        DateTime toDate)
-    {
-        await EnsureInitializedAsync();
-
-        var startTime = fromDate.Date.ToUniversalTime();
-        var endTime = toDate.Date.AddDays(1).ToUniversalTime();
-
-        return await _database!.Table<LocalTimelineEntry>()
-            .Where(e => e.Timestamp >= startTime && e.Timestamp < endTime)
-            .OrderByDescending(e => e.Timestamp)
-            .ToListAsync();
-    }
-
-    /// <summary>
-    /// Gets all local timeline entries for export.
-    /// </summary>
-    /// <returns>All entries ordered by timestamp descending.</returns>
-    public async Task<List<LocalTimelineEntry>> GetAllLocalTimelineEntriesAsync()
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<LocalTimelineEntry>()
-            .OrderByDescending(e => e.Timestamp)
-            .ToListAsync();
-    }
-
-    /// <summary>
-    /// Deletes a local timeline entry by ID.
-    /// </summary>
-    /// <param name="id">The local ID.</param>
-    public async Task DeleteLocalTimelineEntryAsync(int id)
-    {
-        await EnsureInitializedAsync();
-        await _database!.ExecuteAsync(
-            "DELETE FROM LocalTimelineEntries WHERE Id = ?", id);
-    }
-
-    /// <summary>
-    /// Deletes a local timeline entry by timestamp (for removing skipped entries).
-    /// Uses a tolerance window to handle minor timestamp differences.
-    /// </summary>
-    /// <param name="timestamp">The timestamp to match (UTC).</param>
-    /// <param name="toleranceSeconds">Tolerance window in seconds (default 2).</param>
-    /// <returns>Number of entries deleted.</returns>
-    public async Task<int> DeleteLocalTimelineEntryByTimestampAsync(
-        DateTime timestamp,
-        int toleranceSeconds = 2)
-    {
-        await EnsureInitializedAsync();
-
-        var minTime = timestamp.AddSeconds(-toleranceSeconds);
-        var maxTime = timestamp.AddSeconds(toleranceSeconds);
-
-        return await _database!.ExecuteAsync(
-            "DELETE FROM LocalTimelineEntries WHERE Timestamp >= ? AND Timestamp <= ?",
-            minTime, maxTime);
-    }
-
-    /// <summary>
-    /// Gets the total count of local timeline entries.
-    /// </summary>
-    /// <returns>The count of entries.</returns>
-    public async Task<int> GetLocalTimelineEntryCountAsync()
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<LocalTimelineEntry>().CountAsync();
-    }
-
-    /// <summary>
-    /// Gets the most recent local timeline entry.
-    /// Used by LocalTimelineFilter to initialize last stored location.
-    /// </summary>
-    /// <returns>The most recent entry or null if none exist.</returns>
-    public async Task<LocalTimelineEntry?> GetMostRecentLocalTimelineEntryAsync()
-    {
-        await EnsureInitializedAsync();
-        return await _database!.Table<LocalTimelineEntry>()
-            .OrderByDescending(e => e.Timestamp)
-            .FirstOrDefaultAsync();
-    }
-
-    /// <summary>
-    /// Updates the ServerId for a local timeline entry matched by timestamp.
-    /// Used when sync confirms a location was stored on server.
-    /// </summary>
-    /// <param name="timestamp">The timestamp to match (UTC).</param>
-    /// <param name="serverId">The server-assigned ID.</param>
-    /// <param name="toleranceSeconds">Tolerance window in seconds (default 2).</param>
-    /// <returns>True if an entry was updated.</returns>
-    public async Task<bool> UpdateLocalTimelineServerIdAsync(
-        DateTime timestamp,
-        int serverId,
-        int toleranceSeconds = 2)
-    {
-        await EnsureInitializedAsync();
-
-        var minTime = timestamp.AddSeconds(-toleranceSeconds);
-        var maxTime = timestamp.AddSeconds(toleranceSeconds);
-
-        var affected = await _database!.ExecuteAsync(
-            "UPDATE LocalTimelineEntries SET ServerId = ? WHERE Timestamp >= ? AND Timestamp <= ? AND ServerId IS NULL",
-            serverId, minTime, maxTime);
-
-        return affected > 0;
-    }
-
-    /// <summary>
-    /// Clears all local timeline entries.
-    /// Use with caution - this deletes all local timeline history.
-    /// </summary>
-    /// <returns>Number of entries deleted.</returns>
-    public async Task<int> ClearAllLocalTimelineEntriesAsync()
-    {
-        await EnsureInitializedAsync();
-        return await _database!.ExecuteAsync("DELETE FROM LocalTimelineEntries");
-    }
-
-    /// <summary>
-    /// Bulk inserts local timeline entries.
-    /// Used for import operations.
-    /// </summary>
-    /// <param name="entries">The entries to insert.</param>
-    /// <returns>Number of entries inserted.</returns>
-    public async Task<int> BulkInsertLocalTimelineEntriesAsync(IEnumerable<LocalTimelineEntry> entries)
-    {
-        await EnsureInitializedAsync();
-        var entryList = entries.ToList();
-        if (entryList.Count == 0)
-            return 0;
-
-        await _database!.InsertAllAsync(entryList);
-        return entryList.Count;
     }
 
     #endregion

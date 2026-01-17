@@ -16,17 +16,25 @@ public interface IApiClient
     /// Logs a location to the server.
     /// </summary>
     /// <param name="location">The location data to log.</param>
+    /// <param name="idempotencyKey">Optional idempotency key for duplicate protection.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Result indicating success or failure with optional message.</returns>
-    Task<ApiResult> LogLocationAsync(LocationLogRequest location, CancellationToken cancellationToken = default);
+    Task<ApiResult> LogLocationAsync(
+        LocationLogRequest location,
+        string? idempotencyKey,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Performs a manual check-in (bypasses time/distance thresholds).
     /// </summary>
     /// <param name="location">The location data to check in.</param>
+    /// <param name="idempotencyKey">Optional idempotency key for duplicate protection.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Result indicating success or failure with optional message.</returns>
-    Task<ApiResult> CheckInAsync(LocationLogRequest location, CancellationToken cancellationToken = default);
+    Task<ApiResult> CheckInAsync(
+        LocationLogRequest location,
+        string? idempotencyKey,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Tests connectivity to the server.
@@ -187,6 +195,16 @@ public interface IApiClient
         TripUpdateRequest request,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Gets trip geographic boundary for tile download calculation.
+    /// </summary>
+    /// <param name="tripId">The trip ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Trip boundary response with bounding box, or null if not found.</returns>
+    Task<TripBoundaryResponse?> GetTripBoundaryAsync(
+        Guid tripId,
+        CancellationToken cancellationToken = default);
+
     #endregion
 
     #region Segment Operations
@@ -290,6 +308,12 @@ public class ApiResult
     public int? LocationId { get; set; }
 
     /// <summary>
+    /// Gets or sets whether this is a transient failure that should be retried.
+    /// Examples: timeouts, temporary network issues, request cancellation.
+    /// </summary>
+    public bool IsTransient { get; set; }
+
+    /// <summary>
     /// Creates a successful result.
     /// </summary>
     public static ApiResult Ok(string? message = null) =>
@@ -304,8 +328,8 @@ public class ApiResult
     /// <summary>
     /// Creates a failure result.
     /// </summary>
-    public static ApiResult Fail(string? message, int? statusCode = null) =>
-        new() { Success = false, Message = message, StatusCode = statusCode };
+    public static ApiResult Fail(string? message, int? statusCode = null, bool isTransient = false) =>
+        new() { Success = false, Message = message, StatusCode = statusCode, IsTransient = isTransient };
 }
 
 /// <summary>
@@ -322,6 +346,12 @@ public class ServerSettings
     /// Gets or sets the minimum distance threshold between logged locations (meters).
     /// </summary>
     public int LocationDistanceThresholdMeters { get; set; }
+
+    /// <summary>
+    /// Gets or sets the maximum acceptable GPS accuracy for location logging (meters).
+    /// Locations with accuracy worse (higher) than this value are rejected.
+    /// </summary>
+    public int LocationAccuracyThresholdMeters { get; set; }
 
     /// <summary>
     /// Gets or sets the user's display name.

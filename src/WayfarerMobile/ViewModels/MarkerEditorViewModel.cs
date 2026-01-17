@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using WayfarerMobile.Core.Helpers;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Messages;
 using WayfarerMobile.Services;
 
 namespace WayfarerMobile.ViewModels;
@@ -63,6 +65,7 @@ public partial class MarkerIconOption : ObservableObject
 public partial class MarkerEditorViewModel : BaseViewModel, IQueryAttributable
 {
     private readonly ITripSyncService _tripSyncService;
+    private readonly ITripStateManager _tripStateManager;
     private readonly TripDownloadService _downloadService;
     private readonly IToastService _toastService;
 
@@ -128,10 +131,12 @@ public partial class MarkerEditorViewModel : BaseViewModel, IQueryAttributable
     /// </summary>
     public MarkerEditorViewModel(
         ITripSyncService tripSyncService,
+        ITripStateManager tripStateManager,
         TripDownloadService downloadService,
         IToastService toastService)
     {
         _tripSyncService = tripSyncService;
+        _tripStateManager = tripStateManager;
         _downloadService = downloadService;
         _toastService = toastService;
         Title = "Edit Marker";
@@ -342,12 +347,33 @@ public partial class MarkerEditorViewModel : BaseViewModel, IQueryAttributable
         {
             IsSaving = true;
 
+            // Update in-memory model first for deterministic UI state
+            var loadedTrip = _tripStateManager.LoadedTrip;
+            if (loadedTrip != null)
+            {
+                var place = loadedTrip.Regions
+                    .SelectMany(r => r.Places)
+                    .FirstOrDefault(p => p.Id == _placeId);
+                if (place != null)
+                {
+                    place.Icon = SelectedIcon;
+                    place.MarkerColor = SelectedColor;
+                }
+
+                // Refresh SortedRegions so UI-bound Place copies have the updated marker
+                // (SortedRegions creates new TripRegion objects that include place copies)
+                loadedTrip.NotifySortedRegionsChanged();
+            }
+
             // Queue server sync
             await _tripSyncService.UpdatePlaceAsync(
                 _placeId,
                 _tripId,
                 iconName: SelectedIcon,
                 markerColor: SelectedColor);
+
+            // Send message to refresh map layers (subscribers handle the actual refresh)
+            WeakReferenceMessenger.Default.Send(new PlaceMarkerChangedMessage(_placeId, _tripId));
 
             await _toastService.ShowSuccessAsync("Marker updated");
             await NavigateBackWithRestoreAsync();
@@ -397,7 +423,8 @@ public partial class MarkerEditorViewModel : BaseViewModel, IQueryAttributable
     {
         if (_placeId != Guid.Empty)
         {
-            await Shell.Current.GoToAsync($"..?restoreEntityType=Place&restoreEntityId={_placeId}");
+            // Use lowercase to match ProcessPendingSelectionRestoreAsync switch cases
+            await Shell.Current.GoToAsync($"..?restoreEntityType=place&restoreEntityId={_placeId}");
         }
         else
         {

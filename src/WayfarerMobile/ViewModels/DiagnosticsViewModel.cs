@@ -7,7 +7,7 @@ using SQLite;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
-using WayfarerMobile.Data.Services;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Services;
 
 namespace WayfarerMobile.ViewModels;
@@ -24,7 +24,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
     private readonly AppDiagnosticService _appDiagnosticService;
     private readonly PerformanceMonitorService _performanceService;
     private readonly IToastService _toastService;
-    private readonly DatabaseService _databaseService;
+    private readonly ILocationQueueRepository _locationQueueRepository;
     private readonly ISettingsService _settingsService;
     private bool _isSubscribed;
 
@@ -38,7 +38,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
         AppDiagnosticService appDiagnosticService,
         PerformanceMonitorService performanceService,
         IToastService toastService,
-        DatabaseService databaseService,
+        ILocationQueueRepository locationQueueRepository,
         ISettingsService settingsService)
     {
         _logger = logger;
@@ -47,7 +47,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
         _appDiagnosticService = appDiagnosticService;
         _performanceService = performanceService;
         _toastService = toastService;
-        _databaseService = databaseService;
+        _locationQueueRepository = locationQueueRepository;
         _settingsService = settingsService;
         Title = "Diagnostics";
 
@@ -65,13 +65,19 @@ public partial class DiagnosticsViewModel : BaseViewModel
         {
             _locationBridge.StateChanged += OnLocationStateChanged;
             _locationBridge.LocationReceived += OnLocationReceived;
+            LocationSyncCallbacks.LocationSynced += OnLocationSynced;
+            LocationSyncCallbacks.LocationSkipped += OnLocationSkipped;
+            Connectivity.ConnectivityChanged += OnConnectivityChanged;
             _isSubscribed = true;
-            _logger.LogDebug("Subscribed to location bridge events");
+            _logger.LogDebug("Subscribed to location, sync, and connectivity events");
 
             // Initialize from current state immediately
             var currentState = _locationBridge.CurrentState;
             IsGpsRunning = currentState == Core.Enums.TrackingState.Active;
             TrackingState = currentState.ToString();
+
+            // Initialize network state
+            HasNetwork = Connectivity.Current.NetworkAccess == NetworkAccess.Internet;
         }
     }
 
@@ -84,9 +90,30 @@ public partial class DiagnosticsViewModel : BaseViewModel
         {
             _locationBridge.StateChanged -= OnLocationStateChanged;
             _locationBridge.LocationReceived -= OnLocationReceived;
+            LocationSyncCallbacks.LocationSynced -= OnLocationSynced;
+            LocationSyncCallbacks.LocationSkipped -= OnLocationSkipped;
+            Connectivity.ConnectivityChanged -= OnConnectivityChanged;
             _isSubscribed = false;
-            _logger.LogDebug("Unsubscribed from location bridge events");
+            _logger.LogDebug("Unsubscribed from location, sync, and connectivity events");
         }
+    }
+
+    /// <summary>
+    /// Handles connectivity changes to update network status in real-time.
+    /// </summary>
+    private void OnConnectivityChanged(object? sender, ConnectivityChangedEventArgs e)
+    {
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            var wasOnline = HasNetwork;
+            HasNetwork = e.NetworkAccess == NetworkAccess.Internet;
+
+            if (wasOnline != HasNetwork)
+            {
+                _logger.LogDebug("Network status changed: {OldState} -> {NewState}", wasOnline, HasNetwork);
+                UpdateHealthStatusFromCurrentState();
+            }
+        });
     }
 
     /// <summary>
@@ -130,6 +157,39 @@ public partial class DiagnosticsViewModel : BaseViewModel
                 UpdateHealthStatusFromCurrentState();
             }
         });
+    }
+
+    /// <summary>
+    /// Handles location sync completion to refresh queue statistics in real-time.
+    /// </summary>
+    private async void OnLocationSynced(object? sender, LocationSyncedEventArgs e)
+    {
+        await RefreshQueueStatisticsAsync();
+    }
+
+    /// <summary>
+    /// Handles location skip events to refresh queue statistics in real-time.
+    /// </summary>
+    private async void OnLocationSkipped(object? sender, LocationSkippedEventArgs e)
+    {
+        await RefreshQueueStatisticsAsync();
+    }
+
+    /// <summary>
+    /// Refreshes queue statistics from the database.
+    /// Called by sync event handlers for real-time updates.
+    /// </summary>
+    private async Task RefreshQueueStatisticsAsync()
+    {
+        try
+        {
+            var queueDiag = await _appDiagnosticService.GetLocationQueueDiagnosticsAsync();
+            UpdateLocationQueue(queueDiag);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Error refreshing queue statistics after sync event");
+        }
     }
 
     /// <summary>
@@ -236,13 +296,13 @@ public partial class DiagnosticsViewModel : BaseViewModel
     private int _pendingLocations;
 
     [ObservableProperty]
+    private int _retryingLocations;
+
+    [ObservableProperty]
     private int _syncedLocations;
 
     [ObservableProperty]
     private int _rejectedLocations;
-
-    [ObservableProperty]
-    private int _failedLocations;
 
     [ObservableProperty]
     private string _oldestPendingAge = "N/A";
@@ -647,7 +707,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
         {
             try
             {
-                var deleted = await _databaseService.ClearSyncedQueueAsync();
+                var deleted = await _locationQueueRepository.ClearSyncedQueueAsync();
                 await _toastService.ShowSuccessAsync($"{deleted} synced locations cleared");
                 await LoadDataAsync();
             }
@@ -687,7 +747,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
         {
             try
             {
-                var deleted = await _databaseService.ClearAllQueueAsync();
+                var deleted = await _locationQueueRepository.ClearAllQueueAsync();
                 await _toastService.ShowSuccessAsync($"{deleted} locations cleared");
                 await LoadDataAsync();
             }
@@ -712,7 +772,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
     {
         try
         {
-            var locations = await _databaseService.GetAllQueuedLocationsAsync();
+            var locations = await _locationQueueRepository.GetAllQueuedLocationsAsync();
 
             if (locations.Count == 0)
             {
@@ -721,7 +781,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
             }
 
             var csv = new StringBuilder();
-            csv.AppendLine("Id,Timestamp,Latitude,Longitude,Altitude,Accuracy,Speed,Bearing,Provider,SyncStatus,SyncAttempts,LastSyncAttempt,IsRejected,RejectionReason,LastError,Notes");
+            csv.AppendLine("Id,Timestamp,Latitude,Longitude,Altitude,Accuracy,Speed,Bearing,Provider,SyncStatus,SyncAttempts,LastSyncAttempt,IsRejected,RejectionReason,LastError,IsUserInvoked,ActivityTypeId,CheckInNotes");
 
             foreach (var loc in locations)
             {
@@ -729,8 +789,8 @@ public partial class DiagnosticsViewModel : BaseViewModel
                 {
                     Core.Enums.SyncStatus.Pending => loc.IsRejected ? "Rejected" :
                                          loc.SyncAttempts > 0 ? $"Retrying({loc.SyncAttempts})" : "Pending",
+                    Core.Enums.SyncStatus.Syncing => "Syncing",
                     Core.Enums.SyncStatus.Synced => "Synced",
-                    Core.Enums.SyncStatus.Failed => "Failed", // Legacy status
                     _ => "Unknown"
                 };
 
@@ -751,7 +811,9 @@ public partial class DiagnosticsViewModel : BaseViewModel
                     $"{loc.IsRejected}," +
                     $"\"{loc.RejectionReason?.Replace("\"", "\"\"") ?? ""}\"," +
                     $"\"{loc.LastError?.Replace("\"", "\"\"") ?? ""}\"," +
-                    $"\"{loc.Notes?.Replace("\"", "\"\"") ?? ""}\"");
+                    $"{loc.IsUserInvoked}," +
+                    $"{loc.ActivityTypeId?.ToString(inv) ?? ""}," +
+                    $"\"{loc.CheckInNotes?.Replace("\"", "\"\"") ?? ""}\"");
             }
 
             var fileName = $"wayfarer_locations_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
@@ -818,7 +880,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
     {
         try
         {
-            var locations = await _databaseService.GetAllQueuedLocationsAsync();
+            var locations = await _locationQueueRepository.GetAllQueuedLocationsAsync();
 
             if (locations.Count == 0)
             {
@@ -842,13 +904,16 @@ public partial class DiagnosticsViewModel : BaseViewModel
                 {
                     Core.Enums.SyncStatus.Pending => loc.IsRejected ? "REJECTED" :
                                          loc.SyncAttempts > 0 ? $"RETRY({loc.SyncAttempts})" : "PENDING",
+                    Core.Enums.SyncStatus.Syncing => "SYNCING",
                     Core.Enums.SyncStatus.Synced => "SYNCED",
-                    Core.Enums.SyncStatus.Failed => "FAILED", // Legacy status
                     _ => "?"
                 };
 
+                // Add USER indicator for user-invoked locations (manual check-ins)
+                var userTag = loc.IsUserInvoked ? " [USER]" : "";
+
                 var inv = System.Globalization.CultureInfo.InvariantCulture;
-                sb.AppendLine($"[{loc.Timestamp:HH:mm:ss}] {status}");
+                sb.AppendLine($"[{loc.Timestamp:HH:mm:ss}] {status}{userTag}");
                 sb.AppendLine($"  Loc: {loc.Latitude.ToString("F5", inv)}, {loc.Longitude.ToString("F5", inv)}");
 
                 if (loc.Accuracy.HasValue)
@@ -857,6 +922,10 @@ public partial class DiagnosticsViewModel : BaseViewModel
                     sb.Append($"  Spd: {loc.Speed.Value.ToString("F1", inv)}m/s");
                 if (loc.Accuracy.HasValue || loc.Speed.HasValue)
                     sb.AppendLine();
+
+                // Show check-in notes for user-invoked locations
+                if (!string.IsNullOrEmpty(loc.CheckInNotes))
+                    sb.AppendLine($"  Notes: {loc.CheckInNotes}");
 
                 if (!string.IsNullOrEmpty(loc.LastError))
                     sb.AppendLine($"  Err: {loc.LastError}");
@@ -914,9 +983,9 @@ public partial class DiagnosticsViewModel : BaseViewModel
     {
         QueueHealthStatus = diag.QueueHealthStatus;
         PendingLocations = diag.PendingCount;
+        RetryingLocations = diag.RetryingCount;
         SyncedLocations = diag.SyncedCount;
         RejectedLocations = diag.RejectedCount;
-        FailedLocations = diag.FailedCount;
 
         if (diag.OldestPendingTimestamp.HasValue)
         {
@@ -953,7 +1022,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
     {
         TrackingState = diag.TrackingState;
         PerformanceMode = diag.PerformanceMode;
-        TrackingThresholds = $"{diag.TimeThresholdMinutes} min / {diag.DistanceThresholdMeters} m";
+        TrackingThresholds = $"{diag.TimeThresholdMinutes} min / {diag.DistanceThresholdMeters} m / {diag.AccuracyThresholdMeters} m accuracy";
 
         if (diag.LastLocationTimestamp.HasValue)
         {
@@ -1022,7 +1091,8 @@ public partial class DiagnosticsViewModel : BaseViewModel
         HasZoomCoverage = true;
         OverallCoverage = $"{info.OverallCoveragePercent:F0}%";
 
-        ZoomCoverageItems.Clear();
+        // Build items list first (can be done on any thread)
+        var items = new List<ZoomCoverageItem>();
         foreach (var (zoom, coverage) in info.CoverageByZoom.OrderBy(kv => kv.Key))
         {
             // Calculate coverage area in km using tile math
@@ -1030,13 +1100,38 @@ public partial class DiagnosticsViewModel : BaseViewModel
                 _settingsService.LiveCachePrefetchRadius, zoom, info.Latitude);
             var radiusKm = radiusMeters / 1000.0;
 
-            ZoomCoverageItems.Add(new ZoomCoverageItem
+            items.Add(new ZoomCoverageItem
             {
                 ZoomLevel = zoom,
                 Coverage = $"{coverage.CoveragePercent:F0}%",
                 AreaKm = radiusKm >= 10 ? $"{radiusKm:F0} km" : $"{radiusKm:F1} km"
             });
         }
+
+        // Update ObservableCollection on main thread (required for UI binding)
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            ZoomCoverageItems.Clear();
+            foreach (var item in items)
+            {
+                ZoomCoverageItems.Add(item);
+            }
+        });
+    }
+
+    #endregion
+
+    #region Cleanup
+
+    /// <summary>
+    /// Cleans up resources when the ViewModel is disposed.
+    /// Ensures event unsubscription even if OnDisappearing was not called.
+    /// </summary>
+    protected override void Cleanup()
+    {
+        // Ensure unsubscription even if page navigation didn't trigger OnDisappearing
+        OnDisappearing();
+        base.Cleanup();
     }
 
     #endregion

@@ -6,7 +6,7 @@
              xmlns:controls="clr-namespace:WayfarerMobile.Shared.Controls"
              x:Class="WayfarerMobile.Views.Controls.MyTripsView"
              x:Name="ThisView"
-             x:DataType="viewmodels:TripsViewModel">
+             x:DataType="viewmodels:MyTripsViewModel">
 
     <Grid RowDefinitions="Auto,*">
         <!-- Sync Status Banner (shown when there are pending/failed syncs) -->
@@ -64,7 +64,7 @@
         <RefreshView Grid.Row="1"
                      Command="{Binding LoadTripsCommand}"
                      IsRefreshing="{Binding IsLoadingTrips, Mode=TwoWay}">
-            <CollectionView ItemsSource="{Binding MyTrips}"
+            <CollectionView ItemsSource="{Binding Trips}"
                             SelectionMode="None"
                             IsGrouped="True">
 
@@ -134,13 +134,16 @@
                                            TextColor="White" />
                                 </Border>
 
-                                <!-- Stats (Regions / Places) -->
-                                <HorizontalStackLayout Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
-                                                       Spacing="12">
+                                <!-- Stats + Date -->
+                                <VerticalStackLayout Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                                     Spacing="2">
                                     <Label Text="{Binding StatsText}"
                                            FontSize="12"
                                            TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-                                </HorizontalStackLayout>
+                                    <Label Text="{Binding UpdatedAtText}"
+                                           FontSize="11"
+                                           TextColor="{AppThemeBinding Light={StaticResource Gray400}, Dark={StaticResource Gray500}}" />
+                                </VerticalStackLayout>
 
                                 <!-- Actions Row -->
                                 <VerticalStackLayout Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
@@ -149,7 +152,7 @@
                                     <HorizontalStackLayout Spacing="12">
                                         <!-- To Trip Button (when trip is currently loaded) -->
                                         <Button Text="To Trip"
-                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=BackToTripCommand}"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MyTripsViewModel}}, Path=BackToTripCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding IsCurrentlyLoaded}"
                                                 BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
@@ -161,7 +164,7 @@
 
                                         <!-- Load to Map Button -->
                                         <Button Text="Load"
-                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=LoadTripToMapCommand}"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MyTripsViewModel}}, Path=LoadTripToMapCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanLoadToMap}"
                                                 BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
@@ -171,9 +174,33 @@
                                                 Padding="10,0"
                                                 CornerRadius="16" />
 
+                                        <!-- Pause button (visible when downloading) -->
+                                        <Button Text="Pause"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MyTripsViewModel}}, Path=Download.PauseDownloadForItemCommand}"
+                                                CommandParameter="{Binding .}"
+                                                IsVisible="{Binding CanPause}"
+                                                BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                                TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
+                                                FontSize="12"
+                                                HeightRequest="32"
+                                                Padding="10,0"
+                                                CornerRadius="16" />
+
+                                        <!-- Resume button (visible when paused) -->
+                                        <Button Text="Resume"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MyTripsViewModel}}, Path=Download.ResumeDownloadForItemCommand}"
+                                                CommandParameter="{Binding .}"
+                                                IsVisible="{Binding CanResume}"
+                                                BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                                TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
+                                                FontSize="12"
+                                                HeightRequest="32"
+                                                Padding="10,0"
+                                                CornerRadius="16" />
+
                                         <!-- Download (Metadata only) -->
                                         <Button Text="Download"
-                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=QuickDownloadCommand}"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MyTripsViewModel}}, Path=Download.QuickDownloadCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanQuickDownload}"
                                                 BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
@@ -185,7 +212,7 @@
 
                                         <!-- Download + Offline Maps (With Tiles) -->
                                         <Button Text="+Offline Maps"
-                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=FullDownloadCommand}"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MyTripsViewModel}}, Path=Download.FullDownloadCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanFullDownload}"
                                                 BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
@@ -197,7 +224,7 @@
 
                                         <!-- Remove Offline Maps Only - keeps trip data -->
                                         <Button Text="Remove Maps"
-                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=DeleteTilesOnlyCommand}"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MyTripsViewModel}}, Path=Download.DeleteTilesOnlyCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanDeleteTilesOnly}"
                                                 BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
@@ -209,7 +236,7 @@
 
                                         <!-- Delete All - removes trip and all local data -->
                                         <Button Text="Remove All"
-                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:TripsViewModel}}, Path=DeleteDownloadCommand}"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MyTripsViewModel}}, Path=Download.DeleteDownloadCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanDelete}"
                                                 BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
@@ -225,17 +252,8 @@
                                            FontSize="11"
                                            TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
                                            IsVisible="{Binding CanQuickDownload}"
-                                           LineBreakMode="TailTruncation" />
+                                           LineBreakMode="WordWrap" />
                                 </VerticalStackLayout>
-
-                                <!-- Download Progress (when downloading) -->
-                                <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
-                                      IsVisible="{Binding IsDownloading}"
-                                      Margin="0,8,0,0">
-                                    <ProgressBar Progress="{Binding DownloadProgress}"
-                                                 ProgressColor="{StaticResource Primary}"
-                                                 HeightRequest="4" />
-                                </Grid>
                             </Grid>
                         </Border>
                     </DataTemplate>

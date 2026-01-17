@@ -65,7 +65,7 @@
                             <Label Text="Tracking Mode"
                                    FontSize="14"
                                    FontAttributes="Bold" />
-                            <Label Text="{Binding TrackingModeDescription}"
+                            <Label Text="{Binding AppearanceSettings.TrackingModeDescription}"
                                    FontSize="12"
                                    TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                         </VerticalStackLayout>
@@ -130,6 +130,14 @@
                                    FontSize="12"
                                    TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                         </VerticalStackLayout>
+
+                        <VerticalStackLayout Spacing="5">
+                            <Label Text="{Binding LocationAccuracyThreshold, StringFormat='Accuracy threshold: {0} m'}"
+                                   FontSize="14" />
+                            <Label Text="Maximum acceptable GPS accuracy"
+                                   FontSize="12"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        </VerticalStackLayout>
                     </VerticalStackLayout>
                 </sfExpander:SfExpander.Content>
             </sfExpander:SfExpander>
@@ -153,8 +161,8 @@
                             <Label Text="Language for turn-by-turn voice guidance"
                                    FontSize="12"
                                    TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-                            <Picker ItemsSource="{Binding LanguageOptions}"
-                                    SelectedItem="{Binding SelectedLanguageOption}"
+                            <Picker ItemsSource="{Binding NavigationSettings.LanguageOptions}"
+                                    SelectedItem="{Binding NavigationSettings.SelectedLanguageOption}"
                                     Title="Select Language"
                                     HeightRequest="44" />
                         </VerticalStackLayout>
@@ -172,24 +180,24 @@
                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                             </VerticalStackLayout>
                             <Switch Grid.Column="1"
-                                        IsToggled="{Binding NavigationAudioEnabled}"
+                                        IsToggled="{Binding NavigationSettings.NavigationAudioEnabled}"
                                         OnColor="{StaticResource Primary}" />
                         </Grid>
 
                         <!-- Voice Volume Slider (only when audio enabled) -->
-                        <VerticalStackLayout Spacing="8" IsVisible="{Binding NavigationAudioEnabled}">
+                        <VerticalStackLayout Spacing="8" IsVisible="{Binding NavigationSettings.NavigationAudioEnabled}">
                             <Grid ColumnDefinitions="*,Auto">
                                 <Label Text="Voice Volume"
                                        FontSize="14"
                                        Grid.Column="0" />
-                                <Label Text="{Binding NavigationVolumePercent, StringFormat='{0}%'}"
+                                <Label Text="{Binding NavigationSettings.NavigationVolumePercent, StringFormat='{0}%'}"
                                        FontSize="14"
                                        FontAttributes="Bold"
                                        Grid.Column="1" />
                             </Grid>
                             <Slider Minimum="0"
                                     Maximum="1"
-                                    Value="{Binding NavigationVolume}" />
+                                    Value="{Binding NavigationSettings.NavigationVolume}" />
                         </VerticalStackLayout>
 
                         <BoxView HeightRequest="1"
@@ -205,7 +213,7 @@
                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                             </VerticalStackLayout>
                             <Switch Grid.Column="1"
-                                        IsToggled="{Binding NavigationVibrationEnabled}"
+                                        IsToggled="{Binding NavigationSettings.NavigationVibrationEnabled}"
                                         OnColor="{StaticResource Primary}" />
                         </Grid>
 
@@ -222,7 +230,7 @@
                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                             </VerticalStackLayout>
                             <Switch Grid.Column="1"
-                                        IsToggled="{Binding AutoRerouteEnabled}"
+                                        IsToggled="{Binding NavigationSettings.AutoRerouteEnabled}"
                                         OnColor="{StaticResource Primary}" />
                         </Grid>
 
@@ -236,17 +244,17 @@
                             <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
                                 <Button Grid.Column="0"
                                         Text="Kilometers"
-                                        Command="{Binding SetDistanceUnitsCommand}"
+                                        Command="{Binding NavigationSettings.SetDistanceUnitsCommand}"
                                         CommandParameter="kilometers"
                                         Style="{StaticResource DarkButton}"
-                                        Opacity="{Binding IsKilometers, Converter={StaticResource BoolToOpacityConverter}}"
+                                        Opacity="{Binding NavigationSettings.IsKilometers, Converter={StaticResource BoolToOpacityConverter}}"
                                         HeightRequest="36" />
                                 <Button Grid.Column="1"
                                         Text="Miles"
-                                        Command="{Binding SetDistanceUnitsCommand}"
+                                        Command="{Binding NavigationSettings.SetDistanceUnitsCommand}"
                                         CommandParameter="miles"
                                         Style="{StaticResource DarkButton}"
-                                        Opacity="{Binding IsMiles, Converter={StaticResource BoolToOpacityConverter}}"
+                                        Opacity="{Binding NavigationSettings.IsMiles, Converter={StaticResource BoolToOpacityConverter}}"
                                         HeightRequest="36" />
                             </Grid>
                         </VerticalStackLayout>
@@ -276,16 +284,16 @@
                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                             </VerticalStackLayout>
                             <Switch Grid.Column="1"
-                                    IsToggled="{Binding VisitNotificationsEnabled}"
+                                    IsToggled="{Binding VisitNotificationSettings.VisitNotificationsEnabled}"
                                     OnColor="{StaticResource Primary}" />
                         </Grid>
 
                         <BoxView HeightRequest="1"
                                  Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                                 IsVisible="{Binding VisitNotificationsEnabled}" />
+                                 IsVisible="{Binding VisitNotificationSettings.VisitNotificationsEnabled}" />
 
                         <!-- Notification Style (only visible when enabled) -->
-                        <VerticalStackLayout Spacing="8" IsVisible="{Binding VisitNotificationsEnabled}">
+                        <VerticalStackLayout Spacing="8" IsVisible="{Binding VisitNotificationSettings.VisitNotificationsEnabled}">
                             <Label Text="Notification Style"
                                    FontSize="14" />
                             <Label Text="How to notify you about visits"
@@ -294,34 +302,34 @@
                             <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
                                 <Button Grid.Column="0"
                                         Text="Banner"
-                                        Command="{Binding SetVisitNotificationStyleCommand}"
+                                        Command="{Binding VisitNotificationSettings.SetVisitNotificationStyleCommand}"
                                         CommandParameter="notification"
                                         Style="{StaticResource DarkButton}"
-                                        Opacity="{Binding IsVisitStyleNotification, Converter={StaticResource BoolToOpacityConverter}}"
+                                        Opacity="{Binding VisitNotificationSettings.IsVisitStyleNotification, Converter={StaticResource BoolToOpacityConverter}}"
                                         HeightRequest="36" />
                                 <Button Grid.Column="1"
                                         Text="Voice"
-                                        Command="{Binding SetVisitNotificationStyleCommand}"
+                                        Command="{Binding VisitNotificationSettings.SetVisitNotificationStyleCommand}"
                                         CommandParameter="voice"
                                         Style="{StaticResource DarkButton}"
-                                        Opacity="{Binding IsVisitStyleVoice, Converter={StaticResource BoolToOpacityConverter}}"
+                                        Opacity="{Binding VisitNotificationSettings.IsVisitStyleVoice, Converter={StaticResource BoolToOpacityConverter}}"
                                         HeightRequest="36" />
                                 <Button Grid.Column="2"
                                         Text="Both"
-                                        Command="{Binding SetVisitNotificationStyleCommand}"
+                                        Command="{Binding VisitNotificationSettings.SetVisitNotificationStyleCommand}"
                                         CommandParameter="both"
                                         Style="{StaticResource DarkButton}"
-                                        Opacity="{Binding IsVisitStyleBoth, Converter={StaticResource BoolToOpacityConverter}}"
+                                        Opacity="{Binding VisitNotificationSettings.IsVisitStyleBoth, Converter={StaticResource BoolToOpacityConverter}}"
                                         HeightRequest="36" />
                             </Grid>
                         </VerticalStackLayout>
 
                         <BoxView HeightRequest="1"
                                  Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                                 IsVisible="{Binding ShowVisitVoiceOption}" />
+                                 IsVisible="{Binding VisitNotificationSettings.ShowVisitVoiceOption}" />
 
                         <!-- Voice Announcement Toggle (only when style includes voice) -->
-                        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding ShowVisitVoiceOption}">
+                        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding VisitNotificationSettings.ShowVisitVoiceOption}">
                             <VerticalStackLayout Grid.Column="0">
                                 <Label Text="Voice Announcement"
                                        FontSize="14" />
@@ -330,7 +338,7 @@
                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                             </VerticalStackLayout>
                             <Switch Grid.Column="1"
-                                    IsToggled="{Binding VisitVoiceAnnouncementEnabled}"
+                                    IsToggled="{Binding VisitNotificationSettings.VisitVoiceAnnouncementEnabled}"
                                     OnColor="{StaticResource Primary}" />
                         </Grid>
                     </VerticalStackLayout>
@@ -359,7 +367,7 @@
                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                             </VerticalStackLayout>
                             <Switch Grid.Column="1"
-                                        IsToggled="{Binding MapOfflineCacheEnabled}"
+                                        IsToggled="{Binding CacheSettings.MapOfflineCacheEnabled}"
                                         OnColor="{StaticResource Primary}" />
                         </Grid>
 
@@ -372,20 +380,20 @@
                                 <Label Text="Prefetch Radius"
                                        FontSize="14"
                                        Grid.Column="0" />
-                                <Label Text="{Binding PrefetchRadiusGridSize}"
+                                <Label Text="{Binding CacheSettings.PrefetchRadiusGridSize}"
                                        FontSize="14"
                                        FontAttributes="Bold"
                                        Grid.Column="1" />
                             </Grid>
                             <Slider Minimum="1"
                                     Maximum="10"
-                                    Value="{Binding LiveCachePrefetchRadius}" />
+                                    Value="{Binding CacheSettings.LiveCachePrefetchRadius}" />
                             <Grid ColumnDefinitions="Auto,*,Auto">
                                 <Label Text="1"
                                        FontSize="10"
                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
                                        Grid.Column="0" />
-                                <Label Text="{Binding LiveCachePrefetchRadius}"
+                                <Label Text="{Binding CacheSettings.LiveCachePrefetchRadius}"
                                        FontSize="14"
                                        FontAttributes="Bold"
                                        HorizontalOptions="Center"
@@ -410,9 +418,9 @@
                             <Grid ColumnDefinitions="*,80">
                                 <Slider Minimum="100"
                                         Maximum="2000"
-                                        Value="{Binding MaxLiveCacheSizeMB}"
+                                        Value="{Binding CacheSettings.MaxLiveCacheSizeMB}"
                                         Grid.Column="0" />
-                                <Label Text="{Binding MaxLiveCacheSizeMB, StringFormat='{0} MB'}"
+                                <Label Text="{Binding CacheSettings.MaxLiveCacheSizeMB, StringFormat='{0} MB'}"
                                        FontSize="14"
                                        FontAttributes="Bold"
                                        HorizontalOptions="End"
@@ -434,9 +442,9 @@
                             <Grid ColumnDefinitions="*,80">
                                 <Slider Minimum="500"
                                         Maximum="5000"
-                                        Value="{Binding MaxTripCacheSizeMB}"
+                                        Value="{Binding CacheSettings.MaxTripCacheSizeMB}"
                                         Grid.Column="0" />
-                                <Label Text="{Binding MaxTripCacheSizeMB, StringFormat='{0} MB'}"
+                                <Label Text="{Binding CacheSettings.MaxTripCacheSizeMB, StringFormat='{0} MB'}"
                                        FontSize="14"
                                        FontAttributes="Bold"
                                        HorizontalOptions="End"
@@ -458,9 +466,9 @@
                             <Grid ColumnDefinitions="*,80">
                                 <Slider Minimum="100"
                                         Maximum="2000"
-                                        Value="{Binding PrefetchDistanceThresholdMeters}"
+                                        Value="{Binding CacheSettings.PrefetchDistanceThresholdMeters}"
                                         Grid.Column="0" />
-                                <Label Text="{Binding PrefetchDistanceThresholdMeters, StringFormat='{0} m'}"
+                                <Label Text="{Binding CacheSettings.PrefetchDistanceThresholdMeters, StringFormat='{0} m'}"
                                        FontSize="14"
                                        FontAttributes="Bold"
                                        HorizontalOptions="End"
@@ -482,9 +490,9 @@
                             <Grid ColumnDefinitions="*,40">
                                 <Slider Minimum="1"
                                         Maximum="4"
-                                        Value="{Binding MaxConcurrentTileDownloads}"
+                                        Value="{Binding CacheSettings.MaxConcurrentTileDownloads}"
                                         Grid.Column="0" />
-                                <Label Text="{Binding MaxConcurrentTileDownloads}"
+                                <Label Text="{Binding CacheSettings.MaxConcurrentTileDownloads}"
                                        FontSize="14"
                                        FontAttributes="Bold"
                                        HorizontalOptions="End"
@@ -506,9 +514,9 @@
                             <Grid ColumnDefinitions="*,80">
                                 <Slider Minimum="50"
                                         Maximum="1000"
-                                        Value="{Binding MinTileRequestDelayMs}"
+                                        Value="{Binding CacheSettings.MinTileRequestDelayMs}"
                                         Grid.Column="0" />
-                                <Label Text="{Binding MinTileRequestDelayMs, StringFormat='{0} ms'}"
+                                <Label Text="{Binding CacheSettings.MinTileRequestDelayMs, StringFormat='{0} ms'}"
                                        FontSize="14"
                                        FontAttributes="Bold"
                                        HorizontalOptions="End"
@@ -527,7 +535,7 @@
                         <VerticalStackLayout Spacing="8">
                             <Label Text="Tile Server URL"
                                    FontSize="14" />
-                            <Entry Text="{Binding TileServerUrl}"
+                            <Entry Text="{Binding CacheSettings.TileServerUrl}"
                                    Placeholder="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
                                    Keyboard="Url"
                                    FontSize="12" />
@@ -535,8 +543,8 @@
                                    FontSize="11"
                                    TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                             <Button Text="Reset to Default"
-                                    Command="{Binding ResetTileServerUrlCommand}"
-                                    IsVisible="{Binding IsDefaultTileServer, Converter={StaticResource InvertedBoolConverter}}"
+                                    Command="{Binding CacheSettings.ResetTileServerUrlCommand}"
+                                    IsVisible="{Binding CacheSettings.IsDefaultTileServer, Converter={StaticResource InvertedBoolConverter}}"
                                     Style="{StaticResource DarkButton}"
                                     HeightRequest="36" />
                         </VerticalStackLayout>
@@ -563,8 +571,8 @@
                             <Label Text="Choose between light, dark, or system theme"
                                    FontSize="12"
                                    TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-                            <Picker ItemsSource="{Binding ThemeOptions}"
-                                    SelectedItem="{Binding ThemePreference}"
+                            <Picker ItemsSource="{Binding AppearanceSettings.ThemeOptions}"
+                                    SelectedItem="{Binding AppearanceSettings.ThemePreference}"
                                     Title="Select Theme"
                                     HeightRequest="44" />
                         </VerticalStackLayout>
@@ -582,7 +590,7 @@
                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                             </VerticalStackLayout>
                             <Switch Grid.Column="1"
-                                        IsToggled="{Binding KeepScreenOn}"
+                                        IsToggled="{Binding AppearanceSettings.KeepScreenOn}"
                                         OnColor="{StaticResource Primary}" />
                         </Grid>
                     </VerticalStackLayout>
@@ -611,7 +619,7 @@
                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                             </VerticalStackLayout>
                             <Switch Grid.Column="1"
-                                        IsToggled="{Binding ShowBatteryWarnings}"
+                                        IsToggled="{Binding AppearanceSettings.ShowBatteryWarnings}"
                                         OnColor="{StaticResource Primary}" />
                         </Grid>
 
@@ -628,7 +636,7 @@
                                        TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                             </VerticalStackLayout>
                             <Switch Grid.Column="1"
-                                        IsToggled="{Binding AutoPauseTrackingOnCriticalBattery}"
+                                        IsToggled="{Binding AppearanceSettings.AutoPauseTrackingOnCriticalBattery}"
                                         OnColor="{StaticResource Primary}" />
                         </Grid>
                     </VerticalStackLayout>
@@ -718,7 +726,7 @@
                 </sfExpander:SfExpander.Header>
                 <sfExpander:SfExpander.Content>
                     <VerticalStackLayout Padding="15" Spacing="10">
-                        <Label Text="{Binding LocalTimelineCount, StringFormat='Local entries: {0}'}"
+                        <Label Text="{Binding TimelineData.LocalTimelineCount, StringFormat='Local entries: {0}'}"
                                FontSize="14"
                                TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
 
@@ -730,12 +738,12 @@
                         <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
                             <Button Grid.Column="0"
                                     Text="Export CSV"
-                                    Command="{Binding ExportCsvCommand}"
+                                    Command="{Binding TimelineData.ExportCsvCommand}"
                                     Style="{StaticResource DarkButton}"
                                     HeightRequest="44" />
                             <Button Grid.Column="1"
                                     Text="Export GeoJSON"
-                                    Command="{Binding ExportGeoJsonCommand}"
+                                    Command="{Binding TimelineData.ExportGeoJsonCommand}"
                                     Style="{StaticResource DarkButton}"
                                     HeightRequest="44" />
                         </Grid>
@@ -746,36 +754,19 @@
                                TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
 
                         <Button Text="Import Timeline"
-                                Command="{Binding ImportTimelineCommand}"
+                                Command="{Binding TimelineData.ImportTimelineCommand}"
                                 Style="{StaticResource DarkButton}"
                                 HeightRequest="44" />
                     </VerticalStackLayout>
                 </sfExpander:SfExpander.Content>
             </sfExpander:SfExpander>
 
-            <!-- Diagnostics Section -->
-            <sfExpander:SfExpander IsExpanded="False">
-                <sfExpander:SfExpander.Header>
-                    <Grid HeightRequest="48" Padding="10,0">
-                        <Label Text="Diagnostics"
-                               FontSize="16"
-                               FontAttributes="Bold"
-                               VerticalOptions="Center" />
-                    </Grid>
-                </sfExpander:SfExpander.Header>
-                <sfExpander:SfExpander.Content>
-                    <VerticalStackLayout Padding="15" Spacing="10">
-                        <Label Text="{Binding AppVersion}"
-                               FontSize="14"
-                               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-
-                        <Button Text="View Diagnostics"
-                                Command="{Binding ShowDiagnosticsCommand}"
-                                Style="{StaticResource DarkButton}"
-                                HeightRequest="44" />
-                    </VerticalStackLayout>
-                </sfExpander:SfExpander.Content>
-            </sfExpander:SfExpander>
+            <!-- Diagnostics Button -->
+            <Button Text="Diagnostics"
+                    Command="{Binding ShowDiagnosticsCommand}"
+                    Style="{StaticResource DarkButton}"
+                    Margin="10,5"
+                    HeightRequest="44" />
 
         </VerticalStackLayout>
     </ScrollView>

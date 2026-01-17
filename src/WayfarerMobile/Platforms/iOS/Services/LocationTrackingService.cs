@@ -1,6 +1,7 @@
 using CoreLocation;
 using Foundation;
 using UIKit;
+using WayfarerMobile.Core.Algorithms;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Services;
@@ -26,6 +27,24 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
 
     #endregion
 
+    #region Static Delegates
+
+    /// <summary>
+    /// Delegate for submitting a location directly to the server (online path).
+    /// When online, this bypasses the queue and gets immediate server response.
+    /// Returns the server ID if accepted, null if skipped/failed.
+    /// </summary>
+    public static Func<LocationData, Task<int?>>? OnlineSubmitDelegate { get; set; }
+
+    /// <summary>
+    /// Delegate for queueing a location for later sync (offline path).
+    /// When offline or online fails, locations go to the queue for background sync.
+    /// Returns the queued location ID.
+    /// </summary>
+    public static Func<LocationData, Task<int>>? OfflineQueueDelegate { get; set; }
+
+    #endregion
+
     #region Fields
 
     private CLLocationManager? _locationManager;
@@ -33,11 +52,15 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
     private PerformanceMode _currentMode = PerformanceMode.Normal;
     private LocationData? _lastLocation;
     private DatabaseService? _database;
+    private ThresholdFilter? _thresholdFilter;
 
     // Filtering state
     private DateTime _lastLocationTime = DateTime.MinValue;
     private const double MinTimeBetweenUpdatesSeconds = 5.0;
     private const double MinDistanceMeters = 10.0;
+
+    // Timeline tracking control
+    private bool _timelineTrackingEnabled = true;
 
     #endregion
 
@@ -46,6 +69,7 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
     private LocationTrackingService()
     {
         InitializeDatabase();
+        InitializeThresholdFilter();
         SubscribeToCallbacks();
     }
 
@@ -57,6 +81,26 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
         LocationServiceCallbacks.PauseRequested += OnPauseRequested;
         LocationServiceCallbacks.ResumeRequested += OnResumeRequested;
         LocationServiceCallbacks.StopRequested += OnStopRequested;
+        LocationServiceCallbacks.ThresholdsUpdated += OnThresholdsUpdated;
+    }
+
+    /// <summary>
+    /// Unsubscribes from notification action callbacks to prevent memory leaks.
+    /// </summary>
+    private void UnsubscribeFromCallbacks()
+    {
+        LocationServiceCallbacks.PauseRequested -= OnPauseRequested;
+        LocationServiceCallbacks.ResumeRequested -= OnResumeRequested;
+        LocationServiceCallbacks.StopRequested -= OnStopRequested;
+        LocationServiceCallbacks.ThresholdsUpdated -= OnThresholdsUpdated;
+    }
+
+    /// <summary>
+    /// Handles threshold updates from server sync via LocationServiceCallbacks.
+    /// </summary>
+    private void OnThresholdsUpdated(object? sender, ThresholdsUpdatedEventArgs e)
+    {
+        UpdateThresholds(e.TimeThresholdMinutes, e.DistanceThresholdMeters, e.AccuracyThresholdMeters);
     }
 
     /// <summary>
@@ -100,6 +144,49 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
         {
             Console.WriteLine($"[iOS LocationService] Database init failed: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Initializes the threshold filter with server-configured thresholds.
+    /// </summary>
+    private void InitializeThresholdFilter()
+    {
+        _thresholdFilter = new ThresholdFilter();
+
+        // Load timeline tracking setting
+        _timelineTrackingEnabled = Preferences.Get("timeline_tracking_enabled", true);
+
+        // Load server thresholds for location filtering
+        // Defaults match SettingsService: 5 min / 15 m / 50 m accuracy
+        var timeThreshold = Preferences.Get("location_time_threshold", 5);
+        var distanceThreshold = Preferences.Get("location_distance_threshold", 15);
+        var accuracyThreshold = Preferences.Get("location_accuracy_threshold", 50);
+
+        _thresholdFilter.UpdateThresholds(timeThreshold, distanceThreshold, accuracyThreshold);
+
+        Console.WriteLine($"[iOS LocationService] Thresholds: {timeThreshold}min / {distanceThreshold}m / {accuracyThreshold}m accuracy");
+    }
+
+    /// <summary>
+    /// Updates the threshold filter settings.
+    /// </summary>
+    /// <param name="timeMinutes">Time threshold in minutes.</param>
+    /// <param name="distanceMeters">Distance threshold in meters.</param>
+    /// <param name="accuracyMeters">Accuracy threshold in meters.</param>
+    public void UpdateThresholds(int timeMinutes, int distanceMeters, int accuracyMeters)
+    {
+        _thresholdFilter?.UpdateThresholds(timeMinutes, distanceMeters, accuracyMeters);
+        Console.WriteLine($"[iOS LocationService] Thresholds updated: {timeMinutes}min / {distanceMeters}m / {accuracyMeters}m accuracy");
+    }
+
+    /// <summary>
+    /// Sets whether timeline tracking is enabled.
+    /// </summary>
+    /// <param name="enabled">True to enable timeline tracking.</param>
+    public void SetTimelineTrackingEnabled(bool enabled)
+    {
+        _timelineTrackingEnabled = enabled;
+        Console.WriteLine($"[iOS LocationService] Timeline tracking: {(enabled ? "enabled" : "disabled")}");
     }
 
     #endregion
@@ -171,6 +258,9 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
 
         try
         {
+            // Unsubscribe from callbacks to prevent memory leaks
+            UnsubscribeFromCallbacks();
+
             _locationManager.StopUpdatingLocation();
             _locationManager.StopMonitoringSignificantLocationChanges();
 
@@ -294,13 +384,27 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
         _lastLocation = location;
         _lastLocationTime = now;
 
-        // Notify listeners via static callbacks
+        // Notify listeners via static callbacks (always - for map updates, etc.)
         LocationServiceCallbacks.NotifyLocationReceived(location);
 
-        // Queue for sync
-        _ = QueueLocationAsync(location);
-
-        Console.WriteLine($"[iOS LocationService] Location: {location.Latitude:F6}, {location.Longitude:F6}, accuracy: {location.Accuracy:F1}m");
+        // Apply threshold filter before queuing for server sync
+        // Only queue if timeline tracking is enabled and location passes filter
+        if (_timelineTrackingEnabled && _thresholdFilter != null)
+        {
+            if (_thresholdFilter.TryLog(location))
+            {
+                _ = QueueLocationAsync(location);
+                Console.WriteLine($"[iOS LocationService] Queued: {location.Latitude:F6}, {location.Longitude:F6}, accuracy: {location.Accuracy:F1}m");
+            }
+            else
+            {
+                Console.WriteLine($"[iOS LocationService] Filtered: {location.Latitude:F6}, {location.Longitude:F6}, accuracy: {location.Accuracy:F1}m (below threshold)");
+            }
+        }
+        else if (!_timelineTrackingEnabled)
+        {
+            Console.WriteLine($"[iOS LocationService] Skipped: timeline tracking disabled");
+        }
     }
 
     /// <summary>
@@ -351,16 +455,59 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
     #region Database
 
     /// <summary>
-    /// Queues a location for sync to the server.
+    /// Logs a location using the online/offline path decision.
+    /// Online path: Submit directly to server via log-location endpoint (server authority).
+    /// Offline path: Queue for background sync via QueueDrainService.
     /// </summary>
     private async Task QueueLocationAsync(LocationData location)
     {
-        if (_database == null)
-            return;
-
         try
         {
-            await _database.QueueLocationAsync(location);
+            // ONLINE PATH: Try direct server submission if delegate is wired
+            var onlineSubmit = OnlineSubmitDelegate;
+            if (onlineSubmit != null)
+            {
+                try
+                {
+                    var serverId = await onlineSubmit(location);
+                    if (serverId.HasValue)
+                    {
+                        // Server accepted the location - authoritative response
+                        Console.WriteLine($"[iOS LocationService] Online submitted: ServerId={serverId}");
+                        // LocalTimelineStorageService handles timeline via the delegate
+                        return;
+                    }
+                    // Server skipped (threshold not met) - don't queue, server is authoritative
+                    Console.WriteLine("[iOS LocationService] Online skipped by server (threshold not met)");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    // Online failed - fall through to offline path
+                    Console.WriteLine($"[iOS LocationService] Online submit failed, falling back to offline: {ex.Message}");
+                }
+            }
+
+            // OFFLINE PATH: Queue for background sync
+            var offlineQueue = OfflineQueueDelegate;
+            if (offlineQueue != null)
+            {
+                var queuedId = await offlineQueue(location);
+                Console.WriteLine($"[iOS LocationService] Queued for offline sync: Id={queuedId}");
+                // LocalTimelineStorageService handles timeline via the delegate
+                return;
+            }
+
+            // FALLBACK: Direct database queue (no delegates wired)
+            if (_database != null)
+            {
+                await _database.QueueLocationAsync(location);
+                Console.WriteLine($"[iOS LocationService] Queued via database: {location}");
+
+                // Notify that location was queued - used by LocalTimelineStorageService
+                // to store with correct coordinates (matches what will be synced)
+                LocationServiceCallbacks.NotifyLocationQueued(location);
+            }
         }
         catch (Exception ex)
         {

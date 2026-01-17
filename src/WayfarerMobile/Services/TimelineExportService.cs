@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Data.Entities;
-using WayfarerMobile.Data.Services;
+using WayfarerMobile.Data.Repositories;
 
 namespace WayfarerMobile.Services;
 
@@ -12,17 +12,19 @@ namespace WayfarerMobile.Services;
 /// </summary>
 public class TimelineExportService
 {
-    private readonly DatabaseService _databaseService;
+    private readonly ITimelineRepository _timelineRepository;
     private readonly ILogger<TimelineExportService> _logger;
 
     /// <summary>
     /// Creates a new instance of TimelineExportService.
     /// </summary>
+    /// <param name="timelineRepository">Repository for timeline operations.</param>
+    /// <param name="logger">Logger instance.</param>
     public TimelineExportService(
-        DatabaseService databaseService,
+        ITimelineRepository timelineRepository,
         ILogger<TimelineExportService> logger)
     {
-        _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
+        _timelineRepository = timelineRepository ?? throw new ArgumentNullException(nameof(timelineRepository));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -123,11 +125,11 @@ public class TimelineExportService
     {
         if (fromDate.HasValue && toDate.HasValue)
         {
-            return await _databaseService.GetLocalTimelineEntriesInRangeAsync(
+            return await _timelineRepository.GetLocalTimelineEntriesInRangeAsync(
                 fromDate.Value, toDate.Value);
         }
 
-        return await _databaseService.GetAllLocalTimelineEntriesAsync();
+        return await _timelineRepository.GetAllLocalTimelineEntriesAsync();
     }
 
     /// <summary>

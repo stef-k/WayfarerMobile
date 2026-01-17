@@ -176,7 +176,7 @@ public class LocationSyncServiceTests
         };
 
         _databaseMock
-            .Setup(x => x.GetPendingLocationsAsync(It.IsAny<int>()))
+            .Setup(x => x.ClaimPendingLocationsAsync(It.IsAny<int>()))
             .ReturnsAsync(locations);
 
         _apiClientMock
@@ -203,7 +203,7 @@ public class LocationSyncServiceTests
         };
 
         _databaseMock
-            .Setup(x => x.GetPendingLocationsAsync(It.IsAny<int>()))
+            .Setup(x => x.ClaimPendingLocationsAsync(It.IsAny<int>()))
             .ReturnsAsync(locations);
 
         _apiClientMock

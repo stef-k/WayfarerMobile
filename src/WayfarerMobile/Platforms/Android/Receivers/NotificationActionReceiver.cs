@@ -3,6 +3,7 @@ using Android.Util;
 using Android.Widget;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Platforms.Android.Services;
 using WayfarerMobile.Services;
 
@@ -40,6 +41,7 @@ public class NotificationActionReceiver : BroadcastReceiver
 
     /// <summary>
     /// Performs a manual check-in using the last received location.
+    /// Supports offline fallback - queues check-in if server is unavailable.
     /// </summary>
     /// <param name="context">The Android context.</param>
     private async Task PerformCheckInAsync(Context context)
@@ -54,8 +56,12 @@ public class NotificationActionReceiver : BroadcastReceiver
                 return;
             }
 
-            // Get IApiClient from DI container using service locator pattern
-            var apiClient = IPlatformApplication.Current?.Services.GetService<IApiClient>();
+            // Get services from DI container using service locator pattern
+            var services = IPlatformApplication.Current?.Services;
+            var apiClient = services?.GetService<IApiClient>();
+            var locationQueue = services?.GetService<ILocationQueueRepository>();
+            var timelineStorage = services?.GetService<LocalTimelineStorageService>();
+
             if (apiClient == null)
             {
                 ShowToast(context, "Check-in service unavailable");
@@ -82,22 +88,64 @@ public class NotificationActionReceiver : BroadcastReceiver
                 Provider = "notification-checkin"
             };
 
-            // Perform check-in (bypasses thresholds)
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            var result = await apiClient.CheckInAsync(request, cts.Token);
+            // ONLINE PATH: Try direct server submission
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                var result = await apiClient.CheckInAsync(request, Guid.NewGuid().ToString("N"), cts.Token);
 
-            if (result.Success)
-            {
-                ShowToast(context, "Check-in successful");
-                LocationServiceCallbacks.NotifyCheckInPerformed(true, null);
-                Log.Info(LogTag, "Check-in successful");
-            }
-            else
-            {
+                if (result.Success)
+                {
+                    // Add to local timeline with server-assigned ID
+                    if (result.LocationId.HasValue && timelineStorage != null)
+                    {
+                        await timelineStorage.AddAcceptedLocationAsync(lastLocation, result.LocationId.Value);
+                    }
+
+                    ShowToast(context, "Check-in successful");
+                    LocationServiceCallbacks.NotifyCheckInPerformed(true, null);
+                    Log.Info(LogTag, "Check-in successful");
+                    return;
+                }
+
+                // Server rejected (non-network failure)
                 ShowToast(context, $"Check-in failed: {result.Message ?? "Unknown error"}");
                 LocationServiceCallbacks.NotifyCheckInPerformed(false, result.Message);
                 Log.Warn(LogTag, $"Check-in failed: {result.Message}");
+                return;
             }
+            catch (HttpRequestException ex)
+            {
+                Log.Warn(LogTag, $"Network error, falling back to offline: {ex.Message}");
+            }
+            catch (OperationCanceledException ex) when (!ex.CancellationToken.IsCancellationRequested)
+            {
+                Log.Warn(LogTag, "Timeout, falling back to offline");
+            }
+
+            // OFFLINE PATH: Queue for background sync
+            if (locationQueue == null)
+            {
+                ShowToast(context, "Offline check-in unavailable");
+                LocationServiceCallbacks.NotifyCheckInPerformed(false, "Queue service unavailable");
+                Log.Warn(LogTag, "Check-in failed: ILocationQueueRepository not available");
+                return;
+            }
+
+            // Queue with isUserInvoked=true (manual check-in)
+            var queuedId = await locationQueue.QueueLocationAsync(
+                lastLocation,
+                isUserInvoked: true);
+
+            // Add pending entry to local timeline
+            if (timelineStorage != null)
+            {
+                await timelineStorage.AddPendingLocationAsync(lastLocation, queuedId);
+            }
+
+            ShowToast(context, "Check-in queued (offline)");
+            LocationServiceCallbacks.NotifyCheckInPerformed(true, "Queued for sync");
+            Log.Info(LogTag, "Check-in queued for offline sync");
         }
         catch (OperationCanceledException)
         {

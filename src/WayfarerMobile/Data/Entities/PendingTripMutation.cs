@@ -188,6 +188,11 @@ public class PendingTripMutation
     public string? OriginalMarkerColor { get; set; }
 
     /// <summary>
+    /// Gets or sets the original region ID (for places, for restoration on cancel/rejection).
+    /// </summary>
+    public Guid? OriginalRegionId { get; set; }
+
+    /// <summary>
     /// Gets or sets the original cover image URL (for regions, for restoration).
     /// </summary>
     public string? OriginalCoverImageUrl { get; set; }

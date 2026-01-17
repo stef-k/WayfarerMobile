@@ -3,7 +3,7 @@ using SQLite;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
-using WayfarerMobile.Data.Services;
+using WayfarerMobile.Data.Repositories;
 
 namespace WayfarerMobile.Services;
 
@@ -20,19 +20,22 @@ namespace WayfarerMobile.Services;
 /// </remarks>
 public class TimelineDataService
 {
-    private readonly DatabaseService _databaseService;
+    private readonly ITimelineRepository _timelineRepository;
     private readonly IApiClient _apiClient;
     private readonly ILogger<TimelineDataService> _logger;
 
     /// <summary>
     /// Creates a new instance of TimelineDataService.
     /// </summary>
+    /// <param name="timelineRepository">Repository for timeline operations.</param>
+    /// <param name="apiClient">API client for server communication.</param>
+    /// <param name="logger">Logger instance.</param>
     public TimelineDataService(
-        DatabaseService databaseService,
+        ITimelineRepository timelineRepository,
         IApiClient apiClient,
         ILogger<TimelineDataService> logger)
     {
-        _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
+        _timelineRepository = timelineRepository ?? throw new ArgumentNullException(nameof(timelineRepository));
         _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -48,7 +51,7 @@ public class TimelineDataService
     {
         try
         {
-            var entries = await _databaseService.GetLocalTimelineEntriesForDateAsync(date);
+            var entries = await _timelineRepository.GetLocalTimelineEntriesForDateAsync(date);
             _logger.LogDebug("Retrieved {Count} local entries for {Date:yyyy-MM-dd}", entries.Count, date);
             return entries;
         }
@@ -75,7 +78,7 @@ public class TimelineDataService
     {
         try
         {
-            var entries = await _databaseService.GetLocalTimelineEntriesInRangeAsync(fromDate, toDate);
+            var entries = await _timelineRepository.GetLocalTimelineEntriesInRangeAsync(fromDate, toDate);
             _logger.LogDebug(
                 "Retrieved {Count} local entries for range {From:yyyy-MM-dd} to {To:yyyy-MM-dd}",
                 entries.Count, fromDate, toDate);
@@ -101,7 +104,7 @@ public class TimelineDataService
     {
         try
         {
-            return await _databaseService.GetAllLocalTimelineEntriesAsync();
+            return await _timelineRepository.GetAllLocalTimelineEntriesAsync();
         }
         catch (SQLiteException ex)
         {
@@ -158,7 +161,7 @@ public class TimelineDataService
                 serverData.Data.Count, date);
 
             // Load existing local entries for this date
-            var localEntries = await _databaseService.GetLocalTimelineEntriesForDateAsync(date);
+            var localEntries = await _timelineRepository.GetLocalTimelineEntriesForDateAsync(date);
             var localByServerId = localEntries
                 .Where(e => e.ServerId.HasValue)
                 .ToDictionary(e => e.ServerId!.Value);
@@ -186,7 +189,7 @@ public class TimelineDataService
 
                     existing.LastEnrichedAt = DateTime.UtcNow;
 
-                    await _databaseService.UpdateLocalTimelineEntryAsync(existing);
+                    await _timelineRepository.UpdateLocalTimelineEntryAsync(existing);
                     updatedCount++;
                 }
                 else
@@ -214,7 +217,7 @@ public class TimelineDataService
                         LastEnrichedAt = DateTime.UtcNow
                     };
 
-                    await _databaseService.InsertLocalTimelineEntryAsync(newEntry);
+                    await _timelineRepository.InsertLocalTimelineEntryAsync(newEntry);
                     insertedCount++;
                 }
             }
@@ -310,7 +313,7 @@ public class TimelineDataService
     {
         try
         {
-            return await _databaseService.GetLocalTimelineEntryCountAsync();
+            return await _timelineRepository.GetLocalTimelineEntryCountAsync();
         }
         catch (SQLiteException ex)
         {

@@ -7,6 +7,27 @@ namespace WayfarerMobile.Services;
 /// Shared callback handler for communication between platform location services and the UI layer.
 /// This provides a platform-independent way to receive location updates.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>Memory Leak Warning:</b> This class uses static events. Subscribers MUST unsubscribe
+/// when they are disposed or go out of scope, otherwise they will be kept alive indefinitely
+/// by the static event handlers, causing memory leaks.
+/// </para>
+/// <para>
+/// <b>Correct usage pattern:</b>
+/// <code>
+/// // In constructor or initialization:
+/// LocationServiceCallbacks.LocationReceived += OnLocationReceived;
+///
+/// // In Dispose or cleanup:
+/// LocationServiceCallbacks.LocationReceived -= OnLocationReceived;
+/// </code>
+/// </para>
+/// <para>
+/// ViewModels should unsubscribe in their <c>Cleanup()</c> or <c>OnDisappearing()</c> methods.
+/// Services should unsubscribe in their <c>Dispose()</c> methods.
+/// </para>
+/// </remarks>
 public static class LocationServiceCallbacks
 {
     /// <summary>
@@ -22,8 +43,16 @@ public static class LocationServiceCallbacks
 
     /// <summary>
     /// Event raised when a new location is received from GPS.
+    /// Used for UI updates (map, current position display).
     /// </summary>
     public static event EventHandler<LocationData>? LocationReceived;
+
+    /// <summary>
+    /// Event raised when a location is queued for sync.
+    /// Used by LocalTimelineStorageService to store entries with correct coordinates.
+    /// This may differ from LocationReceived when Android uses best-wake-sample optimization.
+    /// </summary>
+    public static event EventHandler<LocationData>? LocationQueued;
 
     /// <summary>
     /// Event raised when the tracking state changes.
@@ -54,6 +83,12 @@ public static class LocationServiceCallbacks
     public static event EventHandler? StopRequested;
 
     /// <summary>
+    /// Event raised when location thresholds are updated from the server.
+    /// Platform-specific location services should subscribe to this event to update their filters.
+    /// </summary>
+    public static event EventHandler<ThresholdsUpdatedEventArgs>? ThresholdsUpdated;
+
+    /// <summary>
     /// Notifies listeners of a new location.
     /// Called by platform-specific location services.
     /// </summary>
@@ -66,7 +101,35 @@ public static class LocationServiceCallbacks
         // Ensure we're on the main thread for UI updates
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            LocationReceived?.Invoke(null, location);
+            try
+            {
+                LocationReceived?.Invoke(null, location);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LocationServiceCallbacks] LocationReceived subscriber exception: {ex.Message}");
+            }
+        });
+    }
+
+    /// <summary>
+    /// Notifies listeners that a location was queued for sync.
+    /// Called by platform-specific location services after successful queue.
+    /// </summary>
+    /// <param name="location">The location data that was queued (may differ from broadcast).</param>
+    public static void NotifyLocationQueued(LocationData location)
+    {
+        // Ensure we're on the main thread for UI updates
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            try
+            {
+                LocationQueued?.Invoke(null, location);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LocationServiceCallbacks] LocationQueued subscriber exception: {ex.Message}");
+            }
         });
     }
 
@@ -80,7 +143,14 @@ public static class LocationServiceCallbacks
         // Ensure we're on the main thread for UI updates
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            StateChanged?.Invoke(null, state);
+            try
+            {
+                StateChanged?.Invoke(null, state);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LocationServiceCallbacks] StateChanged subscriber exception: {ex.Message}");
+            }
         });
     }
 
@@ -95,7 +165,14 @@ public static class LocationServiceCallbacks
         // Ensure we're on the main thread for UI updates
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            CheckInPerformed?.Invoke(null, new CheckInEventArgs(success, errorMessage));
+            try
+            {
+                CheckInPerformed?.Invoke(null, new CheckInEventArgs(success, errorMessage));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LocationServiceCallbacks] CheckInPerformed subscriber exception: {ex.Message}");
+            }
         });
     }
 
@@ -107,7 +184,14 @@ public static class LocationServiceCallbacks
     {
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            PauseRequested?.Invoke(null, EventArgs.Empty);
+            try
+            {
+                PauseRequested?.Invoke(null, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LocationServiceCallbacks] PauseRequested subscriber exception: {ex.Message}");
+            }
         });
     }
 
@@ -119,7 +203,14 @@ public static class LocationServiceCallbacks
     {
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            ResumeRequested?.Invoke(null, EventArgs.Empty);
+            try
+            {
+                ResumeRequested?.Invoke(null, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LocationServiceCallbacks] ResumeRequested subscriber exception: {ex.Message}");
+            }
         });
     }
 
@@ -131,7 +222,37 @@ public static class LocationServiceCallbacks
     {
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            StopRequested?.Invoke(null, EventArgs.Empty);
+            try
+            {
+                StopRequested?.Invoke(null, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LocationServiceCallbacks] StopRequested subscriber exception: {ex.Message}");
+            }
+        });
+    }
+
+    /// <summary>
+    /// Notifies platform services that location thresholds have been updated.
+    /// Called by SettingsSyncService after syncing new thresholds from the server.
+    /// </summary>
+    /// <param name="timeMinutes">New time threshold in minutes.</param>
+    /// <param name="distanceMeters">New distance threshold in meters.</param>
+    /// <param name="accuracyMeters">New accuracy threshold in meters.</param>
+    public static void NotifyThresholdsUpdated(int timeMinutes, int distanceMeters, int accuracyMeters)
+    {
+        // Platform services may be on background threads, so use MainThread
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            try
+            {
+                ThresholdsUpdated?.Invoke(null, new ThresholdsUpdatedEventArgs(timeMinutes, distanceMeters, accuracyMeters));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LocationServiceCallbacks] ThresholdsUpdated subscriber exception: {ex.Message}");
+            }
         });
     }
 }
@@ -160,5 +281,39 @@ public class CheckInEventArgs : EventArgs
     {
         Success = success;
         ErrorMessage = errorMessage;
+    }
+}
+
+/// <summary>
+/// Event arguments for threshold update events.
+/// </summary>
+public class ThresholdsUpdatedEventArgs : EventArgs
+{
+    /// <summary>
+    /// Gets the new time threshold in minutes.
+    /// </summary>
+    public int TimeThresholdMinutes { get; }
+
+    /// <summary>
+    /// Gets the new distance threshold in meters.
+    /// </summary>
+    public int DistanceThresholdMeters { get; }
+
+    /// <summary>
+    /// Gets the new accuracy threshold in meters.
+    /// </summary>
+    public int AccuracyThresholdMeters { get; }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ThresholdsUpdatedEventArgs"/> class.
+    /// </summary>
+    /// <param name="timeMinutes">New time threshold in minutes.</param>
+    /// <param name="distanceMeters">New distance threshold in meters.</param>
+    /// <param name="accuracyMeters">New accuracy threshold in meters.</param>
+    public ThresholdsUpdatedEventArgs(int timeMinutes, int distanceMeters, int accuracyMeters)
+    {
+        TimeThresholdMinutes = timeMinutes;
+        DistanceThresholdMeters = distanceMeters;
+        AccuracyThresholdMeters = accuracyMeters;
     }
 }

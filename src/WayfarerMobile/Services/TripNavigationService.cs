@@ -5,6 +5,7 @@ using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Core.Navigation;
 using WayfarerMobile.Core.Helpers;
+using WayfarerMobile.Interfaces;
 
 namespace WayfarerMobile.Services;
 
@@ -25,6 +26,7 @@ public class TripNavigationService : ITripNavigationService
     private readonly OsrmRoutingService _osrmService;
     private readonly RouteCacheService _routeCacheService;
     private readonly INavigationAudioService _audioService;
+    private readonly INavigationRouteBuilder _routeBuilder;
 
     private TripNavigationGraph? _currentGraph;
     private TripDetails? _currentTrip;
@@ -78,17 +80,20 @@ public class TripNavigationService : ITripNavigationService
         ILogger<TripNavigationService> logger,
         OsrmRoutingService osrmService,
         RouteCacheService routeCacheService,
-        INavigationAudioService audioService)
+        INavigationAudioService audioService,
+        INavigationRouteBuilder routeBuilder)
     {
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(osrmService);
         ArgumentNullException.ThrowIfNull(routeCacheService);
         ArgumentNullException.ThrowIfNull(audioService);
+        ArgumentNullException.ThrowIfNull(routeBuilder);
 
         _logger = logger;
         _osrmService = osrmService;
         _routeCacheService = routeCacheService;
         _audioService = audioService;
+        _routeBuilder = routeBuilder;
     }
 
     /// <summary>
@@ -160,7 +165,7 @@ public class TripNavigationService : ITripNavigationService
                 var path = _currentGraph.FindPath(nearestNode.Id, destinationPlaceId);
                 if (path.Count > 0)
                 {
-                    _activeRoute = BuildRouteFromPath(path, currentLat, currentLon);
+                    _activeRoute = _routeBuilder.BuildFromSegmentPath(path, currentLat, currentLon, _currentGraph);
                     _logger.LogDebug("Using segment route with {WaypointCount} waypoints", _activeRoute?.Waypoints.Count);
                     return _activeRoute;
                 }
@@ -168,7 +173,7 @@ public class TripNavigationService : ITripNavigationService
         }
 
         // Priority 3: Direct navigation (bearing + distance)
-        _activeRoute = BuildDirectRoute(currentLat, currentLon, destination);
+        _activeRoute = _routeBuilder.BuildDirectRoute(currentLat, currentLon, destination);
         _logger.LogDebug("Using direct route to {Destination}", destination.Name);
         return _activeRoute;
     }
@@ -216,7 +221,7 @@ public class TripNavigationService : ITripNavigationService
                 var path = _currentGraph.FindPath(nearestNode.Id, destinationPlaceId);
                 if (path.Count > 0)
                 {
-                    _activeRoute = BuildRouteFromPath(path, currentLat, currentLon);
+                    _activeRoute = _routeBuilder.BuildFromSegmentPath(path, currentLat, currentLon, _currentGraph);
                     _logger.LogDebug("Using segment route with {WaypointCount} waypoints", _activeRoute?.Waypoints.Count);
                     return _activeRoute;
                 }
@@ -227,7 +232,7 @@ public class TripNavigationService : ITripNavigationService
         var cachedRoute = _routeCacheService.GetValidRoute(currentLat, currentLon, destinationPlaceId);
         if (cachedRoute != null)
         {
-            _activeRoute = BuildRouteFromCache(cachedRoute, currentLat, currentLon, destination);
+            _activeRoute = _routeBuilder.BuildFromCachedRoute(cachedRoute, currentLat, currentLon, destination);
             _logger.LogInformation(
                 "Using cached route to {Destination}: {Distance:F1}km",
                 destination.Name, cachedRoute.DistanceMeters / 1000);
@@ -258,7 +263,7 @@ public class TripNavigationService : ITripNavigationService
                     FetchedAtUtc = DateTime.UtcNow
                 });
 
-                _activeRoute = BuildRouteFromOsrm(osrmRoute, currentLat, currentLon, destination);
+                _activeRoute = _routeBuilder.BuildFromOsrmResponse(osrmRoute, currentLat, currentLon, destination);
                 _logger.LogInformation(
                     "Using OSRM route to {Destination}: {Distance:F1}km",
                     destination.Name, osrmRoute.DistanceMeters / 1000);
@@ -267,113 +272,9 @@ public class TripNavigationService : ITripNavigationService
         }
 
         // Priority 4: Direct navigation (bearing + distance)
-        _activeRoute = BuildDirectRoute(currentLat, currentLon, destination);
+        _activeRoute = _routeBuilder.BuildDirectRoute(currentLat, currentLon, destination);
         _logger.LogDebug("Using direct route to {Destination}", destination.Name);
         return _activeRoute;
-    }
-
-    /// <summary>
-    /// Builds a navigation route from cached route data.
-    /// </summary>
-    private NavigationRoute BuildRouteFromCache(
-        CachedRoute cachedRoute,
-        double startLat, double startLon,
-        NavigationNode destination)
-    {
-        var waypoints = new List<NavigationWaypoint>();
-
-        // Decode the polyline to get all route points
-        var routePoints = PolylineDecoder.Decode(cachedRoute.Geometry);
-
-        // Add start
-        waypoints.Add(new NavigationWaypoint
-        {
-            Latitude = startLat,
-            Longitude = startLon,
-            Name = "Current Location",
-            Type = WaypointType.Start
-        });
-
-        // Add intermediate route points (skip first and last as they're start/destination)
-        foreach (var point in routePoints.Skip(1).Take(routePoints.Count - 2))
-        {
-            waypoints.Add(new NavigationWaypoint
-            {
-                Latitude = point.Latitude,
-                Longitude = point.Longitude,
-                Type = WaypointType.RoutePoint
-            });
-        }
-
-        // Add destination
-        waypoints.Add(new NavigationWaypoint
-        {
-            Latitude = destination.Latitude,
-            Longitude = destination.Longitude,
-            Name = destination.Name,
-            Type = WaypointType.Destination,
-            PlaceId = destination.Id
-        });
-
-        return new NavigationRoute
-        {
-            Waypoints = waypoints,
-            DestinationName = destination.Name,
-            TotalDistanceMeters = cachedRoute.DistanceMeters,
-            EstimatedDuration = TimeSpan.FromSeconds(cachedRoute.DurationSeconds)
-        };
-    }
-
-    /// <summary>
-    /// Builds a navigation route from OSRM response.
-    /// </summary>
-    private NavigationRoute BuildRouteFromOsrm(
-        OsrmRouteResult osrmRoute,
-        double startLat, double startLon,
-        NavigationNode destination)
-    {
-        var waypoints = new List<NavigationWaypoint>();
-
-        // Decode the polyline to get all route points
-        var routePoints = PolylineDecoder.Decode(osrmRoute.Geometry);
-
-        // Add start
-        waypoints.Add(new NavigationWaypoint
-        {
-            Latitude = startLat,
-            Longitude = startLon,
-            Name = "Current Location",
-            Type = WaypointType.Start
-        });
-
-        // Add intermediate route points (skip first and last as they're start/destination)
-        foreach (var point in routePoints.Skip(1).Take(routePoints.Count - 2))
-        {
-            waypoints.Add(new NavigationWaypoint
-            {
-                Latitude = point.Latitude,
-                Longitude = point.Longitude,
-                Type = WaypointType.RoutePoint
-            });
-        }
-
-        // Add destination
-        waypoints.Add(new NavigationWaypoint
-        {
-            Latitude = destination.Latitude,
-            Longitude = destination.Longitude,
-            Name = destination.Name,
-            Type = WaypointType.Destination,
-            PlaceId = destination.Id
-        });
-
-        return new NavigationRoute
-        {
-            Waypoints = waypoints,
-            DestinationName = destination.Name,
-            TotalDistanceMeters = osrmRoute.DistanceMeters,
-            EstimatedDuration = TimeSpan.FromSeconds(osrmRoute.DurationSeconds)
-        };
     }
 
     /// <summary>
@@ -405,7 +306,7 @@ public class TripNavigationService : ITripNavigationService
 
             if (osrmRoute != null)
             {
-                var route = BuildRouteFromOsrmCoordinates(osrmRoute, currentLat, currentLon, destLat, destLon, destName);
+                var route = _routeBuilder.BuildFromOsrmCoordinates(osrmRoute, currentLat, currentLon, destLat, destLon, destName);
                 _logger.LogInformation("Using OSRM route to {Name}: {Distance:F1}km", destName, osrmRoute.DistanceMeters / 1000);
                 _activeRoute = route;
                 return route;
@@ -416,164 +317,11 @@ public class TripNavigationService : ITripNavigationService
             _logger.LogWarning(ex, "OSRM routing failed, falling back to direct route");
         }
 
-        // Fallback to direct route (straight line)
-        _logger.LogInformation("Using direct route to {Name}", destName);
-        var directRoute = BuildDirectRouteToCoordinates(currentLat, currentLon, destLat, destLon, destName);
+        // Fallback to direct route (straight line) with profile-aware ETA
+        _logger.LogInformation("Using direct route to {Name} with profile {Profile}", destName, profile);
+        var directRoute = _routeBuilder.BuildDirectRouteToCoordinates(currentLat, currentLon, destLat, destLon, destName, profile);
         _activeRoute = directRoute;
         return directRoute;
-    }
-
-    /// <summary>
-    /// Builds a navigation route from OSRM response to coordinates.
-    /// </summary>
-    private NavigationRoute BuildRouteFromOsrmCoordinates(
-        OsrmRouteResult osrmRoute,
-        double startLat, double startLon,
-        double destLat, double destLon,
-        string destName)
-    {
-        var waypoints = new List<NavigationWaypoint>();
-
-        // Decode the polyline to get all route points
-        var routePoints = Core.Helpers.PolylineDecoder.Decode(osrmRoute.Geometry);
-
-        // Add start
-        waypoints.Add(new NavigationWaypoint
-        {
-            Latitude = startLat,
-            Longitude = startLon,
-            Name = "Current Location",
-            Type = WaypointType.Start
-        });
-
-        // Add intermediate route points (skip first and last as they're start/destination)
-        foreach (var point in routePoints.Skip(1).Take(routePoints.Count - 2))
-        {
-            waypoints.Add(new NavigationWaypoint
-            {
-                Latitude = point.Latitude,
-                Longitude = point.Longitude,
-                Type = WaypointType.RoutePoint
-            });
-        }
-
-        // Add destination
-        waypoints.Add(new NavigationWaypoint
-        {
-            Latitude = destLat,
-            Longitude = destLon,
-            Name = destName,
-            Type = WaypointType.Destination
-        });
-
-        // Convert OSRM steps to NavigationSteps
-        var steps = osrmRoute.Steps.Select(s => new NavigationStep
-        {
-            Instruction = s.Instruction,
-            DistanceMeters = s.DistanceMeters,
-            DurationSeconds = s.DurationSeconds,
-            ManeuverType = s.ManeuverType,
-            Latitude = s.Latitude,
-            Longitude = s.Longitude,
-            StreetName = s.StreetName
-        }).ToList();
-
-        return new NavigationRoute
-        {
-            Waypoints = waypoints,
-            Steps = steps,
-            DestinationName = destName,
-            TotalDistanceMeters = osrmRoute.DistanceMeters,
-            EstimatedDuration = TimeSpan.FromSeconds(osrmRoute.DurationSeconds),
-            IsDirectRoute = false
-        };
-    }
-
-    /// <summary>
-    /// Builds a direct route (straight line) to coordinates.
-    /// </summary>
-    private NavigationRoute BuildDirectRouteToCoordinates(
-        double startLat, double startLon,
-        double destLat, double destLon,
-        string destName)
-    {
-        var distance = GeoMath.CalculateDistance(startLat, startLon, destLat, destLon);
-        var bearing = GeoMath.CalculateBearing(startLat, startLon, destLat, destLon);
-        var direction = GetCardinalDirection(bearing);
-        var distanceText = FormatDistance(distance);
-
-        // Create instruction for straight-line navigation
-        var instruction = string.IsNullOrEmpty(destName) || destName == "Dropped Pin"
-            ? $"Head {direction}, {distanceText}"
-            : $"Head {direction}, {distanceText} to {destName}";
-
-        var steps = new List<NavigationStep>
-        {
-            new()
-            {
-                Instruction = instruction,
-                DistanceMeters = distance,
-                DurationSeconds = distance / 1.4,
-                ManeuverType = "depart",
-                Latitude = startLat,
-                Longitude = startLon
-            },
-            new()
-            {
-                Instruction = "You have arrived",
-                DistanceMeters = 0,
-                DurationSeconds = 0,
-                ManeuverType = "arrive",
-                Latitude = destLat,
-                Longitude = destLon
-            }
-        };
-
-        return new NavigationRoute
-        {
-            Waypoints = new List<NavigationWaypoint>
-            {
-                new() { Latitude = startLat, Longitude = startLon, Name = "Current Location", Type = WaypointType.Start },
-                new() { Latitude = destLat, Longitude = destLon, Name = destName, Type = WaypointType.Destination }
-            },
-            Steps = steps,
-            DestinationName = destName,
-            TotalDistanceMeters = distance,
-            EstimatedDuration = TimeSpan.FromSeconds(distance / 1.4), // Walking speed ~5km/h
-            IsDirectRoute = true,
-            InitialBearing = bearing
-        };
-    }
-
-    /// <summary>
-    /// Gets the cardinal direction name from a bearing.
-    /// </summary>
-    private static string GetCardinalDirection(double bearing)
-    {
-        // Normalize bearing to 0-360
-        bearing = ((bearing % 360) + 360) % 360;
-
-        return bearing switch
-        {
-            >= 337.5 or < 22.5 => "north",
-            >= 22.5 and < 67.5 => "northeast",
-            >= 67.5 and < 112.5 => "east",
-            >= 112.5 and < 157.5 => "southeast",
-            >= 157.5 and < 202.5 => "south",
-            >= 202.5 and < 247.5 => "southwest",
-            >= 247.5 and < 292.5 => "west",
-            _ => "northwest"
-        };
-    }
-
-    /// <summary>
-    /// Formats a distance in meters to a human-readable string.
-    /// </summary>
-    private static string FormatDistance(double meters)
-    {
-        if (meters >= 1000)
-            return $"{meters / 1000:F1} km";
-        return $"{meters:F0} m";
     }
 
     /// <summary>
@@ -882,85 +630,6 @@ public class TripNavigationService : ITripNavigationService
     }
 
     /// <summary>
-    /// Builds a route from a path of node IDs.
-    /// </summary>
-    private NavigationRoute BuildRouteFromPath(List<string> path, double startLat, double startLon)
-    {
-        var route = new NavigationRoute();
-        var waypoints = new List<NavigationWaypoint>();
-
-        // Add starting position
-        waypoints.Add(new NavigationWaypoint
-        {
-            Latitude = startLat,
-            Longitude = startLon,
-            Name = "Current Location",
-            Type = WaypointType.Start
-        });
-
-        // Add path waypoints
-        for (int i = 0; i < path.Count; i++)
-        {
-            if (_currentGraph!.Nodes.TryGetValue(path[i], out var node))
-            {
-                waypoints.Add(new NavigationWaypoint
-                {
-                    Latitude = node.Latitude,
-                    Longitude = node.Longitude,
-                    Name = node.Name,
-                    Type = i == path.Count - 1 ? WaypointType.Destination : WaypointType.Waypoint,
-                    PlaceId = node.Id
-                });
-
-                // Add edge waypoints if detailed geometry exists
-                if (i < path.Count - 1)
-                {
-                    var edge = _currentGraph.GetEdgeBetween(path[i], path[i + 1]);
-                    if (edge?.HasDetailedGeometry == true && edge.RouteGeometry != null)
-                    {
-                        foreach (var point in edge.RouteGeometry.Skip(1).Take(edge.RouteGeometry.Count - 2))
-                        {
-                            waypoints.Add(new NavigationWaypoint
-                            {
-                                Latitude = point.Latitude,
-                                Longitude = point.Longitude,
-                                Type = WaypointType.RoutePoint
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-        route.Waypoints = waypoints;
-        route.DestinationName = waypoints.LastOrDefault()?.Name ?? "Unknown";
-        route.TotalDistanceMeters = CalculateTotalDistance(waypoints);
-        route.EstimatedDuration = TimeSpan.FromSeconds(route.TotalDistanceMeters / 1.4);
-
-        return route;
-    }
-
-    /// <summary>
-    /// Builds a direct route to a destination.
-    /// </summary>
-    private NavigationRoute BuildDirectRoute(double startLat, double startLon, NavigationNode destination)
-    {
-        var distance = GeoMath.CalculateDistance(startLat, startLon, destination.Latitude, destination.Longitude);
-
-        return new NavigationRoute
-        {
-            Waypoints = new List<NavigationWaypoint>
-            {
-                new() { Latitude = startLat, Longitude = startLon, Name = "Current Location", Type = WaypointType.Start },
-                new() { Latitude = destination.Latitude, Longitude = destination.Longitude, Name = destination.Name, Type = WaypointType.Destination, PlaceId = destination.Id }
-            },
-            DestinationName = destination.Name,
-            TotalDistanceMeters = distance,
-            EstimatedDuration = TimeSpan.FromSeconds(distance / 1.4)
-        };
-    }
-
-    /// <summary>
     /// Gets the next place in the trip sequence.
     /// </summary>
     private TripPlace? GetNextPlaceInSequence(double currentLat, double currentLon)
@@ -1159,21 +828,6 @@ public class TripNavigationService : ITripNavigationService
         var progress = 100 * (1 - remainingDistance / _activeRoute.TotalDistanceMeters);
 
         return Math.Clamp(progress, 0, 100);
-    }
-
-    /// <summary>
-    /// Calculates total distance of waypoints.
-    /// </summary>
-    private static double CalculateTotalDistance(List<NavigationWaypoint> waypoints)
-    {
-        double total = 0;
-        for (int i = 0; i < waypoints.Count - 1; i++)
-        {
-            total += GeoMath.CalculateDistance(
-                waypoints[i].Latitude, waypoints[i].Longitude,
-                waypoints[i + 1].Latitude, waypoints[i + 1].Longitude);
-        }
-        return total;
     }
 
     #endregion

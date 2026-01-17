@@ -5,7 +5,7 @@ namespace WayfarerMobile.Core.Algorithms;
 
 /// <summary>
 /// Filters locations for local timeline storage using AND logic (matching server behavior).
-/// A location is stored only if BOTH time AND distance thresholds are exceeded.
+/// A location is stored only if accuracy is acceptable AND BOTH time AND distance thresholds are exceeded.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -14,8 +14,8 @@ namespace WayfarerMobile.Core.Algorithms;
 /// which syncs from the server (single source of truth).
 /// </para>
 /// <para>
-/// Unlike <see cref="ThresholdFilter"/> which uses OR logic (for reducing API calls),
-/// this filter uses AND logic to match what the server actually stores.
+/// Accuracy is checked first as a hard reject gate. Locations with poor accuracy
+/// are rejected immediately, even for the first location.
 /// </para>
 /// </remarks>
 public class LocalTimelineFilter
@@ -44,6 +44,12 @@ public class LocalTimelineFilter
     public int DistanceThresholdMeters => _settings.LocationDistanceThresholdMeters;
 
     /// <summary>
+    /// Gets the accuracy threshold in meters from settings.
+    /// Locations with accuracy worse (higher) than this value are rejected.
+    /// </summary>
+    public int AccuracyThresholdMeters => _settings.LocationAccuracyThresholdMeters;
+
+    /// <summary>
     /// Gets the last location that passed the filter.
     /// </summary>
     public LocationData? LastStoredLocation
@@ -53,8 +59,20 @@ public class LocalTimelineFilter
 
     /// <summary>
     /// Determines if a location should be stored locally.
-    /// Uses AND logic: both time AND distance thresholds must be exceeded.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A location passes if ALL conditions are met:
+    /// <list type="bullet">
+    /// <item>Accuracy is acceptable (≤ AccuracyThresholdMeters) or null</item>
+    /// <item>It's the first location, OR both time AND distance thresholds are exceeded</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// Accuracy is checked first as a hard reject gate. Locations with poor accuracy
+    /// are rejected immediately, even for the first location.
+    /// </para>
+    /// </remarks>
     /// <param name="location">The location to check.</param>
     /// <returns>True if the location should be stored locally.</returns>
     public bool ShouldStore(LocationData location)
@@ -63,7 +81,12 @@ public class LocalTimelineFilter
 
         lock (_lock)
         {
-            // First location always passes
+            // Accuracy check is a hard reject gate (checked first, even for first location)
+            // Null accuracy is acceptable (older data may lack accuracy info)
+            if (location.Accuracy.HasValue && location.Accuracy.Value > AccuracyThresholdMeters)
+                return false;
+
+            // First location passes if accuracy is acceptable
             if (_lastStoredLocation == null)
                 return true;
 

@@ -19,6 +19,11 @@ public class SyncFailureEventArgs : EventArgs
     /// Gets or sets whether this was a client error (4xx).
     /// </summary>
     public bool IsClientError { get; set; }
+
+    /// <summary>
+    /// Gets or sets the entity type (Place, Region, Segment, Area, Trip).
+    /// </summary>
+    public string? EntityType { get; set; }
 }
 
 /// <summary>

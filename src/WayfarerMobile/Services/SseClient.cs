@@ -290,10 +290,24 @@ public class SseClient : ISseClient
                 _isConnected = false;
                 break; // Exit loop - no retry
             }
+            catch (HttpRequestException ex)
+            {
+                // Network error - only log if we thought we were online (unexpected failure)
+                if (Connectivity.Current.NetworkAccess == NetworkAccess.Internet)
+                {
+                    _logger.LogWarning("SSE network error on {Channel}: {Message}", channelName, ex.Message);
+                }
+
+                reconnectAttempt++;
+                _isConnected = false;
+
+                // Wait for network before retrying (avoids spamming reconnect attempts when offline)
+                await WaitForNetworkAsync(cancellationToken).ConfigureAwait(false);
+            }
             catch (Exception ex)
             {
-                // Real connection error - log and retry with backoff
-                _logger.LogError(ex, "SSE connection error on {Channel}", channelName);
+                // Unexpected error - log with stack trace for debugging
+                _logger.LogError(ex, "SSE unexpected error on {Channel}", channelName);
                 reconnectAttempt++;
                 _isConnected = false;
 
@@ -671,6 +685,51 @@ public class SseClient : ISseClient
                message.Contains("the request was aborted") ||
                message.Contains("closed") ||
                message.Contains("disposed");
+    }
+
+    /// <summary>
+    /// Waits for network connectivity before returning.
+    /// Avoids spamming reconnect attempts when offline.
+    /// </summary>
+    private async Task WaitForNetworkAsync(CancellationToken cancellationToken)
+    {
+        if (Connectivity.Current.NetworkAccess == NetworkAccess.Internet)
+        {
+            return; // Already have network
+        }
+
+        _logger.LogInformation("SSE waiting for network connectivity...");
+
+        var tcs = new TaskCompletionSource<bool>();
+
+        void OnConnectivityChanged(object? sender, ConnectivityChangedEventArgs e)
+        {
+            if (e.NetworkAccess == NetworkAccess.Internet)
+            {
+                tcs.TrySetResult(true);
+            }
+        }
+
+        try
+        {
+            Connectivity.ConnectivityChanged += OnConnectivityChanged;
+
+            // Check again after subscribing (race condition guard)
+            if (Connectivity.Current.NetworkAccess == NetworkAccess.Internet)
+            {
+                return;
+            }
+
+            // Wait for network or cancellation
+            using var registration = cancellationToken.Register(() => tcs.TrySetCanceled());
+            await tcs.Task.ConfigureAwait(false);
+
+            _logger.LogInformation("SSE network connectivity restored");
+        }
+        finally
+        {
+            Connectivity.ConnectivityChanged -= OnConnectivityChanged;
+        }
     }
 
     #endregion

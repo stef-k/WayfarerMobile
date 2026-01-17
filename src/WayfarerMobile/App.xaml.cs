@@ -1,9 +1,12 @@
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Models;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services;
 using WayfarerMobile.ViewModels;
+using WayfarerMobile.ViewModels.Settings;
 
 namespace WayfarerMobile;
 
@@ -129,11 +132,15 @@ public partial class App : Application
                 return;
 
             // Apply theme preference
-            SettingsViewModel.ApplyTheme(settings.ThemePreference);
+            AppearanceSettingsViewModel.ApplyTheme(settings.ThemePreference);
             _logger.LogDebug("Applied theme: {Theme}", settings.ThemePreference);
 
-            // Apply keep screen on setting
-            ApplyKeepScreenOn(settings.KeepScreenOn);
+            // Apply keep screen on setting using native wake lock service
+            if (settings.KeepScreenOn)
+            {
+                var wakeLockService = _serviceProvider.GetService<IWakeLockService>();
+                wakeLockService?.AcquireWakeLock(keepScreenOn: true);
+            }
 
             // Note: Language preference (LanguagePreference) is only for navigation voice guidance,
             // not for changing the app's display language. The navigation service will read this
@@ -142,23 +149,6 @@ public partial class App : Application
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to apply saved settings");
-        }
-    }
-
-    /// <summary>
-    /// Applies the keep screen on setting using the cross-platform MAUI API.
-    /// </summary>
-    /// <param name="keepScreenOn">Whether to keep the screen on.</param>
-    private static void ApplyKeepScreenOn(bool keepScreenOn)
-    {
-        try
-        {
-            DeviceDisplay.Current.KeepScreenOn = keepScreenOn;
-            // Note: No logging here - static method, called frequently on resume
-        }
-        catch
-        {
-            // Silently ignore - not critical functionality
         }
     }
 
@@ -195,19 +185,14 @@ public partial class App : Application
                 _logger.LogDebug("Secure settings preload started");
             }
 
-            // Start location sync service (server sync)
-            var syncService = _serviceProvider.GetService<LocationSyncService>();
-            syncService?.Start();
-            _logger.LogDebug("Background sync service started");
-
             // Start queue drain service (offline queue sync via check-in endpoint)
             var queueDrainService = _serviceProvider.GetService<QueueDrainService>();
-            _ = queueDrainService?.StartAsync();
+            SafeFireAndForget(queueDrainService?.StartAsync(), "QueueDrainService");
             _logger.LogDebug("Queue drain service started");
 
             // Initialize local timeline storage service (subscribes to location events)
             var timelineStorageService = _serviceProvider.GetService<LocalTimelineStorageService>();
-            _ = timelineStorageService?.InitializeAsync();
+            SafeFireAndForget(timelineStorageService?.InitializeAsync(), "LocalTimelineStorageService");
             _logger.LogDebug("Local timeline storage service initialization started");
 
             // Note: Settings sync is handled by SettingsSyncService, triggered opportunistically
@@ -215,12 +200,16 @@ public partial class App : Application
 
             // Sync activity types if needed (UI data, fire-and-forget)
             var activitySyncService = _serviceProvider.GetService<IActivitySyncService>();
-            _ = activitySyncService?.AutoSyncIfNeededAsync();
+            SafeFireAndForget(activitySyncService?.AutoSyncIfNeededAsync(), "ActivitySyncService");
 
             // Start visit notification service if enabled (subscribes to SSE visit events)
             var visitNotificationService = _serviceProvider.GetService<IVisitNotificationService>();
-            _ = visitNotificationService?.StartAsync();
+            SafeFireAndForget(visitNotificationService?.StartAsync(), "VisitNotificationService");
             _logger.LogDebug("Visit notification service initialization started");
+
+            // Wire up location tracking delegates for online/offline path decision
+            WireLocationTrackingDelegates(timelineStorageService);
+            _logger.LogDebug("Location tracking delegates wired");
 
             // Note: Location tracking service start is handled by OnWindowActivatedForServiceStart
             // to ensure deterministic timing after UI is fully initialized.
@@ -229,6 +218,78 @@ public partial class App : Application
         {
             _logger.LogError(ex, "Failed to start background services");
         }
+    }
+
+    /// <summary>
+    /// Wires up the location tracking delegates for online/offline path decision.
+    /// Called early during startup to ensure delegates are set before location service starts.
+    /// </summary>
+    /// <param name="timelineStorageService">The local timeline storage service for updating timeline.</param>
+    private void WireLocationTrackingDelegates(LocalTimelineStorageService? timelineStorageService)
+    {
+        var apiClient = _serviceProvider.GetService<IApiClient>();
+        var locationQueue = _serviceProvider.GetService<ILocationQueueRepository>();
+
+        // Online submit delegate: Submit directly to server via log-location endpoint
+        Func<LocationData, Task<int?>> onlineSubmit = async location =>
+        {
+            if (apiClient == null)
+                throw new InvalidOperationException("API client not available");
+
+            // Convert to API request model
+            var request = new LocationLogRequest
+            {
+                Latitude = location.Latitude,
+                Longitude = location.Longitude,
+                Accuracy = location.Accuracy,
+                Altitude = location.Altitude,
+                Speed = location.Speed,
+                Timestamp = location.Timestamp
+            };
+
+            // Call the log-location endpoint (server is authoritative)
+            var result = await apiClient.LogLocationAsync(request, idempotencyKey: null);
+
+            if (result.Success && !result.Skipped && result.LocationId.HasValue)
+            {
+                // Server accepted - update local timeline with server-assigned ID
+                if (timelineStorageService != null)
+                {
+                    await timelineStorageService.AddAcceptedLocationAsync(location, result.LocationId.Value);
+                }
+                return result.LocationId.Value;
+            }
+
+            // Server skipped (threshold not met) or failed - return null (don't queue)
+            return null;
+        };
+
+        // Offline queue delegate: Queue for background sync
+        Func<LocationData, Task<int>> offlineQueue = async location =>
+        {
+            if (locationQueue == null)
+                throw new InvalidOperationException("Location queue not available");
+
+            // Queue with isUserInvoked=false (background location)
+            var queuedId = await locationQueue.QueueLocationAsync(location, isUserInvoked: false);
+
+            // Add pending entry to local timeline (will be updated when queue drains)
+            if (timelineStorageService != null)
+            {
+                await timelineStorageService.AddPendingLocationAsync(location, queuedId);
+            }
+
+            return queuedId;
+        };
+
+        // Wire up delegates to platform-specific location services
+#if ANDROID
+        WayfarerMobile.Platforms.Android.Services.LocationTrackingService.OnlineSubmitDelegate = onlineSubmit;
+        WayfarerMobile.Platforms.Android.Services.LocationTrackingService.OfflineQueueDelegate = offlineQueue;
+#elif IOS
+        WayfarerMobile.Platforms.iOS.Services.LocationTrackingService.OnlineSubmitDelegate = onlineSubmit;
+        WayfarerMobile.Platforms.iOS.Services.LocationTrackingService.OfflineQueueDelegate = offlineQueue;
+#endif
     }
 
     /// <summary>
@@ -351,19 +412,11 @@ public partial class App : Application
                 await CheckPermissionsHealthAsync();
             }
 
-            // Handle app lifecycle (sync, state restoration)
+            // Handle app lifecycle (sync, state restoration, wake lock re-acquisition)
             var lifecycleService = _serviceProvider.GetService<IAppLifecycleService>();
             if (lifecycleService != null)
             {
                 await lifecycleService.OnResumingAsync();
-            }
-
-            // Re-apply keep screen on setting when resuming
-            // (Android may reset this when app goes to background)
-            var settings = _serviceProvider.GetService<ISettingsService>();
-            if (settings != null)
-            {
-                ApplyKeepScreenOn(settings.KeepScreenOn);
             }
         }
         catch (Exception ex)
@@ -643,6 +696,26 @@ public partial class App : Application
         finally
         {
             _isShowingLockScreen = false;
+        }
+    }
+
+    /// <summary>
+    /// Executes an async task in fire-and-forget mode with proper exception logging.
+    /// Ensures exceptions are observed and logged rather than becoming unobserved task exceptions.
+    /// </summary>
+    /// <param name="task">The task to execute.</param>
+    /// <param name="serviceName">Name of the service for logging context.</param>
+    private async void SafeFireAndForget(Task? task, string serviceName)
+    {
+        if (task == null) return;
+
+        try
+        {
+            await task;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "{ServiceName} initialization failed", serviceName);
         }
     }
 

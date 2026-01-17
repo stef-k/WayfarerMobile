@@ -6,6 +6,7 @@ using Syncfusion.Maui.Toolkit.Hosting;
 using WayfarerMobile.Core.Algorithms;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Services;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Data.Services;
 using WayfarerMobile.Handlers;
 using WayfarerMobile.Interfaces;
@@ -13,10 +14,12 @@ using WayfarerMobile.Services;
 using WayfarerMobile.Services.Security;
 using WayfarerMobile.Services.TileCache;
 using WayfarerMobile.ViewModels;
+using WayfarerMobile.ViewModels.Settings;
 using WayfarerMobile.Views;
 using WayfarerMobile.Views.Onboarding;
 using SkiaSharp.Views.Maui.Controls.Hosting;
 using ZXing.Net.Maui.Controls;
+using SQLite;
 
 namespace WayfarerMobile;
 
@@ -158,7 +161,27 @@ public static class MauiProgram
 
         // Infrastructure Services
         services.AddSingleton<DatabaseService>();
+
+        // Database connection factory for repositories
+        services.AddSingleton<Func<Task<SQLiteAsyncConnection>>>(sp =>
+            () => sp.GetRequiredService<DatabaseService>().GetConnectionAsync());
+
+        // Repositories (all singletons - shared connection)
+        services.AddSingleton<ILocationQueueRepository, LocationQueueRepository>();
+        services.AddSingleton<ITimelineRepository, TimelineRepository>();
+        services.AddSingleton<ILiveTileCacheRepository, LiveTileCacheRepository>();
+        services.AddSingleton<ITripTileRepository, TripTileRepository>();
+        services.AddSingleton<IDownloadStateRepository, DownloadStateRepository>();
+        services.AddSingleton<IPlaceRepository, PlaceRepository>();
+        services.AddSingleton<ISegmentRepository, SegmentRepository>();
+        services.AddSingleton<IAreaRepository, AreaRepository>();
+        services.AddSingleton<ITripRepository, TripRepository>();
+
         services.AddSingleton<ISettingsService, SettingsService>();
+        services.AddSingleton<ITripStateManager, TripStateManager>();
+        services.AddSingleton<IDownloadProgressAggregator, DownloadProgressAggregator>();
+        services.AddSingleton<ISyncEventBus, SyncEventBus>();
+        services.AddSingleton<IMutationQueueService, MutationQueueService>();
 
         // MAUI Essentials Services (for DI injection)
         services.AddSingleton<IConnectivity>(Connectivity.Current);
@@ -167,17 +190,31 @@ public static class MauiProgram
         services.AddSingleton<ApiClient>();
         services.AddSingleton<IApiClient>(sp => sp.GetRequiredService<ApiClient>());
         services.AddSingleton<IVisitApiClient>(sp => sp.GetRequiredService<ApiClient>());
-        services.AddSingleton<LocationSyncService>();
         services.AddSingleton<QueueDrainService>(); // Drains offline queue via check-in endpoint
+        services.AddSingleton<IPlaceOperationsHandler, PlaceOperationsHandler>();
+        services.AddSingleton<IRegionOperationsHandler, RegionOperationsHandler>();
+        services.AddSingleton<ITripEntityOperationsHandler, TripEntityOperationsHandler>();
         services.AddSingleton<ITripSyncService, TripSyncService>();
         services.AddSingleton<ITimelineSyncService, TimelineSyncService>();
         services.AddSingleton<IActivitySyncService, ActivitySyncService>();
         services.AddSingleton<SettingsSyncService>(); // Syncs settings + activities every 6 hours
         services.AddSingleton<IGroupsService, GroupsService>();
+        services.AddSingleton<IGroupMemberManager, GroupMemberManager>();
         services.AddSingleton<NavigationService>();
+        services.AddSingleton<ITileDownloadService, TileDownloadService>();
+        services.AddSingleton<IDownloadStateManager, DownloadStateManager>();
+        services.AddSingleton<ICacheLimitEnforcer, CacheLimitEnforcer>();
+        services.AddSingleton<ITripMetadataBuilder, TripMetadataBuilder>();
+        services.AddSingleton<ITripContentService, TripContentService>();
+        services.AddSingleton<ITileDownloadOrchestrator, TileDownloadOrchestrator>();
         services.AddSingleton<TripDownloadService>();
         // Also register as interface for consumers that prefer interface injection
         services.AddSingleton<ITripDownloadService>(sp => sp.GetRequiredService<TripDownloadService>());
+        services.AddSingleton<IDownloadStateService, DownloadStateService>();
+
+        // Trip editing and sync coordination (extracted from TripDownloadService)
+        services.AddSingleton<ITripEditingService, TripEditingService>();
+        services.AddSingleton<ITripSyncCoordinator, TripSyncCoordinator>();
 
         // Local Timeline Services (offline-first timeline storage)
         services.AddSingleton<LocalTimelineFilter>();
@@ -185,6 +222,7 @@ public static class MauiProgram
         services.AddSingleton<TimelineDataService>();
         services.AddTransient<TimelineExportService>();
         services.AddTransient<TimelineImportService>();
+        services.AddSingleton<ITimelineEntryManager, TimelineEntryManager>();
 
         // Tile Cache Services (depends on TripDownloadService, ILocationBridge)
         services.AddSingleton<LiveTileCacheService>();
@@ -202,6 +240,7 @@ public static class MauiProgram
 
         // Feature-specific Layer Services
         services.AddSingleton<IGroupLayerService, GroupLayerService>(); // Stateless rendering
+        services.AddSingleton<MarkerPulseAnimator>(); // Shared animation timing for live markers
         services.AddSingleton<ILocationLayerService, LocationLayerService>(); // Stateful (animation)
         services.AddSingleton<IDroppedPinLayerService, DroppedPinLayerService>(); // Stateless rendering
         services.AddSingleton<ITripLayerService, TripLayerService>(); // Has icon cache
@@ -210,6 +249,7 @@ public static class MauiProgram
         // Routing Services
         services.AddSingleton<OsrmRoutingService>();
         services.AddSingleton<RouteCacheService>();
+        services.AddSingleton<INavigationRouteBuilder, NavigationRouteBuilder>();
         services.AddSingleton<TripNavigationService>();
         services.AddSingleton<ITripNavigationService>(sp => sp.GetRequiredService<TripNavigationService>());
 
@@ -258,18 +298,66 @@ public static class MauiProgram
         // Visit Notification Service (depends on SSE, TTS, LocalNotification, LocationSyncEventBridge)
         services.AddSingleton<IVisitNotificationService, VisitNotificationService>();
 
-        // ViewModels
-        services.AddSingleton<MainViewModel>();
+        // ViewModels - Singleton child VMs (hold expensive state like Map instance)
+        services.AddSingleton<MapDisplayViewModel>();  // Map display and layer management
+        services.AddSingleton<NavigationCoordinatorViewModel>();  // Navigation coordination
+        services.AddSingleton<TripItemEditorViewModel>();  // Trip item editing operations
+        services.AddSingleton<ContextMenuViewModel>();  // Context menu and dropped pin operations
+        services.AddSingleton<TrackingCoordinatorViewModel>();  // Tracking lifecycle management
+
+        // Transient VMs - same lifetime as their Page to prevent MauiContext disposal issues
+        services.AddTransient<TripSheetViewModel>();  // Trip sheet display and selection
+        services.AddTransient<MainViewModel>();  // Main page coordination
+
+        // Settings child ViewModels
+        services.AddTransient<NavigationSettingsViewModel>();
+        services.AddTransient<CacheSettingsViewModel>();
+        services.AddTransient<VisitNotificationSettingsViewModel>();
+        services.AddTransient<AppearanceSettingsViewModel>();
+        services.AddTransient<TimelineDataViewModel>();
         services.AddTransient<SettingsViewModel>();
+        // Groups child ViewModels (transient to match parent lifetime)
+        // These must be transient because they hold callbacks to the transient GroupsViewModel
+        services.AddTransient<SseManagementViewModel>();
+        services.AddTransient<DateNavigationViewModel>();
+        services.AddTransient<MemberDetailsViewModel>();
         services.AddTransient<GroupsViewModel>();
         services.AddTransient<OnboardingViewModel>();
-        services.AddTransient<TimelineViewModel>();
+
+        // Timeline ViewModels with factory pattern for child VMs
+        services.AddTransient<TimelineViewModel>(sp => new TimelineViewModel(
+            sp.GetRequiredService<IApiClient>(),
+            sp.GetRequiredService<DatabaseService>(),
+            sp.GetRequiredService<ITimelineSyncService>(),
+            sp.GetRequiredService<IToastService>(),
+            sp.GetRequiredService<ISettingsService>(),
+            sp.GetRequiredService<IMapBuilder>(),
+            sp.GetRequiredService<ITimelineLayerService>(),
+            sp.GetRequiredService<TimelineDataService>(),
+            sp.GetRequiredService<ITimelineEntryManager>(),
+            callbacks => new CoordinateEditorViewModel(
+                callbacks,
+                sp.GetRequiredService<ITimelineSyncService>(),
+                sp.GetRequiredService<IToastService>(),
+                sp.GetRequiredService<ILogger<CoordinateEditorViewModel>>()),
+            callbacks => new DateTimeEditorViewModel(
+                callbacks,
+                sp.GetRequiredService<ITimelineSyncService>(),
+                sp.GetRequiredService<IToastService>(),
+                sp.GetRequiredService<ILogger<DateTimeEditorViewModel>>()),
+            sp.GetRequiredService<ILogger<TimelineViewModel>>()));
+
         services.AddTransient<CheckInViewModel>();
-        services.AddSingleton<TripsViewModel>();
+
+        // Trips ViewModels (coordinator pattern)
+        services.AddSingleton<TripDownloadViewModel>();    // Download operations
+        services.AddSingleton<MyTripsViewModel>();         // My Trips tab
+        services.AddSingleton<PublicTripsViewModel>();     // Public Trips tab
+        services.AddSingleton<TripsPageViewModel>();       // Coordinator
+
         services.AddTransient<PinSecurityViewModel>();
         services.AddSingleton<NavigationHudViewModel>();
         services.AddTransient<QrScannerViewModel>();
-        services.AddTransient<PublicTripsViewModel>();
         services.AddTransient<LockScreenViewModel>();
         services.AddTransient<AboutViewModel>();
         services.AddTransient<DiagnosticsViewModel>();

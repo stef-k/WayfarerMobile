@@ -28,6 +28,7 @@ public class SettingsService : ISettingsService
     private const string KeyApiToken = "api_token";
     private const string KeyLocationTimeThreshold = "location_time_threshold";
     private const string KeyLocationDistanceThreshold = "location_distance_threshold";
+    private const string KeyLocationAccuracyThreshold = "location_accuracy_threshold";
     private const string KeyLastSyncTime = "last_sync_time";
     private const string KeyThemePreference = "theme_preference";
     private const string KeyLanguagePreference = "language_preference";
@@ -268,6 +269,17 @@ public class SettingsService : ISettingsService
     }
 
     /// <summary>
+    /// Gets or sets the maximum acceptable GPS accuracy for location logging (from server config).
+    /// Locations with accuracy worse (higher) than this value are rejected.
+    /// Default: 50 meters. Server validates the range (10-1000m).
+    /// </summary>
+    public int LocationAccuracyThresholdMeters
+    {
+        get => Preferences.Get(KeyLocationAccuracyThreshold, 50);
+        set => Preferences.Set(KeyLocationAccuracyThreshold, value);
+    }
+
+    /// <summary>
     /// Gets whether the app is properly configured (has server URL and token).
     /// </summary>
     public bool IsConfigured =>
@@ -442,10 +454,11 @@ public class SettingsService : ISettingsService
 
     /// <summary>
     /// Gets or sets the navigation audio volume (0.0 to 1.0).
+    /// Default is 0.7 (70%) to avoid startling users.
     /// </summary>
     public float NavigationVolume
     {
-        get => Preferences.Get(KeyNavigationVolume, 1.0f);
+        get => Preferences.Get(KeyNavigationVolume, 0.7f);
         set => Preferences.Set(KeyNavigationVolume, Math.Clamp(value, 0.0f, 1.0f));
     }
 

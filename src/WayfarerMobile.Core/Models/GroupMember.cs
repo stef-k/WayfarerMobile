@@ -1,10 +1,19 @@
+using System.ComponentModel;
+
 namespace WayfarerMobile.Core.Models;
 
 /// <summary>
 /// Represents a member of a group.
 /// </summary>
-public class GroupMember
+public class GroupMember : INotifyPropertyChanged
 {
+    private bool _isVisibleOnMap = true;
+
+    /// <summary>
+    /// Occurs when a property value changes.
+    /// </summary>
+    public event PropertyChangedEventHandler? PropertyChanged;
+
     /// <summary>
     /// Gets or sets the user ID.
     /// </summary>
@@ -53,7 +62,18 @@ public class GroupMember
     /// <summary>
     /// Gets or sets whether this member is visible on the map.
     /// </summary>
-    public bool IsVisibleOnMap { get; set; } = true;
+    public bool IsVisibleOnMap
+    {
+        get => _isVisibleOnMap;
+        set
+        {
+            if (_isVisibleOnMap != value)
+            {
+                _isVisibleOnMap = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsVisibleOnMap)));
+            }
+        }
+    }
 
     /// <summary>
     /// Gets the display name to show (falls back to username).

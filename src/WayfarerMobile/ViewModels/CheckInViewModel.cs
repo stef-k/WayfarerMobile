@@ -4,8 +4,10 @@ using CommunityToolkit.Mvvm.Input;
 using Mapsui.Layers;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Interfaces;
 using WayfarerMobile.Data.Entities;
+using WayfarerMobile.Services;
 
 namespace WayfarerMobile.ViewModels;
 
@@ -20,6 +22,8 @@ public partial class CheckInViewModel : BaseViewModel
     private readonly ILocationLayerService _locationLayerService;
     private readonly IActivitySyncService _activitySyncService;
     private readonly IToastService _toastService;
+    private readonly ILocationQueueRepository _locationQueue;
+    private readonly LocalTimelineStorageService _timelineStorage;
 
     // Map state - CheckInViewModel owns its Map instance
     private Mapsui.Map? _map;
@@ -139,7 +143,9 @@ public partial class CheckInViewModel : BaseViewModel
         IMapBuilder mapBuilder,
         ILocationLayerService locationLayerService,
         IActivitySyncService activitySyncService,
-        IToastService toastService)
+        IToastService toastService,
+        ILocationQueueRepository locationQueue,
+        LocalTimelineStorageService timelineStorage)
     {
         _locationBridge = locationBridge;
         _apiClient = apiClient;
@@ -147,6 +153,8 @@ public partial class CheckInViewModel : BaseViewModel
         _locationLayerService = locationLayerService;
         _activitySyncService = activitySyncService;
         _toastService = toastService;
+        _locationQueue = locationQueue;
+        _timelineStorage = timelineStorage;
         Title = "Check In";
     }
 
@@ -208,7 +216,7 @@ public partial class CheckInViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Submits the check-in to the server.
+    /// Submits the check-in to the server, with offline fallback.
     /// </summary>
     [RelayCommand]
     private async Task SubmitCheckInAsync()
@@ -241,24 +249,71 @@ public partial class CheckInViewModel : BaseViewModel
                 Notes = string.IsNullOrWhiteSpace(Notes) ? null : Notes.Trim()
             };
 
-            var result = await _apiClient.CheckInAsync(request);
-
-            IsSubmitting = false;
+            // ONLINE PATH: Try direct server submission
+            var result = await _apiClient.CheckInAsync(request, Guid.NewGuid().ToString("N"));
 
             if (result.Success)
             {
+                IsSubmitting = false;
+
                 // Show success state
                 IsSuccess = true;
                 OverlayMessage = "Check-in successful!";
 
+                // Add to local timeline with server-assigned ID
+                if (result.LocationId.HasValue)
+                {
+                    await _timelineStorage.AddAcceptedLocationAsync(CurrentLocation, result.LocationId.Value);
+                }
+
                 // Keep success visible for 1.5s so users can see it, then close
                 await Task.Delay(1500);
                 CheckInCompleted?.Invoke(this, EventArgs.Empty);
+                return;
             }
-            else
+
+            // Check if this is a transient failure (network error, timeout) - fall through to offline path
+            if (!result.IsTransient)
             {
+                // Server rejected (non-network failure) - show error and stop
+                IsSubmitting = false;
                 await _toastService.ShowErrorAsync($"Check-in failed: {result.Message}");
+                return;
             }
+
+            // Transient failure (network/timeout) - fall through to offline path
+
+            // OFFLINE PATH: Queue for background sync
+            OverlayMessage = "Offline - queuing check-in...";
+
+            var locationData = new LocationData
+            {
+                Latitude = CurrentLocation.Latitude,
+                Longitude = CurrentLocation.Longitude,
+                Altitude = CurrentLocation.Altitude,
+                Accuracy = CurrentLocation.Accuracy,
+                Speed = CurrentLocation.Speed,
+                Timestamp = request.Timestamp,
+                Provider = request.Provider
+            };
+
+            // Queue with isUserInvoked=true, activity, and notes
+            var queuedId = await _locationQueue.QueueLocationAsync(
+                locationData,
+                isUserInvoked: true,
+                activityTypeId: SelectedActivity?.Id,
+                notes: string.IsNullOrWhiteSpace(Notes) ? null : Notes.Trim());
+
+            // Add pending entry to local timeline
+            await _timelineStorage.AddPendingLocationAsync(locationData, queuedId);
+
+            IsSubmitting = false;
+            IsSuccess = true;
+            OverlayMessage = "Queued for sync when online";
+
+            // Keep success visible for 1.5s so users can see it, then close
+            await Task.Delay(1500);
+            CheckInCompleted?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex)
         {

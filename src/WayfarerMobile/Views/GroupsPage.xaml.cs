@@ -84,6 +84,9 @@ public partial class GroupsPage : ContentPage
         // This prevents confusion between live GPS dot and group member markers
         _viewModel.ClearLiveLocationIndicator();
 
+        // Sync peer visibility switch with ViewModel state
+        SyncPeerVisibilitySwitch();
+
         await _viewModel.OnAppearingAsync();
     }
 
@@ -139,28 +142,33 @@ public partial class GroupsPage : ContentPage
         var feature = mapInfo.Feature;
         Console.WriteLine($"[Groups] OnMapInfo: Feature found, checking for UserId...");
 
-        // Check if a group member marker was tapped
-        if (feature["UserId"] is string userId && !string.IsNullOrEmpty(userId))
+        // Check for historical location marker FIRST (both have UserId, but historical has IsHistorical=true)
+        if (feature["IsHistorical"] is bool isHistorical && isHistorical)
+        {
+            // Historical location marker tapped - extract all data from feature
+            var historicalUserId = feature["UserId"] as string;
+            if (!string.IsNullOrEmpty(historicalUserId))
+            {
+                var latitude = feature["Latitude"] is double lat ? lat : 0;
+                var longitude = feature["Longitude"] is double lon ? lon : 0;
+                var timestamp = feature["TimestampUtc"] is DateTime ts ? ts : DateTime.UtcNow;
+
+                Console.WriteLine($"[Groups] OnMapInfo: Tapped historical location for {historicalUserId} at {latitude},{longitude} on {timestamp}");
+                _viewModel.ShowHistoricalMemberDetails(historicalUserId, latitude, longitude, timestamp);
+                BottomSheet.State = BottomSheetState.FullExpanded;
+            }
+        }
+        // Check for live/latest group member marker
+        else if (feature["UserId"] is string userId && !string.IsNullOrEmpty(userId))
         {
             Console.WriteLine($"[Groups] OnMapInfo: Tapped member {userId}");
             _viewModel.ShowMemberDetailsByUserId(userId);
             BottomSheet.State = BottomSheetState.FullExpanded;
         }
-        else if (feature["IsHistorical"] is bool isHistorical && isHistorical)
-        {
-            // Historical location marker tapped
-            var historicalUserId = feature["UserId"] as string;
-            if (!string.IsNullOrEmpty(historicalUserId))
-            {
-                Console.WriteLine($"[Groups] OnMapInfo: Tapped historical location for {historicalUserId}");
-                _viewModel.ShowMemberDetailsByUserId(historicalUserId);
-                BottomSheet.State = BottomSheetState.FullExpanded;
-            }
-        }
     }
 
     /// <summary>
-    /// Handles ViewModel property changes for bottom sheet state.
+    /// Handles ViewModel property changes for bottom sheet state and peer visibility.
     /// </summary>
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -174,6 +182,24 @@ public partial class GroupsPage : ContentPage
             {
                 BottomSheet.State = BottomSheetState.Collapsed;
             }
+        }
+        else if (e.PropertyName == nameof(GroupsViewModel.MyPeerVisibilityDisabled))
+        {
+            // Sync switch state: ON when visible (not disabled), OFF when disabled
+            SyncPeerVisibilitySwitch();
+        }
+    }
+
+    /// <summary>
+    /// Syncs the peer visibility switch with the ViewModel state.
+    /// </summary>
+    private void SyncPeerVisibilitySwitch()
+    {
+        // Switch ON = visible (not disabled), OFF = hidden (disabled)
+        var shouldBeOn = !_viewModel.MyPeerVisibilityDisabled;
+        if (PeerVisibilitySwitch.IsToggled != shouldBeOn)
+        {
+            PeerVisibilitySwitch.IsToggled = shouldBeOn;
         }
     }
 
@@ -212,6 +238,26 @@ public partial class GroupsPage : ContentPage
     {
         // Trigger map update when any member's visibility changes
         _viewModel.RefreshMapMarkersCommand.Execute(null);
+    }
+
+    /// <summary>
+    /// Handles peer visibility toggle changes.
+    /// </summary>
+    private void OnPeerVisibilityToggled(object? sender, ToggledEventArgs e)
+    {
+        // Toggle peer visibility via command
+        // Note: Switch ON = visible (not disabled), OFF = hidden (disabled)
+        // The command toggles the current state, so we only execute if the desired state differs
+        var wantVisible = e.Value;
+        var currentlyDisabled = _viewModel.MyPeerVisibilityDisabled;
+
+        // Only toggle if the states don't match
+        // wantVisible && currentlyDisabled = need to enable (toggle)
+        // !wantVisible && !currentlyDisabled = need to disable (toggle)
+        if ((wantVisible && currentlyDisabled) || (!wantVisible && !currentlyDisabled))
+        {
+            _viewModel.TogglePeerVisibilityCommand.Execute(null);
+        }
     }
 
     /// <summary>

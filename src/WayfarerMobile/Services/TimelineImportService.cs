@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Data.Entities;
-using WayfarerMobile.Data.Services;
+using WayfarerMobile.Data.Repositories;
 
 namespace WayfarerMobile.Services;
 
@@ -20,18 +20,20 @@ public record ImportResult(int Imported, int Updated, int Skipped, List<string> 
 /// </summary>
 public class TimelineImportService
 {
-    private readonly DatabaseService _databaseService;
+    private readonly ITimelineRepository _timelineRepository;
     private readonly ILogger<TimelineImportService> _logger;
     private const int TimestampToleranceSeconds = 2;
 
     /// <summary>
     /// Creates a new instance of TimelineImportService.
     /// </summary>
+    /// <param name="timelineRepository">Repository for timeline operations.</param>
+    /// <param name="logger">Logger instance.</param>
     public TimelineImportService(
-        DatabaseService databaseService,
+        ITimelineRepository timelineRepository,
         ILogger<TimelineImportService> logger)
     {
-        _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
+        _timelineRepository = timelineRepository ?? throw new ArgumentNullException(nameof(timelineRepository));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -197,7 +199,7 @@ public class TimelineImportService
     private async Task<ImportAction> ImportEntryAsync(LocalTimelineEntry entry)
     {
         // Check for existing entry by timestamp
-        var existing = await _databaseService.GetLocalTimelineEntryByTimestampAsync(
+        var existing = await _timelineRepository.GetLocalTimelineEntryByTimestampAsync(
             entry.Timestamp,
             TimestampToleranceSeconds);
 
@@ -214,7 +216,7 @@ public class TimelineImportService
                 if (HasMoreData(entry, existing))
                 {
                     UpdateExisting(existing, entry);
-                    await _databaseService.UpdateLocalTimelineEntryAsync(existing);
+                    await _timelineRepository.UpdateLocalTimelineEntryAsync(existing);
                     return ImportAction.Updated;
                 }
                 return ImportAction.Skipped;
@@ -224,7 +226,7 @@ public class TimelineImportService
         // New entry
         entry.CreatedAt = DateTime.UtcNow;
         entry.ServerId = null; // Imported entries are local-only
-        await _databaseService.InsertLocalTimelineEntryAsync(entry);
+        await _timelineRepository.InsertLocalTimelineEntryAsync(entry);
         return ImportAction.Imported;
     }
 

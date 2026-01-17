@@ -41,8 +41,22 @@ public enum TimelineViewType
 /// <summary>
 /// ViewModel for the timeline page showing location history on a map.
 /// </summary>
-public partial class TimelineViewModel : BaseViewModel
+public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbacks, IDateTimeEditorCallbacks
 {
+    #region Child ViewModels
+
+    /// <summary>
+    /// Gets the coordinate editor child ViewModel.
+    /// </summary>
+    public CoordinateEditorViewModel CoordinateEditor { get; }
+
+    /// <summary>
+    /// Gets the datetime editor child ViewModel.
+    /// </summary>
+    public DateTimeEditorViewModel DateTimeEditor { get; }
+
+    #endregion
+
     #region Constants
 
     private const string TimelineLayerName = "TimelineLocations";
@@ -60,6 +74,7 @@ public partial class TimelineViewModel : BaseViewModel
     private readonly IMapBuilder _mapBuilder;
     private readonly ITimelineLayerService _timelineLayerService;
     private readonly TimelineDataService _timelineDataService;
+    private readonly ITimelineEntryManager _entryManager;
     private readonly ILogger<TimelineViewModel> _logger;
     private Map? _map;
     private WritableLayer? _timelineLayer;
@@ -82,8 +97,6 @@ public partial class TimelineViewModel : BaseViewModel
     /// Gets or sets the selected date for filtering.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DateButtonText))]
-    [NotifyPropertyChangedFor(nameof(CanGoNext))]
     private DateTime _selectedDate = DateTime.Today;
 
     /// <summary>
@@ -129,44 +142,6 @@ public partial class TimelineViewModel : BaseViewModel
     private bool _isLocationSheetOpen;
 
     /// <summary>
-    /// Gets or sets whether coordinate picking mode is active.
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsEditing))]
-    [NotifyPropertyChangedFor(nameof(CanNavigateDate))]
-    private bool _isCoordinatePickingMode;
-
-    /// <summary>
-    /// Gets or sets whether the edit datetime picker is open.
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsEditing))]
-    [NotifyPropertyChangedFor(nameof(CanNavigateDate))]
-    private bool _isEditDateTimePickerOpen;
-
-    /// <summary>
-    /// Gets or sets the datetime being edited.
-    /// </summary>
-    [ObservableProperty]
-    private DateTime _editDateTime = DateTime.Now;
-
-    /// <summary>
-    /// Gets or sets the pending latitude during coordinate picking.
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasPendingCoordinates))]
-    [NotifyPropertyChangedFor(nameof(PendingCoordinatesText))]
-    private double? _pendingLatitude;
-
-    /// <summary>
-    /// Gets or sets the pending longitude during coordinate picking.
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasPendingCoordinates))]
-    [NotifyPropertyChangedFor(nameof(PendingCoordinatesText))]
-    private double? _pendingLongitude;
-
-    /// <summary>
     /// Gets or sets whether the app is currently online.
     /// </summary>
     [ObservableProperty]
@@ -182,46 +157,31 @@ public partial class TimelineViewModel : BaseViewModel
     public Map Map => _map ??= CreateMap();
 
     /// <summary>
-    /// Gets the date button text based on current date.
+    /// Gets or sets the date button text based on current date.
+    /// Observable backing field to ensure compiled bindings update correctly.
     /// </summary>
-    public string DateButtonText
-    {
-        get
-        {
-            if (SelectedDate.Date == DateTime.Today)
-                return "Today";
-            if (SelectedDate.Date == DateTime.Today.AddDays(-1))
-                return "Yesterday";
-            return SelectedDate.ToString("ddd, MMM d");
-        }
-    }
+    [ObservableProperty]
+    private string _dateButtonText = "Today";
 
     /// <summary>
-    /// Gets whether the user can navigate to the next day (cannot go past today).
+    /// Gets or sets whether the user can navigate to the next day (cannot go past today).
+    /// Observable backing field to ensure compiled bindings update correctly.
     /// </summary>
-    public bool CanGoNext => SelectedDate.Date < DateTime.Today && CanNavigateDate;
+    [ObservableProperty]
+    private bool _canGoNext;
 
     /// <summary>
-    /// Gets whether any edit mode is currently active.
+    /// Gets or sets whether any edit mode is currently active.
+    /// Observable backing field to ensure compiled bindings update correctly.
     /// </summary>
-    public bool IsEditing => IsCoordinatePickingMode || IsEditDateTimePickerOpen;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanNavigateDate))]
+    private bool _isEditing;
 
     /// <summary>
     /// Gets whether date navigation is allowed (not during editing).
     /// </summary>
     public bool CanNavigateDate => !IsEditing;
-
-    /// <summary>
-    /// Gets whether there are pending coordinates to save.
-    /// </summary>
-    public bool HasPendingCoordinates => PendingLatitude.HasValue && PendingLongitude.HasValue;
-
-    /// <summary>
-    /// Gets the pending coordinates text for display.
-    /// </summary>
-    public string PendingCoordinatesText => HasPendingCoordinates
-        ? $"{PendingLatitude:F6}, {PendingLongitude:F6}"
-        : "Tap on map to set location";
 
     #endregion
 
@@ -238,6 +198,9 @@ public partial class TimelineViewModel : BaseViewModel
     /// <param name="mapBuilder">The map builder for creating isolated map instances.</param>
     /// <param name="timelineLayerService">The timeline layer service for rendering markers.</param>
     /// <param name="timelineDataService">The timeline data service for local storage access.</param>
+    /// <param name="entryManager">The timeline entry manager for CRUD and external actions.</param>
+    /// <param name="coordinateEditorFactory">Factory to create the coordinate editor ViewModel.</param>
+    /// <param name="dateTimeEditorFactory">Factory to create the datetime editor ViewModel.</param>
     /// <param name="logger">The logger for diagnostic output.</param>
     public TimelineViewModel(
         IApiClient apiClient,
@@ -248,6 +211,9 @@ public partial class TimelineViewModel : BaseViewModel
         IMapBuilder mapBuilder,
         ITimelineLayerService timelineLayerService,
         TimelineDataService timelineDataService,
+        ITimelineEntryManager entryManager,
+        Func<ICoordinateEditorCallbacks, CoordinateEditorViewModel> coordinateEditorFactory,
+        Func<IDateTimeEditorCallbacks, DateTimeEditorViewModel> dateTimeEditorFactory,
         ILogger<TimelineViewModel> logger)
     {
         _apiClient = apiClient;
@@ -258,17 +224,29 @@ public partial class TimelineViewModel : BaseViewModel
         _mapBuilder = mapBuilder;
         _timelineLayerService = timelineLayerService;
         _timelineDataService = timelineDataService;
+        _entryManager = entryManager;
         _logger = logger;
         Title = "Timeline";
 
-        // Subscribe to sync events
-        _timelineSyncService.SyncCompleted += OnSyncCompleted;
-        _timelineSyncService.SyncQueued += OnSyncQueued;
-        _timelineSyncService.SyncRejected += OnSyncRejected;
+        // Create child ViewModels with this as callbacks
+        CoordinateEditor = coordinateEditorFactory(this);
+        DateTimeEditor = dateTimeEditorFactory(this);
 
-        // Initialize connectivity state
+        // Wire up property change forwarding for XAML bindings
+        // (Child VMs are created fresh for each TimelineViewModel instance, so this is safe)
+        CoordinateEditor.PropertyChanged += OnCoordinateEditorPropertyChanged;
+        DateTimeEditor.PropertyChanged += OnDateTimeEditorPropertyChanged;
+
+        // Note: Singleton service subscriptions (sync events, connectivity) are done in
+        // OnAppearingAsync and unsubscribed in OnDisappearingAsync to prevent event handler
+        // accumulation when this Transient ViewModel is recreated on each navigation.
+
+        // Initialize connectivity state (but don't subscribe yet)
         UpdateConnectivityState();
-        Connectivity.ConnectivityChanged += OnConnectivityChanged;
+
+        // Initialize observable properties derived from SelectedDate
+        UpdateDateButtonText();
+        UpdateCanGoNext();
     }
 
     #endregion
@@ -286,55 +264,6 @@ public partial class TimelineViewModel : BaseViewModel
 
         // Create map with tile source (includes offline caching) and our layers
         return _mapBuilder.CreateMap(_timelineLayer, _tempMarkerLayer);
-    }
-
-    /// <summary>
-    /// Updates or creates the temporary marker at the specified coordinates.
-    /// </summary>
-    /// <param name="latitude">The latitude.</param>
-    /// <param name="longitude">The longitude.</param>
-    private void UpdateTempMarker(double latitude, double longitude)
-    {
-        if (_tempMarkerLayer == null || _map == null)
-            return;
-
-        _tempMarkerLayer.Clear();
-
-        var (x, y) = SphericalMercator.FromLonLat(longitude, latitude);
-        var point = new Point(x, y);
-        var feature = new GeometryFeature(point)
-        {
-            Styles = new[] { CreateTempMarkerStyle() }
-        };
-
-        _tempMarkerLayer.Add(feature);
-        _tempMarkerLayer.DataHasChanged();
-    }
-
-    /// <summary>
-    /// Removes the temporary marker from the map.
-    /// </summary>
-    private void RemoveTempMarker()
-    {
-        if (_tempMarkerLayer == null)
-            return;
-
-        _tempMarkerLayer.Clear();
-        _tempMarkerLayer.DataHasChanged();
-    }
-
-    /// <summary>
-    /// Creates the style for the temporary marker (distinct from regular markers).
-    /// </summary>
-    private static IStyle CreateTempMarkerStyle()
-    {
-        return new SymbolStyle
-        {
-            SymbolScale = 0.7,
-            Fill = new Brush(Color.FromArgb(255, 255, 87, 34)), // Orange (Material Deep Orange)
-            Outline = new Pen(Color.White, 3),
-            SymbolType = SymbolType.Ellipse
-        };
     }
 
     /// <summary>
@@ -652,22 +581,10 @@ public partial class TimelineViewModel : BaseViewModel
         if (SelectedLocation == null)
             return;
 
-        try
-        {
-            var location = new Microsoft.Maui.Devices.Sensors.Location(SelectedLocation.Latitude, SelectedLocation.Longitude);
-            var options = new MapLaunchOptions { Name = $"Location at {SelectedLocation.TimeText}" };
-            await Microsoft.Maui.ApplicationModel.Map.Default.OpenAsync(location, options);
-        }
-        catch (FeatureNotSupportedException ex)
-        {
-            _logger.LogWarning(ex, "Maps feature not supported on this device");
-            await _toastService.ShowErrorAsync("Maps not available");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to open maps");
-            await _toastService.ShowErrorAsync("Could not open maps");
-        }
+        await _entryManager.OpenInMapsAsync(
+            SelectedLocation.Latitude,
+            SelectedLocation.Longitude,
+            $"Location at {SelectedLocation.TimeText}");
     }
 
     /// <summary>
@@ -679,21 +596,9 @@ public partial class TimelineViewModel : BaseViewModel
         if (SelectedLocation == null)
             return;
 
-        try
-        {
-            var url = $"https://en.wikipedia.org/wiki/Special:Nearby#/coord/{SelectedLocation.Latitude},{SelectedLocation.Longitude}";
-            await Launcher.OpenAsync(new Uri(url));
-        }
-        catch (UriFormatException ex)
-        {
-            _logger.LogError(ex, "Invalid Wikipedia URL");
-            await _toastService.ShowErrorAsync("Could not open Wikipedia");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to open Wikipedia");
-            await _toastService.ShowErrorAsync("Could not open Wikipedia");
-        }
+        await _entryManager.SearchWikipediaAsync(
+            SelectedLocation.Latitude,
+            SelectedLocation.Longitude);
     }
 
     /// <summary>
@@ -705,22 +610,9 @@ public partial class TimelineViewModel : BaseViewModel
         if (SelectedLocation == null)
             return;
 
-        try
-        {
-            var coords = $"{SelectedLocation.Latitude:F6}, {SelectedLocation.Longitude:F6}";
-            await Clipboard.SetTextAsync(coords);
-            await _toastService.ShowAsync("Coordinates copied");
-        }
-        catch (FeatureNotSupportedException ex)
-        {
-            _logger.LogWarning(ex, "Clipboard not supported on this device");
-            await _toastService.ShowErrorAsync("Clipboard not available");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to copy coordinates");
-            await _toastService.ShowErrorAsync("Could not copy coordinates");
-        }
+        await _entryManager.CopyCoordinatesAsync(
+            SelectedLocation.Latitude,
+            SelectedLocation.Longitude);
     }
 
     /// <summary>
@@ -732,27 +624,11 @@ public partial class TimelineViewModel : BaseViewModel
         if (SelectedLocation == null)
             return;
 
-        try
-        {
-            var googleMapsUrl = $"https://www.google.com/maps?q={SelectedLocation.Latitude:F6},{SelectedLocation.Longitude:F6}";
-            var text = $"Location from {SelectedLocation.TimeText} on {SelectedLocation.DateText}:\n{googleMapsUrl}";
-
-            await Share.Default.RequestAsync(new ShareTextRequest
-            {
-                Title = "Share Location",
-                Text = text
-            });
-        }
-        catch (FeatureNotSupportedException ex)
-        {
-            _logger.LogWarning(ex, "Share feature not supported on this device");
-            await _toastService.ShowErrorAsync("Share not available");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to share location");
-            await _toastService.ShowErrorAsync("Could not share location");
-        }
+        await _entryManager.ShareLocationAsync(
+            SelectedLocation.Latitude,
+            SelectedLocation.Longitude,
+            SelectedLocation.TimeText,
+            SelectedLocation.DateText);
     }
 
     /// <summary>
@@ -765,190 +641,80 @@ public partial class TimelineViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Enters coordinate picking mode.
+    /// Deletes a timeline location.
     /// </summary>
-    [RelayCommand]
-    private void EnterCoordinatePickingMode()
+    /// <param name="locationId">The location ID to delete.</param>
+    public async Task DeleteLocationAsync(int locationId)
     {
-        if (SelectedLocation == null) return;
-
-        // Set initial pending coordinates to current location
-        PendingLatitude = SelectedLocation.Latitude;
-        PendingLongitude = SelectedLocation.Longitude;
-        IsCoordinatePickingMode = true;
-
-        // Show temp marker at current location
-        UpdateTempMarker(PendingLatitude.Value, PendingLongitude.Value);
-    }
-
-    /// <summary>
-    /// Sets the pending coordinates from a map tap.
-    /// </summary>
-    /// <param name="latitude">The latitude.</param>
-    /// <param name="longitude">The longitude.</param>
-    public void SetPendingCoordinates(double latitude, double longitude)
-    {
-        if (!IsCoordinatePickingMode) return;
-
-        PendingLatitude = latitude;
-        PendingLongitude = longitude;
-        UpdateTempMarker(latitude, longitude);
-    }
-
-    /// <summary>
-    /// Saves the pending coordinates.
-    /// </summary>
-    [RelayCommand]
-    private async Task SaveCoordinatesAsync()
-    {
-        if (SelectedLocation == null || !HasPendingCoordinates) return;
-
-        // Store locationId before any changes (reference becomes stale after reload)
-        var locationId = SelectedLocation.LocationId;
-
         // Check online status
         if (!IsOnline)
         {
-            await _toastService.ShowWarningAsync("You're offline. Changes will sync when online.");
+            await _toastService.ShowWarningAsync("You're offline. Deletion will sync when online.");
         }
 
         try
         {
             IsBusy = true;
 
-            await _timelineSyncService.UpdateLocationAsync(
-                locationId,
-                PendingLatitude,
-                PendingLongitude,
-                localTimestamp: null,
-                notes: null,
-                includeNotes: false);
+            // Close the location sheet first
+            IsLocationSheetOpen = false;
+            SelectedLocation = null;
 
-            // Exit picking mode
-            ExitCoordinatePickingMode();
+            // Update UI immediately (optimistic delete)
+            var locationToRemove = _allLocations.FirstOrDefault(l => l.Id == locationId);
+            if (locationToRemove != null)
+            {
+                _allLocations.Remove(locationToRemove);
 
-            // Reload data to reflect changes on map
-            await LoadDataAsync();
+                // Re-group the remaining locations
+                if (_allLocations.Any())
+                {
+                    var groups = _allLocations
+                        .GroupBy(l => l.LocalTimestamp.Hour)
+                        .OrderByDescending(g => g.Key)
+                        .Select(g => new TimelineGroup(
+                            $"{g.Key:00}:00 - {g.Key:00}:59",
+                            g.OrderByDescending(l => l.LocalTimestamp).ToList()))
+                        .ToList();
+                    TimelineGroups = new ObservableCollection<TimelineGroup>(groups);
+                    TotalCount = _allLocations.Count;
+                    IsEmpty = false;
+                    StatsText = $"{TotalCount} location{(TotalCount == 1 ? "" : "s")}";
+                }
+                else
+                {
+                    TimelineGroups = new ObservableCollection<TimelineGroup>();
+                    TotalCount = 0;
+                    IsEmpty = true;
+                    StatsText = "No locations";
+                }
 
-            // Re-select the location to show updated details in bottom sheet
-            ShowLocationDetails(locationId);
-            IsLocationSheetOpen = true;
+                // Update map
+                UpdateMapLocations();
+            }
+
+            // Delete via sync service (handles offline queueing)
+            await _timelineSyncService.DeleteLocationAsync(locationId);
+
+            await _toastService.ShowSuccessAsync("Location deleted");
         }
-        catch (HttpRequestException ex)
+        catch (HttpRequestException)
         {
-            _logger.LogError(ex, "Network error saving coordinates");
-            await _toastService.ShowErrorAsync("Network error. Changes will sync when online.");
+            await _toastService.ShowWarningAsync("Network error. Deletion will sync when online.");
+            // Reload to restore UI if local delete failed
+            await LoadDataAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error saving coordinates");
-            await _toastService.ShowErrorAsync($"Failed to save: {ex.Message}");
+            _logger.LogError(ex, "Error deleting location {LocationId}", locationId);
+            await _toastService.ShowErrorAsync($"Failed to delete: {ex.Message}");
+            // Reload to restore UI state
+            await LoadDataAsync();
         }
         finally
         {
             IsBusy = false;
         }
-    }
-
-    /// <summary>
-    /// Cancels coordinate picking mode.
-    /// </summary>
-    [RelayCommand]
-    private void CancelCoordinatePicking()
-    {
-        ExitCoordinatePickingMode();
-    }
-
-    /// <summary>
-    /// Exits coordinate picking mode and cleans up.
-    /// </summary>
-    private void ExitCoordinatePickingMode()
-    {
-        IsCoordinatePickingMode = false;
-        PendingLatitude = null;
-        PendingLongitude = null;
-        RemoveTempMarker();
-    }
-
-    /// <summary>
-    /// Opens the datetime picker for editing the selected location.
-    /// </summary>
-    [RelayCommand]
-    private void OpenEditDateTimePicker()
-    {
-        if (SelectedLocation == null) return;
-
-        // Set the picker to the current location's datetime
-        EditDateTime = SelectedLocation.LocalTimestamp;
-        IsEditDateTimePickerOpen = true;
-    }
-
-    /// <summary>
-    /// Saves the edited datetime from the picker.
-    /// </summary>
-    [RelayCommand]
-    private async Task SaveEditDateTimeAsync()
-    {
-        if (SelectedLocation == null) return;
-
-        // Store locationId before any changes (reference becomes stale after reload)
-        var locationId = SelectedLocation.LocationId;
-
-        // Check online status
-        if (!IsOnline)
-        {
-            await _toastService.ShowWarningAsync("You're offline. Changes will sync when online.");
-        }
-
-        try
-        {
-            IsBusy = true;
-
-            // User entered local time - convert to UTC for the server
-            // The SfDateTimePicker returns DateTimeKind.Unspecified, but it represents local time
-            var utcDateTime = DateTime.SpecifyKind(EditDateTime, DateTimeKind.Local).ToUniversalTime();
-
-            await _timelineSyncService.UpdateLocationAsync(
-                locationId,
-                latitude: null,
-                longitude: null,
-                localTimestamp: utcDateTime,
-                notes: null,
-                includeNotes: false);
-
-            // Close picker
-            IsEditDateTimePickerOpen = false;
-
-            // Reload data to reflect changes on map and groupings
-            await LoadDataAsync();
-
-            // Re-select the location to show updated details in bottom sheet
-            ShowLocationDetails(locationId);
-            IsLocationSheetOpen = true;
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Network error saving datetime");
-            await _toastService.ShowErrorAsync("Network error. Changes will sync when online.");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error saving datetime");
-            await _toastService.ShowErrorAsync($"Failed to save: {ex.Message}");
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
-
-    /// <summary>
-    /// Cancels datetime editing.
-    /// </summary>
-    [RelayCommand]
-    private void CancelEditDateTime()
-    {
-        IsEditDateTimePickerOpen = false;
     }
 
     /// <summary>
@@ -969,29 +735,14 @@ public partial class TimelineViewModel : BaseViewModel
         {
             IsBusy = true;
 
-            await _timelineSyncService.UpdateLocationAsync(
-                SelectedLocation.LocationId,
-                latitude: null,
-                longitude: null,
-                localTimestamp: null,
-                notes: notesHtml,
-                includeNotes: true);
+            var locationId = SelectedLocation.LocationId;
+            await _entryManager.SaveNotesAsync(locationId, notesHtml);
 
             // Reload data to reflect changes
             await LoadDataAsync();
 
             // Re-select the location to show updated details
-            ShowLocationDetails(SelectedLocation.LocationId);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Network error saving notes");
-            await _toastService.ShowErrorAsync("Network error. Changes will sync when online.");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error saving notes");
-            await _toastService.ShowErrorAsync($"Failed to save: {ex.Message}");
+            ShowLocationDetails(locationId);
         }
         finally
         {
@@ -1005,20 +756,8 @@ public partial class TimelineViewModel : BaseViewModel
     /// <param name="e">The timeline entry update event args.</param>
     public async Task SaveEntryChangesAsync(TimelineEntryUpdateEventArgs e)
     {
-        // Apply optimistic UI update
-        if (SelectedLocation != null)
-        {
-            // Reload will update the display
-        }
-
         // Sync to server (handles offline queueing automatically)
-        await _timelineSyncService.UpdateLocationAsync(
-            e.LocationId,
-            e.Latitude,
-            e.Longitude,
-            e.LocalTimestamp,
-            e.Notes,
-            includeNotes: true);
+        await _entryManager.SaveEntryChangesAsync(e);
 
         // Reload data to reflect changes
         await LoadDataAsync();
@@ -1104,6 +843,12 @@ public partial class TimelineViewModel : BaseViewModel
     /// </summary>
     public override async Task OnAppearingAsync()
     {
+        // Subscribe to Singleton service events (unsubscribed in OnDisappearingAsync)
+        _timelineSyncService.SyncCompleted += OnSyncCompleted;
+        _timelineSyncService.SyncQueued += OnSyncQueued;
+        _timelineSyncService.SyncRejected += OnSyncRejected;
+        Connectivity.ConnectivityChanged += OnConnectivityChanged;
+
         EnsureMapInitialized();
         await LoadDataAsync();
 
@@ -1126,6 +871,13 @@ public partial class TimelineViewModel : BaseViewModel
     /// </summary>
     public override Task OnDisappearingAsync()
     {
+        // Unsubscribe from Singleton service events (subscribed in OnAppearingAsync)
+        // This prevents event handler accumulation when this Transient ViewModel is recreated
+        _timelineSyncService.SyncCompleted -= OnSyncCompleted;
+        _timelineSyncService.SyncQueued -= OnSyncQueued;
+        _timelineSyncService.SyncRejected -= OnSyncRejected;
+        Connectivity.ConnectivityChanged -= OnConnectivityChanged;
+
         // Clear timeline markers to release memory
         if (_timelineLayer != null)
         {
@@ -1150,19 +902,124 @@ public partial class TimelineViewModel : BaseViewModel
     /// </summary>
     protected override void Cleanup()
     {
-        // Unsubscribe from sync events
-        _timelineSyncService.SyncCompleted -= OnSyncCompleted;
-        _timelineSyncService.SyncQueued -= OnSyncQueued;
-        _timelineSyncService.SyncRejected -= OnSyncRejected;
+        // Note: Singleton service subscriptions (sync events, connectivity) are now
+        // unsubscribed in OnDisappearingAsync to prevent accumulation during navigation.
 
-        // Unsubscribe from connectivity events
-        Connectivity.ConnectivityChanged -= OnConnectivityChanged;
+        // Unsubscribe from child ViewModel property changes
+        // (These are subscribed once in constructor to VMs created with this instance)
+        CoordinateEditor.PropertyChanged -= OnCoordinateEditorPropertyChanged;
+        DateTimeEditor.PropertyChanged -= OnDateTimeEditorPropertyChanged;
 
         // Dispose map to release native resources
         _map?.Dispose();
         _map = null;
 
         base.Cleanup();
+    }
+
+    /// <summary>
+    /// Forwards CoordinateEditor property changes for XAML binding.
+    /// Also updates parent observable properties for IsEditing state.
+    /// </summary>
+    private void OnCoordinateEditorPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        // Forward child property changes for path-based bindings (e.g., CoordinateEditor.IsCoordinatePickingMode)
+        OnPropertyChanged($"CoordinateEditor.{e.PropertyName}");
+
+        // Update parent observable properties when editing state changes
+        if (e.PropertyName == nameof(CoordinateEditorViewModel.IsEditing))
+        {
+            UpdateEditingState();
+        }
+    }
+
+    /// <summary>
+    /// Forwards DateTimeEditor property changes for XAML binding.
+    /// Also updates parent observable properties for IsEditing state.
+    /// </summary>
+    private void OnDateTimeEditorPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        // Forward child property changes for path-based bindings (e.g., DateTimeEditor.IsEditDateTimePickerOpen)
+        OnPropertyChanged($"DateTimeEditor.{e.PropertyName}");
+
+        // Update parent observable properties when editing state changes
+        if (e.PropertyName == nameof(DateTimeEditorViewModel.IsEditing))
+        {
+            UpdateEditingState();
+        }
+    }
+
+    /// <summary>
+    /// Updates the IsEditing observable property based on child editor states.
+    /// Also updates CanGoNext since it depends on editing state.
+    /// </summary>
+    private void UpdateEditingState()
+    {
+        IsEditing = CoordinateEditor.IsEditing || DateTimeEditor.IsEditing;
+        UpdateCanGoNext();
+    }
+
+    /// <summary>
+    /// Updates the CanGoNext observable property based on current state.
+    /// </summary>
+    private void UpdateCanGoNext()
+    {
+        CanGoNext = SelectedDate.Date < DateTime.Today && CanNavigateDate;
+    }
+
+    /// <summary>
+    /// Updates the DateButtonText observable property based on SelectedDate.
+    /// </summary>
+    private void UpdateDateButtonText()
+    {
+        if (SelectedDate.Date == DateTime.Today)
+            DateButtonText = "Today";
+        else if (SelectedDate.Date == DateTime.Today.AddDays(-1))
+            DateButtonText = "Yesterday";
+        else
+            DateButtonText = SelectedDate.ToString("ddd, MMM d");
+    }
+
+    /// <summary>
+    /// Called when SelectedDate changes. Updates derived observable properties.
+    /// </summary>
+    partial void OnSelectedDateChanged(DateTime value)
+    {
+        UpdateDateButtonText();
+        UpdateCanGoNext();
+    }
+
+    #endregion
+
+    #region Callback Interface Implementations
+
+    // ICoordinateEditorCallbacks implementation
+    TimelineLocationDisplay? ICoordinateEditorCallbacks.SelectedLocation => SelectedLocation;
+    WritableLayer? ICoordinateEditorCallbacks.TempMarkerLayer => _tempMarkerLayer;
+    Mapsui.Map? ICoordinateEditorCallbacks.MapInstance => _map;
+    bool ICoordinateEditorCallbacks.IsOnline => IsOnline;
+    bool ICoordinateEditorCallbacks.IsBusy { get => IsBusy; set => IsBusy = value; }
+    Task ICoordinateEditorCallbacks.ReloadTimelineAsync() => LoadDataAsync();
+    void ICoordinateEditorCallbacks.ShowLocationDetails(int locationId) => ShowLocationDetails(locationId);
+    void ICoordinateEditorCallbacks.OpenLocationSheet() => IsLocationSheetOpen = true;
+
+    // IDateTimeEditorCallbacks implementation
+    TimelineLocationDisplay? IDateTimeEditorCallbacks.SelectedLocation => SelectedLocation;
+    bool IDateTimeEditorCallbacks.IsOnline => IsOnline;
+    bool IDateTimeEditorCallbacks.IsBusy { get => IsBusy; set => IsBusy = value; }
+    Task IDateTimeEditorCallbacks.ReloadTimelineAsync() => LoadDataAsync();
+    void IDateTimeEditorCallbacks.ShowLocationDetails(int locationId) => ShowLocationDetails(locationId);
+    void IDateTimeEditorCallbacks.OpenLocationSheet() => IsLocationSheetOpen = true;
+
+    /// <summary>
+    /// Delegates coordinate setting to the child ViewModel.
+    /// Called by code-behind when the map is tapped during coordinate picking mode.
+    /// </summary>
+    /// <param name="latitude">The latitude.</param>
+    /// <param name="longitude">The longitude.</param>
+    public void SetPendingCoordinates(double latitude, double longitude)
+    {
+        CoordinateEditor.SetPendingCoordinates(latitude, longitude);
     }
 
     #endregion

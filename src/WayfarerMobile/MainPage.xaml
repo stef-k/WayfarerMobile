@@ -34,7 +34,7 @@
 
                     <!-- Map takes full screen -->
                     <mapsui:MapControl x:Name="MapControl"
-                                       Map="{Binding Map}"
+                                       Map="{Binding MapDisplay.Map}"
                                        HorizontalOptions="Fill"
                                        VerticalOptions="Fill"
                                        ZIndex="0" />
@@ -83,14 +83,14 @@
                                 <!-- Cache health indicator (tappable, larger hit area) -->
                                 <Border Padding="4,0" StrokeThickness="0" BackgroundColor="Transparent" VerticalOptions="Center">
                                     <Border.GestureRecognizers>
-                                        <TapGestureRecognizer Command="{Binding ShowCacheStatusCommand}" />
+                                        <TapGestureRecognizer Command="{Binding MapDisplay.ShowCacheStatusCommand}" />
                                     </Border.GestureRecognizers>
                                     <HorizontalStackLayout Spacing="4" VerticalOptions="Center">
                                         <Ellipse WidthRequest="10"
                                                  HeightRequest="10"
-                                                 Fill="{Binding CacheHealthColor}"
+                                                 Fill="{Binding MapDisplay.CacheHealthColor}"
                                                  VerticalOptions="Center" />
-                                        <Label Text="{Binding CacheHealthTooltip}"
+                                        <Label Text="{Binding MapDisplay.CacheHealthTooltip}"
                                                FontSize="11"
                                                TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}"
                                                VerticalOptions="Center" />
@@ -102,7 +102,7 @@
 
                     <!-- Top Right: Reset North -->
                     <ImageButton Source="explore_compass.png"
-                                 Command="{Binding ResetNorthCommand}"
+                                 Command="{Binding MapDisplay.ResetNorthCommand}"
                                  VerticalOptions="Start"
                                  HorizontalOptions="End"
                                  Margin="0,8,15,0"
@@ -138,7 +138,7 @@
                                      BackgroundColor="{StaticResource Gray900}" />
                         <!-- 2. Recenter on user's location (MIDDLE) -->
                         <ImageButton Source="crosshair.png"
-                                     Command="{Binding CenterOnLocationCommand}"
+                                     Command="{Binding MapDisplay.CenterOnLocationCommand}"
                                      WidthRequest="44"
                                      HeightRequest="44"
                                      CornerRadius="22"
@@ -169,7 +169,7 @@
                             BackgroundColor="{AppThemeBinding Light=Black, Dark={StaticResource Gray900}}"
                             Opacity="0.95"
                             StrokeThickness="0"
-                            IsVisible="{Binding IsPlaceCoordinateEditMode}"
+                            IsVisible="{Binding TripSheet.Editor.IsPlaceCoordinateEditMode}"
                             ZIndex="20">
                         <Border.StrokeShape>
                             <RoundRectangle CornerRadius="12" />
@@ -177,19 +177,19 @@
                         <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto,Auto" RowSpacing="4" ColumnSpacing="12">
                             <!-- Row 0: Place name and coordinates -->
                             <VerticalStackLayout Grid.Row="0" Grid.Column="0">
-                                <Label Text="{Binding PlaceBeingEditedForCoordinates.Name, StringFormat='Editing: {0}'}"
+                                <Label Text="{Binding TripSheet.Editor.PlaceBeingEditedForCoordinates.Name, StringFormat='Editing: {0}'}"
                                        FontSize="14"
                                        FontAttributes="Bold"
                                        TextColor="White"
                                        LineBreakMode="TailTruncation" />
-                                <Label Text="{Binding PendingPlaceCoordinatesText}"
+                                <Label Text="{Binding TripSheet.Editor.PendingPlaceCoordinatesText}"
                                        FontSize="12"
                                        TextColor="{StaticResource Gray300}" />
                             </VerticalStackLayout>
                             <!-- Cancel Button -->
                             <Button Grid.Row="0" Grid.Column="1"
                                     Text="Cancel"
-                                    Command="{Binding CancelPlaceCoordinateEditingCommand}"
+                                    Command="{Binding TripSheet.Editor.CancelPlaceCoordinateEditingCommand}"
                                     BackgroundColor="Transparent"
                                     BorderColor="{StaticResource Gray400}"
                                     BorderWidth="1"
@@ -201,7 +201,7 @@
                             <!-- Save Button -->
                             <Button Grid.Row="0" Grid.Column="2"
                                     Text="Save"
-                                    Command="{Binding SavePlaceCoordinatesCommand}"
+                                    Command="{Binding TripSheet.Editor.SavePlaceCoordinatesCommand}"
                                     BackgroundColor="{StaticResource Primary}"
                                     TextColor="White"
                                     FontSize="13"
@@ -296,7 +296,7 @@
                                                  IsEnabled="{Binding CheckInViewModel.HasLocation}" />
                                     <!-- Copy Coordinates -->
                                     <ImageButton Grid.Column="3"
-                                                 Source="info.png"
+                                                 Source="copy.png"
                                                  Clicked="OnCheckInCopyCoordinatesClicked"
                                                  WidthRequest="32"
                                                  HeightRequest="32"

@@ -88,6 +88,22 @@ public class QueuedLocation
     public string? LastError { get; set; }
 
     /// <summary>
+    /// Gets or sets a unique key for idempotent sync operations.
+    /// </summary>
+    public string? IdempotencyKey { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the server has confirmed receipt of this location.
+    /// </summary>
+    public bool ServerConfirmed { get; set; }
+
+    /// <summary>
+    /// Gets or sets the server-assigned ID for this location.
+    /// Stored alongside ServerConfirmed to enable crash recovery reconciliation.
+    /// </summary>
+    public int? ServerId { get; set; }
+
+    /// <summary>
     /// Gets or sets whether this location was rejected (by client threshold check or server).
     /// When true, this location should not be retried.
     /// </summary>
@@ -99,6 +115,26 @@ public class QueuedLocation
     /// Examples: "Client: Time 2.3min &lt; 5min threshold", "Server: HTTP 400 Bad Request"
     /// </summary>
     public string? RejectionReason { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether this location was user-invoked (manual check-in).
+    /// User-invoked locations skip all client-side filtering and are prioritized in sync queue.
+    /// False for background/live locations (apply filtering).
+    /// </summary>
+    [Indexed]
+    public bool IsUserInvoked { get; set; }
+
+    /// <summary>
+    /// Gets or sets the activity type ID for manual check-ins.
+    /// Only populated for user-invoked locations (IsUserInvoked = true).
+    /// </summary>
+    public int? ActivityTypeId { get; set; }
+
+    /// <summary>
+    /// Gets or sets notes for this location.
+    /// Only populated for user-invoked locations (IsUserInvoked = true).
+    /// </summary>
+    public string? CheckInNotes { get; set; }
 
     /// <summary>
     /// Gets or sets when this record was created.

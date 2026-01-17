@@ -7,13 +7,13 @@ namespace WayfarerMobile.Views;
 /// </summary>
 public partial class TripsPage : ContentPage
 {
-    private readonly TripsViewModel _viewModel;
+    private readonly TripsPageViewModel _viewModel;
 
     /// <summary>
     /// Creates a new instance of TripsPage.
     /// </summary>
-    /// <param name="viewModel">The trips view model.</param>
-    public TripsPage(TripsViewModel viewModel)
+    /// <param name="viewModel">The trips page view model (coordinator).</param>
+    public TripsPage(TripsPageViewModel viewModel)
     {
         InitializeComponent();
         _viewModel = viewModel;

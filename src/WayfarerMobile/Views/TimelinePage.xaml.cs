@@ -45,13 +45,13 @@ public partial class TimelinePage : ContentPage
         var mapInfo = e.GetMapInfo(map.Layers);
 
         // In coordinate picking mode, handle any tap on the map
-        if (_viewModel.IsCoordinatePickingMode)
+        if (_viewModel.CoordinateEditor.IsCoordinatePickingMode)
         {
             if (mapInfo?.WorldPosition != null)
             {
                 var worldPos = mapInfo.WorldPosition;
                 var lonLat = SphericalMercator.ToLonLat(worldPos.X, worldPos.Y);
-                _viewModel.SetPendingCoordinates(lonLat.lat, lonLat.lon);
+                _viewModel.CoordinateEditor.SetPendingCoordinates(lonLat.lat, lonLat.lon);
             }
             return;
         }
@@ -74,7 +74,7 @@ public partial class TimelinePage : ContentPage
         var action = await DisplayActionSheetAsync(
             "Edit Location",
             "Cancel",
-            null,
+            "Delete",
             "Adjust Coordinates",
             "Edit Date/Time",
             "Edit Notes");
@@ -90,6 +90,25 @@ public partial class TimelinePage : ContentPage
             case "Edit Notes":
                 await NavigateToNotesEditor();
                 break;
+            case "Delete":
+                await DeleteLocationAsync();
+                break;
+        }
+    }
+
+    private async Task DeleteLocationAsync()
+    {
+        if (_viewModel.SelectedLocation == null) return;
+
+        var confirm = await DisplayAlertAsync(
+            "Delete Location",
+            "Are you sure you want to delete this location? This cannot be undone.",
+            "Delete",
+            "Cancel");
+
+        if (confirm)
+        {
+            await _viewModel.DeleteLocationAsync(_viewModel.SelectedLocation.LocationId);
         }
     }
 
@@ -99,15 +118,15 @@ public partial class TimelinePage : ContentPage
         BottomSheet.State = BottomSheetState.Collapsed;
 
         // Enter coordinate picking mode
-        _viewModel.EnterCoordinatePickingModeCommand.Execute(null);
+        _viewModel.CoordinateEditor.EnterCoordinatePickingModeCommand.Execute(null);
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         // When coordinate picking mode ends (save or cancel), fully expand the bottom sheet
-        if (e.PropertyName == nameof(TimelineViewModel.IsCoordinatePickingMode))
+        if (e.PropertyName == "CoordinateEditor.IsCoordinatePickingMode")
         {
-            if (!_viewModel.IsCoordinatePickingMode && _viewModel.IsLocationSheetOpen)
+            if (!_viewModel.CoordinateEditor.IsCoordinatePickingMode && _viewModel.IsLocationSheetOpen)
             {
                 BottomSheet.State = BottomSheetState.FullExpanded;
             }
@@ -117,7 +136,7 @@ public partial class TimelinePage : ContentPage
     private void StartDateTimeEdit()
     {
         // Open the SfDateTimePicker via ViewModel command
-        _viewModel.OpenEditDateTimePickerCommand.Execute(null);
+        _viewModel.DateTimeEditor.OpenEditDateTimePickerCommand.Execute(null);
     }
 
     private async Task NavigateToNotesEditor()
@@ -154,7 +173,7 @@ public partial class TimelinePage : ContentPage
     private void OnEditDateTimePickerOkClicked(object? sender, EventArgs e)
     {
         // User confirmed datetime selection - save the edited datetime
-        _viewModel.SaveEditDateTimeCommand.Execute(null);
+        _viewModel.DateTimeEditor.SaveEditDateTimeCommand.Execute(null);
     }
 
     private void OnEditDateTimePickerCancelClicked(object? sender, EventArgs e)

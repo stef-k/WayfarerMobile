@@ -4,6 +4,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WayfarerMobile.Core.Helpers;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Models;
+using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services;
 
 namespace WayfarerMobile.ViewModels;
@@ -35,7 +37,8 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
 {
     private readonly ITimelineSyncService _timelineSyncService;
     private readonly ITripSyncService _tripSyncService;
-    private readonly TripDownloadService _downloadService;
+    private readonly ITripEditingService _tripEditingService;
+    private readonly ITripStateManager _tripStateManager;
     private readonly IToastService _toastService;
     private readonly ISettingsService _settingsService;
     private string? _originalNotesHtml;
@@ -94,13 +97,15 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     public NotesEditorViewModel(
         ITimelineSyncService timelineSyncService,
         ITripSyncService tripSyncService,
-        TripDownloadService downloadService,
+        ITripEditingService tripEditingService,
+        ITripStateManager tripStateManager,
         IToastService toastService,
         ISettingsService settingsService)
     {
         _timelineSyncService = timelineSyncService;
         _tripSyncService = tripSyncService;
-        _downloadService = downloadService;
+        _tripEditingService = tripEditingService;
+        _tripStateManager = tripStateManager;
         _toastService = toastService;
         _settingsService = settingsService;
         Title = "Edit Notes";
@@ -112,12 +117,25 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     /// <param name="query">The query parameters.</param>
     public void ApplyQueryAttributes(IDictionary<string, object> query)
     {
+        // Debug: Log all received query parameters
+        Console.WriteLine($"[NotesEditorViewModel] ApplyQueryAttributes received {query.Count} parameters:");
+        foreach (var kvp in query)
+        {
+            Console.WriteLine($"  {kvp.Key} = {kvp.Value} (type: {kvp.Value?.GetType().Name ?? "null"})");
+        }
+
         // Parse entity type (defaults to Timeline for backward compatibility)
         if (query.TryGetValue("entityType", out var entityTypeObj))
         {
-            if (Enum.TryParse<NotesEntityType>(entityTypeObj?.ToString(), out var entityType))
+            // Use ignoreCase: true explicitly since entityType may be passed as lowercase
+            if (Enum.TryParse<NotesEntityType>(entityTypeObj?.ToString(), ignoreCase: true, out var entityType))
             {
                 EntityType = entityType;
+                Console.WriteLine($"[NotesEditorViewModel] Parsed entityType: {EntityType}");
+            }
+            else
+            {
+                Console.WriteLine($"[NotesEditorViewModel] Failed to parse entityType: {entityTypeObj}");
             }
         }
 
@@ -158,6 +176,16 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
         {
             NotesHtml = notesObj?.ToString();
             _originalNotesHtml = NotesHtml;
+        }
+
+        // Parse entity name for title
+        if (query.TryGetValue("entityName", out var entityNameObj))
+        {
+            var entityName = entityNameObj?.ToString();
+            if (!string.IsNullOrEmpty(entityName))
+            {
+                Title = $"Edit {entityName}";
+            }
         }
     }
 
@@ -209,6 +237,8 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
         // Validate we have required IDs for the entity type
         if (!ValidateEntityIds())
         {
+            Console.WriteLine($"[NotesEditorViewModel] Save failed: validation failed for {EntityType}. EntityId={EntityId}, TripId={TripId}, LocationId={LocationId}");
+            await _toastService.ShowErrorAsync("Unable to save - missing entity information");
             return;
         }
 
@@ -322,8 +352,15 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     /// </summary>
     private async Task SaveTripNotesAsync(string? notes)
     {
+        // Update in-memory loaded trip
+        var loadedTrip = _tripStateManager.LoadedTrip;
+        if (loadedTrip != null && loadedTrip.Id == EntityId)
+        {
+            loadedTrip.Notes = notes;
+        }
+
         // Update local database optimistically
-        await _downloadService.UpdateTripNotesAsync(EntityId, notes);
+        await _tripEditingService.UpdateTripNotesAsync(EntityId, notes);
 
         // Queue server sync (includeNotes: true ensures notes are sent to server)
         await _tripSyncService.UpdateTripAsync(EntityId, name: null, notes: notes, includeNotes: true);
@@ -334,6 +371,21 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     /// </summary>
     private async Task SaveRegionNotesAsync(string? notes)
     {
+        // Update in-memory loaded trip
+        var loadedTrip = _tripStateManager.LoadedTrip;
+        if (loadedTrip != null)
+        {
+            var region = loadedTrip.Regions.FirstOrDefault(r => r.Id == EntityId);
+            if (region != null)
+            {
+                region.Notes = notes;
+            }
+
+            // Refresh SortedRegions so UI-bound Region copies have the updated notes
+            // (SortedRegions creates new TripRegion objects from canonical regions)
+            loadedTrip.NotifySortedRegionsChanged();
+        }
+
         // Queue server sync
         await _tripSyncService.UpdateRegionAsync(
             EntityId,
@@ -347,6 +399,19 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     /// </summary>
     private async Task SavePlaceNotesAsync(string? notes)
     {
+        // Update in-memory loaded trip
+        var loadedTrip = _tripStateManager.LoadedTrip;
+        if (loadedTrip != null)
+        {
+            var place = loadedTrip.Regions
+                .SelectMany(r => r.Places)
+                .FirstOrDefault(p => p.Id == EntityId);
+            if (place != null)
+            {
+                place.Notes = notes;
+            }
+        }
+
         // Queue server sync
         await _tripSyncService.UpdatePlaceAsync(
             EntityId,
@@ -360,6 +425,17 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     /// </summary>
     private async Task SaveSegmentNotesAsync(string? notes)
     {
+        // Update in-memory loaded trip
+        var loadedTrip = _tripStateManager.LoadedTrip;
+        if (loadedTrip != null)
+        {
+            var segment = loadedTrip.Segments.FirstOrDefault(s => s.Id == EntityId);
+            if (segment != null)
+            {
+                segment.Notes = notes;
+            }
+        }
+
         // Queue server sync (segments don't have local storage)
         // Parameters: segmentId, tripId, notes
         await _tripSyncService.UpdateSegmentNotesAsync(EntityId, TripId, notes);
@@ -370,6 +446,19 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     /// </summary>
     private async Task SaveAreaNotesAsync(string? notes)
     {
+        // Update in-memory loaded trip
+        var loadedTrip = _tripStateManager.LoadedTrip;
+        if (loadedTrip != null)
+        {
+            var area = loadedTrip.Regions
+                .SelectMany(r => r.Areas)
+                .FirstOrDefault(a => a.Id == EntityId);
+            if (area != null)
+            {
+                area.Notes = notes;
+            }
+        }
+
         // Queue server sync (areas don't have local storage)
         await _tripSyncService.UpdateAreaNotesAsync(TripId, EntityId, notes);
     }
@@ -407,12 +496,14 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     private async Task NavigateBackWithRestoreAsync()
     {
         // For entity types that need selection restoration, pass the info back
+        // Use lowercase to match ProcessPendingSelectionRestoreAsync switch cases
         var query = EntityType switch
         {
-            NotesEntityType.Place => $"..?restoreEntityType=Place&restoreEntityId={EntityId}",
-            NotesEntityType.Area => $"..?restoreEntityType=Area&restoreEntityId={EntityId}",
-            NotesEntityType.Segment => $"..?restoreEntityType=Segment&restoreEntityId={EntityId}",
-            NotesEntityType.Region => $"..?restoreEntityType=Region&restoreEntityId={EntityId}",
+            NotesEntityType.Place => $"..?restoreEntityType=place&restoreEntityId={EntityId}",
+            NotesEntityType.Area => $"..?restoreEntityType=area&restoreEntityId={EntityId}",
+            NotesEntityType.Segment => $"..?restoreEntityType=segment&restoreEntityId={EntityId}",
+            NotesEntityType.Region => $"..?restoreEntityType=region&restoreEntityId={EntityId}",
+            NotesEntityType.Trip => $"..?restoreEntityType=trip&restoreEntityId={EntityId}",
             _ => ".."
         };
 

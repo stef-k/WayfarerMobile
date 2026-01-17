@@ -96,15 +96,21 @@ public class ApiClient : IApiClient, IVisitApiClient
     public bool IsConfigured => _settings.IsConfigured;
 
     /// <inheritdoc/>
-    public async Task<ApiResult> LogLocationAsync(LocationLogRequest location, CancellationToken cancellationToken = default)
+    public async Task<ApiResult> LogLocationAsync(
+        LocationLogRequest location,
+        string? idempotencyKey,
+        CancellationToken cancellationToken = default)
     {
-        return await SendLocationAsync("/api/location/log-location", location, cancellationToken);
+        return await SendLocationAsync("/api/location/log-location", location, idempotencyKey, cancellationToken);
     }
 
     /// <inheritdoc/>
-    public async Task<ApiResult> CheckInAsync(LocationLogRequest location, CancellationToken cancellationToken = default)
+    public async Task<ApiResult> CheckInAsync(
+        LocationLogRequest location,
+        string? idempotencyKey,
+        CancellationToken cancellationToken = default)
     {
-        return await SendLocationAsync("/api/location/check-in", location, cancellationToken);
+        return await SendLocationAsync("/api/location/check-in", location, idempotencyKey, cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -133,8 +139,8 @@ public class ApiClient : IApiClient, IVisitApiClient
             if (response.IsSuccessStatusCode)
             {
                 var settings = await response.Content.ReadFromJsonAsync<ServerSettings>(JsonOptions, cancellationToken);
-                _logger.LogInformation("Fetched server settings: TimeThreshold={Time}min, DistanceThreshold={Distance}m",
-                    settings?.LocationTimeThresholdMinutes, settings?.LocationDistanceThresholdMeters);
+                _logger.LogInformation("Fetched server settings: TimeThreshold={Time}min, DistanceThreshold={Distance}m, AccuracyThreshold={Accuracy}m",
+                    settings?.LocationTimeThresholdMinutes, settings?.LocationDistanceThresholdMeters, settings?.LocationAccuracyThresholdMeters);
                 return settings;
             }
 
@@ -143,7 +149,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error fetching server settings");
+            LogNetworkWarningIfOnline("Network error fetching server settings: {Message}", ex.Message);
             return null;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -188,7 +194,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error getting trips");
+            LogNetworkWarningIfOnline("Network error getting trips: {Message}", ex.Message);
             return new List<TripSummary>();
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -233,7 +239,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error getting trip details for {TripId}", tripId);
+            LogNetworkWarningIfOnline("Network error getting trip details for {TripId}: {Message}", tripId, ex.Message);
             return null;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -278,7 +284,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error getting trip boundary for {TripId}", tripId);
+            LogNetworkWarningIfOnline("Network error getting trip boundary for {TripId}: {Message}", tripId, ex.Message);
             return null;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -317,8 +323,16 @@ public class ApiClient : IApiClient, IVisitApiClient
 
             if (response.IsSuccessStatusCode)
             {
-                var place = await response.Content.ReadFromJsonAsync<TripPlace>(JsonOptions, cancellationToken);
-                return new PlaceResponse { Success = true, Id = place?.Id ?? Guid.Empty, Place = place };
+                // Server returns { "success": true, "place": {...} } - parse as PlaceResponse
+                var result = await response.Content.ReadFromJsonAsync<PlaceResponse>(JsonOptions, cancellationToken);
+                if (result != null)
+                {
+                    // Ensure Id is set from the nested place object if not directly provided
+                    if (result.Id == Guid.Empty && result.Place != null)
+                        result.Id = result.Place.Id;
+                    return result;
+                }
+                return new PlaceResponse { Success = false, Error = "Failed to parse response" };
             }
 
             _logger.LogWarning("Failed to create place: {StatusCode}", response.StatusCode);
@@ -326,7 +340,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error creating place in trip {TripId}", tripId);
+            LogNetworkWarningIfOnline("Network error creating place in trip {TripId}: {Message}", tripId, ex.Message);
             return new PlaceResponse { Success = false, Error = $"Network error: {ex.Message}" };
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -363,8 +377,16 @@ public class ApiClient : IApiClient, IVisitApiClient
 
             if (response.IsSuccessStatusCode)
             {
-                var place = await response.Content.ReadFromJsonAsync<TripPlace>(JsonOptions, cancellationToken);
-                return new PlaceResponse { Success = true, Id = placeId, Place = place };
+                // Server returns { "success": true, "place": {...} } - parse as PlaceResponse
+                var result = await response.Content.ReadFromJsonAsync<PlaceResponse>(JsonOptions, cancellationToken);
+                if (result != null)
+                {
+                    // Ensure Id is set (from nested place or use the original placeId)
+                    if (result.Id == Guid.Empty)
+                        result.Id = result.Place?.Id ?? placeId;
+                    return result;
+                }
+                return new PlaceResponse { Success = false, Error = "Failed to parse response" };
             }
 
             _logger.LogWarning("Failed to update place {PlaceId}: {StatusCode}", placeId, response.StatusCode);
@@ -372,7 +394,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error updating place {PlaceId}", placeId);
+            LogNetworkWarningIfOnline("Network error updating place {PlaceId}: {Message}", placeId, ex.Message);
             return new PlaceResponse { Success = false, Error = $"Network error: {ex.Message}" };
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -413,7 +435,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error deleting place {PlaceId}", placeId);
+            LogNetworkWarningIfOnline("Network error deleting place {PlaceId}: {Message}", placeId, ex.Message);
             return false;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -527,7 +549,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error updating timeline location {LocationId}", locationId);
+            LogNetworkWarningIfOnline("Network error updating timeline location {LocationId}: {Message}", locationId, ex.Message);
             return new TimelineUpdateResponse { Success = false, Error = $"Network error: {ex.Message}" };
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -569,7 +591,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error deleting timeline location {LocationId}", locationId);
+            LogNetworkWarningIfOnline("Network error deleting timeline location {LocationId}: {Message}", locationId, ex.Message);
             return false;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -610,8 +632,16 @@ public class ApiClient : IApiClient, IVisitApiClient
 
             if (response.IsSuccessStatusCode)
             {
-                var region = await response.Content.ReadFromJsonAsync<TripRegion>(JsonOptions, cancellationToken);
-                return new RegionResponse { Success = true, Id = region?.Id ?? Guid.Empty, Region = region };
+                // Server returns { "success": true, "region": {...} } - parse as RegionResponse
+                var result = await response.Content.ReadFromJsonAsync<RegionResponse>(JsonOptions, cancellationToken);
+                if (result != null)
+                {
+                    // Ensure Id is set from the nested region object if not directly provided
+                    if (result.Id == Guid.Empty && result.Region != null)
+                        result.Id = result.Region.Id;
+                    return result;
+                }
+                return new RegionResponse { Success = false, Error = "Failed to parse response" };
             }
 
             _logger.LogWarning("Failed to create region: {StatusCode}", response.StatusCode);
@@ -619,7 +649,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error creating region in trip {TripId}", tripId);
+            LogNetworkWarningIfOnline("Network error creating region in trip {TripId}: {Message}", tripId, ex.Message);
             return new RegionResponse { Success = false, Error = $"Network error: {ex.Message}" };
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -656,8 +686,16 @@ public class ApiClient : IApiClient, IVisitApiClient
 
             if (response.IsSuccessStatusCode)
             {
-                var region = await response.Content.ReadFromJsonAsync<TripRegion>(JsonOptions, cancellationToken);
-                return new RegionResponse { Success = true, Id = regionId, Region = region };
+                // Server returns { "success": true, "region": {...} } - parse as RegionResponse
+                var result = await response.Content.ReadFromJsonAsync<RegionResponse>(JsonOptions, cancellationToken);
+                if (result != null)
+                {
+                    // Ensure Id is set (from nested region or use the original regionId)
+                    if (result.Id == Guid.Empty)
+                        result.Id = result.Region?.Id ?? regionId;
+                    return result;
+                }
+                return new RegionResponse { Success = false, Error = "Failed to parse response" };
             }
 
             _logger.LogWarning("Failed to update region {RegionId}: {StatusCode}", regionId, response.StatusCode);
@@ -665,7 +703,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error updating region {RegionId}", regionId);
+            LogNetworkWarningIfOnline("Network error updating region {RegionId}: {Message}", regionId, ex.Message);
             return new RegionResponse { Success = false, Error = $"Network error: {ex.Message}" };
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -706,7 +744,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error deleting region {RegionId}", regionId);
+            LogNetworkWarningIfOnline("Network error deleting region {RegionId}: {Message}", regionId, ex.Message);
             return false;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -774,7 +812,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error fetching public trips");
+            LogNetworkWarningIfOnline("Network error fetching public trips: {Message}", ex.Message);
             return null;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -833,7 +871,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error cloning trip {TripId}", tripId);
+            LogNetworkWarningIfOnline("Network error cloning trip {TripId}: {Message}", tripId, ex.Message);
             return new CloneTripResponse { Success = false, Error = $"Network error: {ex.Message}" };
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -889,7 +927,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error updating trip {TripId}", tripId);
+            LogNetworkWarningIfOnline("Network error updating trip {TripId}: {Message}", tripId, ex.Message);
             return new TripUpdateResponse { Success = false, Error = $"Network error: {ex.Message}" };
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -949,7 +987,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error updating segment {SegmentId}", segmentId);
+            LogNetworkWarningIfOnline("Network error updating segment {SegmentId}: {Message}", segmentId, ex.Message);
             return new SegmentUpdateResponse { Success = false, Error = $"Network error: {ex.Message}" };
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -1005,7 +1043,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error updating area {AreaId}", areaId);
+            LogNetworkWarningIfOnline("Network error updating area {AreaId}: {Message}", areaId, ex.Message);
             return new AreaUpdateResponse { Success = false };
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -1073,7 +1111,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error fetching timeline locations");
+            LogNetworkWarningIfOnline("Network error fetching timeline locations: {Message}", ex.Message);
             return null;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -1094,6 +1132,7 @@ public class ApiClient : IApiClient, IVisitApiClient
     private async Task<ApiResult> SendLocationAsync(
         string endpoint,
         LocationLogRequest location,
+        string? idempotencyKey,
         CancellationToken cancellationToken)
     {
         if (!IsConfigured)
@@ -1118,6 +1157,10 @@ public class ApiClient : IApiClient, IVisitApiClient
             };
 
             var request = CreateRequest(HttpMethod.Post, endpoint);
+            if (!string.IsNullOrWhiteSpace(idempotencyKey))
+            {
+                request.Headers.TryAddWithoutValidation("Idempotency-Key", idempotencyKey);
+            }
             request.Content = JsonContent.Create(payload, options: JsonOptions);
 
             _logger.LogDebug("Sending location to {Endpoint}: ({Lat}, {Lon})",
@@ -1142,13 +1185,22 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error sending location");
-            return ApiResult.Fail($"Network error: {ex.Message}");
+            LogNetworkWarningIfOnline("Network error sending location: {Message}", ex.Message);
+            return ApiResult.Fail($"Network error: {ex.Message}", isTransient: true);
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
         {
-            _logger.LogError(ex, "Request timed out");
-            return ApiResult.Fail("Request timed out");
+            _logger.LogWarning(ex, "Request timed out sending location");
+            return ApiResult.Fail("Request timed out", isTransient: true);
+        }
+        catch (TaskCanceledException ex)
+        {
+            // TaskCanceledException can occur from:
+            // 1. User/app cancellation (CancellationToken triggered)
+            // 2. Connection pool timeout (HttpClient internal timeout)
+            // Both are transient and should trigger retry
+            _logger.LogWarning(ex, "Request canceled sending location");
+            return ApiResult.Fail("Request canceled", isTransient: true);
         }
         catch (Exception ex)
         {
@@ -1172,6 +1224,18 @@ public class ApiClient : IApiClient, IVisitApiClient
 
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         return request;
+    }
+
+    /// <summary>
+    /// Logs a network warning only if we think we're online.
+    /// Avoids noisy logs when we already know we're offline.
+    /// </summary>
+    private void LogNetworkWarningIfOnline(string message, params object[] args)
+    {
+        if (Connectivity.Current.NetworkAccess == NetworkAccess.Internet)
+        {
+            _logger.LogWarning(message, args);
+        }
     }
 
     /// <summary>
