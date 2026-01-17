@@ -88,55 +88,55 @@ See `docs/reference/NAVIGATION_SYSTEM.md` for full documentation.
 - Prefer CommunityToolkit.Mvvm attributes: `[ObservableProperty]`, `[RelayCommand]`.
 - Use Syncfusion components where they provide clear value and reduce custom UI complexity.
 
-## Active Refactoring: Issues #75, #76, #77
+## Git Workflow (Strict)
 
-**IMPORTANT: Read this section before any work on these issues.**
-
-A large-scale refactoring is in progress. Issue #93 is the **master orchestration document** - always check it first for current status, phase order, and rules.
-
-### Quick Reference
-
-| Issue | Scope | Status |
-|-------|-------|--------|
-| #93 | Master orchestration (READ FIRST) | Open |
-| #77 | TripSyncService + TripDownloadService → 6 Services | Open |
-| #76 | TripsViewModel → 3 ViewModels | Open |
-| #75 | MainViewModel → 4 ViewModels | Open |
+**The `main` branch is UNTOUCHABLE. No exceptions.**
 
 ### Branch Strategy
 
 ```
-main (stable) ──► DO NOT commit refactoring work here
+main (stable, protected)
   │
-  └── develop (integration branch) ──► All refactoring merges here first
-        │
-        └── feature/refactor-* ──► Individual phase branches
+  └── feature/xyz ──► PR ──► merge on GitHub ──► pull locally ──► delete branch
+  └── fix/abc     ──► PR ──► merge on GitHub ──► pull locally ──► delete branch
 ```
 
 ### Mandatory Rules
 
-1. **All refactoring branches base off `develop`**, not `main`
-2. **All refactoring PRs target `develop`**, not `main`
-3. **Phase order is STRICT**: Phase 0 → #77 → #76 → #75 (dependencies block progress)
-4. **Hotfix forward-merge**: If ANY change lands on `main`, immediately merge `main` → `develop`
-5. **Check #93** for current phase status before starting work
+1. **NEVER commit directly to `main`** - all work goes through feature branches
+2. **NEVER push directly to `main`** - GitHub branch protection enforces this
+3. **ALL changes require a PR** - no exceptions, even for small fixes
+4. **Merge PRs on GitHub only** - never merge locally
+5. **After PR merge**: pull `main` from remote, then delete the local feature branch
+6. **Branch naming**:
+   - `feature/<description>` for new features
+   - `fix/<description>` for bug fixes
+   - `chore/<description>` for maintenance tasks
 
-### Phase Dependencies
+### Workflow Steps (Every Time)
 
+```bash
+# 1. Start work - create branch from main
+git checkout main
+git pull origin main
+git checkout -b feature/my-feature
+
+# 2. Do work, commit often
+git add -A && git commit -m "description"
+
+# 3. Push and create PR
+git push -u origin feature/my-feature
+gh pr create --base main --title "..." --body "..."
+
+# 4. After PR is merged on GitHub - cleanup
+git checkout main
+git pull origin main
+git branch -D feature/my-feature
 ```
-Phase 0 (infrastructure) ──► BLOCKING
-    │
-    ├── ITripStateManager (replaces static CurrentLoadedTripId)
-    ├── CompositeDisposable pattern
-    ├── Characterization tests
-    └── Race condition fixes
-    │
-    ▼
-Phase 1: #77 Services ──► Phase 2: #76 TripsViewModel ──► Phase 3: #75 MainViewModel
-```
 
-### Before Starting Work
+### Why No `develop` Branch?
 
-1. `git fetch origin`
-2. Check which phase is active in #93
-3. Ensure you're on `develop` or a feature branch based on `develop`
+- Simpler workflow for quick iterations
+- PRs provide sufficient review gates
+- No release staging needed
+- Less merge conflict overhead
