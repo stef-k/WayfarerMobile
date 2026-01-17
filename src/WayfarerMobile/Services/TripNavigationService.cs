@@ -59,7 +59,9 @@ public class TripNavigationService : ITripNavigationService
     public Guid? CurrentTripId => _currentTrip?.Id;
 
     // Turn announcement tracking
-    private string? _lastAnnouncedWaypoint;
+    // Note: HashSet is not thread-safe, but all access is from main thread
+    // (location updates marshaled via MainThread.BeginInvokeOnMainThread in LocationServiceCallbacks)
+    private readonly HashSet<string> _announcedStepKeys = new();
     private DateTime _lastAnnouncementTime = DateTime.MinValue;
     private const double TurnAnnouncementDistanceMeters = 100; // Announce when within 100m of waypoint
     private const int MinAnnouncementIntervalSeconds = 15;
@@ -130,6 +132,7 @@ public class TripNavigationService : ITripNavigationService
         _currentTrip = null;
         _activeRoute = null;
         _destinationPlaceId = null;
+        _announcedStepKeys.Clear();
     }
 
     /// <summary>
@@ -155,6 +158,7 @@ public class TripNavigationService : ITripNavigationService
         }
 
         _destinationPlaceId = destinationPlaceId;
+        _announcedStepKeys.Clear(); // Reset announcements for new route
 
         // Priority 1: Check for user-defined segment route
         if (_currentGraph.IsWithinSegmentRoutingRange(currentLat, currentLon))
@@ -211,6 +215,7 @@ public class TripNavigationService : ITripNavigationService
         }
 
         _destinationPlaceId = destinationPlaceId;
+        _announcedStepKeys.Clear(); // Reset announcements for new route
 
         // Priority 1: Check for user-defined segment route
         if (_currentGraph.IsWithinSegmentRoutingRange(currentLat, currentLon))
@@ -295,6 +300,7 @@ public class TripNavigationService : ITripNavigationService
         string profile = "foot")
     {
         _logger.LogInformation("Calculating route to {Name} at {Lat},{Lon}", destName, destLat, destLon);
+        _announcedStepKeys.Clear(); // Reset announcements for new route
 
         // Try OSRM first
         try
@@ -450,14 +456,18 @@ public class TripNavigationService : ITripNavigationService
                 return distance > 20 && distance <= TurnAnnouncementDistanceMeters; // Between 20-100m
             });
 
-        if (nextWaypoint != null && nextWaypoint.Name != _lastAnnouncedWaypoint)
+        if (nextWaypoint != null)
         {
-            // Get the edge to this waypoint for transport mode info
-            var transportMode = GetTransportModeToWaypoint(nextWaypoint);
-            var announcement = BuildTurnAnnouncement(nextWaypoint, state.DistanceToNextWaypointMeters, transportMode);
+            var waypointKey = $"waypoint:{nextWaypoint.PlaceId ?? nextWaypoint.Name}";
+            // Only announce each waypoint once per navigation session
+            if (_announcedStepKeys.Add(waypointKey))
+            {
+                // Get the edge to this waypoint for transport mode info
+                var transportMode = GetTransportModeToWaypoint(nextWaypoint);
+                var announcement = BuildTurnAnnouncement(nextWaypoint, state.DistanceToNextWaypointMeters, transportMode);
 
-            AnnounceInstruction(announcement, state.DistanceToNextWaypointMeters);
-            _lastAnnouncedWaypoint = nextWaypoint.Name;
+                AnnounceInstruction(announcement, state.DistanceToNextWaypointMeters);
+            }
         }
     }
 
@@ -482,10 +492,10 @@ public class TripNavigationService : ITripNavigationService
             if (distance > 20 && distance <= TurnAnnouncementDistanceMeters)
             {
                 var stepKey = $"{step.ManeuverType}:{step.Latitude:F5},{step.Longitude:F5}";
-                if (stepKey != _lastAnnouncedWaypoint)
+                // Only announce each step once per navigation session
+                if (_announcedStepKeys.Add(stepKey))
                 {
                     AnnounceInstruction(step.Instruction, distance);
-                    _lastAnnouncedWaypoint = stepKey;
                     return;
                 }
             }
