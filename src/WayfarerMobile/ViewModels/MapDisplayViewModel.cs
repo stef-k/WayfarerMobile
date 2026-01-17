@@ -231,7 +231,7 @@ public partial class MapDisplayViewModel : BaseViewModel
 
         if (location != null && _map != null)
         {
-            _mapBuilder.CenterOnLocation(_map, location.Latitude, location.Longitude);
+            _mapBuilder.CenterOnLocation(_map, location.Latitude, location.Longitude, zoomLevel: 16);
             IsFollowingLocation = true;
         }
         else
