@@ -2,6 +2,12 @@
 
 ## 1.0
 
+### 2026-01-17 (PR #171)
+- **Fix: Map recenter behavior (#97)**
+  - Map centers + zooms to street level when page appears (no trip loaded)
+  - Location updates move dot without auto-recentering - users can pan freely
+  - "Center on Location" button available for manual recentering
+
 ### 2026-01-17 (PR #170)
 - **UI: Improved heading and accuracy indicator visibility (#166)**
   - Heading cone: increased opacity (alpha 80→120) and size (length 35→50px, inner radius 12→14px)
