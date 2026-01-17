@@ -2,6 +2,18 @@
 
 ## 1.0
 
+### 2026-01-17 (PR #168)
+- **Performance: Faster Offline Queue Sync (#101)**
+  - Reduced sync rate limit from 65s to 12s (server allows 10s, 2s safety margin)
+  - Added continuous drain loop that processes queue until empty
+  - Sync time for 100 queued locations: ~50 min → ~17 min
+  - Drain loop exits cleanly on: queue empty, device offline, too many failures, service disposed
+- **Code Quality Improvements**
+  - Extracted shared drain logic into `ClaimAndProcessOneLocationAsync` (eliminates duplication)
+  - Added `IsDrainLoopRunning` property with early check to reduce invocation overhead
+  - Added verbose trace logging to empty catch blocks in platform services
+  - Documented static delegate lifecycle (set once at startup, never cleared)
+
 ### 2026-01-17 (PR #164, #165)
 - Initial public release
 - **Architecture Overhaul**
