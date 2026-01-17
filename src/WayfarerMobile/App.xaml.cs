@@ -135,8 +135,12 @@ public partial class App : Application
             AppearanceSettingsViewModel.ApplyTheme(settings.ThemePreference);
             _logger.LogDebug("Applied theme: {Theme}", settings.ThemePreference);
 
-            // Apply keep screen on setting
-            ApplyKeepScreenOn(settings.KeepScreenOn);
+            // Apply keep screen on setting using native wake lock service
+            if (settings.KeepScreenOn)
+            {
+                var wakeLockService = _serviceProvider.GetService<IWakeLockService>();
+                wakeLockService?.AcquireWakeLock(keepScreenOn: true);
+            }
 
             // Note: Language preference (LanguagePreference) is only for navigation voice guidance,
             // not for changing the app's display language. The navigation service will read this
@@ -145,23 +149,6 @@ public partial class App : Application
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to apply saved settings");
-        }
-    }
-
-    /// <summary>
-    /// Applies the keep screen on setting using the cross-platform MAUI API.
-    /// </summary>
-    /// <param name="keepScreenOn">Whether to keep the screen on.</param>
-    private static void ApplyKeepScreenOn(bool keepScreenOn)
-    {
-        try
-        {
-            DeviceDisplay.Current.KeepScreenOn = keepScreenOn;
-            // Note: No logging here - static method, called frequently on resume
-        }
-        catch
-        {
-            // Silently ignore - not critical functionality
         }
     }
 
@@ -425,19 +412,11 @@ public partial class App : Application
                 await CheckPermissionsHealthAsync();
             }
 
-            // Handle app lifecycle (sync, state restoration)
+            // Handle app lifecycle (sync, state restoration, wake lock re-acquisition)
             var lifecycleService = _serviceProvider.GetService<IAppLifecycleService>();
             if (lifecycleService != null)
             {
                 await lifecycleService.OnResumingAsync();
-            }
-
-            // Re-apply keep screen on setting when resuming
-            // (Android may reset this when app goes to background)
-            var settings = _serviceProvider.GetService<ISettingsService>();
-            if (settings != null)
-            {
-                ApplyKeepScreenOn(settings.KeepScreenOn);
             }
         }
         catch (Exception ex)
