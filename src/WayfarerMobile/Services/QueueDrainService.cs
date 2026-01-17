@@ -287,6 +287,15 @@ public sealed class QueueDrainService : IDisposable
     }
 
     /// <summary>
+    /// Gets whether the drain loop is currently running.
+    /// </summary>
+    /// <remarks>
+    /// Used by platform services to avoid unnecessary <see cref="StartDrainLoop"/> calls
+    /// when the loop is already active.
+    /// </remarks>
+    public bool IsDrainLoopRunning => Volatile.Read(ref _drainLoopRunning) != 0;
+
+    /// <summary>
     /// Triggers an immediate drain cycle outside the normal timer schedule.
     /// Used by AppLifecycleService to flush pending locations on suspend/resume.
     /// </summary>
@@ -478,47 +487,86 @@ public sealed class QueueDrainService : IDisposable
     #region Drain Logic
 
     /// <summary>
+    /// Result of attempting to claim and process a location.
+    /// </summary>
+    private enum DrainAttemptResult
+    {
+        /// <summary>Location was claimed and processed (success or rejection).</summary>
+        Processed,
+
+        /// <summary>Skipped due to early exit condition (offline, rate limited, etc.).</summary>
+        Skipped,
+
+        /// <summary>Failed during claim or processing.</summary>
+        Failed
+    }
+
+    /// <summary>
     /// Attempts to drain one location from the queue.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token for shutdown.</param>
     private async Task DrainOneAsync(CancellationToken cancellationToken)
     {
-        // Early exits - use Debug level for routine skip conditions
+        // Use shared implementation with verbose logging for timer-triggered drains
+        await ClaimAndProcessOneLocationAsync(cancellationToken, verboseLogging: true);
+    }
+
+    /// <summary>
+    /// Shared implementation for claiming and processing a single location.
+    /// Used by both timer-triggered drain and drain loop.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token for shutdown.</param>
+    /// <param name="verboseLogging">If true, logs debug messages for early exit conditions.</param>
+    /// <returns>Result indicating whether location was processed, skipped, or failed.</returns>
+    private async Task<DrainAttemptResult> ClaimAndProcessOneLocationAsync(
+        CancellationToken cancellationToken,
+        bool verboseLogging)
+    {
+        // Early exits
         if (!_isOnline)
         {
-            _logger.LogDebug("QueueDrain: Offline, skipping cycle");
-            return;
+            if (verboseLogging)
+                _logger.LogDebug("QueueDrain: Offline, skipping cycle");
+            return DrainAttemptResult.Skipped;
         }
 
         if (!_apiClient.IsConfigured)
         {
-            _logger.LogDebug("QueueDrain: API not configured, skipping cycle");
-            return;
+            if (verboseLogging)
+                _logger.LogDebug("QueueDrain: API not configured, skipping cycle");
+            return DrainAttemptResult.Skipped;
         }
 
         var failures = Volatile.Read(ref _consecutiveFailures);
         if (failures >= MaxConsecutiveFailures)
         {
-            _logger.LogDebug(
-                "QueueDrain: Too many consecutive failures ({Failures}), backing off",
-                failures);
-            return;
+            if (verboseLogging)
+            {
+                _logger.LogDebug(
+                    "QueueDrain: Too many consecutive failures ({Failures}), backing off",
+                    failures);
+            }
+            return DrainAttemptResult.Skipped;
         }
 
         if (!CanMakeCheckInRequest())
         {
-            var timeSinceLast = DateTime.UtcNow - _lastDrainTime;
-            _logger.LogDebug(
-                "QueueDrain: Rate limited ({SecondsSinceLast:F0}s since last, need {Required}s)",
-                timeSinceLast.TotalSeconds, MinSecondsBetweenDrains);
-            return;
+            if (verboseLogging)
+            {
+                var timeSinceLast = DateTime.UtcNow - _lastDrainTime;
+                _logger.LogDebug(
+                    "QueueDrain: Rate limited ({SecondsSinceLast:F0}s since last, need {Required}s)",
+                    timeSinceLast.TotalSeconds, MinSecondsBetweenDrains);
+            }
+            return DrainAttemptResult.Skipped;
         }
 
         // Try to acquire lock with timeout (non-blocking if busy)
         if (!await _drainLock.WaitAsync(DrainLockTimeoutMs, cancellationToken))
         {
-            _logger.LogDebug("Drain lock busy, skipping cycle");
-            return;
+            if (verboseLogging)
+                _logger.LogDebug("Drain lock busy, skipping cycle");
+            return DrainAttemptResult.Skipped;
         }
 
         QueuedLocation? location = null;
@@ -530,28 +578,27 @@ public sealed class QueueDrainService : IDisposable
             location = await _locationQueue.ClaimNextPendingLocationWithPriorityAsync();
             if (location == null)
             {
-                _logger.LogDebug("QueueDrain: No pending locations to claim");
-                return;
+                if (verboseLogging)
+                    _logger.LogDebug("QueueDrain: No pending locations to claim");
+                return DrainAttemptResult.Skipped;
             }
 
             _logger.LogDebug(
                 "QueueDrain: Claimed location {Id} from {Timestamp}",
                 location.Id, location.Timestamp);
 
-            // Note: Location is already marked as Syncing by ClaimOldestPendingLocationAsync
+            // Note: Location is already marked as Syncing by ClaimNextPendingLocationWithPriorityAsync
             // Rate limit is recorded in ProcessLocationAsync AFTER client-side filter passes
         }
         catch (SQLiteException ex)
         {
-            // Exception occurs during claim - location is not yet assigned
             _logger.LogError(ex, "Database error claiming pending location from queue");
-            return;
+            return DrainAttemptResult.Failed;
         }
         catch (Exception ex)
         {
-            // Exception occurs during claim - location is not yet assigned
             _logger.LogError(ex, "Unexpected error claiming pending location from queue");
-            return;
+            return DrainAttemptResult.Failed;
         }
         finally
         {
@@ -562,6 +609,7 @@ public sealed class QueueDrainService : IDisposable
         try
         {
             await ProcessLocationAsync(location, cancellationToken);
+            return DrainAttemptResult.Processed;
         }
         catch (Exception ex)
         {
@@ -569,6 +617,7 @@ public sealed class QueueDrainService : IDisposable
             // but if something unexpected escapes, ensure we don't leave location stuck
             _logger.LogError(ex, "Unhandled exception processing location {Id}", location.Id);
             await TryResetLocationAsync(location.Id, "Unhandled processing exception");
+            return DrainAttemptResult.Failed;
         }
     }
 
@@ -1041,59 +1090,13 @@ public sealed class QueueDrainService : IDisposable
 
     /// <summary>
     /// Drains one location and returns success/failure.
-    /// Similar to DrainOneAsync but returns bool for drain loop use.
+    /// Uses shared implementation with minimal logging for drain loop use.
     /// </summary>
     private async Task<bool> DrainOneWithResultAsync(CancellationToken cancellationToken)
     {
-        // Early exits
-        if (!_isOnline || !_apiClient.IsConfigured)
-            return false;
-
-        var failures = Volatile.Read(ref _consecutiveFailures);
-        if (failures >= MaxConsecutiveFailures)
-            return false;
-
-        if (!CanMakeCheckInRequest())
-            return false;
-
-        // Try to acquire lock with timeout (non-blocking if busy)
-        if (!await _drainLock.WaitAsync(DrainLockTimeoutMs, cancellationToken))
-            return false;
-
-        QueuedLocation? location = null;
-
-        try
-        {
-            location = await _locationQueue.ClaimNextPendingLocationWithPriorityAsync();
-            if (location == null)
-                return false;
-
-            _logger.LogDebug(
-                "DrainLoop: Claimed location {Id} from {Timestamp}",
-                location.Id, location.Timestamp);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "DrainLoop: Error claiming pending location");
-            return false;
-        }
-        finally
-        {
-            _drainLock.Release();
-        }
-
-        // Process location outside lock (network call)
-        try
-        {
-            await ProcessLocationAsync(location, cancellationToken);
-            return true; // Processing completed (may have succeeded or been rejected)
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "DrainLoop: Unhandled exception processing location {Id}", location.Id);
-            await TryResetLocationAsync(location.Id, "Unhandled processing exception");
-            return false;
-        }
+        // Use shared implementation with minimal logging for drain loop (avoids log spam)
+        var result = await ClaimAndProcessOneLocationAsync(cancellationToken, verboseLogging: false);
+        return result == DrainAttemptResult.Processed;
     }
 
     #endregion

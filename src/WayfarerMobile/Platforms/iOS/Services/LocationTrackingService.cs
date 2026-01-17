@@ -47,29 +47,66 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
     /// Delegate for starting the drain loop after queueing a location.
     /// This triggers QueueDrainService.StartDrainLoop() to drain the queue while backgrounded.
     /// </summary>
+    /// <remarks>
+    /// <para><strong>Lifecycle:</strong></para>
+    /// <list type="bullet">
+    ///   <item>Set once during App.xaml.cs startup via <see cref="SetDrainLoopStarter"/>.</item>
+    ///   <item>Never cleared during app lifecycle (singleton service outlives UI).</item>
+    ///   <item>References QueueDrainService which is a singleton from DI container.</item>
+    /// </list>
+    /// <para>
+    /// This static delegate pattern is necessary because the iOS location service
+    /// runs as a singleton independently of the MAUI DI container lifecycle.
+    /// </para>
+    /// </remarks>
     private static Action? _startDrainLoop;
+
+    /// <summary>
+    /// Delegate for checking if drain loop is already running.
+    /// Used to avoid unnecessary <see cref="_startDrainLoop"/> invocations.
+    /// </summary>
+    private static Func<bool>? _isDrainLoopRunning;
 
     /// <summary>
     /// Sets the drain loop starter delegate. Called from App.xaml.cs during startup.
     /// </summary>
+    /// <remarks>
+    /// <para><strong>Call exactly once</strong> during app initialization.</para>
+    /// <para>
+    /// The delegate is retained for the app's lifetime and used by the background
+    /// service to trigger queue draining after each location is queued.
+    /// </para>
+    /// </remarks>
     /// <param name="starter">Action that calls QueueDrainService.StartDrainLoop().</param>
-    public static void SetDrainLoopStarter(Action starter)
+    /// <param name="isRunningChecker">Optional func that returns QueueDrainService.IsDrainLoopRunning.</param>
+    public static void SetDrainLoopStarter(Action starter, Func<bool>? isRunningChecker = null)
     {
         _startDrainLoop = starter;
+        _isDrainLoopRunning = isRunningChecker;
     }
 
     /// <summary>
     /// Safely starts the drain loop. MUST be completely safe - never throw exceptions.
     /// </summary>
+    /// <remarks>
+    /// Checks if drain loop is already running before invoking to reduce overhead
+    /// when processing multiple queued locations in succession.
+    /// </remarks>
     private static void StartDrainLoopSafely()
     {
         try
         {
+            // Skip if loop is already running (reduces delegate invocation overhead)
+            if (_isDrainLoopRunning?.Invoke() == true)
+                return;
+
             _startDrainLoop?.Invoke();
         }
-        catch
+        catch (Exception ex)
         {
             // CRITICAL: Swallow ALL exceptions - never disrupt location service
+            // Log at debug level for diagnostics (verbose Console.WriteLine is filtered in release)
+            System.Diagnostics.Debug.WriteLine($"[iOS LocationService] Drain loop start suppressed: {ex.GetType().Name}");
         }
     }
 

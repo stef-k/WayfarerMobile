@@ -194,11 +194,12 @@ public partial class App : Application
             if (queueDrainService != null)
             {
                 Action drainLoopStarter = () => queueDrainService.StartDrainLoop();
+                Func<bool> isRunningChecker = () => queueDrainService.IsDrainLoopRunning;
 
 #if ANDROID
-                WayfarerMobile.Platforms.Android.Services.LocationTrackingService.SetDrainLoopStarter(drainLoopStarter);
+                WayfarerMobile.Platforms.Android.Services.LocationTrackingService.SetDrainLoopStarter(drainLoopStarter, isRunningChecker);
 #elif IOS
-                WayfarerMobile.Platforms.iOS.Services.LocationTrackingService.SetDrainLoopStarter(drainLoopStarter);
+                WayfarerMobile.Platforms.iOS.Services.LocationTrackingService.SetDrainLoopStarter(drainLoopStarter, isRunningChecker);
 #endif
                 _logger.LogDebug("Drain loop starter wired to location services");
             }
