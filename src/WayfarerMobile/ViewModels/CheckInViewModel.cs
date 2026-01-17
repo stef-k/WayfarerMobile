@@ -250,42 +250,38 @@ public partial class CheckInViewModel : BaseViewModel
             };
 
             // ONLINE PATH: Try direct server submission
-            try
-            {
-                var result = await _apiClient.CheckInAsync(request, Guid.NewGuid().ToString("N"));
+            var result = await _apiClient.CheckInAsync(request, Guid.NewGuid().ToString("N"));
 
+            if (result.Success)
+            {
                 IsSubmitting = false;
 
-                if (result.Success)
+                // Show success state
+                IsSuccess = true;
+                OverlayMessage = "Check-in successful!";
+
+                // Add to local timeline with server-assigned ID
+                if (result.LocationId.HasValue)
                 {
-                    // Show success state
-                    IsSuccess = true;
-                    OverlayMessage = "Check-in successful!";
-
-                    // Add to local timeline with server-assigned ID
-                    if (result.LocationId.HasValue)
-                    {
-                        await _timelineStorage.AddAcceptedLocationAsync(CurrentLocation, result.LocationId.Value);
-                    }
-
-                    // Keep success visible for 1.5s so users can see it, then close
-                    await Task.Delay(1500);
-                    CheckInCompleted?.Invoke(this, EventArgs.Empty);
-                    return;
+                    await _timelineStorage.AddAcceptedLocationAsync(CurrentLocation, result.LocationId.Value);
                 }
 
-                // Server rejected (non-network failure)
+                // Keep success visible for 1.5s so users can see it, then close
+                await Task.Delay(1500);
+                CheckInCompleted?.Invoke(this, EventArgs.Empty);
+                return;
+            }
+
+            // Check if this is a transient failure (network error, timeout) - fall through to offline path
+            if (!result.IsTransient)
+            {
+                // Server rejected (non-network failure) - show error and stop
+                IsSubmitting = false;
                 await _toastService.ShowErrorAsync($"Check-in failed: {result.Message}");
                 return;
             }
-            catch (HttpRequestException)
-            {
-                // Network error - fall through to offline path
-            }
-            catch (TaskCanceledException)
-            {
-                // Timeout - fall through to offline path
-            }
+
+            // Transient failure (network/timeout) - fall through to offline path
 
             // OFFLINE PATH: Queue for background sync
             OverlayMessage = "Offline - queuing check-in...";

@@ -1186,7 +1186,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "Network error sending location");
-            return ApiResult.Fail($"Network error: {ex.Message}");
+            return ApiResult.Fail($"Network error: {ex.Message}", isTransient: true);
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
         {

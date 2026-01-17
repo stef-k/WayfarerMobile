@@ -67,13 +67,17 @@ public partial class DiagnosticsViewModel : BaseViewModel
             _locationBridge.LocationReceived += OnLocationReceived;
             LocationSyncCallbacks.LocationSynced += OnLocationSynced;
             LocationSyncCallbacks.LocationSkipped += OnLocationSkipped;
+            Connectivity.ConnectivityChanged += OnConnectivityChanged;
             _isSubscribed = true;
-            _logger.LogDebug("Subscribed to location and sync events");
+            _logger.LogDebug("Subscribed to location, sync, and connectivity events");
 
             // Initialize from current state immediately
             var currentState = _locationBridge.CurrentState;
             IsGpsRunning = currentState == Core.Enums.TrackingState.Active;
             TrackingState = currentState.ToString();
+
+            // Initialize network state
+            HasNetwork = Connectivity.Current.NetworkAccess == NetworkAccess.Internet;
         }
     }
 
@@ -88,9 +92,28 @@ public partial class DiagnosticsViewModel : BaseViewModel
             _locationBridge.LocationReceived -= OnLocationReceived;
             LocationSyncCallbacks.LocationSynced -= OnLocationSynced;
             LocationSyncCallbacks.LocationSkipped -= OnLocationSkipped;
+            Connectivity.ConnectivityChanged -= OnConnectivityChanged;
             _isSubscribed = false;
-            _logger.LogDebug("Unsubscribed from location and sync events");
+            _logger.LogDebug("Unsubscribed from location, sync, and connectivity events");
         }
+    }
+
+    /// <summary>
+    /// Handles connectivity changes to update network status in real-time.
+    /// </summary>
+    private void OnConnectivityChanged(object? sender, ConnectivityChangedEventArgs e)
+    {
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            var wasOnline = HasNetwork;
+            HasNetwork = e.NetworkAccess == NetworkAccess.Internet;
+
+            if (wasOnline != HasNetwork)
+            {
+                _logger.LogDebug("Network status changed: {OldState} -> {NewState}", wasOnline, HasNetwork);
+                UpdateHealthStatusFromCurrentState();
+            }
+        });
     }
 
     /// <summary>
