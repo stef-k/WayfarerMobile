@@ -149,7 +149,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error fetching server settings");
+            LogNetworkWarningIfOnline("Network error fetching server settings: {Message}", ex.Message);
             return null;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -194,7 +194,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error getting trips");
+            LogNetworkWarningIfOnline("Network error getting trips: {Message}", ex.Message);
             return new List<TripSummary>();
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -239,7 +239,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error getting trip details for {TripId}", tripId);
+            LogNetworkWarningIfOnline("Network error getting trip details for {TripId}: {Message}", tripId, ex.Message);
             return null;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -284,7 +284,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error getting trip boundary for {TripId}", tripId);
+            LogNetworkWarningIfOnline("Network error getting trip boundary for {TripId}: {Message}", tripId, ex.Message);
             return null;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -340,7 +340,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error creating place in trip {TripId}", tripId);
+            LogNetworkWarningIfOnline("Network error creating place in trip {TripId}: {Message}", tripId, ex.Message);
             return new PlaceResponse { Success = false, Error = $"Network error: {ex.Message}" };
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -394,7 +394,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error updating place {PlaceId}", placeId);
+            LogNetworkWarningIfOnline("Network error updating place {PlaceId}: {Message}", placeId, ex.Message);
             return new PlaceResponse { Success = false, Error = $"Network error: {ex.Message}" };
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -435,7 +435,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error deleting place {PlaceId}", placeId);
+            LogNetworkWarningIfOnline("Network error deleting place {PlaceId}: {Message}", placeId, ex.Message);
             return false;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -549,7 +549,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error updating timeline location {LocationId}", locationId);
+            LogNetworkWarningIfOnline("Network error updating timeline location {LocationId}: {Message}", locationId, ex.Message);
             return new TimelineUpdateResponse { Success = false, Error = $"Network error: {ex.Message}" };
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -591,7 +591,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error deleting timeline location {LocationId}", locationId);
+            LogNetworkWarningIfOnline("Network error deleting timeline location {LocationId}: {Message}", locationId, ex.Message);
             return false;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -649,7 +649,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error creating region in trip {TripId}", tripId);
+            LogNetworkWarningIfOnline("Network error creating region in trip {TripId}: {Message}", tripId, ex.Message);
             return new RegionResponse { Success = false, Error = $"Network error: {ex.Message}" };
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -703,7 +703,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error updating region {RegionId}", regionId);
+            LogNetworkWarningIfOnline("Network error updating region {RegionId}: {Message}", regionId, ex.Message);
             return new RegionResponse { Success = false, Error = $"Network error: {ex.Message}" };
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -744,7 +744,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error deleting region {RegionId}", regionId);
+            LogNetworkWarningIfOnline("Network error deleting region {RegionId}: {Message}", regionId, ex.Message);
             return false;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -812,7 +812,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error fetching public trips");
+            LogNetworkWarningIfOnline("Network error fetching public trips: {Message}", ex.Message);
             return null;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -871,7 +871,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error cloning trip {TripId}", tripId);
+            LogNetworkWarningIfOnline("Network error cloning trip {TripId}: {Message}", tripId, ex.Message);
             return new CloneTripResponse { Success = false, Error = $"Network error: {ex.Message}" };
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -927,7 +927,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error updating trip {TripId}", tripId);
+            LogNetworkWarningIfOnline("Network error updating trip {TripId}: {Message}", tripId, ex.Message);
             return new TripUpdateResponse { Success = false, Error = $"Network error: {ex.Message}" };
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -987,7 +987,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error updating segment {SegmentId}", segmentId);
+            LogNetworkWarningIfOnline("Network error updating segment {SegmentId}: {Message}", segmentId, ex.Message);
             return new SegmentUpdateResponse { Success = false, Error = $"Network error: {ex.Message}" };
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -1043,7 +1043,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error updating area {AreaId}", areaId);
+            LogNetworkWarningIfOnline("Network error updating area {AreaId}: {Message}", areaId, ex.Message);
             return new AreaUpdateResponse { Success = false };
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -1111,7 +1111,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error fetching timeline locations");
+            LogNetworkWarningIfOnline("Network error fetching timeline locations: {Message}", ex.Message);
             return null;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -1185,8 +1185,8 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error sending location");
-            return ApiResult.Fail($"Network error: {ex.Message}");
+            LogNetworkWarningIfOnline("Network error sending location: {Message}", ex.Message);
+            return ApiResult.Fail($"Network error: {ex.Message}", isTransient: true);
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
         {
@@ -1224,6 +1224,18 @@ public class ApiClient : IApiClient, IVisitApiClient
 
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         return request;
+    }
+
+    /// <summary>
+    /// Logs a network warning only if we think we're online.
+    /// Avoids noisy logs when we already know we're offline.
+    /// </summary>
+    private void LogNetworkWarningIfOnline(string message, params object[] args)
+    {
+        if (Connectivity.Current.NetworkAccess == NetworkAccess.Internet)
+        {
+            _logger.LogWarning(message, args);
+        }
     }
 
     /// <summary>

@@ -142,7 +142,7 @@ public partial class TimelineDataViewModel : ObservableObject
             var csv = new StringBuilder();
 
             // Header row
-            csv.AppendLine("Id,Timestamp,Latitude,Longitude,Altitude,Accuracy,Speed,Bearing,Provider,SyncStatus,SyncAttempts,LastSyncAttempt,IsRejected,RejectionReason,LastError");
+            csv.AppendLine("Id,Timestamp,Latitude,Longitude,Altitude,Accuracy,Speed,Bearing,Provider,SyncStatus,SyncAttempts,LastSyncAttempt,IsRejected,RejectionReason,LastError,IsUserInvoked,ActivityTypeId,CheckInNotes");
 
             // Data rows
             foreach (var loc in locations)
@@ -173,7 +173,10 @@ public partial class TimelineDataViewModel : ObservableObject
                     $"{(loc.LastSyncAttempt.HasValue ? loc.LastSyncAttempt.Value.ToString("yyyy-MM-dd HH:mm:ss") : "")}," +
                     $"{loc.IsRejected}," +
                     $"\"{loc.RejectionReason?.Replace("\"", "\"\"") ?? ""}\"," +
-                    $"\"{loc.LastError?.Replace("\"", "\"\"") ?? ""}\"");
+                    $"\"{loc.LastError?.Replace("\"", "\"\"") ?? ""}\"," +
+                    $"{loc.IsUserInvoked}," +
+                    $"{loc.ActivityTypeId?.ToString(inv) ?? ""}," +
+                    $"\"{loc.CheckInNotes?.Replace("\"", "\"\"") ?? ""}\"");
             }
 
             // Save to temp file

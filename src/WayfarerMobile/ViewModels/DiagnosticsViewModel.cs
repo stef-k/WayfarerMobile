@@ -67,13 +67,17 @@ public partial class DiagnosticsViewModel : BaseViewModel
             _locationBridge.LocationReceived += OnLocationReceived;
             LocationSyncCallbacks.LocationSynced += OnLocationSynced;
             LocationSyncCallbacks.LocationSkipped += OnLocationSkipped;
+            Connectivity.ConnectivityChanged += OnConnectivityChanged;
             _isSubscribed = true;
-            _logger.LogDebug("Subscribed to location and sync events");
+            _logger.LogDebug("Subscribed to location, sync, and connectivity events");
 
             // Initialize from current state immediately
             var currentState = _locationBridge.CurrentState;
             IsGpsRunning = currentState == Core.Enums.TrackingState.Active;
             TrackingState = currentState.ToString();
+
+            // Initialize network state
+            HasNetwork = Connectivity.Current.NetworkAccess == NetworkAccess.Internet;
         }
     }
 
@@ -88,9 +92,28 @@ public partial class DiagnosticsViewModel : BaseViewModel
             _locationBridge.LocationReceived -= OnLocationReceived;
             LocationSyncCallbacks.LocationSynced -= OnLocationSynced;
             LocationSyncCallbacks.LocationSkipped -= OnLocationSkipped;
+            Connectivity.ConnectivityChanged -= OnConnectivityChanged;
             _isSubscribed = false;
-            _logger.LogDebug("Unsubscribed from location and sync events");
+            _logger.LogDebug("Unsubscribed from location, sync, and connectivity events");
         }
+    }
+
+    /// <summary>
+    /// Handles connectivity changes to update network status in real-time.
+    /// </summary>
+    private void OnConnectivityChanged(object? sender, ConnectivityChangedEventArgs e)
+    {
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            var wasOnline = HasNetwork;
+            HasNetwork = e.NetworkAccess == NetworkAccess.Internet;
+
+            if (wasOnline != HasNetwork)
+            {
+                _logger.LogDebug("Network status changed: {OldState} -> {NewState}", wasOnline, HasNetwork);
+                UpdateHealthStatusFromCurrentState();
+            }
+        });
     }
 
     /// <summary>
@@ -758,7 +781,7 @@ public partial class DiagnosticsViewModel : BaseViewModel
             }
 
             var csv = new StringBuilder();
-            csv.AppendLine("Id,Timestamp,Latitude,Longitude,Altitude,Accuracy,Speed,Bearing,Provider,SyncStatus,SyncAttempts,LastSyncAttempt,IsRejected,RejectionReason,LastError");
+            csv.AppendLine("Id,Timestamp,Latitude,Longitude,Altitude,Accuracy,Speed,Bearing,Provider,SyncStatus,SyncAttempts,LastSyncAttempt,IsRejected,RejectionReason,LastError,IsUserInvoked,ActivityTypeId,CheckInNotes");
 
             foreach (var loc in locations)
             {
@@ -787,7 +810,10 @@ public partial class DiagnosticsViewModel : BaseViewModel
                     $"{(loc.LastSyncAttempt.HasValue ? loc.LastSyncAttempt.Value.ToString("yyyy-MM-dd HH:mm:ss") : "")}," +
                     $"{loc.IsRejected}," +
                     $"\"{loc.RejectionReason?.Replace("\"", "\"\"") ?? ""}\"," +
-                    $"\"{loc.LastError?.Replace("\"", "\"\"") ?? ""}\"");
+                    $"\"{loc.LastError?.Replace("\"", "\"\"") ?? ""}\"," +
+                    $"{loc.IsUserInvoked}," +
+                    $"{loc.ActivityTypeId?.ToString(inv) ?? ""}," +
+                    $"\"{loc.CheckInNotes?.Replace("\"", "\"\"") ?? ""}\"");
             }
 
             var fileName = $"wayfarer_locations_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
@@ -883,8 +909,11 @@ public partial class DiagnosticsViewModel : BaseViewModel
                     _ => "?"
                 };
 
+                // Add USER indicator for user-invoked locations (manual check-ins)
+                var userTag = loc.IsUserInvoked ? " [USER]" : "";
+
                 var inv = System.Globalization.CultureInfo.InvariantCulture;
-                sb.AppendLine($"[{loc.Timestamp:HH:mm:ss}] {status}");
+                sb.AppendLine($"[{loc.Timestamp:HH:mm:ss}] {status}{userTag}");
                 sb.AppendLine($"  Loc: {loc.Latitude.ToString("F5", inv)}, {loc.Longitude.ToString("F5", inv)}");
 
                 if (loc.Accuracy.HasValue)
@@ -893,6 +922,10 @@ public partial class DiagnosticsViewModel : BaseViewModel
                     sb.Append($"  Spd: {loc.Speed.Value.ToString("F1", inv)}m/s");
                 if (loc.Accuracy.HasValue || loc.Speed.HasValue)
                     sb.AppendLine();
+
+                // Show check-in notes for user-invoked locations
+                if (!string.IsNullOrEmpty(loc.CheckInNotes))
+                    sb.AppendLine($"  Notes: {loc.CheckInNotes}");
 
                 if (!string.IsNullOrEmpty(loc.LastError))
                     sb.AppendLine($"  Err: {loc.LastError}");

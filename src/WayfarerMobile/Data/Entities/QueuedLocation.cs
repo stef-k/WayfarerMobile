@@ -115,6 +115,26 @@ public class QueuedLocation
     public string? RejectionReason { get; set; }
 
     /// <summary>
+    /// Gets or sets whether this location was user-invoked (manual check-in).
+    /// User-invoked locations skip all client-side filtering and are prioritized in sync queue.
+    /// False for background/live locations (apply filtering).
+    /// </summary>
+    [Indexed]
+    public bool IsUserInvoked { get; set; }
+
+    /// <summary>
+    /// Gets or sets the activity type ID for manual check-ins.
+    /// Only populated for user-invoked locations (IsUserInvoked = true).
+    /// </summary>
+    public int? ActivityTypeId { get; set; }
+
+    /// <summary>
+    /// Gets or sets notes for this location.
+    /// Only populated for user-invoked locations (IsUserInvoked = true).
+    /// </summary>
+    public string? CheckInNotes { get; set; }
+
+    /// <summary>
     /// Gets or sets when this record was created.
     /// </summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

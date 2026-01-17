@@ -26,7 +26,11 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
     #region Queue Operations
 
     /// <inheritdoc />
-    public async Task QueueLocationAsync(LocationData location)
+    public async Task<int> QueueLocationAsync(
+        LocationData location,
+        bool isUserInvoked = false,
+        int? activityTypeId = null,
+        string? notes = null)
     {
         // Validate coordinates to prevent corrupted data
         if (!IsValidCoordinate(location.Latitude, location.Longitude))
@@ -49,13 +53,18 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
             Timestamp = location.Timestamp,
             Provider = location.Provider,
             SyncStatus = SyncStatus.Pending,
-            IdempotencyKey = Guid.NewGuid().ToString("N") // Unique key for idempotent sync
+            IdempotencyKey = Guid.NewGuid().ToString("N"), // Unique key for idempotent sync
+            IsUserInvoked = isUserInvoked,
+            ActivityTypeId = activityTypeId,
+            CheckInNotes = notes
         };
 
         await db.InsertAsync(queued);
 
         // Cleanup old locations if queue is too large
         await CleanupOldLocationsAsync(db);
+
+        return queued.Id;
     }
 
     /// <summary>
@@ -394,6 +403,43 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
         }
 
         return null;
+    }
+
+    /// <inheritdoc />
+    public async Task<QueuedLocation?> ClaimNextPendingLocationWithPriorityAsync()
+    {
+        var db = await GetConnectionAsync();
+
+        // PRIORITY 1: User-invoked locations (manual check-ins)
+        var userInvokedIds = await db.QueryScalarsAsync<int>(
+            @"SELECT Id FROM QueuedLocations
+              WHERE SyncStatus = ? AND IsRejected = 0 AND IsUserInvoked = 1
+              ORDER BY Timestamp
+              LIMIT 5",
+            (int)SyncStatus.Pending);
+
+        var now = DateTime.UtcNow;
+
+        // Try to claim a user-invoked location first
+        foreach (var id in userInvokedIds)
+        {
+            var updated = await db.ExecuteAsync(
+                @"UPDATE QueuedLocations
+                  SET SyncStatus = ?, LastSyncAttempt = ?,
+                      IdempotencyKey = COALESCE(IdempotencyKey, ?)
+                  WHERE Id = ? AND SyncStatus = ?",
+                (int)SyncStatus.Syncing, now, Guid.NewGuid().ToString("N"), id, (int)SyncStatus.Pending);
+
+            if (updated > 0)
+            {
+                return await db.Table<QueuedLocation>()
+                    .Where(l => l.Id == id)
+                    .FirstOrDefaultAsync();
+            }
+        }
+
+        // PRIORITY 2: Background/live locations (use existing claim method)
+        return await ClaimOldestPendingLocationAsync();
     }
 
     /// <inheritdoc />

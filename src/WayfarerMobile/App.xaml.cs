@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Models;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services;
@@ -218,6 +220,10 @@ public partial class App : Application
             SafeFireAndForget(visitNotificationService?.StartAsync(), "VisitNotificationService");
             _logger.LogDebug("Visit notification service initialization started");
 
+            // Wire up location tracking delegates for online/offline path decision
+            WireLocationTrackingDelegates(timelineStorageService);
+            _logger.LogDebug("Location tracking delegates wired");
+
             // Note: Location tracking service start is handled by OnWindowActivatedForServiceStart
             // to ensure deterministic timing after UI is fully initialized.
         }
@@ -225,6 +231,78 @@ public partial class App : Application
         {
             _logger.LogError(ex, "Failed to start background services");
         }
+    }
+
+    /// <summary>
+    /// Wires up the location tracking delegates for online/offline path decision.
+    /// Called early during startup to ensure delegates are set before location service starts.
+    /// </summary>
+    /// <param name="timelineStorageService">The local timeline storage service for updating timeline.</param>
+    private void WireLocationTrackingDelegates(LocalTimelineStorageService? timelineStorageService)
+    {
+        var apiClient = _serviceProvider.GetService<IApiClient>();
+        var locationQueue = _serviceProvider.GetService<ILocationQueueRepository>();
+
+        // Online submit delegate: Submit directly to server via log-location endpoint
+        Func<LocationData, Task<int?>> onlineSubmit = async location =>
+        {
+            if (apiClient == null)
+                throw new InvalidOperationException("API client not available");
+
+            // Convert to API request model
+            var request = new LocationLogRequest
+            {
+                Latitude = location.Latitude,
+                Longitude = location.Longitude,
+                Accuracy = location.Accuracy,
+                Altitude = location.Altitude,
+                Speed = location.Speed,
+                Timestamp = location.Timestamp
+            };
+
+            // Call the log-location endpoint (server is authoritative)
+            var result = await apiClient.LogLocationAsync(request, idempotencyKey: null);
+
+            if (result.Success && !result.Skipped && result.LocationId.HasValue)
+            {
+                // Server accepted - update local timeline with server-assigned ID
+                if (timelineStorageService != null)
+                {
+                    await timelineStorageService.AddAcceptedLocationAsync(location, result.LocationId.Value);
+                }
+                return result.LocationId.Value;
+            }
+
+            // Server skipped (threshold not met) or failed - return null (don't queue)
+            return null;
+        };
+
+        // Offline queue delegate: Queue for background sync
+        Func<LocationData, Task<int>> offlineQueue = async location =>
+        {
+            if (locationQueue == null)
+                throw new InvalidOperationException("Location queue not available");
+
+            // Queue with isUserInvoked=false (background location)
+            var queuedId = await locationQueue.QueueLocationAsync(location, isUserInvoked: false);
+
+            // Add pending entry to local timeline (will be updated when queue drains)
+            if (timelineStorageService != null)
+            {
+                await timelineStorageService.AddPendingLocationAsync(location, queuedId);
+            }
+
+            return queuedId;
+        };
+
+        // Wire up delegates to platform-specific location services
+#if ANDROID
+        WayfarerMobile.Platforms.Android.Services.LocationTrackingService.OnlineSubmitDelegate = onlineSubmit;
+        WayfarerMobile.Platforms.Android.Services.LocationTrackingService.OfflineQueueDelegate = offlineQueue;
+#elif IOS
+        WayfarerMobile.Platforms.iOS.Services.LocationTrackingService.OnlineSubmitDelegate = onlineSubmit;
+        WayfarerMobile.Platforms.iOS.Services.LocationTrackingService.OfflineQueueDelegate = offlineQueue;
+#endif
     }
 
     /// <summary>

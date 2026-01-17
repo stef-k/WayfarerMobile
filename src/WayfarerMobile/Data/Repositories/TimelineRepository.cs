@@ -219,5 +219,39 @@ public class TimelineRepository : RepositoryBase, ITimelineRepository
             .ToListAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<bool> UpdateServerIdByQueuedLocationIdAsync(int queuedLocationId, int serverId)
+    {
+        var db = await GetConnectionAsync();
+        var entry = await db.Table<LocalTimelineEntry>()
+            .Where(e => e.QueuedLocationId == queuedLocationId)
+            .FirstOrDefaultAsync();
+
+        if (entry == null)
+            return false;
+
+        entry.ServerId = serverId;
+        await db.UpdateAsync(entry);
+        return true;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> DeleteByQueuedLocationIdAsync(int queuedLocationId)
+    {
+        var db = await GetConnectionAsync();
+        return await db.ExecuteAsync(
+            "DELETE FROM LocalTimelineEntries WHERE QueuedLocationId = ?",
+            queuedLocationId);
+    }
+
+    /// <inheritdoc />
+    public async Task<LocalTimelineEntry?> GetByQueuedLocationIdAsync(int queuedLocationId)
+    {
+        var db = await GetConnectionAsync();
+        return await db.Table<LocalTimelineEntry>()
+            .Where(e => e.QueuedLocationId == queuedLocationId)
+            .FirstOrDefaultAsync();
+    }
+
     #endregion
 }
