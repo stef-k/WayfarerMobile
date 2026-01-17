@@ -2,6 +2,11 @@
 
 ## 1.0
 
+### 2026-01-17 (PR #172)
+- **Fix: Prevent repeat navigation announcements (#143)**
+  - Each navigation step/waypoint now announced only once per session
+  - Fixes alternating announcements when multiple steps within range
+
 ### 2026-01-17 (PR #171)
 - **Fix: Map recenter behavior (#97)**
   - Map centers + zooms to street level when page appears (no trip loaded)
