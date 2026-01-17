@@ -17,14 +17,15 @@ public sealed class QueueDrainService : IDisposable
     #region Constants
 
     /// <summary>
-    /// Minimum seconds between check-in requests (conservative vs server's 30s).
+    /// Minimum seconds between check-in requests.
+    /// Uses 12s (not 10s) to stay slightly above server limit and avoid 429 responses from clock drift.
     /// </summary>
-    private const int MinSecondsBetweenDrains = 65;
+    private const int MinSecondsBetweenDrains = 12;
 
     /// <summary>
-    /// Maximum check-in syncs per hour (conservative vs server's 60).
+    /// Maximum check-in syncs per hour (3600/12 = 300).
     /// </summary>
-    private const int MaxDrainsPerHour = 55;
+    private const int MaxDrainsPerHour = 300;
 
     /// <summary>
     /// Gets time threshold in minutes from settings (synced from server).
@@ -108,6 +109,16 @@ public sealed class QueueDrainService : IDisposable
     /// </summary>
     private const int FirstCleanupDelayMinutes = 30;
 
+    /// <summary>
+    /// Maximum consecutive failures in drain loop before exiting.
+    /// </summary>
+    private const int MaxConsecutiveLoopFailures = 5;
+
+    /// <summary>
+    /// Small delay between drain loop iterations to prevent tight loop / CPU spin (milliseconds).
+    /// </summary>
+    private const int DrainLoopDelayMs = 100;
+
     #endregion
 
     #region Fields
@@ -131,6 +142,7 @@ public sealed class QueueDrainService : IDisposable
     private volatile bool _isDisposed;
     private volatile bool _isStarted;
     private int _disposeGuard; // For thread-safe Dispose via Interlocked
+    private int _drainLoopRunning; // For thread-safe drain loop guard via Interlocked
 
     #endregion
 
@@ -872,6 +884,215 @@ public sealed class QueueDrainService : IDisposable
             var now = DateTime.UtcNow;
             _lastDrainTime = now;
             _drainHistory.Enqueue(now);
+        }
+    }
+
+    /// <summary>
+    /// Calculates time until next drain is allowed by rate limit.
+    /// </summary>
+    private TimeSpan GetTimeUntilNextAllowedDrain()
+    {
+        lock (_rateLimitLock)
+        {
+            var elapsed = DateTime.UtcNow - _lastDrainTime;
+            var remaining = TimeSpan.FromSeconds(MinSecondsBetweenDrains) - elapsed;
+            return remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
+        }
+    }
+
+    #endregion
+
+    #region Drain Loop
+
+    /// <summary>
+    /// Starts a drain loop if not already running. Safe to call frequently.
+    /// Called by background location services after queuing a location.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// CRITICAL: This method is called from background location services.
+    /// It MUST be completely fire-and-forget and NEVER throw exceptions.
+    /// </para>
+    /// <para>
+    /// The loop runs until:
+    /// - Queue is empty
+    /// - Device goes offline
+    /// - Too many consecutive failures
+    /// - Service is disposed/stopped
+    /// </para>
+    /// </remarks>
+    public void StartDrainLoop()
+    {
+        // Already running? Do nothing.
+        if (Interlocked.CompareExchange(ref _drainLoopRunning, 1, 0) != 0)
+            return;
+
+        // Fire-and-forget with full isolation
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await DrainLoopAsync();
+            }
+            catch (Exception ex)
+            {
+                // CRITICAL: Never propagate exceptions
+                _logger.LogError(ex, "Drain loop crashed unexpectedly");
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _drainLoopRunning, 0);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Internal drain loop that keeps draining until queue is empty or conditions prevent further draining.
+    /// </summary>
+    private async Task DrainLoopAsync()
+    {
+        var loopFailures = 0;
+
+        _logger.LogDebug("Drain loop started");
+
+        while (!_isDisposed && _isStarted)
+        {
+            try
+            {
+                // Check 1: Connectivity
+                if (!_isOnline)
+                {
+                    _logger.LogDebug("Drain loop: Offline, exiting");
+                    break;
+                }
+
+                // Check 2: API configured
+                if (!_apiClient.IsConfigured)
+                {
+                    _logger.LogDebug("Drain loop: API not configured, exiting");
+                    break;
+                }
+
+                // Check 3: Queue size
+                var pendingCount = await _locationQueue.GetPendingCountAsync();
+                if (pendingCount == 0)
+                {
+                    _logger.LogDebug("Drain loop: Queue empty, exiting");
+                    break;
+                }
+
+                // Check 4: Rate limit
+                if (!CanMakeCheckInRequest())
+                {
+                    // Wait until rate limit allows, then continue
+                    var waitTime = GetTimeUntilNextAllowedDrain();
+                    _logger.LogDebug("Drain loop: Rate limited, waiting {Seconds}s", waitTime.TotalSeconds);
+                    await Task.Delay(waitTime);
+                    continue;
+                }
+
+                // Check 5: Too many failures
+                if (loopFailures >= MaxConsecutiveLoopFailures)
+                {
+                    _logger.LogWarning("Drain loop: Too many failures ({Count}), exiting", loopFailures);
+                    break;
+                }
+
+                // Attempt drain
+                var cts = _timerCts;
+                if (cts == null || cts.IsCancellationRequested)
+                    break;
+
+                var success = await DrainOneWithResultAsync(cts.Token);
+
+                if (success)
+                {
+                    loopFailures = 0; // Reset on success
+                }
+                else
+                {
+                    loopFailures++;
+                }
+
+                // Small delay to prevent tight loop / CPU spin
+                await Task.Delay(DrainLoopDelayMs);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogDebug("Drain loop: Cancelled");
+                break;
+            }
+            catch (Exception ex)
+            {
+                // Log but continue - one bad iteration should not kill the loop
+                _logger.LogWarning(ex, "Drain loop iteration failed");
+                loopFailures++;
+
+                if (loopFailures >= MaxConsecutiveLoopFailures)
+                    break;
+
+                // Back off on errors
+                await Task.Delay(TimeSpan.FromSeconds(loopFailures * 2));
+            }
+        }
+
+        _logger.LogDebug("Drain loop exited");
+    }
+
+    /// <summary>
+    /// Drains one location and returns success/failure.
+    /// Similar to DrainOneAsync but returns bool for drain loop use.
+    /// </summary>
+    private async Task<bool> DrainOneWithResultAsync(CancellationToken cancellationToken)
+    {
+        // Early exits
+        if (!_isOnline || !_apiClient.IsConfigured)
+            return false;
+
+        var failures = Volatile.Read(ref _consecutiveFailures);
+        if (failures >= MaxConsecutiveFailures)
+            return false;
+
+        if (!CanMakeCheckInRequest())
+            return false;
+
+        // Try to acquire lock with timeout (non-blocking if busy)
+        if (!await _drainLock.WaitAsync(DrainLockTimeoutMs, cancellationToken))
+            return false;
+
+        QueuedLocation? location = null;
+
+        try
+        {
+            location = await _locationQueue.ClaimNextPendingLocationWithPriorityAsync();
+            if (location == null)
+                return false;
+
+            _logger.LogDebug(
+                "DrainLoop: Claimed location {Id} from {Timestamp}",
+                location.Id, location.Timestamp);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "DrainLoop: Error claiming pending location");
+            return false;
+        }
+        finally
+        {
+            _drainLock.Release();
+        }
+
+        // Process location outside lock (network call)
+        try
+        {
+            await ProcessLocationAsync(location, cancellationToken);
+            return true; // Processing completed (may have succeeded or been rejected)
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "DrainLoop: Unhandled exception processing location {Id}", location.Id);
+            await TryResetLocationAsync(location.Id, "Unhandled processing exception");
+            return false;
         }
     }
 

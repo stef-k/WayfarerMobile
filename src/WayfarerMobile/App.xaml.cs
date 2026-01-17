@@ -190,6 +190,19 @@ public partial class App : Application
             SafeFireAndForget(queueDrainService?.StartAsync(), "QueueDrainService");
             _logger.LogDebug("Queue drain service started");
 
+            // Wire up drain loop starter for background location services
+            if (queueDrainService != null)
+            {
+                Action drainLoopStarter = () => queueDrainService.StartDrainLoop();
+
+#if ANDROID
+                WayfarerMobile.Platforms.Android.Services.LocationTrackingService.SetDrainLoopStarter(drainLoopStarter);
+#elif IOS
+                WayfarerMobile.Platforms.iOS.Services.LocationTrackingService.SetDrainLoopStarter(drainLoopStarter);
+#endif
+                _logger.LogDebug("Drain loop starter wired to location services");
+            }
+
             // Initialize local timeline storage service (subscribes to location events)
             var timelineStorageService = _serviceProvider.GetService<LocalTimelineStorageService>();
             SafeFireAndForget(timelineStorageService?.InitializeAsync(), "LocalTimelineStorageService");

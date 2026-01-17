@@ -43,6 +43,36 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
     /// </summary>
     public static Func<LocationData, Task<int>>? OfflineQueueDelegate { get; set; }
 
+    /// <summary>
+    /// Delegate for starting the drain loop after queueing a location.
+    /// This triggers QueueDrainService.StartDrainLoop() to drain the queue while backgrounded.
+    /// </summary>
+    private static Action? _startDrainLoop;
+
+    /// <summary>
+    /// Sets the drain loop starter delegate. Called from App.xaml.cs during startup.
+    /// </summary>
+    /// <param name="starter">Action that calls QueueDrainService.StartDrainLoop().</param>
+    public static void SetDrainLoopStarter(Action starter)
+    {
+        _startDrainLoop = starter;
+    }
+
+    /// <summary>
+    /// Safely starts the drain loop. MUST be completely safe - never throw exceptions.
+    /// </summary>
+    private static void StartDrainLoopSafely()
+    {
+        try
+        {
+            _startDrainLoop?.Invoke();
+        }
+        catch
+        {
+            // CRITICAL: Swallow ALL exceptions - never disrupt location service
+        }
+    }
+
     #endregion
 
     #region Fields
@@ -495,6 +525,9 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
                 var queuedId = await offlineQueue(location);
                 Console.WriteLine($"[iOS LocationService] Queued for offline sync: Id={queuedId}");
                 // LocalTimelineStorageService handles timeline via the delegate
+
+                // Start drain loop to process queue while backgrounded
+                StartDrainLoopSafely();
                 return;
             }
 
@@ -507,6 +540,9 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
                 // Notify that location was queued - used by LocalTimelineStorageService
                 // to store with correct coordinates (matches what will be synced)
                 LocationServiceCallbacks.NotifyLocationQueued(location);
+
+                // Start drain loop to process queue while backgrounded
+                StartDrainLoopSafely();
             }
         }
         catch (Exception ex)
