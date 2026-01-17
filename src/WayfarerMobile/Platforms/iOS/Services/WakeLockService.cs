@@ -40,21 +40,30 @@ public class WakeLockService : IWakeLockService
                 Console.WriteLine("[WakeLockService] Wake lock already held");
                 return;
             }
+        }
 
-            try
+        try
+        {
+            MainThread.BeginInvokeOnMainThread(() =>
             {
-                MainThread.BeginInvokeOnMainThread(() =>
+                try
                 {
                     UIApplication.SharedApplication.IdleTimerDisabled = true;
+                    lock (_lock)
+                    {
+                        _isWakeLockHeld = true;
+                    }
                     Console.WriteLine("[WakeLockService] Idle timer disabled (screen will stay on)");
-                });
-
-                _isWakeLockHeld = true;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[WakeLockService] Error acquiring wake lock: {ex.Message}");
-            }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[WakeLockService] Error in wake lock callback: {ex.Message}");
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[WakeLockService] Error acquiring wake lock: {ex.Message}");
         }
     }
 
@@ -67,21 +76,30 @@ public class WakeLockService : IWakeLockService
         {
             if (!_isWakeLockHeld)
                 return;
+        }
 
-            try
+        try
+        {
+            MainThread.BeginInvokeOnMainThread(() =>
             {
-                MainThread.BeginInvokeOnMainThread(() =>
+                try
                 {
                     UIApplication.SharedApplication.IdleTimerDisabled = false;
+                    lock (_lock)
+                    {
+                        _isWakeLockHeld = false;
+                    }
                     Console.WriteLine("[WakeLockService] Idle timer enabled (screen can turn off)");
-                });
-
-                _isWakeLockHeld = false;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[WakeLockService] Error releasing wake lock: {ex.Message}");
-            }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[WakeLockService] Error in release wake lock callback: {ex.Message}");
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[WakeLockService] Error releasing wake lock: {ex.Message}");
         }
     }
 }
