@@ -68,7 +68,9 @@ public class TimelineEntryManager : ITimelineEntryManager
                 args.Longitude,
                 args.LocalTimestamp,
                 args.Notes,
-                includeNotes: true);
+                includeNotes: true,
+                activityTypeId: args.ActivityTypeId,
+                clearActivity: args.ClearActivity);
 
             return true;
         }

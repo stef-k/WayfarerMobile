@@ -30,7 +30,9 @@ public interface ITimelineSyncService
         double? longitude = null,
         DateTime? localTimestamp = null,
         string? notes = null,
-        bool includeNotes = false);
+        bool includeNotes = false,
+        int? activityTypeId = null,
+        bool clearActivity = false);
 
     /// <summary>
     /// Delete a timeline location with optimistic UI pattern.

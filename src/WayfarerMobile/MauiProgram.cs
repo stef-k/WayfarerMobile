@@ -335,6 +335,7 @@ public static class MauiProgram
             sp.GetRequiredService<ITimelineLayerService>(),
             sp.GetRequiredService<TimelineDataService>(),
             sp.GetRequiredService<ITimelineEntryManager>(),
+            sp.GetRequiredService<IActivitySyncService>(),
             callbacks => new CoordinateEditorViewModel(
                 callbacks,
                 sp.GetRequiredService<ITimelineSyncService>(),

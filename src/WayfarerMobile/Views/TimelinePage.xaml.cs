@@ -77,6 +77,7 @@ public partial class TimelinePage : ContentPage
             "Delete",
             "Adjust Coordinates",
             "Edit Date/Time",
+            "Edit Activity",
             "Edit Notes");
 
         switch (action)
@@ -86,6 +87,9 @@ public partial class TimelinePage : ContentPage
                 break;
             case "Edit Date/Time":
                 StartDateTimeEdit();
+                break;
+            case "Edit Activity":
+                await ShowActivityPickerAsync();
                 break;
             case "Edit Notes":
                 await NavigateToNotesEditor();
@@ -137,6 +141,48 @@ public partial class TimelinePage : ContentPage
     {
         // Open the SfDateTimePicker via ViewModel command
         _viewModel.DateTimeEditor.OpenEditDateTimePickerCommand.Execute(null);
+    }
+
+    private async Task ShowActivityPickerAsync()
+    {
+        if (_viewModel.SelectedLocation == null) return;
+
+        // Build activity options including current selection and clear option
+        var activities = _viewModel.ActivityTypes.ToList();
+        var currentActivity = _viewModel.SelectedLocation.ActivityType;
+
+        var options = new List<string>();
+
+        // Add clear option if there's a current activity
+        if (!string.IsNullOrEmpty(currentActivity))
+        {
+            options.Add("Clear Activity");
+        }
+
+        // Add all available activities
+        options.AddRange(activities.Select(a => a.Name));
+
+        var selectedAction = await DisplayActionSheetAsync(
+            $"Select Activity{(string.IsNullOrEmpty(currentActivity) ? "" : $" (Current: {currentActivity})")}",
+            "Cancel",
+            null,
+            options.ToArray());
+
+        if (string.IsNullOrEmpty(selectedAction) || selectedAction == "Cancel")
+            return;
+
+        if (selectedAction == "Clear Activity")
+        {
+            await _viewModel.UpdateActivityAsync(null, clearActivity: true);
+        }
+        else
+        {
+            var selected = activities.FirstOrDefault(a => a.Name == selectedAction);
+            if (selected != null)
+            {
+                await _viewModel.UpdateActivityAsync(selected.Id, clearActivity: false);
+            }
+        }
     }
 
     private async Task NavigateToNotesEditor()
