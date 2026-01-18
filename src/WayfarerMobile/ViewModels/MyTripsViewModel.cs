@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
+using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services;
 using WayfarerMobile.Shared.Collections;
@@ -213,7 +214,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error loading trips");
+            _logger.LogNetworkWarningIfOnline("Network error loading trips: {Message}", ex.Message);
             ErrorMessage = "Failed to load trips. Please check your connection.";
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -246,7 +247,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "Network error refreshing sync status");
+            _logger.LogNetworkWarningIfOnline("Network error refreshing sync status: {Message}", ex.Message);
         }
         catch (Exception ex)
         {
@@ -272,7 +273,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error retrying sync");
+            _logger.LogNetworkWarningIfOnline("Network error retrying sync: {Message}", ex.Message);
             await _toastService.ShowErrorAsync("Network error. Please try again.");
         }
         catch (Exception ex)
@@ -312,7 +313,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error canceling sync");
+            _logger.LogNetworkWarningIfOnline("Network error canceling sync: {Message}", ex.Message);
             await _toastService.ShowErrorAsync("Network error. Please try again.");
         }
         catch (Exception ex)
@@ -456,7 +457,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error updating trip name");
+            _logger.LogNetworkWarningIfOnline("Network error updating trip name: {Message}", ex.Message);
             await _toastService.ShowErrorAsync("Network error. Changes saved locally.");
         }
         catch (Exception ex)

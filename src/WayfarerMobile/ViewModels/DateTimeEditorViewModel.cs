@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 
 namespace WayfarerMobile.ViewModels;
@@ -131,7 +132,7 @@ public partial class DateTimeEditorViewModel : ObservableObject
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error saving datetime");
+            _logger.LogNetworkWarningIfOnline("Network error saving datetime: {Message}", ex.Message);
             await _toastService.ShowErrorAsync("Network error. Changes will sync when online.");
             _callbacks.IsBusy = false;
         }

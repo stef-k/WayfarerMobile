@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services;
 
@@ -369,7 +370,7 @@ public partial class DateNavigationViewModel : ObservableObject
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error loading historical locations");
+            _logger.LogNetworkWarningIfOnline("Network error loading historical locations: {Message}", ex.Message);
         }
         catch (Exception ex)
         {
@@ -526,7 +527,7 @@ public partial class DateNavigationViewModel : ObservableObject
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error loading historical locations for {Date}", data.NewDate);
+            _logger.LogNetworkWarningIfOnline("Network error loading historical locations for {Date}: {Message}", data.NewDate, ex.Message);
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
         {

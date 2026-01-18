@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Helpers;
 using WayfarerMobile.Services;
 
 namespace WayfarerMobile.ViewModels;
@@ -264,7 +265,7 @@ public partial class PublicTripsViewModel : BaseViewModel
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error cloning trip {TripId}", trip.Id);
+            _logger.LogNetworkWarningIfOnline("Network error cloning trip {TripId}: {Message}", trip.Id, ex.Message);
             await _toastService.ShowErrorAsync("Network error. Please check your connection.");
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)

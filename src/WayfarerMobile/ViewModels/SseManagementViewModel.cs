@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services;
 
@@ -184,7 +185,7 @@ public class SseManagementViewModel : IDisposable
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "Network error in SSE subscription");
+                _logger.LogNetworkWarningIfOnline("Network error in SSE subscription: {Message}", ex.Message);
             }
             catch (Exception ex)
             {
@@ -306,7 +307,7 @@ public class SseManagementViewModel : IDisposable
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "Network error handling SSE location event");
+            _logger.LogNetworkWarningIfOnline("Network error handling SSE location event: {Message}", ex.Message);
         }
         catch (Exception ex)
         {
@@ -342,7 +343,7 @@ public class SseManagementViewModel : IDisposable
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "Network error handling SSE location deleted event");
+            _logger.LogNetworkWarningIfOnline("Network error handling SSE location deleted event: {Message}", ex.Message);
         }
         catch (Exception ex)
         {
@@ -400,7 +401,7 @@ public class SseManagementViewModel : IDisposable
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "Network error handling SSE membership event");
+            _logger.LogNetworkWarningIfOnline("Network error handling SSE membership event: {Message}", ex.Message);
         }
         catch (Exception ex)
         {
@@ -559,7 +560,7 @@ public class SseManagementViewModel : IDisposable
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "Network error refreshing location for {UserId}", userId);
+            _logger.LogNetworkWarningIfOnline("Network error refreshing location for {UserId}: {Message}", userId, ex.Message);
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
         {
