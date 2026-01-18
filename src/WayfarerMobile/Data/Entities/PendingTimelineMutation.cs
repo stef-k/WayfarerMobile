@@ -65,6 +65,16 @@ public class PendingTimelineMutation
     /// </summary>
     public bool IncludeNotes { get; set; }
 
+    /// <summary>
+    /// Gets or sets the new activity type ID (null if not changed).
+    /// </summary>
+    public int? ActivityTypeId { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to clear the activity type.
+    /// </summary>
+    public bool ClearActivity { get; set; }
+
     #endregion
 
     #region Original Values (for rollback on server rejection)
@@ -92,6 +102,12 @@ public class PendingTimelineMutation
     /// Used to rollback if server rejects the change.
     /// </summary>
     public string? OriginalNotes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the original activity type name before mutation.
+    /// Used to rollback if server rejects the change.
+    /// </summary>
+    public string? OriginalActivityType { get; set; }
 
     /// <summary>
     /// Gets or sets the full deleted entry as JSON.
@@ -157,5 +173,5 @@ public class PendingTimelineMutation
         OperationType == "Delete"
             ? !string.IsNullOrEmpty(DeletedEntryJson)
             : OriginalLatitude.HasValue || OriginalLongitude.HasValue ||
-              OriginalTimestamp.HasValue || OriginalNotes != null;
+              OriginalTimestamp.HasValue || OriginalNotes != null || OriginalActivityType != null;
 }

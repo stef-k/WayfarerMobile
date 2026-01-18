@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using SQLite;
 using WayfarerMobile.Core.Interfaces;
@@ -24,6 +25,18 @@ public class TimelineDataService
     private readonly ITimelineRepository _timelineRepository;
     private readonly IApiClient _apiClient;
     private readonly ILogger<TimelineDataService> _logger;
+
+    /// <summary>
+    /// Per-date locks to prevent concurrent enrichment for the same date.
+    /// Prevents race condition where two parallel calls both insert the same ServerId.
+    /// </summary>
+    private readonly ConcurrentDictionary<DateTime, SemaphoreSlim> _enrichmentLocks = new();
+
+    /// <summary>
+    /// Maximum number of date locks to keep before pruning old ones.
+    /// Typical usage is 1-2 dates per session, so 30 provides ample headroom.
+    /// </summary>
+    private const int MaxEnrichmentLocks = 30;
 
     /// <summary>
     /// Creates a new instance of TimelineDataService.
@@ -142,6 +155,19 @@ public class TimelineDataService
             return false;
         }
 
+        // Normalize to date only (ignore time component) for lock key
+        var dateKey = date.Date;
+
+        // Get or create a lock for this specific date
+        var dateLock = _enrichmentLocks.GetOrAdd(dateKey, _ => new SemaphoreSlim(1, 1));
+
+        // Try to acquire lock - if another enrichment for this date is in progress, skip
+        if (!await dateLock.WaitAsync(0))
+        {
+            _logger.LogDebug("Enrichment for {Date:yyyy-MM-dd} already in progress, skipping", date);
+            return true; // Not an error, just concurrent call
+        }
+
         try
         {
             // Fetch from server
@@ -163,9 +189,43 @@ public class TimelineDataService
 
             // Load existing local entries for this date
             var localEntries = await _timelineRepository.GetLocalTimelineEntriesForDateAsync(date);
+
+            // Group by ServerId to handle potential duplicates (data integrity issue)
+            // Keep the most recently created entry and delete duplicates
+            var duplicatesToDelete = new List<int>();
             var localByServerId = localEntries
                 .Where(e => e.ServerId.HasValue)
-                .ToDictionary(e => e.ServerId!.Value);
+                .GroupBy(e => e.ServerId!.Value)
+                .ToDictionary(g => g.Key, g =>
+                {
+                    var entries = g.OrderByDescending(e => e.CreatedAt).ToList();
+                    if (entries.Count > 1)
+                    {
+                        _logger.LogWarning(
+                            "Found {Count} duplicate local entries for ServerId {ServerId} on {Date:yyyy-MM-dd}, cleaning up",
+                            entries.Count, g.Key, date);
+                        // Mark all but the most recent for deletion
+                        duplicatesToDelete.AddRange(entries.Skip(1).Select(e => e.Id));
+                    }
+                    return entries.First();
+                });
+
+            // Clean up duplicates (best effort - don't fail enrichment if cleanup fails)
+            if (duplicatesToDelete.Count > 0)
+            {
+                try
+                {
+                    foreach (var id in duplicatesToDelete)
+                    {
+                        await _timelineRepository.DeleteLocalTimelineEntryAsync(id);
+                    }
+                    _logger.LogInformation("Deleted {Count} duplicate local timeline entries", duplicatesToDelete.Count);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to delete {Count} duplicate entries, will retry next enrichment", duplicatesToDelete.Count);
+                }
+            }
 
             var updatedCount = 0;
             var insertedCount = 0;
@@ -249,6 +309,46 @@ public class TimelineDataService
             _logger.LogError(ex, "Unexpected error enriching from server for {Date:yyyy-MM-dd}", date);
             return false;
         }
+        finally
+        {
+            dateLock.Release();
+            PruneOldEnrichmentLocks(dateKey);
+        }
+    }
+
+    /// <summary>
+    /// Removes old date locks to prevent unbounded memory growth.
+    /// Keeps the most recently used dates (within MaxEnrichmentLocks).
+    /// </summary>
+    /// <param name="keepDate">The current date to always keep.</param>
+    private void PruneOldEnrichmentLocks(DateTime keepDate)
+    {
+        // Only prune if we exceed the threshold
+        if (_enrichmentLocks.Count <= MaxEnrichmentLocks)
+            return;
+
+        // Remove dates furthest from the current date being accessed
+        var datesToRemove = _enrichmentLocks.Keys
+            .Where(d => d != keepDate)
+            .OrderByDescending(d => Math.Abs((d - keepDate).TotalDays))
+            .Take(_enrichmentLocks.Count - MaxEnrichmentLocks + 5) // Remove a few extra to avoid frequent pruning
+            .ToList();
+
+        foreach (var dateToRemove in datesToRemove)
+        {
+            if (_enrichmentLocks.TryRemove(dateToRemove, out var removedLock))
+            {
+                // Only dispose if no one is waiting (CurrentCount == 1 means released)
+                if (removedLock.CurrentCount == 1)
+                {
+                    removedLock.Dispose();
+                }
+                // If someone is waiting, the lock is orphaned but will be GC'd eventually
+            }
+        }
+
+        _logger.LogDebug("Pruned {Count} old enrichment locks, {Remaining} remaining",
+            datesToRemove.Count, _enrichmentLocks.Count);
     }
 
     /// <summary>

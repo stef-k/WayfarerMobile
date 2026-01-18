@@ -2,6 +2,7 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:viewmodels="clr-namespace:WayfarerMobile.ViewModels"
+             xmlns:controls="clr-namespace:WayfarerMobile.Shared.Controls"
              xmlns:mapsui="clr-namespace:Mapsui.UI.Maui;assembly=Mapsui.UI.Maui"
              xmlns:bottomSheet="clr-namespace:Syncfusion.Maui.Toolkit.BottomSheet;assembly=Syncfusion.Maui.Toolkit"
              xmlns:picker="clr-namespace:Syncfusion.Maui.Toolkit.Picker;assembly=Syncfusion.Maui.Toolkit"
@@ -253,6 +254,19 @@
                                 </VerticalStackLayout>
                             </Frame>
 
+                            <!-- Activity Section -->
+                            <Frame Padding="12"
+                                   BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                                   BorderColor="Transparent"
+                                   CornerRadius="8"
+                                   HasShadow="False"
+                                   IsVisible="{Binding SelectedLocation.HasActivity}">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="Activity" Style="{StaticResource Caption}" FontAttributes="Bold" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedLocation.ActivityName}" Style="{StaticResource Body}" />
+                                </VerticalStackLayout>
+                            </Frame>
+
                             <!-- Notes Section -->
                             <Frame Padding="12"
                                    BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
@@ -311,5 +325,97 @@
                 </Grid>
             </bottomSheet:SfBottomSheet.BottomSheetContent>
         </bottomSheet:SfBottomSheet>
+
+        <!-- Activity Picker Popup Overlay -->
+        <Grid IsVisible="{Binding IsActivityPickerOpen}"
+              BackgroundColor="#80000000"
+              InputTransparent="False">
+            <Grid.GestureRecognizers>
+                <TapGestureRecognizer Command="{Binding CloseActivityPickerCommand}" />
+            </Grid.GestureRecognizers>
+
+            <Frame Margin="24"
+                   Padding="16"
+                   CornerRadius="12"
+                   VerticalOptions="Center"
+                   HorizontalOptions="Fill"
+                   BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}"
+                   HasShadow="True">
+                <Frame.GestureRecognizers>
+                    <TapGestureRecognizer />
+                </Frame.GestureRecognizers>
+
+                <VerticalStackLayout Spacing="16">
+                    <!-- Header -->
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Label Text="Select Activity"
+                               Style="{StaticResource SubHeadline}"
+                               FontAttributes="Bold"
+                               VerticalOptions="Center" />
+                        <Button Grid.Column="1"
+                                Text="✕"
+                                FontSize="16"
+                                WidthRequest="36"
+                                HeightRequest="36"
+                                Padding="0"
+                                CornerRadius="18"
+                                BackgroundColor="Transparent"
+                                TextColor="{StaticResource TextSecondary}"
+                                Command="{Binding CloseActivityPickerCommand}" />
+                    </Grid>
+
+                    <!-- Current Activity Display -->
+                    <Label Text="{Binding SelectedLocation.ActivityName, StringFormat='Current: {0}', TargetNullValue='Current: None'}"
+                           Style="{StaticResource Caption}"
+                           TextColor="{StaticResource TextSecondary}" />
+
+                    <!-- Activity ComboBox -->
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <controls:ComboBox Placeholder="Select an Activity"
+                                           ItemsSource="{Binding ActivityTypes}"
+                                           SelectedItem="{Binding SelectedActivityForEdit, Mode=TwoWay}"
+                                           DisplayMemberPath="Name"
+                                           VisibleItemCount="5" />
+                        <Button Grid.Column="1"
+                                Text="↻"
+                                FontSize="14"
+                                WidthRequest="36"
+                                HeightRequest="36"
+                                CornerRadius="18"
+                                Padding="0"
+                                Command="{Binding RefreshActivitiesCommand}"
+                                IsEnabled="{Binding IsLoadingActivities, Converter={StaticResource InvertedBoolConverter}}"
+                                BackgroundColor="{StaticResource Gray200}"
+                                TextColor="{StaticResource Gray600}"
+                                VerticalOptions="Center" />
+                    </Grid>
+
+                    <!-- Action Buttons -->
+                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                        <Button Text="Clear"
+                                Command="{Binding ClearActivityCommand}"
+                                IsVisible="{Binding SelectedLocation.HasActivity}"
+                                BackgroundColor="{StaticResource Gray200}"
+                                TextColor="{StaticResource Gray600}"
+                                CornerRadius="8"
+                                HeightRequest="44" />
+                        <Button Grid.Column="1"
+                                Text="Cancel"
+                                Command="{Binding CloseActivityPickerCommand}"
+                                BackgroundColor="{StaticResource Gray200}"
+                                TextColor="{StaticResource Gray600}"
+                                CornerRadius="8"
+                                HeightRequest="44" />
+                        <Button Grid.Column="2"
+                                Text="Save"
+                                Command="{Binding SaveActivityCommand}"
+                                BackgroundColor="{StaticResource Primary}"
+                                TextColor="White"
+                                CornerRadius="8"
+                                HeightRequest="44" />
+                    </Grid>
+                </VerticalStackLayout>
+            </Frame>
+        </Grid>
     </Grid>
 </ContentPage>

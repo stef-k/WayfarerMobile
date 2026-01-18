@@ -77,6 +77,7 @@ public partial class TimelinePage : ContentPage
             "Delete",
             "Adjust Coordinates",
             "Edit Date/Time",
+            "Edit Activity",
             "Edit Notes");
 
         switch (action)
@@ -86,6 +87,9 @@ public partial class TimelinePage : ContentPage
                 break;
             case "Edit Date/Time":
                 StartDateTimeEdit();
+                break;
+            case "Edit Activity":
+                ShowActivityPicker();
                 break;
             case "Edit Notes":
                 await NavigateToNotesEditor();
@@ -137,6 +141,12 @@ public partial class TimelinePage : ContentPage
     {
         // Open the SfDateTimePicker via ViewModel command
         _viewModel.DateTimeEditor.OpenEditDateTimePickerCommand.Execute(null);
+    }
+
+    private void ShowActivityPicker()
+    {
+        // Open the activity picker popup via ViewModel command
+        _viewModel.OpenActivityPickerCommand.Execute(null);
     }
 
     private async Task NavigateToNotesEditor()

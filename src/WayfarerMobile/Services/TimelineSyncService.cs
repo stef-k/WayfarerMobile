@@ -89,7 +89,10 @@ public class TimelineSyncService : ITimelineSyncService
         double? longitude = null,
         DateTime? localTimestamp = null,
         string? notes = null,
-        bool includeNotes = false)
+        bool includeNotes = false,
+        int? activityTypeId = null,
+        bool clearActivity = false,
+        string? activityTypeName = null)
     {
         await EnsureInitializedAsync();
 
@@ -97,7 +100,7 @@ public class TimelineSyncService : ITimelineSyncService
         var originalValues = await GetOriginalValuesAsync(locationId);
 
         // Apply optimistic update to LocalTimelineEntry
-        await ApplyLocalEntryUpdateAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes);
+        await ApplyLocalEntryUpdateAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, activityTypeName, clearActivity);
 
         // Build request
         var request = new TimelineLocationUpdateRequest
@@ -105,13 +108,15 @@ public class TimelineSyncService : ITimelineSyncService
             Latitude = latitude,
             Longitude = longitude,
             LocalTimestamp = localTimestamp,
-            Notes = includeNotes ? notes : null
+            Notes = includeNotes ? notes : null,
+            ActivityTypeId = activityTypeId,
+            ClearActivity = clearActivity ? true : null
         };
 
         // Check connectivity first
         if (!IsConnected)
         {
-            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, originalValues);
+            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, activityTypeId, clearActivity, originalValues);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = Guid.Empty, Message = "Saved offline - will sync when online" });
             return;
         }
@@ -129,7 +134,7 @@ public class TimelineSyncService : ITimelineSyncService
             }
 
             // Null or failed response - queue for retry (keep local changes)
-            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, originalValues);
+            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, activityTypeId, clearActivity, originalValues);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = Guid.Empty, Message = "Sync failed - will retry" });
         }
         catch (HttpRequestException ex) when (IsClientError(ex))
@@ -147,7 +152,7 @@ public class TimelineSyncService : ITimelineSyncService
         catch (HttpRequestException ex)
         {
             // Network error - queue for retry (keep local changes)
-            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, originalValues);
+            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, activityTypeId, clearActivity, originalValues);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs
             {
                 EntityId = Guid.Empty,
@@ -157,7 +162,7 @@ public class TimelineSyncService : ITimelineSyncService
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
         {
             // Timeout - queue for retry (keep local changes)
-            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, originalValues);
+            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, activityTypeId, clearActivity, originalValues);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs
             {
                 EntityId = Guid.Empty,
@@ -167,7 +172,7 @@ public class TimelineSyncService : ITimelineSyncService
         catch (Exception ex)
         {
             // Unexpected error - queue for retry (keep local changes)
-            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, originalValues);
+            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, activityTypeId, clearActivity, originalValues);
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs
             {
                 EntityId = Guid.Empty,
@@ -287,7 +292,9 @@ public class TimelineSyncService : ITimelineSyncService
                         Latitude = mutation.Latitude,
                         Longitude = mutation.Longitude,
                         LocalTimestamp = mutation.LocalTimestamp,
-                        Notes = mutation.IncludeNotes ? mutation.Notes : null
+                        Notes = mutation.IncludeNotes ? mutation.Notes : null,
+                        ActivityTypeId = mutation.ActivityTypeId,
+                        ClearActivity = mutation.ClearActivity ? true : null
                     };
 
                     var response = await _apiClient.UpdateTimelineLocationAsync(mutation.LocationId, request);
@@ -381,13 +388,13 @@ public class TimelineSyncService : ITimelineSyncService
     /// <summary>
     /// Gets original values from LocalTimelineEntry for rollback support.
     /// </summary>
-    private async Task<(int? localEntryId, double? lat, double? lng, DateTime? timestamp, string? notes)> GetOriginalValuesAsync(int locationId)
+    private async Task<(int? localEntryId, double? lat, double? lng, DateTime? timestamp, string? notes, string? activityType)> GetOriginalValuesAsync(int locationId)
     {
         var localEntry = await _timelineRepository.GetLocalTimelineEntryByServerIdAsync(locationId);
         if (localEntry == null)
-            return (null, null, null, null, null);
+            return (null, null, null, null, null, null);
 
-        return (localEntry.Id, localEntry.Latitude, localEntry.Longitude, localEntry.Timestamp, localEntry.Notes);
+        return (localEntry.Id, localEntry.Latitude, localEntry.Longitude, localEntry.Timestamp, localEntry.Notes, localEntry.ActivityType);
     }
 
     /// <summary>
@@ -399,7 +406,9 @@ public class TimelineSyncService : ITimelineSyncService
         double? longitude,
         DateTime? localTimestamp,
         string? notes,
-        bool includeNotes)
+        bool includeNotes,
+        string? activityTypeName,
+        bool clearActivity)
     {
         var localEntry = await _timelineRepository.GetLocalTimelineEntryByServerIdAsync(locationId);
         if (localEntry == null) return;
@@ -409,6 +418,9 @@ public class TimelineSyncService : ITimelineSyncService
         if (longitude.HasValue) localEntry.Longitude = longitude.Value;
         if (localTimestamp.HasValue) localEntry.Timestamp = localTimestamp.Value;
         if (includeNotes) localEntry.Notes = notes;
+        // Activity: set name if provided, clear if requested
+        if (!string.IsNullOrEmpty(activityTypeName)) localEntry.ActivityType = activityTypeName;
+        if (clearActivity) localEntry.ActivityType = null;
 
         await _timelineRepository.UpdateLocalTimelineEntryAsync(localEntry);
     }
@@ -423,7 +435,9 @@ public class TimelineSyncService : ITimelineSyncService
         DateTime? localTimestamp,
         string? notes,
         bool includeNotes,
-        (int? localEntryId, double? lat, double? lng, DateTime? timestamp, string? notes) originalValues)
+        int? activityTypeId,
+        bool clearActivity,
+        (int? localEntryId, double? lat, double? lng, DateTime? timestamp, string? notes, string? activityType) originalValues)
     {
         // Check if there's already a pending mutation for this location
         var existing = await _database!.Table<PendingTimelineMutation>()
@@ -441,6 +455,17 @@ public class TimelineSyncService : ITimelineSyncService
                 existing.Notes = notes;
                 existing.IncludeNotes = true;
             }
+            // Activity: setting an activity clears the clear flag, clearing removes any pending activity
+            if (activityTypeId.HasValue)
+            {
+                existing.ActivityTypeId = activityTypeId;
+                existing.ClearActivity = false;
+            }
+            if (clearActivity)
+            {
+                existing.ClearActivity = true;
+                existing.ActivityTypeId = null;
+            }
             existing.CreatedAt = DateTime.UtcNow;
             await _database.UpdateAsync(existing);
         }
@@ -456,11 +481,14 @@ public class TimelineSyncService : ITimelineSyncService
                 LocalTimestamp = localTimestamp,
                 Notes = notes,
                 IncludeNotes = includeNotes,
+                ActivityTypeId = activityTypeId,
+                ClearActivity = clearActivity,
                 // Persist original values for rollback
                 OriginalLatitude = originalValues.lat,
                 OriginalLongitude = originalValues.lng,
                 OriginalTimestamp = originalValues.timestamp,
                 OriginalNotes = originalValues.notes,
+                OriginalActivityType = originalValues.activityType,
                 CreatedAt = DateTime.UtcNow
             };
             await _database.InsertAsync(mutation);
@@ -472,7 +500,7 @@ public class TimelineSyncService : ITimelineSyncService
     /// </summary>
     private async Task RevertLocalEntryFromValuesAsync(
         int locationId,
-        (int? localEntryId, double? lat, double? lng, DateTime? timestamp, string? notes) originalValues)
+        (int? localEntryId, double? lat, double? lng, DateTime? timestamp, string? notes, string? activityType) originalValues)
     {
         if (!originalValues.localEntryId.HasValue) return;
 
@@ -483,6 +511,7 @@ public class TimelineSyncService : ITimelineSyncService
         if (originalValues.lng.HasValue) localEntry.Longitude = originalValues.lng.Value;
         if (originalValues.timestamp.HasValue) localEntry.Timestamp = originalValues.timestamp.Value;
         localEntry.Notes = originalValues.notes;
+        localEntry.ActivityType = originalValues.activityType;
 
         await _timelineRepository.UpdateLocalTimelineEntryAsync(localEntry);
     }
@@ -572,6 +601,7 @@ public class TimelineSyncService : ITimelineSyncService
             if (mutation.OriginalLongitude.HasValue) localEntry.Longitude = mutation.OriginalLongitude.Value;
             if (mutation.OriginalTimestamp.HasValue) localEntry.Timestamp = mutation.OriginalTimestamp.Value;
             localEntry.Notes = mutation.OriginalNotes;
+            localEntry.ActivityType = mutation.OriginalActivityType;
 
             await _timelineRepository.UpdateLocalTimelineEntryAsync(localEntry);
         }

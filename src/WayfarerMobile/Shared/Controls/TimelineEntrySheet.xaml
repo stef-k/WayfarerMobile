@@ -197,6 +197,35 @@
                             </Grid>
                         </Frame>
 
+                        <!-- Edit Mode: Activity Section -->
+                        <VerticalStackLayout IsVisible="{Binding IsEditing, Source={x:Reference Root}}"
+                                            Spacing="8">
+                            <Label Text="Activity Type"
+                                   Style="{StaticResource Caption}"
+                                   FontAttributes="Bold"
+                                   TextColor="{StaticResource TextSecondary}" />
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <controls:ComboBox Grid.Column="0"
+                                                   Placeholder="Select an Activity"
+                                                   ItemsSource="{Binding ActivityTypes, Source={x:Reference Root}}"
+                                                   SelectedItem="{Binding EditSelectedActivity, Source={x:Reference Root}, Mode=TwoWay}"
+                                                   DisplayMemberPath="Name"
+                                                   VisibleItemCount="5" />
+                                <Button Grid.Column="1"
+                                        Text="↻"
+                                        FontSize="14"
+                                        WidthRequest="36"
+                                        HeightRequest="36"
+                                        CornerRadius="18"
+                                        Padding="0"
+                                        Command="{Binding RefreshActivitiesCommand, Source={x:Reference Root}}"
+                                        IsEnabled="{Binding IsLoadingActivities, Source={x:Reference Root}, Converter={StaticResource InvertedBoolConverter}}"
+                                        BackgroundColor="{StaticResource Gray200}"
+                                        TextColor="{StaticResource Gray600}"
+                                        VerticalOptions="Center" />
+                            </Grid>
+                        </VerticalStackLayout>
+
                         <!-- Edit Mode: Notes Section -->
                         <VerticalStackLayout IsVisible="{Binding IsEditing, Source={x:Reference Root}}"
                                             Spacing="8">

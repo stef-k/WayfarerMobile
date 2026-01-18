@@ -13,6 +13,8 @@ using NetTopologySuite.Geometries;
 using WayfarerMobile.Core.Helpers;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Data.Entities;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 using WayfarerMobile.Data.Services;
@@ -76,6 +78,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     private readonly ITimelineLayerService _timelineLayerService;
     private readonly TimelineDataService _timelineDataService;
     private readonly ITimelineEntryManager _entryManager;
+    private readonly IActivitySyncService _activitySyncService;
     private readonly ILogger<TimelineViewModel> _logger;
     private Map? _map;
     private WritableLayer? _timelineLayer;
@@ -83,6 +86,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     private List<TimelineLocation> _allLocations = new();
     private int? _pendingLocationIdToReopen;
     private DateTime? _dateBeforePickerOpened;
+    private int _loadDataGuard; // Atomic guard to prevent concurrent LoadDataAsync calls
 
     #endregion
 
@@ -148,6 +152,33 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     [ObservableProperty]
     private bool _isOnline = true;
 
+    /// <summary>
+    /// Gets or sets whether activities are loading.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isLoadingActivities;
+
+    #endregion
+
+    #region Activity Properties
+
+    /// <summary>
+    /// Gets the available activity types for editing.
+    /// </summary>
+    public ObservableCollection<ActivityType> ActivityTypes { get; } = [];
+
+    /// <summary>
+    /// Gets or sets whether the activity picker popup is open.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isActivityPickerOpen;
+
+    /// <summary>
+    /// Gets or sets the selected activity in the picker (for two-way binding).
+    /// </summary>
+    [ObservableProperty]
+    private ActivityType? _selectedActivityForEdit;
+
     #endregion
 
     #region Computed Properties
@@ -200,6 +231,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     /// <param name="timelineLayerService">The timeline layer service for rendering markers.</param>
     /// <param name="timelineDataService">The timeline data service for local storage access.</param>
     /// <param name="entryManager">The timeline entry manager for CRUD and external actions.</param>
+    /// <param name="activitySyncService">The activity sync service for loading activity types.</param>
     /// <param name="coordinateEditorFactory">Factory to create the coordinate editor ViewModel.</param>
     /// <param name="dateTimeEditorFactory">Factory to create the datetime editor ViewModel.</param>
     /// <param name="logger">The logger for diagnostic output.</param>
@@ -213,6 +245,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
         ITimelineLayerService timelineLayerService,
         TimelineDataService timelineDataService,
         ITimelineEntryManager entryManager,
+        IActivitySyncService activitySyncService,
         Func<ICoordinateEditorCallbacks, CoordinateEditorViewModel> coordinateEditorFactory,
         Func<IDateTimeEditorCallbacks, DateTimeEditorViewModel> dateTimeEditorFactory,
         ILogger<TimelineViewModel> logger)
@@ -226,6 +259,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
         _timelineLayerService = timelineLayerService;
         _timelineDataService = timelineDataService;
         _entryManager = entryManager;
+        _activitySyncService = activitySyncService;
         _logger = logger;
         Title = "Timeline";
 
@@ -285,7 +319,8 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     [RelayCommand]
     private async Task LoadDataAsync()
     {
-        if (IsBusy)
+        // Atomic guard to prevent concurrent calls (IsBusy check alone has race window)
+        if (Interlocked.CompareExchange(ref _loadDataGuard, 1, 0) != 0)
             return;
 
         try
@@ -365,6 +400,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
         {
             IsBusy = false;
             IsRefreshing = false;
+            Interlocked.Exchange(ref _loadDataGuard, 0); // Release atomic guard
         }
     }
 
@@ -643,6 +679,165 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     }
 
     /// <summary>
+    /// Refreshes the activity types from server.
+    /// </summary>
+    [RelayCommand]
+    private async Task RefreshActivitiesAsync()
+    {
+        if (IsLoadingActivities)
+            return;
+
+        try
+        {
+            IsLoadingActivities = true;
+            var success = await _activitySyncService.SyncWithServerAsync();
+            if (success)
+            {
+                await LoadActivitiesAsync();
+                await _toastService.ShowSuccessAsync("Activities refreshed");
+            }
+            else
+            {
+                await _toastService.ShowWarningAsync("Could not refresh activities");
+            }
+        }
+        finally
+        {
+            IsLoadingActivities = false;
+        }
+    }
+
+    /// <summary>
+    /// Loads activity types from local cache.
+    /// </summary>
+    private async Task LoadActivitiesAsync()
+    {
+        try
+        {
+            IsLoadingActivities = true;
+
+            var activities = await _activitySyncService.GetActivityTypesAsync();
+
+            ActivityTypes.Clear();
+            foreach (var activity in activities)
+            {
+                ActivityTypes.Add(activity);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load activity types");
+        }
+        finally
+        {
+            IsLoadingActivities = false;
+        }
+    }
+
+    /// <summary>
+    /// Opens the activity picker popup.
+    /// </summary>
+    [RelayCommand]
+    private void OpenActivityPicker()
+    {
+        if (SelectedLocation == null) return;
+
+        // Pre-select current activity if any
+        SelectedActivityForEdit = ActivityTypes.FirstOrDefault(a => a.Name == SelectedLocation.ActivityType);
+        IsActivityPickerOpen = true;
+    }
+
+    /// <summary>
+    /// Closes the activity picker popup without saving.
+    /// </summary>
+    [RelayCommand]
+    private void CloseActivityPicker()
+    {
+        IsActivityPickerOpen = false;
+        SelectedActivityForEdit = null;
+    }
+
+    /// <summary>
+    /// Saves the selected activity and closes the picker.
+    /// </summary>
+    [RelayCommand]
+    private async Task SaveActivityAsync()
+    {
+        if (SelectedLocation == null) return;
+
+        var activityChanged = SelectedActivityForEdit?.Name != SelectedLocation.ActivityType;
+        if (activityChanged)
+        {
+            await UpdateActivityAsync(SelectedActivityForEdit?.Id, clearActivity: false);
+        }
+
+        IsActivityPickerOpen = false;
+        SelectedActivityForEdit = null;
+    }
+
+    /// <summary>
+    /// Clears the activity for the current location.
+    /// </summary>
+    [RelayCommand]
+    private async Task ClearActivityAsync()
+    {
+        if (SelectedLocation == null) return;
+
+        await UpdateActivityAsync(null, clearActivity: true);
+        IsActivityPickerOpen = false;
+        SelectedActivityForEdit = null;
+    }
+
+    /// <summary>
+    /// Updates the activity type for the currently selected location.
+    /// </summary>
+    /// <param name="activityTypeId">The new activity type ID, or null if clearing.</param>
+    /// <param name="clearActivity">True to clear the activity.</param>
+    private async Task UpdateActivityAsync(int? activityTypeId, bool clearActivity)
+    {
+        // Capture reference to avoid race condition during async call
+        var locationToUpdate = SelectedLocation;
+        if (locationToUpdate == null) return;
+
+        // Look up activity name for optimistic local update
+        var activityName = activityTypeId.HasValue
+            ? ActivityTypes.FirstOrDefault(a => a.Id == activityTypeId.Value)?.Name
+            : null;
+
+        try
+        {
+            IsBusy = true;
+
+            await _timelineSyncService.UpdateLocationAsync(
+                locationToUpdate.LocationId,
+                activityTypeId: activityTypeId,
+                clearActivity: clearActivity,
+                activityTypeName: activityName);
+
+            // Update local display
+            if (clearActivity)
+            {
+                locationToUpdate.ActivityType = null;
+            }
+            else if (activityTypeId.HasValue)
+            {
+                locationToUpdate.ActivityType = activityName;
+            }
+
+            await _toastService.ShowSuccessAsync("Activity updated");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update activity for location {LocationId}", locationToUpdate.LocationId);
+            await _toastService.ShowErrorAsync("Failed to update activity");
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>
     /// Deletes a timeline location.
     /// </summary>
     /// <param name="locationId">The location ID to delete.</param>
@@ -854,6 +1049,12 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
 
         EnsureMapInitialized();
         await LoadDataAsync();
+
+        // Load activities in background (don't block UI)
+        _ = LoadActivitiesAsync();
+
+        // Background sync of activities if needed
+        _ = _activitySyncService.AutoSyncIfNeededAsync();
 
         // Check if we need to reopen a location sheet (returning from notes editor)
         if (_pendingLocationIdToReopen.HasValue)
@@ -1200,6 +1401,15 @@ public class TimelineLocationDisplay
     /// Gets the activity name.
     /// </summary>
     public string? ActivityName => _location.ActivityType;
+
+    /// <summary>
+    /// Gets or sets the activity type (used for updates).
+    /// </summary>
+    public string? ActivityType
+    {
+        get => _location.ActivityType;
+        set => _location.ActivityType = value;
+    }
 
     /// <summary>
     /// Gets whether an activity is set.

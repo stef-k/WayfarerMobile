@@ -1,5 +1,8 @@
+using System.Collections.ObjectModel;
 using System.Text.RegularExpressions;
+using System.Windows.Input;
 using Syncfusion.Maui.Toolkit.BottomSheet;
+using WayfarerMobile.Data.Entities;
 using WayfarerMobile.ViewModels;
 
 namespace WayfarerMobile.Shared.Controls;
@@ -44,6 +47,24 @@ public partial class TimelineEntrySheet : ContentView
     /// </summary>
     public static readonly BindableProperty IsSavingProperty =
         BindableProperty.Create(nameof(IsSaving), typeof(bool), typeof(TimelineEntrySheet), false);
+
+    /// <summary>
+    /// Bindable property for the available activity types.
+    /// </summary>
+    public static readonly BindableProperty ActivityTypesProperty =
+        BindableProperty.Create(nameof(ActivityTypes), typeof(ObservableCollection<ActivityType>), typeof(TimelineEntrySheet), null);
+
+    /// <summary>
+    /// Bindable property for the refresh activities command.
+    /// </summary>
+    public static readonly BindableProperty RefreshActivitiesCommandProperty =
+        BindableProperty.Create(nameof(RefreshActivitiesCommand), typeof(ICommand), typeof(TimelineEntrySheet), null);
+
+    /// <summary>
+    /// Bindable property for whether activities are loading.
+    /// </summary>
+    public static readonly BindableProperty IsLoadingActivitiesProperty =
+        BindableProperty.Create(nameof(IsLoadingActivities), typeof(bool), typeof(TimelineEntrySheet), false);
 
     #endregion
 
@@ -92,6 +113,33 @@ public partial class TimelineEntrySheet : ContentView
     {
         get => (bool)GetValue(IsSavingProperty);
         set => SetValue(IsSavingProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the available activity types.
+    /// </summary>
+    public ObservableCollection<ActivityType>? ActivityTypes
+    {
+        get => (ObservableCollection<ActivityType>?)GetValue(ActivityTypesProperty);
+        set => SetValue(ActivityTypesProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the command to refresh activities.
+    /// </summary>
+    public ICommand? RefreshActivitiesCommand
+    {
+        get => (ICommand?)GetValue(RefreshActivitiesCommandProperty);
+        set => SetValue(RefreshActivitiesCommandProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets whether activities are loading.
+    /// </summary>
+    public bool IsLoadingActivities
+    {
+        get => (bool)GetValue(IsLoadingActivitiesProperty);
+        set => SetValue(IsLoadingActivitiesProperty, value);
     }
 
     /// <summary>
@@ -157,6 +205,8 @@ public partial class TimelineEntrySheet : ContentView
     private string? _editLatitude;
     private string? _editLongitude;
     private string? _editNotes;
+    private ActivityType? _editSelectedActivity;
+    private string? _originalActivityName;
 
     /// <summary>
     /// Gets or sets the date being edited.
@@ -229,6 +279,19 @@ public partial class TimelineEntrySheet : ContentView
     /// Gets whether there are notes being edited.
     /// </summary>
     public bool HasEditNotes => !string.IsNullOrWhiteSpace(_editNotes);
+
+    /// <summary>
+    /// Gets or sets the selected activity type being edited.
+    /// </summary>
+    public ActivityType? EditSelectedActivity
+    {
+        get => _editSelectedActivity;
+        set
+        {
+            _editSelectedActivity = value;
+            OnPropertyChanged();
+        }
+    }
 
     /// <summary>
     /// Gets a preview of the notes being edited.
@@ -306,6 +369,11 @@ public partial class TimelineEntrySheet : ContentView
         EditLatitude = Entry.Location.Latitude.ToString("F6");
         EditLongitude = Entry.Location.Longitude.ToString("F6");
         EditNotes = Entry.Location.Notes;
+
+        // Initialize activity selection
+        _originalActivityName = Entry.Location.ActivityType;
+        EditSelectedActivity = ActivityTypes?.FirstOrDefault(a => a.Name == _originalActivityName);
+
         IsEditing = true;
         SheetState = BottomSheetState.FullExpanded;
     }
@@ -402,13 +470,19 @@ public partial class TimelineEntrySheet : ContentView
         {
             var newTimestamp = EditDate.Add(EditTime);
 
+            // Determine activity change
+            var activityChanged = EditSelectedActivity?.Name != _originalActivityName;
+            var clearActivity = activityChanged && EditSelectedActivity == null && !string.IsNullOrEmpty(_originalActivityName);
+
             var updateArgs = new TimelineEntryUpdateEventArgs
             {
                 LocationId = Entry.Location.Id,
                 Latitude = lat,
                 Longitude = lon,
                 LocalTimestamp = newTimestamp,
-                Notes = EditNotes
+                Notes = EditNotes,
+                ActivityTypeId = activityChanged ? EditSelectedActivity?.Id : null,
+                ClearActivity = clearActivity
             };
 
             SaveRequested?.Invoke(this, updateArgs);
@@ -619,4 +693,14 @@ public class TimelineEntryUpdateEventArgs : EventArgs
     /// Gets or sets the new notes (HTML).
     /// </summary>
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the activity type ID (null if not changed).
+    /// </summary>
+    public int? ActivityTypeId { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the activity was cleared (true to remove activity).
+    /// </summary>
+    public bool ClearActivity { get; set; }
 }
