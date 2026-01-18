@@ -2,6 +2,14 @@
 
 ## 1.0
 
+### 2026-01-18 (PR #174)
+- **Refactor: Consistent network error handling (#162)**
+  - Created `NetworkLoggingExtensions` helper to check connectivity before logging
+  - Updated ~30 `HttpRequestException` handlers across ViewModels, Services, and Platform code
+  - Network errors only log when device is online (unexpected failures)
+  - Reduces log noise when offline - expected network errors are silently handled
+  - Thread-safe: uses MAUI's `Connectivity.Current.NetworkAccess` (point-in-time snapshot)
+
 ### 2026-01-18 (PR #173)
 - **Fix: Prevent visit notification spam (#142)**
   - Added place+date deduplication to prevent GPS jitter re-entry spam
