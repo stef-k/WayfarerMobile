@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Helpers;
 
 namespace WayfarerMobile.Services;
 
@@ -72,7 +73,7 @@ public class GroupsService : IGroupsService
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error fetching groups");
+            _logger.LogNetworkWarningIfOnline("Network error fetching groups: {Message}", ex.Message);
             return new List<GroupSummary>();
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -120,7 +121,7 @@ public class GroupsService : IGroupsService
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error fetching group members for {GroupId}", groupId);
+            _logger.LogNetworkWarningIfOnline("Network error fetching group members for {GroupId}: {Message}", groupId, ex.Message);
             return new List<GroupMember>();
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -175,7 +176,7 @@ public class GroupsService : IGroupsService
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error fetching latest locations for {GroupId}", groupId);
+            _logger.LogNetworkWarningIfOnline("Network error fetching latest locations for {GroupId}: {Message}", groupId, ex.Message);
             return new Dictionary<string, MemberLocation>();
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -251,7 +252,7 @@ public class GroupsService : IGroupsService
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error querying locations for {GroupId}", groupId);
+            _logger.LogNetworkWarningIfOnline("Network error querying locations for {GroupId}: {Message}", groupId, ex.Message);
             return null;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -302,7 +303,7 @@ public class GroupsService : IGroupsService
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error updating peer visibility for {GroupId}", groupId);
+            _logger.LogNetworkWarningIfOnline("Network error updating peer visibility for {GroupId}: {Message}", groupId, ex.Message);
             return false;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)

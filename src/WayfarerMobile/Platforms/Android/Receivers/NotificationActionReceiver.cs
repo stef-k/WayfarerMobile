@@ -4,6 +4,7 @@ using Android.Widget;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Repositories;
+using WayfarerMobile.Helpers;
 using WayfarerMobile.Platforms.Android.Services;
 using WayfarerMobile.Services;
 
@@ -116,7 +117,11 @@ public class NotificationActionReceiver : BroadcastReceiver
             }
             catch (HttpRequestException ex)
             {
-                Log.Warn(LogTag, $"Network error, falling back to offline: {ex.Message}");
+                // Only log if we thought we were online (unexpected failure)
+                if (NetworkLoggingExtensions.HasInternetConnectivity())
+                {
+                    Log.Warn(LogTag, $"Network error, falling back to offline: {ex.Message}");
+                }
             }
             catch (OperationCanceledException ex) when (!ex.CancellationToken.IsCancellationRequested)
             {

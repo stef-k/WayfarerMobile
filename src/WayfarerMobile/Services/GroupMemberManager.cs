@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 
 namespace WayfarerMobile.Services;
@@ -63,7 +64,7 @@ public class GroupMemberManager : IGroupMemberManager
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "Network error refreshing locations for group {GroupId}", groupId);
+            _logger.LogNetworkWarningIfOnline("Network error refreshing locations for group {GroupId}: {Message}", groupId, ex.Message);
             return null;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -100,7 +101,7 @@ public class GroupMemberManager : IGroupMemberManager
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error toggling peer visibility for group {GroupId}", groupId);
+            _logger.LogNetworkWarningIfOnline("Network error toggling peer visibility for group {GroupId}: {Message}", groupId, ex.Message);
             return false;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)

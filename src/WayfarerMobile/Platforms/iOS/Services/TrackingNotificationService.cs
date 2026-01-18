@@ -3,6 +3,7 @@ using UserNotifications;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Repositories;
+using WayfarerMobile.Helpers;
 using WayfarerMobile.Services;
 
 namespace WayfarerMobile.Platforms.iOS.Services;
@@ -302,7 +303,11 @@ public class TrackingNotificationService : NSObject, IUNUserNotificationCenterDe
             }
             catch (HttpRequestException ex)
             {
-                Console.WriteLine($"[iOS TrackingNotificationService] Network error, falling back to offline: {ex.Message}");
+                // Only log if we thought we were online (unexpected failure)
+                if (NetworkLoggingExtensions.HasInternetConnectivity())
+                {
+                    Console.WriteLine($"[iOS TrackingNotificationService] Network error, falling back to offline: {ex.Message}");
+                }
             }
             catch (OperationCanceledException ex) when (!ex.CancellationToken.IsCancellationRequested)
             {

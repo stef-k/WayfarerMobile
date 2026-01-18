@@ -4,6 +4,7 @@ using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
 using WayfarerMobile.Data.Repositories;
+using WayfarerMobile.Helpers;
 
 namespace WayfarerMobile.Services;
 
@@ -230,7 +231,7 @@ public class TimelineDataService
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error enriching from server for {Date:yyyy-MM-dd}", date);
+            _logger.LogNetworkWarningIfOnline("Network error enriching from server for {Date:yyyy-MM-dd}: {Message}", date, ex.Message);
             return false;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
