@@ -2,6 +2,15 @@
 
 ## 1.0
 
+### 2026-01-18 (PR #176)
+- **Feature: Timeline activity editing (#153)**
+  - Added "Edit Activity" option to timeline location edit menu
+  - Activity picker popup with custom ComboBox control (consistent with check-in flow)
+  - Shows current activity, allows selection from synced activity types
+  - Refresh button to sync activities from server
+  - Clear button to remove activity from location
+  - Full offline support with queue and rollback
+
 ### 2026-01-18 (PR #174)
 - **Refactor: Consistent network error handling (#162)**
   - Created `NetworkLoggingExtensions` helper to check connectivity before logging
