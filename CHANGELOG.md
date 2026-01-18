@@ -2,6 +2,16 @@
 
 ## 1.0
 
+### 2026-01-18 (PR #178)
+- **Feature: Background processing for timeline sync (#177)**
+  - Timeline mutations now sync automatically without requiring Timeline page to be open
+  - Timer-based processing (60s interval) with self-contained connectivity subscription
+  - Piggybacks on background location service wakeups for sync while app is backgrounded
+  - Integrates with AppLifecycleService to trigger sync on suspend/resume
+  - Removed sync responsibility from TimelineViewModel (now UI state only)
+  - Adapted QueueDrainService patterns for lower-traffic timeline mutations
+  - Full exception isolation to protect background location services
+
 ### 2026-01-18 (PR #176)
 - **Feature: Timeline activity editing (#153)**
   - Added "Edit Activity" option to timeline location edit menu

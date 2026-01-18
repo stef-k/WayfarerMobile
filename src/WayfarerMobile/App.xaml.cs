@@ -190,10 +190,20 @@ public partial class App : Application
             SafeFireAndForget(queueDrainService?.StartAsync(), "QueueDrainService");
             _logger.LogDebug("Queue drain service started");
 
+            // Start timeline sync service (offline mutation sync)
+            var timelineSyncService = _serviceProvider.GetService<ITimelineSyncService>();
+            SafeFireAndForget(timelineSyncService?.StartAsync(), "TimelineSyncService");
+            _logger.LogDebug("Timeline sync service started");
+
             // Wire up drain loop starter for background location services
+            // Both services piggyback on location wakeups for background sync
             if (queueDrainService != null)
             {
-                Action drainLoopStarter = () => queueDrainService.StartDrainLoop();
+                Action drainLoopStarter = () =>
+                {
+                    queueDrainService.StartDrainLoop();
+                    timelineSyncService?.StartDrainLoop(); // Piggyback on location wakeups
+                };
                 Func<bool> isRunningChecker = () => queueDrainService.IsDrainLoopRunning;
 
 #if ANDROID
@@ -201,7 +211,7 @@ public partial class App : Application
 #elif IOS
                 WayfarerMobile.Platforms.iOS.Services.LocationTrackingService.SetDrainLoopStarter(drainLoopStarter, isRunningChecker);
 #endif
-                _logger.LogDebug("Drain loop starter wired to location services");
+                _logger.LogDebug("Drain loop starter wired to location services (includes timeline sync)");
             }
 
             // Initialize local timeline storage service (subscribes to location events)
