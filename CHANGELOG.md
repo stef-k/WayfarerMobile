@@ -8,7 +8,9 @@
   - Updated ~30 `HttpRequestException` handlers across ViewModels, Services, and Platform code
   - Network errors only log when device is online (unexpected failures)
   - Reduces log noise when offline - expected network errors are silently handled
-  - Thread-safe: uses MAUI's `Connectivity.Current.NetworkAccess` (point-in-time snapshot)
+  - Rate limiting: same message template logs at most once per 30 seconds
+  - Shows suppression count when logging resumes (e.g., "suppressed 5 similar warnings")
+  - Thread-safe: uses `ConcurrentDictionary` for throttle state tracking
 
 ### 2026-01-18 (PR #173)
 - **Fix: Prevent visit notification spam (#142)**
