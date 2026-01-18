@@ -166,6 +166,18 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     /// </summary>
     public ObservableCollection<ActivityType> ActivityTypes { get; } = [];
 
+    /// <summary>
+    /// Gets or sets whether the activity picker popup is open.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isActivityPickerOpen;
+
+    /// <summary>
+    /// Gets or sets the selected activity in the picker (for two-way binding).
+    /// </summary>
+    [ObservableProperty]
+    private ActivityType? _selectedActivityForEdit;
+
     #endregion
 
     #region Computed Properties
@@ -716,11 +728,65 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     }
 
     /// <summary>
+    /// Opens the activity picker popup.
+    /// </summary>
+    [RelayCommand]
+    private void OpenActivityPicker()
+    {
+        if (SelectedLocation == null) return;
+
+        // Pre-select current activity if any
+        SelectedActivityForEdit = ActivityTypes.FirstOrDefault(a => a.Name == SelectedLocation.ActivityType);
+        IsActivityPickerOpen = true;
+    }
+
+    /// <summary>
+    /// Closes the activity picker popup without saving.
+    /// </summary>
+    [RelayCommand]
+    private void CloseActivityPicker()
+    {
+        IsActivityPickerOpen = false;
+        SelectedActivityForEdit = null;
+    }
+
+    /// <summary>
+    /// Saves the selected activity and closes the picker.
+    /// </summary>
+    [RelayCommand]
+    private async Task SaveActivityAsync()
+    {
+        if (SelectedLocation == null) return;
+
+        var activityChanged = SelectedActivityForEdit?.Name != SelectedLocation.ActivityType;
+        if (activityChanged)
+        {
+            await UpdateActivityAsync(SelectedActivityForEdit?.Id, clearActivity: false);
+        }
+
+        IsActivityPickerOpen = false;
+        SelectedActivityForEdit = null;
+    }
+
+    /// <summary>
+    /// Clears the activity for the current location.
+    /// </summary>
+    [RelayCommand]
+    private async Task ClearActivityAsync()
+    {
+        if (SelectedLocation == null) return;
+
+        await UpdateActivityAsync(null, clearActivity: true);
+        IsActivityPickerOpen = false;
+        SelectedActivityForEdit = null;
+    }
+
+    /// <summary>
     /// Updates the activity type for the currently selected location.
     /// </summary>
     /// <param name="activityTypeId">The new activity type ID, or null if clearing.</param>
     /// <param name="clearActivity">True to clear the activity.</param>
-    public async Task UpdateActivityAsync(int? activityTypeId, bool clearActivity)
+    private async Task UpdateActivityAsync(int? activityTypeId, bool clearActivity)
     {
         if (SelectedLocation == null) return;
 
