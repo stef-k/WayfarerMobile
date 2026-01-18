@@ -254,6 +254,19 @@
                                 </VerticalStackLayout>
                             </Frame>
 
+                            <!-- Activity Section -->
+                            <Frame Padding="12"
+                                   BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                                   BorderColor="Transparent"
+                                   CornerRadius="8"
+                                   HasShadow="False"
+                                   IsVisible="{Binding SelectedLocation.HasActivity}">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="Activity" Style="{StaticResource Caption}" FontAttributes="Bold" TextColor="{StaticResource TextSecondary}" />
+                                    <Label Text="{Binding SelectedLocation.ActivityName}" Style="{StaticResource Body}" />
+                                </VerticalStackLayout>
+                            </Frame>
+
                             <!-- Notes Section -->
                             <Frame Padding="12"
                                    BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
