@@ -46,22 +46,6 @@ public static class NetworkLoggingExtensions
     }
 
     /// <summary>
-    /// Logs an error only if the device currently has internet connectivity.
-    /// Use this for network errors that warrant error-level logging when online.
-    /// </summary>
-    /// <param name="logger">The logger instance.</param>
-    /// <param name="exception">The exception to log.</param>
-    /// <param name="message">The log message template.</param>
-    /// <param name="args">The message template arguments.</param>
-    public static void LogNetworkErrorIfOnline(this ILogger logger, Exception exception, string message, params object?[] args)
-    {
-        if (Connectivity.Current.NetworkAccess == NetworkAccess.Internet)
-        {
-            logger.LogError(exception, message, args);
-        }
-    }
-
-    /// <summary>
     /// Checks if the device currently has internet connectivity.
     /// </summary>
     /// <returns>True if internet is available, false otherwise.</returns>
