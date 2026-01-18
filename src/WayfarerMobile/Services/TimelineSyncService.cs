@@ -996,24 +996,6 @@ public sealed class TimelineSyncService : ITimelineSyncService
     }
 
     /// <summary>
-    /// Process pending mutations (call when connectivity is restored).
-    /// Uses persisted rollback data from mutations to revert on server rejection.
-    /// </summary>
-    /// <remarks>
-    /// This method is kept for backward compatibility but the service now
-    /// processes mutations automatically via timer and drain loop.
-    /// Prefer calling <see cref="StartDrainLoop"/> directly for fire-and-forget,
-    /// or <see cref="TriggerDrainAsync"/> for awaitable single-cycle drain.
-    /// </remarks>
-    [Obsolete("Use StartDrainLoop() for fire-and-forget or TriggerDrainAsync() for awaitable drain.")]
-    public Task ProcessPendingMutationsAsync()
-    {
-        // Start the drain loop which will process all pending mutations
-        StartDrainLoop();
-        return Task.CompletedTask;
-    }
-
-    /// <summary>
     /// Get count of pending mutations.
     /// </summary>
     public async Task<int> GetPendingCountAsync()

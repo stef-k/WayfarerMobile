@@ -57,16 +57,6 @@ public interface ITimelineSyncService : IDisposable
     Task DeleteLocationAsync(int locationId);
 
     /// <summary>
-    /// Process pending mutations when online.
-    /// </summary>
-    /// <remarks>
-    /// Deprecated: The service now processes mutations automatically via timer and drain loop.
-    /// Use <see cref="StartDrainLoop"/> for fire-and-forget or <see cref="TriggerDrainAsync"/> for awaitable drain.
-    /// </remarks>
-    [Obsolete("Use StartDrainLoop() for fire-and-forget or TriggerDrainAsync() for awaitable drain.")]
-    Task ProcessPendingMutationsAsync();
-
-    /// <summary>
     /// Get count of pending mutations.
     /// </summary>
     Task<int> GetPendingCountAsync();
