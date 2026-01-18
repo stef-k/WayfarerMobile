@@ -309,6 +309,12 @@ public sealed class TimelineSyncService : ITimelineSyncService
     /// Handles connectivity state changes.
     /// CRITICAL: Must catch all exceptions (async void pattern).
     /// </summary>
+    /// <remarks>
+    /// Intentionally uses only <see cref="NetworkAccess.Internet"/> and excludes
+    /// <see cref="NetworkAccess.ConstrainedInternet"/> to avoid syncing on metered
+    /// or restricted connections. The ViewModel may show "online" for UI purposes
+    /// while this service waits for full connectivity.
+    /// </remarks>
     private void OnConnectivityChanged(object? sender, ConnectivityChangedEventArgs e)
     {
         try
@@ -693,9 +699,9 @@ public sealed class TimelineSyncService : ITimelineSyncService
             mutation.SyncAttempts++;
             mutation.LastSyncAttempt = DateTime.UtcNow;
 
-            using var timeoutCts = new CancellationTokenSource(SyncTimeoutMs);
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken, timeoutCts.Token);
+            // TODO: Pass cancellation token to API client when it supports cancellation.
+            // For now, timeouts are handled by HttpClient's default timeout.
+            _ = cancellationToken; // Suppress unused parameter warning
 
             bool success;
             if (mutation.OperationType == "Delete")
@@ -996,12 +1002,15 @@ public sealed class TimelineSyncService : ITimelineSyncService
     /// <remarks>
     /// This method is kept for backward compatibility but the service now
     /// processes mutations automatically via timer and drain loop.
+    /// Prefer calling <see cref="StartDrainLoop"/> directly for fire-and-forget,
+    /// or <see cref="TriggerDrainAsync"/> for awaitable single-cycle drain.
     /// </remarks>
-    public async Task ProcessPendingMutationsAsync()
+    [Obsolete("Use StartDrainLoop() for fire-and-forget or TriggerDrainAsync() for awaitable drain.")]
+    public Task ProcessPendingMutationsAsync()
     {
         // Start the drain loop which will process all pending mutations
         StartDrainLoop();
-        await Task.CompletedTask;
+        return Task.CompletedTask;
     }
 
     /// <summary>

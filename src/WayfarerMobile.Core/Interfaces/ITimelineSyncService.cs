@@ -59,6 +59,11 @@ public interface ITimelineSyncService : IDisposable
     /// <summary>
     /// Process pending mutations when online.
     /// </summary>
+    /// <remarks>
+    /// Deprecated: The service now processes mutations automatically via timer and drain loop.
+    /// Use <see cref="StartDrainLoop"/> for fire-and-forget or <see cref="TriggerDrainAsync"/> for awaitable drain.
+    /// </remarks>
+    [Obsolete("Use StartDrainLoop() for fire-and-forget or TriggerDrainAsync() for awaitable drain.")]
     Task ProcessPendingMutationsAsync();
 
     /// <summary>
