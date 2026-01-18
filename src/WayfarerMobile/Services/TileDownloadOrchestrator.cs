@@ -6,6 +6,7 @@ using WayfarerMobile.Core.Models;
 using BatchDownloadResult = WayfarerMobile.Core.Interfaces.BatchDownloadResult;
 using WayfarerMobile.Data.Entities;
 using WayfarerMobile.Data.Repositories;
+using WayfarerMobile.Helpers;
 using WayfarerMobile.Services.TileCache;
 
 namespace WayfarerMobile.Services;
@@ -612,7 +613,7 @@ public sealed class TileDownloadOrchestrator : ITileDownloadOrchestrator
         catch (HttpRequestException ex)
         {
             // Network error - wait and continue
-            _logger.LogWarning(ex, "Network error downloading tile {TileId}", tile.Id);
+            _logger.LogNetworkWarningIfOnline("Network error downloading tile {TileId}: {Message}", tile.Id, ex.Message);
             try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
             return 0;
         }

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using SQLite;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Data.Entities;
+using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 using WayfarerMobile.Data.Services;
 
@@ -264,7 +265,7 @@ public class ActivitySyncService : IActivitySyncService
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error syncing activities from server");
+            _logger.LogNetworkWarningIfOnline("Network error syncing activities from server: {Message}", ex.Message);
             return false;
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -321,7 +322,7 @@ public class ActivitySyncService : IActivitySyncService
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error during auto sync check");
+            _logger.LogNetworkWarningIfOnline("Network error during auto sync check: {Message}", ex.Message);
             return false;
         }
         catch (SQLiteException ex)

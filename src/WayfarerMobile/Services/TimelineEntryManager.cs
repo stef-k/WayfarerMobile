@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 using WayfarerMobile.Shared.Controls;
 
@@ -44,7 +45,7 @@ public class TimelineEntryManager : ITimelineEntryManager
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error saving notes for location {LocationId}", locationId);
+            _logger.LogNetworkWarningIfOnline("Network error saving notes for location {LocationId}: {Message}", locationId, ex.Message);
             await _toastService.ShowErrorAsync("Network error. Changes will sync when online.");
             return false;
         }
@@ -73,7 +74,7 @@ public class TimelineEntryManager : ITimelineEntryManager
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error saving entry changes for location {LocationId}", args.LocationId);
+            _logger.LogNetworkWarningIfOnline("Network error saving entry changes for location {LocationId}: {Message}", args.LocationId, ex.Message);
             await _toastService.ShowErrorAsync("Network error. Changes will sync when online.");
             return false;
         }

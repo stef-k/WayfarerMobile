@@ -13,6 +13,7 @@ using NetTopologySuite.Geometries;
 using WayfarerMobile.Core.Helpers;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 using WayfarerMobile.Data.Services;
 using WayfarerMobile.Services;
@@ -341,9 +342,10 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
             // Update map
             UpdateMapLocations();
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
             // On network error, try loading from local storage as fallback
+            _logger.LogNetworkWarningIfOnline("Network error loading timeline data: {Message}", ex.Message);
             await LoadFromLocalAsync();
             await _toastService.ShowWarningAsync("Server unavailable. Showing local data.");
         }
@@ -698,8 +700,9 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
 
             await _toastService.ShowSuccessAsync("Location deleted");
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
+            _logger.LogNetworkWarningIfOnline("Network error deleting location: {Message}", ex.Message);
             await _toastService.ShowWarningAsync("Network error. Deletion will sync when online.");
             // Reload to restore UI if local delete failed
             await LoadDataAsync();

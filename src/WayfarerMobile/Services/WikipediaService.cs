@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
+using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 
 namespace WayfarerMobile.Services;
@@ -113,7 +114,7 @@ public class WikipediaService : IWikipediaService
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "HTTP error searching Wikipedia API");
+            _logger.LogNetworkWarningIfOnline("HTTP error searching Wikipedia API: {Message}", ex.Message);
             return null;
         }
         catch (JsonException ex)

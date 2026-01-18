@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
+using WayfarerMobile.Helpers;
 
 namespace WayfarerMobile.Services;
 
@@ -129,7 +130,7 @@ public class OsrmRoutingService
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "OSRM request failed (network error)");
+            _logger.LogNetworkWarningIfOnline("OSRM request failed (network error): {Message}", ex.Message);
             return null;
         }
         catch (JsonException ex)

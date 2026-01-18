@@ -4,6 +4,7 @@ using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
 using WayfarerMobile.Data.Repositories;
+using WayfarerMobile.Helpers;
 
 namespace WayfarerMobile.Services;
 
@@ -782,7 +783,7 @@ public sealed class QueueDrainService : IDisposable
             // Network error - reset to pending for retry
             await _locationQueue.ResetLocationToPendingAsync(location.Id);
             Interlocked.Increment(ref _consecutiveFailures);
-            _logger.LogWarning(ex, "Network error syncing location {Id}", location.Id);
+            _logger.LogNetworkWarningIfOnline("Network error syncing location {Id}: {Message}", location.Id, ex.Message);
         }
         catch (Exception ex)
         {

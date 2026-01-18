@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using WayfarerMobile.Helpers;
 using WayfarerMobile.Views.Controls;
 
 namespace WayfarerMobile.ViewModels;
@@ -241,7 +242,7 @@ public partial class ContextMenuViewModel : BaseViewModel
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error calculating route");
+            _logger.LogNetworkWarningIfOnline("Network error calculating route: {Message}", ex.Message);
             await _callbacks.ToastService.ShowErrorAsync("Network error. Please check your connection.");
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)

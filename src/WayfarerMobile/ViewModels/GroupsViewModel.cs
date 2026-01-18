@@ -6,6 +6,7 @@ using Map = Mapsui.Map;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services;
 using WayfarerMobile.Shared.Collections;
@@ -583,7 +584,7 @@ public partial class GroupsViewModel : BaseViewModel,
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error loading groups");
+            _logger.LogNetworkWarningIfOnline("Network error loading groups: {Message}", ex.Message);
             ErrorMessage = "Failed to load groups. Please check your connection and try again.";
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
@@ -635,7 +636,7 @@ public partial class GroupsViewModel : BaseViewModel,
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error loading members for group {GroupId}", SelectedGroup?.Id);
+            _logger.LogNetworkWarningIfOnline("Network error loading members for group {GroupId}: {Message}", SelectedGroup?.Id, ex.Message);
             ErrorMessage = "Failed to load members. Please check your connection and try again.";
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)

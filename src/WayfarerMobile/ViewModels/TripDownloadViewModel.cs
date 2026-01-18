@@ -5,6 +5,7 @@ using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
+using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services;
 
@@ -660,7 +661,7 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error during download");
+            _logger.LogNetworkWarningIfOnline("Network error during download: {Message}", ex.Message);
             await _toastService.ShowErrorAsync("Network error. Please check your connection.");
         }
         catch (IOException ex)
@@ -768,7 +769,7 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error resuming download for trip {TripId}", tripId);
+            _logger.LogNetworkWarningIfOnline("Network error resuming download for trip {TripId}: {Message}", tripId, ex.Message);
             await _toastService.ShowErrorAsync("Network error. Please check your connection.");
             IsDownloadPaused = true;
             IsDownloading = false;

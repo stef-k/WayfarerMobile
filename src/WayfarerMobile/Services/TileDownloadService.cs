@@ -2,6 +2,7 @@ using System.Security;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Helpers;
 using WayfarerMobile.Services.TileCache;
 
 namespace WayfarerMobile.Services;
@@ -141,7 +142,7 @@ public sealed class TileDownloadService : ITileDownloadService, IDisposable
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "Network error downloading tile");
+            _logger.LogNetworkWarningIfOnline("Network error downloading tile: {Message}", ex.Message);
             CleanupTempFile(tempPath);
             return TileDownloadResult.Failed(ex.Message, isNetworkError: true);
         }

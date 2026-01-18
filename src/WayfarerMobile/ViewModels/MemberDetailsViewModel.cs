@@ -5,6 +5,7 @@ using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.ApplicationModel.DataTransfer;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 using WayfarerMobile.Views.Controls;
 
@@ -350,7 +351,7 @@ public partial class MemberDetailsViewModel : ObservableObject
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error calculating route");
+            _logger.LogNetworkWarningIfOnline("Network error calculating route: {Message}", ex.Message);
             await _toastService.ShowErrorAsync("Failed to calculate route");
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)

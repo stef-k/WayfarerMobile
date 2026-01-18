@@ -6,6 +6,7 @@ using Mapsui.Styles;
 using Microsoft.Extensions.Logging;
 using NetTopologySuite.Geometries;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 using Color = Mapsui.Styles.Color;
 using Brush = Mapsui.Styles.Brush;
@@ -174,7 +175,7 @@ public partial class CoordinateEditorViewModel : ObservableObject
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error saving coordinates");
+            _logger.LogNetworkWarningIfOnline("Network error saving coordinates: {Message}", ex.Message);
             await _toastService.ShowErrorAsync("Network error. Changes will sync when online.");
             _callbacks.IsBusy = false;
         }
