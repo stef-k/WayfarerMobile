@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using SQLite;
 using WayfarerMobile.Core.Interfaces;
@@ -24,6 +25,12 @@ public class TimelineDataService
     private readonly ITimelineRepository _timelineRepository;
     private readonly IApiClient _apiClient;
     private readonly ILogger<TimelineDataService> _logger;
+
+    /// <summary>
+    /// Per-date locks to prevent concurrent enrichment for the same date.
+    /// Prevents race condition where two parallel calls both insert the same ServerId.
+    /// </summary>
+    private readonly ConcurrentDictionary<DateTime, SemaphoreSlim> _enrichmentLocks = new();
 
     /// <summary>
     /// Creates a new instance of TimelineDataService.
@@ -142,6 +149,19 @@ public class TimelineDataService
             return false;
         }
 
+        // Normalize to date only (ignore time component) for lock key
+        var dateKey = date.Date;
+
+        // Get or create a lock for this specific date
+        var dateLock = _enrichmentLocks.GetOrAdd(dateKey, _ => new SemaphoreSlim(1, 1));
+
+        // Try to acquire lock - if another enrichment for this date is in progress, skip
+        if (!await dateLock.WaitAsync(0))
+        {
+            _logger.LogDebug("Enrichment for {Date:yyyy-MM-dd} already in progress, skipping", date);
+            return true; // Not an error, just concurrent call
+        }
+
         try
         {
             // Fetch from server
@@ -163,9 +183,23 @@ public class TimelineDataService
 
             // Load existing local entries for this date
             var localEntries = await _timelineRepository.GetLocalTimelineEntriesForDateAsync(date);
+
+            // Group by ServerId to handle potential duplicates (data integrity issue)
+            // Take the most recently created entry if duplicates exist
             var localByServerId = localEntries
                 .Where(e => e.ServerId.HasValue)
-                .ToDictionary(e => e.ServerId!.Value);
+                .GroupBy(e => e.ServerId!.Value)
+                .ToDictionary(g => g.Key, g =>
+                {
+                    var entries = g.ToList();
+                    if (entries.Count > 1)
+                    {
+                        _logger.LogWarning(
+                            "Found {Count} duplicate local entries for ServerId {ServerId} on {Date:yyyy-MM-dd}",
+                            entries.Count, g.Key, date);
+                    }
+                    return entries.OrderByDescending(e => e.CreatedAt).First();
+                });
 
             var updatedCount = 0;
             var insertedCount = 0;
@@ -248,6 +282,10 @@ public class TimelineDataService
         {
             _logger.LogError(ex, "Unexpected error enriching from server for {Date:yyyy-MM-dd}", date);
             return false;
+        }
+        finally
+        {
+            dateLock.Release();
         }
     }
 

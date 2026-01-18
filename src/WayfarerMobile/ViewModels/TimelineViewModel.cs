@@ -86,6 +86,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     private List<TimelineLocation> _allLocations = new();
     private int? _pendingLocationIdToReopen;
     private DateTime? _dateBeforePickerOpened;
+    private int _loadDataGuard; // Atomic guard to prevent concurrent LoadDataAsync calls
 
     #endregion
 
@@ -318,7 +319,8 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     [RelayCommand]
     private async Task LoadDataAsync()
     {
-        if (IsBusy)
+        // Atomic guard to prevent concurrent calls (IsBusy check alone has race window)
+        if (Interlocked.CompareExchange(ref _loadDataGuard, 1, 0) != 0)
             return;
 
         try
@@ -398,6 +400,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
         {
             IsBusy = false;
             IsRefreshing = false;
+            Interlocked.Exchange(ref _loadDataGuard, 0); // Release atomic guard
         }
     }
 
