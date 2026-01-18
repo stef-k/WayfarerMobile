@@ -721,6 +721,10 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
                 ActivityTypes.Add(activity);
             }
         }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load activity types");
+        }
         finally
         {
             IsLoadingActivities = false;
@@ -788,33 +792,40 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     /// <param name="clearActivity">True to clear the activity.</param>
     private async Task UpdateActivityAsync(int? activityTypeId, bool clearActivity)
     {
-        if (SelectedLocation == null) return;
+        // Capture reference to avoid race condition during async call
+        var locationToUpdate = SelectedLocation;
+        if (locationToUpdate == null) return;
+
+        // Look up activity name for optimistic local update
+        var activityName = activityTypeId.HasValue
+            ? ActivityTypes.FirstOrDefault(a => a.Id == activityTypeId.Value)?.Name
+            : null;
 
         try
         {
             IsBusy = true;
 
             await _timelineSyncService.UpdateLocationAsync(
-                SelectedLocation.LocationId,
+                locationToUpdate.LocationId,
                 activityTypeId: activityTypeId,
-                clearActivity: clearActivity);
+                clearActivity: clearActivity,
+                activityTypeName: activityName);
 
             // Update local display
             if (clearActivity)
             {
-                SelectedLocation.ActivityType = null;
+                locationToUpdate.ActivityType = null;
             }
             else if (activityTypeId.HasValue)
             {
-                var activity = ActivityTypes.FirstOrDefault(a => a.Id == activityTypeId.Value);
-                SelectedLocation.ActivityType = activity?.Name;
+                locationToUpdate.ActivityType = activityName;
             }
 
             await _toastService.ShowSuccessAsync("Activity updated");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to update activity for location {LocationId}", SelectedLocation.LocationId);
+            _logger.LogError(ex, "Failed to update activity for location {LocationId}", locationToUpdate.LocationId);
             await _toastService.ShowErrorAsync("Failed to update activity");
         }
         finally

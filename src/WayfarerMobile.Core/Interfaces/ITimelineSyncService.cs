@@ -24,6 +24,15 @@ public interface ITimelineSyncService
     /// <summary>
     /// Update a timeline location with optimistic UI pattern.
     /// </summary>
+    /// <param name="locationId">The location ID to update.</param>
+    /// <param name="latitude">New latitude (optional).</param>
+    /// <param name="longitude">New longitude (optional).</param>
+    /// <param name="localTimestamp">New timestamp (optional).</param>
+    /// <param name="notes">New notes HTML (optional).</param>
+    /// <param name="includeNotes">Whether to include notes in update.</param>
+    /// <param name="activityTypeId">New activity type ID for server (optional).</param>
+    /// <param name="clearActivity">Whether to clear the activity.</param>
+    /// <param name="activityTypeName">Activity name for optimistic local update (optional).</param>
     Task UpdateLocationAsync(
         int locationId,
         double? latitude = null,
@@ -32,7 +41,8 @@ public interface ITimelineSyncService
         string? notes = null,
         bool includeNotes = false,
         int? activityTypeId = null,
-        bool clearActivity = false);
+        bool clearActivity = false,
+        string? activityTypeName = null);
 
     /// <summary>
     /// Delete a timeline location with optimistic UI pattern.

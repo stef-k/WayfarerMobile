@@ -91,7 +91,8 @@ public class TimelineSyncService : ITimelineSyncService
         string? notes = null,
         bool includeNotes = false,
         int? activityTypeId = null,
-        bool clearActivity = false)
+        bool clearActivity = false,
+        string? activityTypeName = null)
     {
         await EnsureInitializedAsync();
 
@@ -99,7 +100,7 @@ public class TimelineSyncService : ITimelineSyncService
         var originalValues = await GetOriginalValuesAsync(locationId);
 
         // Apply optimistic update to LocalTimelineEntry
-        await ApplyLocalEntryUpdateAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, activityTypeId, clearActivity);
+        await ApplyLocalEntryUpdateAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, activityTypeName, clearActivity);
 
         // Build request
         var request = new TimelineLocationUpdateRequest
@@ -406,7 +407,7 @@ public class TimelineSyncService : ITimelineSyncService
         DateTime? localTimestamp,
         string? notes,
         bool includeNotes,
-        int? activityTypeId,
+        string? activityTypeName,
         bool clearActivity)
     {
         var localEntry = await _timelineRepository.GetLocalTimelineEntryByServerIdAsync(locationId);
@@ -417,8 +418,8 @@ public class TimelineSyncService : ITimelineSyncService
         if (longitude.HasValue) localEntry.Longitude = longitude.Value;
         if (localTimestamp.HasValue) localEntry.Timestamp = localTimestamp.Value;
         if (includeNotes) localEntry.Notes = notes;
-        // Note: For activity, we can only clear it locally. Setting a new activity requires
-        // the server response to get the activity name. This is an optimistic update limitation.
+        // Activity: set name if provided, clear if requested
+        if (!string.IsNullOrEmpty(activityTypeName)) localEntry.ActivityType = activityTypeName;
         if (clearActivity) localEntry.ActivityType = null;
 
         await _timelineRepository.UpdateLocalTimelineEntryAsync(localEntry);
@@ -454,8 +455,17 @@ public class TimelineSyncService : ITimelineSyncService
                 existing.Notes = notes;
                 existing.IncludeNotes = true;
             }
-            if (activityTypeId.HasValue) existing.ActivityTypeId = activityTypeId;
-            if (clearActivity) existing.ClearActivity = true;
+            // Activity: setting an activity clears the clear flag, clearing removes any pending activity
+            if (activityTypeId.HasValue)
+            {
+                existing.ActivityTypeId = activityTypeId;
+                existing.ClearActivity = false;
+            }
+            if (clearActivity)
+            {
+                existing.ClearActivity = true;
+                existing.ActivityTypeId = null;
+            }
             existing.CreatedAt = DateTime.UtcNow;
             await _database.UpdateAsync(existing);
         }
