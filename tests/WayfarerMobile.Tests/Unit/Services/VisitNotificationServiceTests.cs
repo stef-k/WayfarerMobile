@@ -713,6 +713,32 @@ public class VisitNotificationServiceTests : IDisposable
         eventCount.Should().Be(2, "visits with null placeId should not be deduplicated by place");
     }
 
+    [Fact]
+    public async Task VisitEvent_ConcurrentSamePlaceEvents_OnlyOneProcessed()
+    {
+        var placeId = Guid.NewGuid();
+        var service = CreateService();
+        await service.StartAsync();
+
+        int eventCount = 0;
+        service.NotificationDisplayed += (_, _) => Interlocked.Increment(ref eventCount);
+
+        // Fire multiple events simultaneously to trigger race condition
+        var tasks = Enumerable.Range(0, 5).Select(_ =>
+        {
+            _mockSseClient.Raise(c => c.VisitStarted += null,
+                new SseVisitStartedEventArgs(CreateVisitEvent(
+                    visitId: Guid.NewGuid(),
+                    placeId: placeId)));
+            return Task.Delay(1); // Minimal delay to allow concurrent processing
+        });
+
+        await Task.WhenAll(tasks);
+        await Task.Delay(200); // Allow processing to complete
+
+        eventCount.Should().Be(1, "concurrent events for same place should result in single notification");
+    }
+
     #endregion
 
     #region Notification Content Tests
