@@ -33,6 +33,12 @@ public class TimelineDataService
     private readonly ConcurrentDictionary<DateTime, SemaphoreSlim> _enrichmentLocks = new();
 
     /// <summary>
+    /// Maximum number of date locks to keep before pruning old ones.
+    /// Typical usage is 1-2 dates per session, so 30 provides ample headroom.
+    /// </summary>
+    private const int MaxEnrichmentLocks = 30;
+
+    /// <summary>
     /// Creates a new instance of TimelineDataService.
     /// </summary>
     /// <param name="timelineRepository">Repository for timeline operations.</param>
@@ -185,21 +191,41 @@ public class TimelineDataService
             var localEntries = await _timelineRepository.GetLocalTimelineEntriesForDateAsync(date);
 
             // Group by ServerId to handle potential duplicates (data integrity issue)
-            // Take the most recently created entry if duplicates exist
+            // Keep the most recently created entry and delete duplicates
+            var duplicatesToDelete = new List<int>();
             var localByServerId = localEntries
                 .Where(e => e.ServerId.HasValue)
                 .GroupBy(e => e.ServerId!.Value)
                 .ToDictionary(g => g.Key, g =>
                 {
-                    var entries = g.ToList();
+                    var entries = g.OrderByDescending(e => e.CreatedAt).ToList();
                     if (entries.Count > 1)
                     {
                         _logger.LogWarning(
-                            "Found {Count} duplicate local entries for ServerId {ServerId} on {Date:yyyy-MM-dd}",
+                            "Found {Count} duplicate local entries for ServerId {ServerId} on {Date:yyyy-MM-dd}, cleaning up",
                             entries.Count, g.Key, date);
+                        // Mark all but the most recent for deletion
+                        duplicatesToDelete.AddRange(entries.Skip(1).Select(e => e.Id));
                     }
-                    return entries.OrderByDescending(e => e.CreatedAt).First();
+                    return entries.First();
                 });
+
+            // Clean up duplicates (best effort - don't fail enrichment if cleanup fails)
+            if (duplicatesToDelete.Count > 0)
+            {
+                try
+                {
+                    foreach (var id in duplicatesToDelete)
+                    {
+                        await _timelineRepository.DeleteLocalTimelineEntryAsync(id);
+                    }
+                    _logger.LogInformation("Deleted {Count} duplicate local timeline entries", duplicatesToDelete.Count);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to delete {Count} duplicate entries, will retry next enrichment", duplicatesToDelete.Count);
+                }
+            }
 
             var updatedCount = 0;
             var insertedCount = 0;
@@ -286,7 +312,43 @@ public class TimelineDataService
         finally
         {
             dateLock.Release();
+            PruneOldEnrichmentLocks(dateKey);
         }
+    }
+
+    /// <summary>
+    /// Removes old date locks to prevent unbounded memory growth.
+    /// Keeps the most recently used dates (within MaxEnrichmentLocks).
+    /// </summary>
+    /// <param name="keepDate">The current date to always keep.</param>
+    private void PruneOldEnrichmentLocks(DateTime keepDate)
+    {
+        // Only prune if we exceed the threshold
+        if (_enrichmentLocks.Count <= MaxEnrichmentLocks)
+            return;
+
+        // Remove dates furthest from the current date being accessed
+        var datesToRemove = _enrichmentLocks.Keys
+            .Where(d => d != keepDate)
+            .OrderByDescending(d => Math.Abs((d - keepDate).TotalDays))
+            .Take(_enrichmentLocks.Count - MaxEnrichmentLocks + 5) // Remove a few extra to avoid frequent pruning
+            .ToList();
+
+        foreach (var dateToRemove in datesToRemove)
+        {
+            if (_enrichmentLocks.TryRemove(dateToRemove, out var removedLock))
+            {
+                // Only dispose if no one is waiting (CurrentCount == 1 means released)
+                if (removedLock.CurrentCount == 1)
+                {
+                    removedLock.Dispose();
+                }
+                // If someone is waiting, the lock is orphaned but will be GC'd eventually
+            }
+        }
+
+        _logger.LogDebug("Pruned {Count} old enrichment locks, {Remaining} remaining",
+            datesToRemove.Count, _enrichmentLocks.Count);
     }
 
     /// <summary>
