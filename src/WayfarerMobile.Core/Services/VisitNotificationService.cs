@@ -65,8 +65,12 @@ public class VisitNotificationService : IVisitNotificationService
     private Guid? _currentDestinationPlaceId;
     private DateTime? _navigationEndedAt;
 
-    // Deduplication: circular buffer of recent visit IDs
+    // Deduplication: circular buffer of recent visit IDs (server-side duplicates)
     private readonly Queue<Guid> _recentVisitIds = new();
+
+    // Deduplication: place ID -> last notified date (prevents GPS jitter re-entry spam)
+    // Only notify once per place per day, regardless of how many visit events arrive
+    private readonly Dictionary<Guid, DateOnly> _notifiedPlaceDates = new();
 
     #endregion
 
@@ -257,7 +261,7 @@ public class VisitNotificationService : IVisitNotificationService
             return;
         }
 
-        // Deduplicate by visit ID
+        // Deduplicate by visit ID (server-side duplicates from SSE/polling)
         if (IsRecentVisit(visit.VisitId))
         {
             _logger.LogDebug("Duplicate visit event ignored: {VisitId}", visit.VisitId);
@@ -266,6 +270,16 @@ public class VisitNotificationService : IVisitNotificationService
 
         // Track this visit ID
         AddRecentVisit(visit.VisitId);
+
+        // Deduplicate by place + date (prevents GPS jitter / re-entry spam)
+        // Allow fresh notifications on different days (trip re-executed)
+        if (visit.PlaceId.HasValue && HasNotifiedPlaceToday(visit.PlaceId.Value))
+        {
+            _logger.LogDebug(
+                "Place already notified today, ignoring: {PlaceId} ({PlaceName})",
+                visit.PlaceId, visit.PlaceName);
+            return;
+        }
 
         // Determine notification mode based on navigation state
         var mode = DetermineNotificationMode(visit);
@@ -307,6 +321,12 @@ public class VisitNotificationService : IVisitNotificationService
             {
                 await SpeakAnnouncementAsync(visit);
             }
+        }
+
+        // Record place as notified today (prevents re-entry spam from GPS jitter)
+        if (visit.PlaceId.HasValue)
+        {
+            RecordPlaceNotified(visit.PlaceId.Value);
         }
 
         NotificationDisplayed?.Invoke(this, new VisitNotificationEventArgs(visit, mode));
@@ -430,6 +450,47 @@ public class VisitNotificationService : IVisitNotificationService
             {
                 _recentVisitIds.Dequeue();
             }
+        }
+    }
+
+    /// <summary>
+    /// Checks if a place was already notified today.
+    /// </summary>
+    private bool HasNotifiedPlaceToday(Guid placeId)
+    {
+        lock (_notifiedPlaceDates)
+        {
+            if (_notifiedPlaceDates.TryGetValue(placeId, out var lastDate))
+            {
+                return lastDate == DateOnly.FromDateTime(DateTime.Today);
+            }
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Records that a place was notified today.
+    /// Also cleans up old entries from previous days.
+    /// </summary>
+    private void RecordPlaceNotified(Guid placeId)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+
+        lock (_notifiedPlaceDates)
+        {
+            // Clean up old entries from previous days
+            var staleKeys = _notifiedPlaceDates
+                .Where(kvp => kvp.Value < today)
+                .Select(kvp => kvp.Key)
+                .ToList();
+
+            foreach (var key in staleKeys)
+            {
+                _notifiedPlaceDates.Remove(key);
+            }
+
+            // Record this place as notified today
+            _notifiedPlaceDates[placeId] = today;
         }
     }
 
