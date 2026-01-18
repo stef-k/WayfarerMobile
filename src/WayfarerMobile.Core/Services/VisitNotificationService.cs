@@ -65,8 +65,12 @@ public class VisitNotificationService : IVisitNotificationService
     private Guid? _currentDestinationPlaceId;
     private DateTime? _navigationEndedAt;
 
-    // Deduplication: circular buffer of recent visit IDs
+    // Deduplication: circular buffer of recent visit IDs (server-side duplicates)
     private readonly Queue<Guid> _recentVisitIds = new();
+
+    // Deduplication: place ID -> last notified date (prevents GPS jitter re-entry spam)
+    // Only notify once per place per day, regardless of how many visit events arrive
+    private readonly Dictionary<Guid, DateOnly> _notifiedPlaceDates = new();
 
     #endregion
 
@@ -257,7 +261,7 @@ public class VisitNotificationService : IVisitNotificationService
             return;
         }
 
-        // Deduplicate by visit ID
+        // Deduplicate by visit ID (server-side duplicates from SSE/polling)
         if (IsRecentVisit(visit.VisitId))
         {
             _logger.LogDebug("Duplicate visit event ignored: {VisitId}", visit.VisitId);
@@ -266,6 +270,17 @@ public class VisitNotificationService : IVisitNotificationService
 
         // Track this visit ID
         AddRecentVisit(visit.VisitId);
+
+        // Deduplicate by place + date (prevents GPS jitter / re-entry spam)
+        // Atomic check-and-record prevents race between concurrent event handlers
+        // Allow fresh notifications on different days (trip re-executed)
+        if (visit.PlaceId.HasValue && !TryRecordPlaceNotificationToday(visit.PlaceId.Value))
+        {
+            _logger.LogDebug(
+                "Place already notified today, ignoring: {PlaceId} ({PlaceName})",
+                visit.PlaceId, visit.PlaceName);
+            return;
+        }
 
         // Determine notification mode based on navigation state
         var mode = DetermineNotificationMode(visit);
@@ -430,6 +445,42 @@ public class VisitNotificationService : IVisitNotificationService
             {
                 _recentVisitIds.Dequeue();
             }
+        }
+    }
+
+    /// <summary>
+    /// Atomically checks if a place was already notified today, and if not, marks it.
+    /// Returns true if this is the first notification for this place today.
+    /// Also cleans up stale entries from previous days.
+    /// </summary>
+    /// <remarks>
+    /// Thread-safe: uses lock to prevent race conditions from concurrent GPS jitter events.
+    /// </remarks>
+    private bool TryRecordPlaceNotificationToday(Guid placeId)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+
+        lock (_notifiedPlaceDates)
+        {
+            // Clean up old entries from previous days
+            var staleKeys = _notifiedPlaceDates
+                .Where(kvp => kvp.Value < today)
+                .Select(kvp => kvp.Key)
+                .ToList();
+
+            foreach (var key in staleKeys)
+            {
+                _notifiedPlaceDates.Remove(key);
+            }
+
+            // Atomic check-and-set
+            if (_notifiedPlaceDates.TryGetValue(placeId, out var lastDate) && lastDate == today)
+            {
+                return false; // Already notified today
+            }
+
+            _notifiedPlaceDates[placeId] = today;
+            return true; // First notification today, now recorded
         }
     }
 

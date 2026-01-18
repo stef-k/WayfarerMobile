@@ -633,6 +633,112 @@ public class VisitNotificationServiceTests : IDisposable
         eventCount.Should().Be(12); // 11 unique + 1 re-processed after eviction
     }
 
+    [Fact]
+    public async Task VisitEvent_SamePlaceSameDay_SecondIsIgnored()
+    {
+        var placeId = Guid.NewGuid();
+        var service = CreateService();
+        await service.StartAsync();
+
+        int eventCount = 0;
+        service.NotificationDisplayed += (_, _) => eventCount++;
+
+        // Send two visits for same place with different visit IDs (simulating GPS jitter re-entry)
+        _mockSseClient.Raise(c => c.VisitStarted += null,
+            new SseVisitStartedEventArgs(CreateVisitEvent(visitId: Guid.NewGuid(), placeId: placeId)));
+        await Task.Delay(50);
+        _mockSseClient.Raise(c => c.VisitStarted += null,
+            new SseVisitStartedEventArgs(CreateVisitEvent(visitId: Guid.NewGuid(), placeId: placeId)));
+        await Task.Delay(100);
+
+        eventCount.Should().Be(1, "second visit to same place on same day should be ignored");
+    }
+
+    [Fact]
+    public async Task VisitEvent_DifferentPlacesSameDay_BothAreProcessed()
+    {
+        var placeId1 = Guid.NewGuid();
+        var placeId2 = Guid.NewGuid();
+        var service = CreateService();
+        await service.StartAsync();
+
+        int eventCount = 0;
+        service.NotificationDisplayed += (_, _) => eventCount++;
+
+        // Send visits for different places
+        _mockSseClient.Raise(c => c.VisitStarted += null,
+            new SseVisitStartedEventArgs(CreateVisitEvent(placeId: placeId1, placeName: "Place A")));
+        await Task.Delay(50);
+        _mockSseClient.Raise(c => c.VisitStarted += null,
+            new SseVisitStartedEventArgs(CreateVisitEvent(placeId: placeId2, placeName: "Place B")));
+        await Task.Delay(100);
+
+        eventCount.Should().Be(2, "visits to different places should both be processed");
+    }
+
+    [Fact]
+    public async Task VisitEvent_NullPlaceId_IsNotDeduplicated()
+    {
+        var service = CreateService();
+        await service.StartAsync();
+
+        int eventCount = 0;
+        service.NotificationDisplayed += (_, _) => eventCount++;
+
+        // Create visits with null placeId (edge case)
+        var visit1 = new SseVisitStartedEvent
+        {
+            VisitId = Guid.NewGuid(),
+            TripId = Guid.NewGuid(),
+            PlaceId = null,
+            PlaceName = "Test Place",
+            TripName = "Test Trip",
+            ArrivedAtUtc = DateTime.UtcNow
+        };
+        var visit2 = new SseVisitStartedEvent
+        {
+            VisitId = Guid.NewGuid(),
+            TripId = Guid.NewGuid(),
+            PlaceId = null,
+            PlaceName = "Test Place",
+            TripName = "Test Trip",
+            ArrivedAtUtc = DateTime.UtcNow
+        };
+
+        _mockSseClient.Raise(c => c.VisitStarted += null, new SseVisitStartedEventArgs(visit1));
+        await Task.Delay(50);
+        _mockSseClient.Raise(c => c.VisitStarted += null, new SseVisitStartedEventArgs(visit2));
+        await Task.Delay(100);
+
+        eventCount.Should().Be(2, "visits with null placeId should not be deduplicated by place");
+    }
+
+    [Fact]
+    public async Task VisitEvent_ConcurrentSamePlaceEvents_OnlyOneProcessed()
+    {
+        var placeId = Guid.NewGuid();
+        var service = CreateService();
+        await service.StartAsync();
+
+        int eventCount = 0;
+        service.NotificationDisplayed += (_, _) => Interlocked.Increment(ref eventCount);
+
+        // Fire multiple events simultaneously to trigger race condition
+        var tasks = Enumerable.Range(0, 5).Select(_ =>
+        {
+            _mockSseClient.Raise(c => c.VisitStarted += null,
+                new SseVisitStartedEventArgs(CreateVisitEvent(
+                    visitId: Guid.NewGuid(),
+                    placeId: placeId)));
+            return Task.Delay(1); // Minimal delay to allow concurrent processing
+        });
+
+        await Task.WhenAll(tasks);
+        await Task.Delay(200); // Allow processing to complete
+
+        eventCount.Should().Be(1, "concurrent events for same place should result in single notification");
+    }
+
     #endregion
 
     #region Notification Content Tests

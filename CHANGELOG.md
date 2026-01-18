@@ -2,6 +2,11 @@
 
 ## 1.0
 
+### 2026-01-18 (PR #173)
+- **Fix: Prevent visit notification spam (#142)**
+  - Added place+date deduplication to prevent GPS jitter re-entry spam
+  - Same place notified only once per day; fresh notifications on different days
+
 ### 2026-01-17 (PR #172)
 - **Fix: Prevent repeat navigation announcements (#143)**
   - Each navigation step/waypoint now announced only once per session
