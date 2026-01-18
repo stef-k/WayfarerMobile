@@ -11,6 +11,7 @@ namespace WayfarerMobile.Services;
 public class AppLifecycleService : IAppLifecycleService
 {
     private readonly QueueDrainService _queueDrainService;
+    private readonly ITimelineSyncService _timelineSyncService;
     private readonly SettingsSyncService _settingsSyncService;
     private readonly IWakeLockService _wakeLockService;
     private readonly ISettingsService _settingsService;
@@ -33,18 +34,21 @@ public class AppLifecycleService : IAppLifecycleService
     /// Creates a new instance of AppLifecycleService.
     /// </summary>
     /// <param name="queueDrainService">The queue drain service for syncing offline locations.</param>
+    /// <param name="timelineSyncService">The timeline sync service for syncing offline mutations.</param>
     /// <param name="settingsSyncService">The settings sync service.</param>
     /// <param name="wakeLockService">The wake lock service.</param>
     /// <param name="settingsService">The settings service.</param>
     /// <param name="logger">The logger instance.</param>
     public AppLifecycleService(
         QueueDrainService queueDrainService,
+        ITimelineSyncService timelineSyncService,
         SettingsSyncService settingsSyncService,
         IWakeLockService wakeLockService,
         ISettingsService settingsService,
         ILogger<AppLifecycleService> logger)
     {
         _queueDrainService = queueDrainService;
+        _timelineSyncService = timelineSyncService;
         _settingsSyncService = settingsSyncService;
         _wakeLockService = wakeLockService;
         _settingsService = settingsService;
@@ -70,6 +74,14 @@ public class AppLifecycleService : IAppLifecycleService
             {
                 _logger.LogDebug("Triggering drain for {Count} pending locations before suspend", pendingCount);
                 await _queueDrainService.TriggerDrainAsync();
+            }
+
+            // Trigger timeline sync drain before suspend
+            var timelinePending = await _timelineSyncService.GetPendingCountAsync();
+            if (timelinePending > 0)
+            {
+                _logger.LogDebug("Triggering timeline sync for {Count} pending mutations before suspend", timelinePending);
+                await _timelineSyncService.TriggerDrainAsync();
             }
 
             // Release any wake locks (screen can turn off in background)
@@ -108,8 +120,8 @@ public class AppLifecycleService : IAppLifecycleService
             // Notify subscribers
             AppResuming?.Invoke(this, EventArgs.Empty);
 
-            // Note: QueueDrainService is started in App.xaml.cs during startup
-            // and continues running with its timer. We just trigger a drain on resume.
+            // Note: QueueDrainService and TimelineSyncService are started in App.xaml.cs
+            // during startup and continue running with their timers. We just trigger drains on resume.
 
             // Trigger a drain to push any locations accumulated in background
             var pendingCount = await _queueDrainService.GetPendingCountAsync();
@@ -117,6 +129,14 @@ public class AppLifecycleService : IAppLifecycleService
             {
                 _logger.LogDebug("Triggering drain for {Count} pending locations on resume", pendingCount);
                 _ = _queueDrainService.TriggerDrainAsync(); // Fire and forget
+            }
+
+            // Trigger timeline sync drain on resume
+            var timelinePending = await _timelineSyncService.GetPendingCountAsync();
+            if (timelinePending > 0)
+            {
+                _logger.LogDebug("Triggering timeline sync for {Count} pending mutations on resume", timelinePending);
+                _timelineSyncService.StartDrainLoop(); // Fire and forget via drain loop
             }
 
             // Sync settings from server if due (6-hour interval)

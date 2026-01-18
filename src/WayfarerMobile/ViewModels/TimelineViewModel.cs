@@ -1003,24 +1003,20 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
 
     /// <summary>
     /// Handles connectivity change events.
-    /// Processes pending timeline mutations when connectivity is restored.
+    /// Updates UI state only - sync is now handled autonomously by TimelineSyncService.
     /// </summary>
-    private async void OnConnectivityChanged(object? sender, ConnectivityChangedEventArgs e)
+    private void OnConnectivityChanged(object? sender, ConnectivityChangedEventArgs e)
     {
-        var wasOnline = IsOnline;
         var access = e.NetworkAccess;
         var isNowOnline = access == NetworkAccess.Internet || access == NetworkAccess.ConstrainedInternet;
 
-        await MainThread.InvokeOnMainThreadAsync(() =>
+        MainThread.BeginInvokeOnMainThread(() =>
         {
             IsOnline = isNowOnline;
         });
 
-        // Process pending mutations when connectivity is restored
-        if (!wasOnline && isNowOnline)
-        {
-            await _timelineSyncService.ProcessPendingMutationsAsync();
-        }
+        // Note: Sync is now handled autonomously by TimelineSyncService
+        // via its own connectivity subscription and timer-based processing
     }
 
     /// <summary>

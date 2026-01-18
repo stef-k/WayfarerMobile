@@ -3,9 +3,16 @@ namespace WayfarerMobile.Core.Interfaces;
 /// <summary>
 /// Interface for timeline sync service.
 /// Provides optimistic UI pattern for timeline location operations with offline support.
+/// Implements background processing via timer and drain loop for autonomous syncing.
 /// </summary>
-public interface ITimelineSyncService
+public interface ITimelineSyncService : IDisposable
 {
+    /// <summary>
+    /// Gets whether the drain loop is currently running.
+    /// Used by callers to avoid unnecessary <see cref="StartDrainLoop"/> calls.
+    /// </summary>
+    bool IsDrainLoopRunning { get; }
+
     /// <summary>
     /// Event raised when sync is rejected by server.
     /// </summary>
@@ -63,4 +70,38 @@ public interface ITimelineSyncService
     /// Clear rejected mutations.
     /// </summary>
     Task ClearRejectedMutationsAsync();
+
+    /// <summary>
+    /// Starts the timeline sync service.
+    /// Initializes timer-based processing and connectivity subscription.
+    /// Should be called after authentication is configured.
+    /// </summary>
+    Task StartAsync();
+
+    /// <summary>
+    /// Stops the timeline sync service.
+    /// Unsubscribes from connectivity and disposes timers.
+    /// </summary>
+    void Stop();
+
+    /// <summary>
+    /// Starts the drain loop if not already running.
+    /// Safe to call frequently - uses atomic guard to prevent concurrent loops.
+    /// Called by background location services to piggyback on location wakeups.
+    /// </summary>
+    /// <remarks>
+    /// CRITICAL: This method is called from background location services.
+    /// It MUST be completely fire-and-forget and NEVER throw exceptions.
+    /// </remarks>
+    void StartDrainLoop();
+
+    /// <summary>
+    /// Triggers an immediate drain cycle outside the normal timer schedule.
+    /// Used by AppLifecycleService to flush pending mutations on suspend/resume.
+    /// </summary>
+    /// <remarks>
+    /// This is a best-effort operation that respects rate limits.
+    /// If the service is not started or disposed, returns immediately.
+    /// </remarks>
+    Task TriggerDrainAsync();
 }
