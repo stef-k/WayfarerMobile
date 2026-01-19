@@ -25,7 +25,6 @@ public class DatabaseService : IAsyncDisposable
     #region Constants
 
     private const string DatabaseFilename = "wayfarer.db3";
-    private const int MaxQueuedLocations = 25000;
     private const int CurrentSchemaVersion = 3; // Increment when schema changes
     private const string SchemaVersionKey = "db_schema_version";
 
@@ -208,6 +207,7 @@ public class DatabaseService : IAsyncDisposable
     /// For DI-enabled services, use <see cref="WayfarerMobile.Data.Repositories.ILocationQueueRepository"/>.
     /// </summary>
     /// <param name="location">The location data to queue.</param>
+    /// <param name="maxQueuedLocations">Maximum queue size - read from Preferences using SettingsService.QueueLimitMaxLocationsKey.</param>
     /// <param name="isUserInvoked">True for manual check-ins (skip filtering, prioritize sync).</param>
     /// <param name="activityTypeId">Optional activity type ID (for user-invoked check-ins).</param>
     /// <param name="notes">Optional notes (for user-invoked check-ins).</param>
@@ -215,6 +215,7 @@ public class DatabaseService : IAsyncDisposable
     /// <exception cref="ArgumentException">Thrown when coordinates are invalid.</exception>
     public async Task<int> QueueLocationAsync(
         LocationData location,
+        int maxQueuedLocations,
         bool isUserInvoked = false,
         int? activityTypeId = null,
         string? notes = null)
@@ -250,7 +251,7 @@ public class DatabaseService : IAsyncDisposable
         Console.WriteLine($"[DatabaseService] Location queued (IsUserInvoked={isUserInvoked}): {location}");
 
         // Cleanup old locations if queue is too large
-        await CleanupOldLocationsAsync();
+        await EnforceQueueLimitAsync(maxQueuedLocations);
 
         return queued.Id;
     }
@@ -292,41 +293,46 @@ public class DatabaseService : IAsyncDisposable
     }
 
     /// <summary>
-    /// Cleans up old locations if queue is at capacity.
-    /// Gradual deletion: removes just 1 location to make room for new one.
-    /// Priority: 1) Oldest Synced, 2) Oldest Rejected, 3) Oldest Pending (last resort).
+    /// Enforces queue limit by removing oldest safe entries, then oldest pending if needed.
+    /// Never removes Syncing entries (in-flight protection).
     /// </summary>
+    /// <param name="maxQueuedLocations">The maximum number of locations to keep.</param>
     /// <remarks>
-    /// Note: This logic is duplicated in <see cref="Repositories.LocationQueueRepository.CleanupOldLocationsAsync"/>.
+    /// Note: This logic is duplicated in <see cref="Repositories.LocationQueueRepository.CleanupOldLocationsAsync(int)"/>.
     /// The duplication is intentional - DatabaseService serves platform services that can't use DI,
     /// while LocationQueueRepository serves DI-enabled services. Both are thread-safe via SQLite
     /// subquery-based deletion (concurrent calls safely delete different or same rows).
     /// </remarks>
-    private async Task CleanupOldLocationsAsync()
+    private async Task EnforceQueueLimitAsync(int maxQueuedLocations)
     {
-        var count = await _database!.Table<QueuedLocation>().CountAsync();
-        if (count < MaxQueuedLocations)
+        var count = await _database!.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM QueuedLocations");
+        if (count < maxQueuedLocations)
             return;
 
-        // 1. Try to delete 1 oldest synced location (safe - already uploaded)
-        var deleted = await _database.ExecuteAsync(
-            "DELETE FROM QueuedLocations WHERE Id = (SELECT Id FROM QueuedLocations WHERE SyncStatus = ? ORDER BY Timestamp LIMIT 1)",
-            (int)SyncStatus.Synced);
+        var toDelete = count - maxQueuedLocations + 1;
 
-        if (deleted > 0)
+        // Delete oldest safe entries (synced or rejected) first
+        var safeDeleted = await _database.ExecuteAsync(@"
+            DELETE FROM QueuedLocations WHERE Id IN (
+                SELECT Id FROM QueuedLocations
+                WHERE (SyncStatus = ? AND IsRejected = 0) OR IsRejected = 1
+                ORDER BY Timestamp, Id
+                LIMIT ?
+            )", (int)SyncStatus.Synced, toDelete);
+
+        if (safeDeleted >= toDelete)
             return;
 
-        // 2. Try to delete 1 oldest rejected location (safe - won't sync anyway)
-        deleted = await _database.ExecuteAsync(
-            "DELETE FROM QueuedLocations WHERE Id = (SELECT Id FROM QueuedLocations WHERE IsRejected = 1 ORDER BY Timestamp LIMIT 1)");
+        var remaining = toDelete - safeDeleted;
 
-        if (deleted > 0)
-            return;
-
-        // 3. Last resort: delete 1 oldest pending location (DATA LOSS - but prevents unbounded growth)
-        await _database.ExecuteAsync(
-            "DELETE FROM QueuedLocations WHERE Id = (SELECT Id FROM QueuedLocations WHERE SyncStatus = ? ORDER BY Timestamp LIMIT 1)",
-            (int)SyncStatus.Pending);
+        // Last resort: delete oldest pending entries (not syncing)
+        await _database.ExecuteAsync(@"
+            DELETE FROM QueuedLocations WHERE Id IN (
+                SELECT Id FROM QueuedLocations
+                WHERE SyncStatus = ? AND IsRejected = 0
+                ORDER BY Timestamp, Id
+                LIMIT ?
+            )", (int)SyncStatus.Pending, remaining);
     }
 
     #endregion

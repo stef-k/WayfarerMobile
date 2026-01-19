@@ -1340,7 +1340,9 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
             // FALLBACK: Direct database queue (no delegates wired)
             if (_databaseService != null)
             {
-                await _databaseService.QueueLocationAsync(location);
+                // Get queue limit from settings (Preferences accessed directly since platform service can't use DI)
+                var maxQueuedLocations = Preferences.Get(SettingsService.QueueLimitMaxLocationsKey, 25000);
+                await _databaseService.QueueLocationAsync(location, maxQueuedLocations);
                 Log.Debug(LogTag, $"Queued via DatabaseService: {location}");
 
                 // Notify that location was queued - used by LocalTimelineStorageService

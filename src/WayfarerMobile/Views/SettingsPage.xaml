@@ -714,6 +714,164 @@
                 </sfExpander:SfExpander.Content>
             </sfExpander:SfExpander>
 
+            <!-- Offline Queue Section -->
+            <sfExpander:SfExpander x:Name="OfflineQueueExpander"
+                                   IsExpanded="False"
+                                   Expanding="OnOfflineQueueExpanding">
+                <sfExpander:SfExpander.Header>
+                    <Grid HeightRequest="48" Padding="10,0">
+                        <Label Text="Offline Queue"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               VerticalOptions="Center" />
+                    </Grid>
+                </sfExpander:SfExpander.Header>
+                <sfExpander:SfExpander.Content>
+                    <VerticalStackLayout Padding="15" Spacing="10">
+                        <!-- Status Summary -->
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Grid.Column="0"
+                                   Text="{Binding OfflineQueue.TotalCount, StringFormat='Queue: {0} locations'}"
+                                   FontSize="14" />
+                            <Label Grid.Column="1"
+                                   Text="{Binding OfflineQueue.HealthStatus}"
+                                   FontSize="14"
+                                   FontAttributes="Bold"
+                                   TextColor="{Binding OfflineQueue.HealthStatusColor}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="5">
+                            <Label Grid.Row="0" Grid.Column="0"
+                                   Text="{Binding OfflineQueue.PendingCount, StringFormat='Pending: {0}'}"
+                                   FontSize="12"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+                            <Label Grid.Row="0" Grid.Column="1"
+                                   Text="{Binding OfflineQueue.RetryingCount, StringFormat='Retrying: {0}'}"
+                                   FontSize="12"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+                            <Label Grid.Row="1" Grid.Column="0"
+                                   Text="{Binding OfflineQueue.SyncedCount, StringFormat='Synced: {0}'}"
+                                   FontSize="12"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+                            <Label Grid.Row="1" Grid.Column="1"
+                                   Text="{Binding OfflineQueue.RejectedCount, StringFormat='Rejected: {0}'}"
+                                   FontSize="12"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+                            <Label Grid.Row="2" Grid.Column="0"
+                                   Text="{Binding OfflineQueue.OldestPendingAge, StringFormat='Oldest: {0}'}"
+                                   FontSize="12"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+                            <Label Grid.Row="2" Grid.Column="1"
+                                   Text="{Binding OfflineQueue.LastSyncTime, StringFormat='Last sync: {0}'}"
+                                   FontSize="12"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+                        </Grid>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+
+                        <!-- Queue Limit Input -->
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="Queue Limit"
+                                   FontSize="14" />
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                <Label Grid.Column="0"
+                                       Text="Max:"
+                                       FontSize="14"
+                                       VerticalOptions="Center" />
+                                <Entry Grid.Column="1"
+                                       x:Name="QueueLimitEntry"
+                                       Text="{Binding OfflineQueue.QueueLimitText}"
+                                       Keyboard="Numeric"
+                                       FontSize="14"
+                                       Unfocused="OnQueueLimitEntryUnfocused"
+                                       HeightRequest="40" />
+                                <Label Grid.Column="2"
+                                       Text="locations"
+                                       FontSize="14"
+                                       VerticalOptions="Center" />
+                            </Grid>
+                            <Label Text="Range: 1 - 100,000. Lower values save storage. Default: 25,000."
+                                   FontSize="11"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            <Label Text="{Binding OfflineQueue.StorageWarningText}"
+                                   FontSize="11"
+                                   TextColor="Orange"
+                                   IsVisible="{Binding OfflineQueue.ShowStorageWarning}" />
+                        </VerticalStackLayout>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+
+                        <!-- Coverage Info -->
+                        <VerticalStackLayout Spacing="5">
+                            <Label Text="Coverage Estimate"
+                                   FontSize="14"
+                                   FontAttributes="Bold" />
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                                <Label Grid.Column="0"
+                                       Text="{Binding OfflineQueue.CoverageSpan, StringFormat='Current span: {0}'}"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+                                <Label Grid.Column="1"
+                                       Text="{Binding OfflineQueue.RemainingHeadroom, StringFormat='Remaining: {0}'}"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+                            </Grid>
+                            <Label Text="Approximate based on time threshold setting"
+                                   FontSize="10"
+                                   FontAttributes="Italic"
+                                   IsVisible="{Binding OfflineQueue.ShowApproxSuffix}"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        </VerticalStackLayout>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+
+                        <!-- Export Buttons -->
+                        <Label Text="Export queue for backup or analysis."
+                               FontSize="12"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                            <Button Grid.Column="0"
+                                    Text="Export CSV"
+                                    Command="{Binding OfflineQueue.ExportCsvCommand}"
+                                    Style="{StaticResource DarkButton}"
+                                    HeightRequest="44" />
+                            <Button Grid.Column="1"
+                                    Text="Export GeoJSON"
+                                    Command="{Binding OfflineQueue.ExportGeoJsonCommand}"
+                                    Style="{StaticResource DarkButton}"
+                                    HeightRequest="44" />
+                        </Grid>
+
+                        <BoxView HeightRequest="1"
+                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
+
+                        <!-- Clear Buttons -->
+                        <Label Text="Clear queue entries. Use with caution."
+                               FontSize="12"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                            <Button Grid.Column="0"
+                                    Text="Clear Synced"
+                                    Command="{Binding OfflineQueue.ClearSyncedQueueCommand}"
+                                    Style="{StaticResource DarkButton}"
+                                    HeightRequest="44" />
+                            <Button Grid.Column="1"
+                                    Text="Clear Pending"
+                                    Command="{Binding OfflineQueue.ClearPendingQueueCommand}"
+                                    Style="{StaticResource DangerButton}"
+                                    HeightRequest="44" />
+                        </Grid>
+                        <Button Text="Clear All"
+                                Command="{Binding OfflineQueue.ClearAllQueueCommand}"
+                                Style="{StaticResource DangerButton}"
+                                HeightRequest="44" />
+                    </VerticalStackLayout>
+                </sfExpander:SfExpander.Content>
+            </sfExpander:SfExpander>
+
             <!-- Timeline Data Section -->
             <sfExpander:SfExpander IsExpanded="False">
                 <sfExpander:SfExpander.Header>

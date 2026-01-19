@@ -224,6 +224,9 @@ public static class MauiProgram
         services.AddTransient<TimelineImportService>();
         services.AddSingleton<ITimelineEntryManager, TimelineEntryManager>();
 
+        // Queue Export Service (for offline queue management in Settings)
+        services.AddSingleton<IQueueExportService, QueueExportService>();
+
         // Tile Cache Services (depends on TripDownloadService, ILocationBridge)
         services.AddSingleton<LiveTileCacheService>();
         services.AddSingleton<UnifiedTileCacheService>();
@@ -315,6 +318,7 @@ public static class MauiProgram
         services.AddTransient<VisitNotificationSettingsViewModel>();
         services.AddTransient<AppearanceSettingsViewModel>();
         services.AddTransient<TimelineDataViewModel>();
+        services.AddTransient<OfflineQueueSettingsViewModel>();
         services.AddTransient<SettingsViewModel>();
         // Groups child ViewModels (transient to match parent lifetime)
         // These must be transient because they hold callbacks to the transient GroupsViewModel

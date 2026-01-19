@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using SQLite;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Services.TileCache;
 
@@ -95,6 +96,42 @@ public class AppDiagnosticService
     {
         if (pending > 1000) return "Warning"; // Large backlog
         return "Healthy";
+    }
+
+    /// <summary>
+    /// Gets comprehensive queue status for Settings display.
+    /// </summary>
+    public async Task<QueueStatusInfo> GetQueueStatusAsync()
+    {
+        var totalCount = await _locationQueueRepository.GetTotalCountAsync();
+        var queueLimit = _settingsService.QueueLimitMaxLocations;
+
+        var allPendingCount = await _locationQueueRepository.GetPendingCountAsync();
+        var retryingCount = await _locationQueueRepository.GetRetryingCountAsync();
+        var syncingCount = await _locationQueueRepository.GetSyncingCountAsync();
+        var syncedCount = await _locationQueueRepository.GetSyncedLocationCountAsync();
+        var rejectedCount = await _locationQueueRepository.GetRejectedLocationCountAsync();
+
+        var pendingCount = allPendingCount - retryingCount;
+
+        var oldestPending = await _locationQueueRepository.GetOldestPendingLocationAsync();
+        var newestPending = await _locationQueueRepository.GetNewestPendingLocationAsync();
+        var lastSynced = await _locationQueueRepository.GetLastSyncedLocationAsync();
+
+        return new QueueStatusInfo
+        {
+            TotalCount = totalCount,
+            PendingCount = pendingCount,
+            RetryingCount = retryingCount,
+            SyncingCount = syncingCount,
+            SyncedCount = syncedCount,
+            RejectedCount = rejectedCount,
+            QueueLimit = queueLimit,
+            OldestPendingTimestamp = oldestPending?.Timestamp,
+            NewestPendingTimestamp = newestPending?.Timestamp,
+            LastSyncedTimestamp = lastSynced?.Timestamp,
+            UsagePercent = queueLimit > 0 ? (double)totalCount / queueLimit * 100 : 0
+        };
     }
 
     #endregion

@@ -38,6 +38,12 @@ public interface ILocationQueueRepository
     /// <returns>All queued locations regardless of sync status.</returns>
     Task<List<QueuedLocation>> GetAllQueuedLocationsAsync();
 
+    /// <summary>
+    /// Gets all queued locations for export, ordered by Timestamp ASC, Id ASC.
+    /// </summary>
+    /// <returns>All queued locations regardless of sync status.</returns>
+    Task<List<QueuedLocation>> GetAllQueuedLocationsForExportAsync();
+
     #endregion
 
     #region Sync Status Operations
@@ -169,19 +175,42 @@ public interface ILocationQueueRepository
     Task<int> ClearSyncedQueueAsync();
 
     /// <summary>
+    /// Clears synced and rejected entries from the queue.
+    /// </summary>
+    /// <returns>The number of locations deleted.</returns>
+    Task<int> ClearSyncedAndRejectedQueueAsync();
+
+    /// <summary>
     /// Clears all locations from the queue (pending, synced, and failed).
     /// </summary>
     /// <returns>The number of locations deleted.</returns>
     Task<int> ClearAllQueueAsync();
+
+    /// <summary>
+    /// Enforces queue limit by removing oldest safe entries, then oldest pending if needed.
+    /// Never removes Syncing entries (in-flight protection).
+    /// </summary>
+    /// <param name="maxQueuedLocations">The maximum number of locations to keep.</param>
+    Task CleanupOldLocationsAsync(int maxQueuedLocations);
 
     #endregion
 
     #region Diagnostic Queries
 
     /// <summary>
+    /// Gets total count of all queued locations.
+    /// </summary>
+    Task<int> GetTotalCountAsync();
+
+    /// <summary>
     /// Gets the count of pending locations that can be synced (excludes rejected).
     /// </summary>
     Task<int> GetPendingCountAsync();
+
+    /// <summary>
+    /// Gets the count of entries currently syncing.
+    /// </summary>
+    Task<int> GetSyncingCountAsync();
 
     /// <summary>
     /// Gets the count of pending locations that are retrying (SyncAttempts > 0).
@@ -202,6 +231,11 @@ public interface ILocationQueueRepository
     /// Gets the oldest pending location (for diagnostics).
     /// </summary>
     Task<QueuedLocation?> GetOldestPendingLocationAsync();
+
+    /// <summary>
+    /// Gets the newest pending location (for coverage calculation).
+    /// </summary>
+    Task<QueuedLocation?> GetNewestPendingLocationAsync();
 
     /// <summary>
     /// Gets the last synced location (for diagnostics).

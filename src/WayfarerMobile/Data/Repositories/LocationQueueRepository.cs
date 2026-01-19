@@ -62,7 +62,7 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
         await db.InsertAsync(queued);
 
         // Cleanup old locations if queue is too large
-        await CleanupOldLocationsAsync(db);
+        await CleanupOldLocationsAsync(db, MaxQueuedLocations);
 
         return queued.Id;
     }
@@ -134,6 +134,14 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
         return await db.Table<QueuedLocation>()
             .OrderByDescending(l => l.Timestamp)
             .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<QueuedLocation>> GetAllQueuedLocationsForExportAsync()
+    {
+        var db = await GetConnectionAsync();
+        return await db.QueryAsync<QueuedLocation>(
+            "SELECT * FROM QueuedLocations ORDER BY Timestamp ASC, Id ASC");
     }
 
     #endregion
@@ -521,6 +529,15 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
     }
 
     /// <inheritdoc />
+    public async Task<int> ClearSyncedAndRejectedQueueAsync()
+    {
+        var db = await GetConnectionAsync();
+        return await db.ExecuteAsync(
+            "DELETE FROM QueuedLocations WHERE (SyncStatus = ? AND IsRejected = 0) OR IsRejected = 1",
+            (int)SyncStatus.Synced);
+    }
+
+    /// <inheritdoc />
     public async Task<int> ClearAllQueueAsync()
     {
         var db = await GetConnectionAsync();
@@ -528,42 +545,61 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
         return await db.ExecuteAsync("DELETE FROM QueuedLocations");
     }
 
+    /// <inheritdoc />
+    public async Task CleanupOldLocationsAsync(int maxQueuedLocations)
+    {
+        var db = await GetConnectionAsync();
+        await CleanupOldLocationsAsync(db, maxQueuedLocations);
+    }
+
     /// <summary>
     /// Cleans up old locations if queue is at capacity.
-    /// Gradual deletion: removes just 1 location to make room for new one.
+    /// Gradual deletion: removes entries to make room for new ones.
     /// Priority: 1) Oldest Synced, 2) Oldest Rejected, 3) Oldest Pending (last resort).
+    /// Never removes Syncing entries (in-flight protection).
     /// </summary>
-    private async Task CleanupOldLocationsAsync(SQLiteAsyncConnection db)
+    private async Task CleanupOldLocationsAsync(SQLiteAsyncConnection db, int maxQueuedLocations)
     {
-        var count = await db.Table<QueuedLocation>().CountAsync();
-        if (count < MaxQueuedLocations)
+        var count = await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM QueuedLocations");
+        if (count < maxQueuedLocations)
             return;
 
-        // 1. Try to delete 1 oldest synced location (safe - already uploaded)
-        var deleted = await db.ExecuteAsync(
-            "DELETE FROM QueuedLocations WHERE Id = (SELECT Id FROM QueuedLocations WHERE SyncStatus = ? ORDER BY Timestamp LIMIT 1)",
-            (int)SyncStatus.Synced);
+        var toDelete = count - maxQueuedLocations + 1;
 
-        if (deleted > 0)
+        // Delete oldest safe entries (synced or rejected) first
+        var safeDeleted = await db.ExecuteAsync(@"
+            DELETE FROM QueuedLocations WHERE Id IN (
+                SELECT Id FROM QueuedLocations
+                WHERE (SyncStatus = ? AND IsRejected = 0) OR IsRejected = 1
+                ORDER BY Timestamp, Id
+                LIMIT ?
+            )", (int)SyncStatus.Synced, toDelete);
+
+        if (safeDeleted >= toDelete)
             return;
 
-        // 2. Try to delete 1 oldest rejected location (safe - won't sync anyway)
-        deleted = await db.ExecuteAsync(
-            "DELETE FROM QueuedLocations WHERE Id = (SELECT Id FROM QueuedLocations WHERE IsRejected = 1 ORDER BY Timestamp LIMIT 1)");
+        var remaining = toDelete - safeDeleted;
 
-        if (deleted > 0)
-            return;
-
-        // 3. Last resort: delete 1 oldest pending location (DATA LOSS - but prevents unbounded growth)
-        // This only happens if user is offline for extended period with continuous tracking
-        await db.ExecuteAsync(
-            "DELETE FROM QueuedLocations WHERE Id = (SELECT Id FROM QueuedLocations WHERE SyncStatus = ? ORDER BY Timestamp LIMIT 1)",
-            (int)SyncStatus.Pending);
+        // Last resort: delete oldest pending entries (not syncing)
+        await db.ExecuteAsync(@"
+            DELETE FROM QueuedLocations WHERE Id IN (
+                SELECT Id FROM QueuedLocations
+                WHERE SyncStatus = ? AND IsRejected = 0
+                ORDER BY Timestamp, Id
+                LIMIT ?
+            )", (int)SyncStatus.Pending, remaining);
     }
 
     #endregion
 
     #region Diagnostic Queries
+
+    /// <inheritdoc />
+    public async Task<int> GetTotalCountAsync()
+    {
+        var db = await GetConnectionAsync();
+        return await db.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM QueuedLocations");
+    }
 
     /// <inheritdoc />
     public async Task<int> GetPendingCountAsync()
@@ -573,6 +609,15 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
         return await db.Table<QueuedLocation>()
             .Where(l => l.SyncStatus == SyncStatus.Pending && !l.IsRejected)
             .CountAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> GetSyncingCountAsync()
+    {
+        var db = await GetConnectionAsync();
+        return await db.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM QueuedLocations WHERE SyncStatus = ?",
+            (int)SyncStatus.Syncing);
     }
 
     /// <inheritdoc />
@@ -614,6 +659,16 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
         return await db.Table<QueuedLocation>()
             .Where(l => l.SyncStatus == SyncStatus.Pending && !l.IsRejected)
             .OrderBy(l => l.Timestamp)
+            .FirstOrDefaultAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<QueuedLocation?> GetNewestPendingLocationAsync()
+    {
+        var db = await GetConnectionAsync();
+        return await db.Table<QueuedLocation>()
+            .Where(l => l.SyncStatus == SyncStatus.Pending && !l.IsRejected)
+            .OrderByDescending(l => l.Timestamp)
             .FirstOrDefaultAsync();
     }
 

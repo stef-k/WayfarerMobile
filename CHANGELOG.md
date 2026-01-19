@@ -2,6 +2,17 @@
 
 ## 1.0
 
+### 2026-01-19 (PR #179)
+- **Feature: Offline queue UX/controls (#152)**
+  - Added Settings > Offline Queue section for user-facing queue management
+  - Queue status display: total count, pending/retrying/synced/rejected breakdown, health status
+  - Configurable queue limit (1-100,000, default 25,000) with storage warning above 50k
+  - Coverage estimate showing current span and remaining headroom based on time threshold
+  - Export to CSV and GeoJSON formats with formula injection protection
+  - Clear actions: Clear Synced (synced+rejected), Clear Pending, Clear All with confirmations
+  - Rolling buffer cleanup: when at limit, removes synced/rejected first, then oldest pending (never syncing)
+  - Diagnostics page now read-only for queue info, points to Settings for management
+
 ### 2026-01-18 (PR #178)
 - **Feature: Background processing for timeline sync (#177)**
   - Timeline mutations now sync automatically without requiring Timeline page to be open
