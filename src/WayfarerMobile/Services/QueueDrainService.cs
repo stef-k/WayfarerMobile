@@ -696,7 +696,8 @@ public sealed class QueueDrainService : IDisposable
                 DeviceModel = location.DeviceModel,
                 OsVersion = location.OsVersion,
                 BatteryLevel = location.BatteryLevel,
-                IsCharging = location.IsCharging
+                IsCharging = location.IsCharging,
+                Source = location.Source
             };
 
             // Use provided cancellation token combined with timeout

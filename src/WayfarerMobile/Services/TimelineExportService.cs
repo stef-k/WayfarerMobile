@@ -139,7 +139,7 @@ public class TimelineExportService
     private static string ToCsvRow(LocalTimelineEntry entry)
     {
         // LocalTimestamp: if we have timezone info, compute local time; otherwise use UTC
-        var localTimestamp = ComputeLocalTimestamp(entry.Timestamp, entry.Timezone);
+        var localTimestamp = ComputeLocalTimestamp(entry.Timestamp, entry.TimeZoneId);
 
         var values = new[]
         {
@@ -161,7 +161,7 @@ public class TimelineExportService
             EscapeCsv(entry.Country),
             EscapeCsv(entry.PostCode),
             EscapeCsv(entry.ActivityType),
-            EscapeCsv(entry.Timezone),
+            EscapeCsv(entry.TimeZoneId),
             EscapeCsv(entry.Source),
             EscapeCsv(entry.Notes),
             // Capture metadata (optional fields)
@@ -224,7 +224,7 @@ public class TimelineExportService
     private static GeoJsonFeature ToGeoJsonFeature(LocalTimelineEntry entry)
     {
         // LocalTimestamp: if we have timezone info, compute local time; otherwise use UTC
-        var localTimestamp = ComputeLocalTimestamp(entry.Timestamp, entry.Timezone);
+        var localTimestamp = ComputeLocalTimestamp(entry.Timestamp, entry.TimeZoneId);
 
         return new GeoJsonFeature
         {
@@ -252,7 +252,7 @@ public class TimelineExportService
                 Country = entry.Country,
                 PostCode = entry.PostCode,
                 Activity = entry.ActivityType,
-                TimeZoneId = entry.Timezone,
+                TimeZoneId = entry.TimeZoneId,
                 Source = entry.Source,
                 Notes = entry.Notes,
                 // Capture metadata (optional fields)

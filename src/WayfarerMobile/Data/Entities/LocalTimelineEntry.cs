@@ -13,7 +13,7 @@ namespace WayfarerMobile.Data.Entities;
 /// </para>
 /// <para>
 /// <strong>Timestamp handling:</strong> All timestamps are stored in UTC.
-/// Use <see cref="Timezone"/> for display conversion when available.
+/// Use <see cref="TimeZoneId"/> for display conversion when available.
 /// </para>
 /// </remarks>
 [Table("LocalTimelineEntries")]
@@ -131,7 +131,8 @@ public class LocalTimelineEntry
     /// Gets or sets the timezone identifier (e.g., "Europe/Athens").
     /// Used for converting UTC timestamp to local display time.
     /// </summary>
-    public string? Timezone { get; set; }
+    [Column("Timezone")] // Keep DB column name for backward compatibility
+    public string? TimeZoneId { get; set; }
 
     #endregion
 

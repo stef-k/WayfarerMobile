@@ -36,7 +36,8 @@ public class TimelineExportImportTests
         string? Country,
         string? PostCode,
         string? ActivityType,
-        string? Timezone,
+        string? TimeZoneId,
+        string? Source,
         string? Notes,
         // Capture metadata fields
         bool? IsUserInvoked = null,
@@ -65,7 +66,8 @@ public class TimelineExportImportTests
         Country: "United Kingdom",
         PostCode: "SW1A 2AA",
         ActivityType: "Walking",
-        Timezone: "Europe/London",
+        TimeZoneId: "Europe/London",
+        Source: "mobile-checkin",
         Notes: "Test note",
         // Capture metadata
         IsUserInvoked: true,
@@ -119,7 +121,8 @@ public class TimelineExportImportTests
             Country: null,
             PostCode: null,
             ActivityType: null,
-            Timezone: null,
+            TimeZoneId: null,
+            Source: null,
             Notes: null);
 
         // Act
@@ -216,6 +219,73 @@ public class TimelineExportImportTests
         csvRow.Should().Contain("Android 14"); // OsVersion
         csvRow.Should().Contain("85"); // BatteryLevel
         csvRow.Should().Contain("False"); // IsCharging
+    }
+
+    [Fact]
+    public void ToCsvRow_WithSource_IncludesSourceField()
+    {
+        // Arrange
+        var entry = CreateSampleEntry();
+
+        // Act
+        var csvRow = ToCsvRow(entry);
+
+        // Assert - verify Source field is present
+        csvRow.Should().Contain("mobile-checkin");
+    }
+
+    [Fact]
+    public void ToGeoJsonFeature_WithSource_IncludesSourceField()
+    {
+        // Arrange
+        var entry = CreateSampleEntry();
+
+        // Act
+        var json = ToGeoJsonFeature(entry);
+        var parsed = ParseGeoJsonFeatureWithAlias(json);
+
+        // Assert - verify Source field is preserved in roundtrip
+        parsed.Should().NotBeNull();
+        parsed!.Source.Should().Be("mobile-checkin");
+    }
+
+    [Theory]
+    [InlineData("mobile-log", "Background location")]
+    [InlineData("mobile-checkin", "Manual check-in")]
+    [InlineData("api-log", "API location")]
+    [InlineData("queue-import", "Queue import")]
+    public void Source_Roundtrip_PreservesAllSourceValues(string sourceValue, string description)
+    {
+        // Arrange - entry with specific source value
+        var entry = new TestTimelineEntry(
+            Id: 1,
+            ServerId: 100,
+            Timestamp: new DateTime(2024, 12, 27, 10, 30, 0, DateTimeKind.Utc),
+            Latitude: 51.5074,
+            Longitude: -0.1278,
+            Accuracy: 10.5,
+            Altitude: null,
+            Speed: null,
+            Bearing: null,
+            Provider: "gps",
+            Address: null,
+            FullAddress: null,
+            Place: null,
+            Region: null,
+            Country: null,
+            PostCode: null,
+            ActivityType: null,
+            TimeZoneId: null,
+            Source: sourceValue,
+            Notes: null);
+
+        // Act - Export to GeoJSON and parse back
+        var json = ToGeoJsonFeature(entry);
+        var parsed = ParseGeoJsonFeatureWithAlias(json);
+
+        // Assert
+        parsed.Should().NotBeNull($"should parse {description}");
+        parsed!.Source.Should().Be(sourceValue, $"Source should preserve '{description}' value");
     }
 
     #endregion
@@ -435,7 +505,8 @@ public class TimelineExportImportTests
             Country: null,
             PostCode: null,
             ActivityType: null,
-            Timezone: null,
+            TimeZoneId: null,
+            Source: null,
             Notes: null);
 
         // Act
@@ -571,7 +642,7 @@ public class TimelineExportImportTests
         entry.Place.Should().Be("London");
         entry.Country.Should().Be("United Kingdom");
         entry.ActivityType.Should().Be("Walking");
-        entry.Timezone.Should().Be("Europe/London");
+        entry.TimeZoneId.Should().Be("Europe/London");
     }
 
     [Fact]
@@ -679,7 +750,7 @@ public class TimelineExportImportTests
         entry.Address.Should().Be("10 Downing Street");
         entry.Place.Should().Be("London");
         entry.ActivityType.Should().Be("Walking");
-        entry.Timezone.Should().Be("Europe/London");
+        entry.TimeZoneId.Should().Be("Europe/London");
         entry.Notes.Should().Be("Test note");
     }
 
@@ -831,7 +902,7 @@ public class TimelineExportImportTests
     private static string ToCsvRow(TestTimelineEntry entry)
     {
         // Compute local timestamp from timezone if available
-        var localTimestamp = ComputeLocalTimestamp(entry.Timestamp, entry.Timezone);
+        var localTimestamp = ComputeLocalTimestamp(entry.Timestamp, entry.TimeZoneId);
 
         var values = new[]
         {
@@ -853,7 +924,8 @@ public class TimelineExportImportTests
             EscapeCsv(entry.Country),
             EscapeCsv(entry.PostCode),
             EscapeCsv(entry.ActivityType),
-            EscapeCsv(entry.Timezone),
+            EscapeCsv(entry.TimeZoneId),
+            EscapeCsv(entry.Source),
             EscapeCsv(entry.Notes),
             // Capture metadata fields
             entry.IsUserInvoked?.ToString(CultureInfo.InvariantCulture) ?? "",
@@ -973,7 +1045,7 @@ public class TimelineExportImportTests
     /// </summary>
     private static Dictionary<string, object?> BuildProperties(TestTimelineEntry entry)
     {
-        var localTimestamp = ComputeLocalTimestamp(entry.Timestamp, entry.Timezone);
+        var localTimestamp = ComputeLocalTimestamp(entry.Timestamp, entry.TimeZoneId);
 
         var props = new Dictionary<string, object?>
         {
@@ -993,7 +1065,8 @@ public class TimelineExportImportTests
             ["Country"] = entry.Country,
             ["PostCode"] = entry.PostCode,
             ["Activity"] = entry.ActivityType,
-            ["TimeZoneId"] = entry.Timezone,
+            ["TimeZoneId"] = entry.TimeZoneId,
+            ["Source"] = entry.Source,
             ["Notes"] = entry.Notes,
             // Capture metadata fields
             ["IsUserInvoked"] = entry.IsUserInvoked,
@@ -1026,7 +1099,8 @@ public class TimelineExportImportTests
         string? Place = null,
         string? Country = null,
         string? ActivityType = null,
-        string? Timezone = null,
+        string? TimeZoneId = null,
+        string? Source = null,
         string? Notes = null,
         // Capture metadata fields
         bool? IsUserInvoked = null,
@@ -1089,7 +1163,8 @@ public class TimelineExportImportTests
                 Place: GetNullableString(properties, "place"),
                 Country: GetNullableString(properties, "country"),
                 ActivityType: GetNullableString(properties, "activityType"),
-                Timezone: GetNullableString(properties, "timezone"),
+                TimeZoneId: GetNullableString(properties, "timezone"),
+                Source: GetNullableString(properties, "source"),
                 Notes: GetNullableString(properties, "notes"),
                 // Capture metadata fields
                 IsUserInvoked: GetNullableBool(properties, "isUserInvoked"),
@@ -1161,7 +1236,8 @@ public class TimelineExportImportTests
                 Place: GetStringWithAlias(properties, "place", "Place"),
                 Country: GetStringWithAlias(properties, "country", "Country"),
                 ActivityType: GetStringWithAlias(properties, "activityType", "Activity"),
-                Timezone: GetStringWithAlias(properties, "timezone", "TimeZoneId"),
+                TimeZoneId: GetStringWithAlias(properties, "timezone", "TimeZoneId"),
+                Source: GetStringWithAlias(properties, "source", "Source"),
                 Notes: GetStringWithAlias(properties, "notes", "Notes"),
                 // Capture metadata fields
                 IsUserInvoked: GetBoolWithAlias(properties, "isUserInvoked", "IsUserInvoked"),
