@@ -137,14 +137,14 @@ if (currentVersion < 4)
 
 | Mobile Field | Export Property | Notes |
 |--------------|-----------------|-------|
-| `Timestamp` | `TimestampUtc` | ISO 8601 UTC |
-| `TimeZoneId` | `TimeZoneId` | From entity, fallback to device current |
-| (computed) | `LocalTimestamp` | `TimestampUtc` converted using `TimeZoneId` |
-| `Accuracy` | `Accuracy` | PascalCase |
-| `Altitude` | `Altitude` | From geometry or property |
-| `Speed` | `Speed` | PascalCase |
-| `ActivityTypeId` | `Activity` | Resolved to activity name string |
-| `CheckInNotes` | `Notes` | Renamed |
+| `Timestamp` | `TimestampUtc` | ISO 8601 UTC with Z suffix |
+| `TimeZoneId` | `TimeZoneId` | IANA timezone (e.g., "Europe/Athens") |
+| (computed) | `LocalTimestamp` | ISO 8601 no offset (e.g., "2024-01-15T12:30:00.0000000") |
+| `Accuracy` | `Accuracy` | Double, meters |
+| `Altitude` | `Altitude` | **Authoritative** - backend reads from here, not geometry Z |
+| `Speed` | `Speed` | Double |
+| `ActivityTypeId` | `Activity` | **Lowercase string name** (e.g., "walking", not "Walking") |
+| `CheckInNotes` | `Notes` | String, renamed |
 | `Bearing` | `Bearing` | Extra (debug) |
 | `Provider` | `Provider` | Extra (debug) |
 | `SyncStatus` | `Status` | Extra (debug), human-readable |
@@ -155,12 +155,13 @@ if (currentVersion < 4)
 | `LastError` | `LastError` | Extra (debug) |
 | `IsUserInvoked` | `IsUserInvoked` | Extra (debug) |
 | `Id` | `Id` | Extra (debug), local DB ID |
-| `ActivityTypeId` | `ActivityTypeId` | Extra (debug), numeric ID |
+| `ActivityTypeId` | `ActivityTypeId` | Extra (debug), numeric ID - ignored by backend |
 
 ### Geometry
 
 - Coordinate order: `[longitude, latitude]` or `[longitude, latitude, altitude]`
-- Altitude included in coordinates when available
+- Z-coordinate (altitude) in geometry is optional for GeoJSON spec compliance
+- **Backend reads Altitude from properties, not geometry Z**
 - SRID: WGS84 (4326)
 
 ## CSV Format
@@ -186,7 +187,9 @@ Latitude,Longitude,TimestampUtc,LocalTimestamp,TimeZoneId,Accuracy,Altitude,Spee
 
 ## Activity Resolution
 
-The `Activity` field requires resolving `ActivityTypeId` to its name:
+The `Activity` field requires resolving `ActivityTypeId` to its **lowercase** name string.
+
+**Important:** Backend matches activity names case-insensitively, but expects lowercase for consistency.
 
 | ActivityTypeId | Activity Name |
 |----------------|---------------|
@@ -198,10 +201,10 @@ The `Activity` field requires resolving `ActivityTypeId` to its name:
 
 **Resolution logic:**
 1. If `ActivityTypeId` is null → `Activity` is null
-2. If `ActivityTypeId` maps to known type → Use activity name (lowercase)
-3. If `ActivityTypeId` is unknown → Use "unknown" or null
+2. If `ActivityTypeId` maps to known type → Use activity name **(always lowercase)**
+3. If `ActivityTypeId` is unknown → Use null (don't guess)
 
-**Note:** Activity types should be fetched from a local cache or hardcoded mapping. The exact mapping depends on the backend's `ActivityType` table.
+**Note:** Activity types should be fetched from a local cache or hardcoded mapping. The exact mapping depends on the backend's `ActivityType` table. The `ActivityTypeId` is also included in debug fields but is ignored by the backend import.
 
 ## LocalTimestamp Calculation
 
