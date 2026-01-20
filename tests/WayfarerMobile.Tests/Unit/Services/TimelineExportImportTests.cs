@@ -1073,7 +1073,15 @@ public class TimelineExportImportTests
                (!string.IsNullOrEmpty(import.Place) && string.IsNullOrEmpty(existing.Place)) ||
                (!string.IsNullOrEmpty(import.Country) && string.IsNullOrEmpty(existing.Country)) ||
                (!string.IsNullOrEmpty(import.ActivityType) && string.IsNullOrEmpty(existing.ActivityType)) ||
-               (!string.IsNullOrEmpty(import.Notes) && string.IsNullOrEmpty(existing.Notes));
+               (!string.IsNullOrEmpty(import.Notes) && string.IsNullOrEmpty(existing.Notes)) ||
+               // Capture metadata fields
+               (import.IsUserInvoked.HasValue && !existing.IsUserInvoked.HasValue) ||
+               (!string.IsNullOrEmpty(import.AppVersion) && string.IsNullOrEmpty(existing.AppVersion)) ||
+               (!string.IsNullOrEmpty(import.AppBuild) && string.IsNullOrEmpty(existing.AppBuild)) ||
+               (!string.IsNullOrEmpty(import.DeviceModel) && string.IsNullOrEmpty(existing.DeviceModel)) ||
+               (!string.IsNullOrEmpty(import.OsVersion) && string.IsNullOrEmpty(existing.OsVersion)) ||
+               (import.BatteryLevel.HasValue && !existing.BatteryLevel.HasValue) ||
+               (import.IsCharging.HasValue && !existing.IsCharging.HasValue);
     }
 
     #endregion

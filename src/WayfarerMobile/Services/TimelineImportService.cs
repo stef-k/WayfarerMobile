@@ -548,7 +548,15 @@ public class TimelineImportService
                (!string.IsNullOrEmpty(import.Place) && string.IsNullOrEmpty(existing.Place)) ||
                (!string.IsNullOrEmpty(import.Country) && string.IsNullOrEmpty(existing.Country)) ||
                (!string.IsNullOrEmpty(import.ActivityType) && string.IsNullOrEmpty(existing.ActivityType)) ||
-               (!string.IsNullOrEmpty(import.Notes) && string.IsNullOrEmpty(existing.Notes));
+               (!string.IsNullOrEmpty(import.Notes) && string.IsNullOrEmpty(existing.Notes)) ||
+               // Capture metadata fields
+               (import.IsUserInvoked.HasValue && !existing.IsUserInvoked.HasValue) ||
+               (!string.IsNullOrEmpty(import.AppVersion) && string.IsNullOrEmpty(existing.AppVersion)) ||
+               (!string.IsNullOrEmpty(import.AppBuild) && string.IsNullOrEmpty(existing.AppBuild)) ||
+               (!string.IsNullOrEmpty(import.DeviceModel) && string.IsNullOrEmpty(existing.DeviceModel)) ||
+               (!string.IsNullOrEmpty(import.OsVersion) && string.IsNullOrEmpty(existing.OsVersion)) ||
+               (import.BatteryLevel.HasValue && !existing.BatteryLevel.HasValue) ||
+               (import.IsCharging.HasValue && !existing.IsCharging.HasValue);
     }
 
     /// <summary>
@@ -583,6 +591,28 @@ public class TimelineImportService
 
         if (string.IsNullOrEmpty(existing.Notes) && !string.IsNullOrEmpty(import.Notes))
             existing.Notes = import.Notes;
+
+        // Capture metadata fields
+        if (!existing.IsUserInvoked.HasValue && import.IsUserInvoked.HasValue)
+            existing.IsUserInvoked = import.IsUserInvoked;
+
+        if (string.IsNullOrEmpty(existing.AppVersion) && !string.IsNullOrEmpty(import.AppVersion))
+            existing.AppVersion = import.AppVersion;
+
+        if (string.IsNullOrEmpty(existing.AppBuild) && !string.IsNullOrEmpty(import.AppBuild))
+            existing.AppBuild = import.AppBuild;
+
+        if (string.IsNullOrEmpty(existing.DeviceModel) && !string.IsNullOrEmpty(import.DeviceModel))
+            existing.DeviceModel = import.DeviceModel;
+
+        if (string.IsNullOrEmpty(existing.OsVersion) && !string.IsNullOrEmpty(import.OsVersion))
+            existing.OsVersion = import.OsVersion;
+
+        if (!existing.BatteryLevel.HasValue && import.BatteryLevel.HasValue)
+            existing.BatteryLevel = import.BatteryLevel;
+
+        if (!existing.IsCharging.HasValue && import.IsCharging.HasValue)
+            existing.IsCharging = import.IsCharging;
     }
 
     /// <summary>
