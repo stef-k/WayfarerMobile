@@ -185,13 +185,13 @@ public class DatabaseService : IAsyncDisposable
         Console.WriteLine("[DatabaseService] Running migration to version 4: Adding metadata fields");
 
         // Add metadata columns for diagnostics, statistics, and export compatibility
-        await _database!.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN TimeZoneId TEXT");
-        await _database.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN AppVersion TEXT");
-        await _database.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN AppBuild TEXT");
-        await _database.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN DeviceModel TEXT");
-        await _database.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN OsVersion TEXT");
-        await _database.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN BatteryLevel INTEGER");
-        await _database.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN IsCharging INTEGER");
+        await AddColumnIfMissingAsync("QueuedLocations", "TimeZoneId", "TEXT");
+        await AddColumnIfMissingAsync("QueuedLocations", "AppVersion", "TEXT");
+        await AddColumnIfMissingAsync("QueuedLocations", "AppBuild", "TEXT");
+        await AddColumnIfMissingAsync("QueuedLocations", "DeviceModel", "TEXT");
+        await AddColumnIfMissingAsync("QueuedLocations", "OsVersion", "TEXT");
+        await AddColumnIfMissingAsync("QueuedLocations", "BatteryLevel", "INTEGER");
+        await AddColumnIfMissingAsync("QueuedLocations", "IsCharging", "INTEGER");
 
         Console.WriteLine("[DatabaseService] Version 4 migration complete");
     }
@@ -204,13 +204,13 @@ public class DatabaseService : IAsyncDisposable
         Console.WriteLine("[DatabaseService] Running migration to version 5: Adding metadata fields to LocalTimelineEntry");
 
         // Add capture metadata columns for round-trip parity with QueuedLocation and backend
-        await _database!.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN IsUserInvoked INTEGER");
-        await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN AppVersion TEXT");
-        await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN AppBuild TEXT");
-        await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN DeviceModel TEXT");
-        await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN OsVersion TEXT");
-        await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN BatteryLevel INTEGER");
-        await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN IsCharging INTEGER");
+        await AddColumnIfMissingAsync("LocalTimelineEntries", "IsUserInvoked", "INTEGER");
+        await AddColumnIfMissingAsync("LocalTimelineEntries", "AppVersion", "TEXT");
+        await AddColumnIfMissingAsync("LocalTimelineEntries", "AppBuild", "TEXT");
+        await AddColumnIfMissingAsync("LocalTimelineEntries", "DeviceModel", "TEXT");
+        await AddColumnIfMissingAsync("LocalTimelineEntries", "OsVersion", "TEXT");
+        await AddColumnIfMissingAsync("LocalTimelineEntries", "BatteryLevel", "INTEGER");
+        await AddColumnIfMissingAsync("LocalTimelineEntries", "IsCharging", "INTEGER");
 
         Console.WriteLine("[DatabaseService] Version 5 migration complete");
     }
@@ -224,10 +224,33 @@ public class DatabaseService : IAsyncDisposable
 
         // Add Source column to both tables for tracking location origin
         // Values: "mobile-log", "mobile-checkin", "api-log", "api-checkin", "queue-import"
-        await _database!.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN Source TEXT");
-        await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN Source TEXT");
+        await AddColumnIfMissingAsync("QueuedLocations", "Source", "TEXT");
+        await AddColumnIfMissingAsync("LocalTimelineEntries", "Source", "TEXT");
 
         Console.WriteLine("[DatabaseService] Version 6 migration complete");
+    }
+
+    private async Task AddColumnIfMissingAsync(string tableName, string columnName, string columnType)
+    {
+        if (await ColumnExistsAsync(tableName, columnName))
+        {
+            return;
+        }
+
+        await _database!.ExecuteAsync(
+            $"ALTER TABLE {tableName} ADD COLUMN {columnName} {columnType}");
+    }
+
+    private async Task<bool> ColumnExistsAsync(string tableName, string columnName)
+    {
+        var columns = await _database!.QueryAsync<TableColumnInfo>($"PRAGMA table_info('{tableName}')");
+        return columns.Any(c => string.Equals(c.Name, columnName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private sealed class TableColumnInfo
+    {
+        [Column("name")]
+        public string Name { get; set; } = string.Empty;
     }
 
     /// <summary>
