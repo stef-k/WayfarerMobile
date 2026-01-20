@@ -42,7 +42,7 @@ public class TimelineExportService
         var sb = new StringBuilder();
 
         // Header row
-        sb.AppendLine("id,server_id,timestamp,latitude,longitude,accuracy,altitude,speed,bearing,provider,address,full_address,place,region,country,postcode,activity_type,timezone,notes");
+        sb.AppendLine("id,server_id,timestamp,latitude,longitude,accuracy,altitude,speed,bearing,provider,address,full_address,place,region,country,postcode,activity_type,timezone,notes,is_user_invoked,app_version,app_build,device_model,os_version,battery_level,is_charging");
 
         // Data rows
         foreach (var entry in entries)
@@ -157,7 +157,15 @@ public class TimelineExportService
             EscapeCsv(entry.PostCode),
             EscapeCsv(entry.ActivityType),
             EscapeCsv(entry.Timezone),
-            EscapeCsv(entry.Notes)
+            EscapeCsv(entry.Notes),
+            // Capture metadata (optional fields)
+            entry.IsUserInvoked?.ToString(CultureInfo.InvariantCulture) ?? "",
+            EscapeCsv(entry.AppVersion),
+            EscapeCsv(entry.AppBuild),
+            EscapeCsv(entry.DeviceModel),
+            EscapeCsv(entry.OsVersion),
+            entry.BatteryLevel?.ToString(CultureInfo.InvariantCulture) ?? "",
+            entry.IsCharging?.ToString(CultureInfo.InvariantCulture) ?? ""
         };
 
         return string.Join(",", values);
@@ -211,7 +219,15 @@ public class TimelineExportService
                 PostCode = entry.PostCode,
                 ActivityType = entry.ActivityType,
                 Timezone = entry.Timezone,
-                Notes = entry.Notes
+                Notes = entry.Notes,
+                // Capture metadata (optional fields)
+                IsUserInvoked = entry.IsUserInvoked,
+                AppVersion = entry.AppVersion,
+                AppBuild = entry.AppBuild,
+                DeviceModel = entry.DeviceModel,
+                OsVersion = entry.OsVersion,
+                BatteryLevel = entry.BatteryLevel,
+                IsCharging = entry.IsCharging
             }
         };
     }
@@ -256,6 +272,14 @@ public class TimelineExportService
         public string? ActivityType { get; set; }
         public string? Timezone { get; set; }
         public string? Notes { get; set; }
+        // Capture metadata (optional)
+        public bool? IsUserInvoked { get; set; }
+        public string? AppVersion { get; set; }
+        public string? AppBuild { get; set; }
+        public string? DeviceModel { get; set; }
+        public string? OsVersion { get; set; }
+        public int? BatteryLevel { get; set; }
+        public bool? IsCharging { get; set; }
     }
 
     #endregion

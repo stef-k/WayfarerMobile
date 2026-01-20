@@ -648,3 +648,152 @@ The export format is compatible with `WayfarerGeoJsonParser` and `CsvLocationPar
 ### UI Updates
 - [ ] Update export button to show count of exportable (pending) locations
 - [ ] Show message if no pending locations to export
+
+---
+
+# Timeline Export/Import Parity
+
+## Overview
+
+In addition to the queue export changes above, `LocalTimelineEntry` needs the same metadata fields for round-trip data parity between:
+
+- **Mobile → Backend**: QueuedLocation with metadata syncs to backend Location
+- **Backend → Mobile**: Timeline sync/import brings data back to LocalTimelineEntry
+
+Without these fields in `LocalTimelineEntry`, metadata is lost on round-trip.
+
+## Field Parity
+
+| Field | QueuedLocation | LocalTimelineEntry | Backend Location |
+|-------|----------------|-------------------|------------------|
+| IsUserInvoked | ✅ | ✅ (added) | ✅ |
+| AppVersion | ✅ | ✅ (added) | ✅ |
+| AppBuild | ✅ | ✅ (added) | ✅ |
+| DeviceModel | ✅ | ✅ (added) | ✅ |
+| OsVersion | ✅ | ✅ (added) | ✅ |
+| BatteryLevel | ✅ | ✅ (added) | ✅ |
+| IsCharging | ✅ | ✅ (added) | ✅ |
+
+## LocalTimelineEntry Schema Change
+
+**New fields (all nullable):**
+
+```csharp
+/// <summary>
+/// Whether this location was user-invoked (manual check-in).
+/// Null if unknown (e.g., imported from external source).
+/// </summary>
+public bool? IsUserInvoked { get; set; }
+
+/// <summary>
+/// App version that captured this location (e.g., "1.2.3").
+/// </summary>
+public string? AppVersion { get; set; }
+
+/// <summary>
+/// App build number (e.g., "45").
+/// </summary>
+public string? AppBuild { get; set; }
+
+/// <summary>
+/// Device model (e.g., "Pixel 7 Pro", "iPhone 14").
+/// </summary>
+public string? DeviceModel { get; set; }
+
+/// <summary>
+/// OS version (e.g., "Android 14", "iOS 17.2").
+/// </summary>
+public string? OsVersion { get; set; }
+
+/// <summary>
+/// Battery level (0-100) when captured. Null if unavailable.
+/// </summary>
+public int? BatteryLevel { get; set; }
+
+/// <summary>
+/// Whether device was charging when captured. Null if unavailable.
+/// </summary>
+public bool? IsCharging { get; set; }
+```
+
+**Migration (version 5):**
+
+```sql
+ALTER TABLE LocalTimelineEntries ADD COLUMN IsUserInvoked INTEGER;
+ALTER TABLE LocalTimelineEntries ADD COLUMN AppVersion TEXT;
+ALTER TABLE LocalTimelineEntries ADD COLUMN AppBuild TEXT;
+ALTER TABLE LocalTimelineEntries ADD COLUMN DeviceModel TEXT;
+ALTER TABLE LocalTimelineEntries ADD COLUMN OsVersion TEXT;
+ALTER TABLE LocalTimelineEntries ADD COLUMN BatteryLevel INTEGER;
+ALTER TABLE LocalTimelineEntries ADD COLUMN IsCharging INTEGER;
+```
+
+## Timeline Export Format
+
+**CSV header (updated):**
+```
+id,server_id,timestamp,latitude,longitude,accuracy,altitude,speed,bearing,provider,address,full_address,place,region,country,postcode,activity_type,timezone,notes,is_user_invoked,app_version,app_build,device_model,os_version,battery_level,is_charging
+```
+
+**GeoJSON properties (updated):**
+```json
+{
+  "id": 123,
+  "serverId": 456,
+  "timestamp": "2024-01-15T12:30:00.0000000Z",
+  ...existing fields...
+  "isUserInvoked": true,
+  "appVersion": "1.2.3",
+  "appBuild": "45",
+  "deviceModel": "Pixel 7 Pro",
+  "osVersion": "Android 14",
+  "batteryLevel": 85,
+  "isCharging": false
+}
+```
+
+## Timeline Import Updates
+
+**CSV column mapping (snake_case):**
+- `is_user_invoked` → `IsUserInvoked`
+- `app_version` → `AppVersion`
+- `app_build` → `AppBuild`
+- `device_model` → `DeviceModel`
+- `os_version` → `OsVersion`
+- `battery_level` → `BatteryLevel`
+- `is_charging` → `IsCharging`
+
+**GeoJSON property mapping (camelCase):**
+- `isUserInvoked` → `IsUserInvoked`
+- `appVersion` → `AppVersion`
+- `appBuild` → `AppBuild`
+- `deviceModel` → `DeviceModel`
+- `osVersion` → `OsVersion`
+- `batteryLevel` → `BatteryLevel`
+- `isCharging` → `IsCharging`
+
+All fields are optional - import works with files that don't have these fields (external sources, historical data).
+
+## Implementation Checklist
+
+### LocalTimelineEntry Entity
+- [x] Add `IsUserInvoked` (bool?)
+- [x] Add `AppVersion` (string?)
+- [x] Add `AppBuild` (string?)
+- [x] Add `DeviceModel` (string?)
+- [x] Add `OsVersion` (string?)
+- [x] Add `BatteryLevel` (int?)
+- [x] Add `IsCharging` (bool?)
+
+### Database Migration
+- [x] Add migration v5 in `DatabaseService.cs`
+
+### TimelineExportService
+- [x] Update CSV header with metadata columns
+- [x] Update `ToCsvRow()` to include metadata
+- [x] Update `GeoJsonProperties` DTO
+- [x] Update `ToGeoJsonFeature()` to include metadata
+
+### TimelineImportService
+- [x] Update `ParseCsvEntry()` to parse metadata columns
+- [x] Update `ParseGeoJsonFeature()` to parse metadata properties

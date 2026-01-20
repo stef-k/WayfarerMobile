@@ -363,6 +363,31 @@ public class TimelineImportService
         if (TryGetValue(values, columnMap, "notes", out var notes))
             entry.Notes = notes;
 
+        // Capture metadata (optional fields)
+        if (TryGetValue(values, columnMap, "is_user_invoked", out var isUserInvokedStr) &&
+            bool.TryParse(isUserInvokedStr, out var isUserInvoked))
+            entry.IsUserInvoked = isUserInvoked;
+
+        if (TryGetValue(values, columnMap, "app_version", out var appVersion))
+            entry.AppVersion = appVersion;
+
+        if (TryGetValue(values, columnMap, "app_build", out var appBuild))
+            entry.AppBuild = appBuild;
+
+        if (TryGetValue(values, columnMap, "device_model", out var deviceModel))
+            entry.DeviceModel = deviceModel;
+
+        if (TryGetValue(values, columnMap, "os_version", out var osVersion))
+            entry.OsVersion = osVersion;
+
+        if (TryGetValue(values, columnMap, "battery_level", out var batteryLevelStr) &&
+            int.TryParse(batteryLevelStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out var batteryLevel))
+            entry.BatteryLevel = batteryLevel;
+
+        if (TryGetValue(values, columnMap, "is_charging", out var isChargingStr) &&
+            bool.TryParse(isChargingStr, out var isCharging))
+            entry.IsCharging = isCharging;
+
         return entry;
     }
 
@@ -480,6 +505,35 @@ public class TimelineImportService
         if (properties.TryGetProperty("notes", out var notes) &&
             notes.ValueKind == JsonValueKind.String)
             entry.Notes = notes.GetString();
+
+        // Capture metadata (optional fields)
+        if (properties.TryGetProperty("isUserInvoked", out var isUserInvoked) &&
+            (isUserInvoked.ValueKind == JsonValueKind.True || isUserInvoked.ValueKind == JsonValueKind.False))
+            entry.IsUserInvoked = isUserInvoked.GetBoolean();
+
+        if (properties.TryGetProperty("appVersion", out var appVersion) &&
+            appVersion.ValueKind == JsonValueKind.String)
+            entry.AppVersion = appVersion.GetString();
+
+        if (properties.TryGetProperty("appBuild", out var appBuild) &&
+            appBuild.ValueKind == JsonValueKind.String)
+            entry.AppBuild = appBuild.GetString();
+
+        if (properties.TryGetProperty("deviceModel", out var deviceModel) &&
+            deviceModel.ValueKind == JsonValueKind.String)
+            entry.DeviceModel = deviceModel.GetString();
+
+        if (properties.TryGetProperty("osVersion", out var osVersion) &&
+            osVersion.ValueKind == JsonValueKind.String)
+            entry.OsVersion = osVersion.GetString();
+
+        if (properties.TryGetProperty("batteryLevel", out var batteryLevel) &&
+            batteryLevel.ValueKind == JsonValueKind.Number)
+            entry.BatteryLevel = batteryLevel.GetInt32();
+
+        if (properties.TryGetProperty("isCharging", out var isCharging) &&
+            (isCharging.ValueKind == JsonValueKind.True || isCharging.ValueKind == JsonValueKind.False))
+            entry.IsCharging = isCharging.GetBoolean();
 
         return entry;
     }

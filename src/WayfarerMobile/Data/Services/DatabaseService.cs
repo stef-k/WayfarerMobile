@@ -25,7 +25,7 @@ public class DatabaseService : IAsyncDisposable
     #region Constants
 
     private const string DatabaseFilename = "wayfarer.db3";
-    private const int CurrentSchemaVersion = 4; // Increment when schema changes
+    private const int CurrentSchemaVersion = 5; // Increment when schema changes
     private const string SchemaVersionKey = "db_schema_version";
 
     private static readonly SQLiteOpenFlags DbFlags =
@@ -137,6 +137,12 @@ public class DatabaseService : IAsyncDisposable
             await MigrateToVersion4Async();
         }
 
+        // Version 5: Add metadata fields to LocalTimelineEntry for parity with QueuedLocation
+        if (currentVersion < 5)
+        {
+            await MigrateToVersion5Async();
+        }
+
         // Update schema version
         await SetSchemaVersionAsync(CurrentSchemaVersion);
         Console.WriteLine($"[DatabaseService] Migration complete. Schema version: {CurrentSchemaVersion}");
@@ -181,6 +187,25 @@ public class DatabaseService : IAsyncDisposable
         await _database.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN IsCharging INTEGER");
 
         Console.WriteLine("[DatabaseService] Version 4 migration complete");
+    }
+
+    /// <summary>
+    /// Migration to version 5: Add metadata fields to LocalTimelineEntry for parity with QueuedLocation.
+    /// </summary>
+    private async Task MigrateToVersion5Async()
+    {
+        Console.WriteLine("[DatabaseService] Running migration to version 5: Adding metadata fields to LocalTimelineEntry");
+
+        // Add capture metadata columns for round-trip parity with QueuedLocation and backend
+        await _database!.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN IsUserInvoked INTEGER");
+        await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN AppVersion TEXT");
+        await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN AppBuild TEXT");
+        await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN DeviceModel TEXT");
+        await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN OsVersion TEXT");
+        await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN BatteryLevel INTEGER");
+        await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN IsCharging INTEGER");
+
+        Console.WriteLine("[DatabaseService] Version 5 migration complete");
     }
 
     /// <summary>
