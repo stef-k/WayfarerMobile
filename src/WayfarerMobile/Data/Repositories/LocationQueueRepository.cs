@@ -155,8 +155,10 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
     public async Task<List<QueuedLocation>> GetAllQueuedLocationsForExportAsync()
     {
         var db = await GetConnectionAsync();
+        // Export only Pending, non-rejected locations (excludes Synced, Syncing, Rejected)
+        // This prevents duplicates when re-importing queue data
         return await db.QueryAsync<QueuedLocation>(
-            "SELECT * FROM QueuedLocations ORDER BY Timestamp ASC, Id ASC");
+            "SELECT * FROM QueuedLocations WHERE SyncStatus = 0 AND IsRejected = 0 ORDER BY Timestamp ASC, Id ASC");
     }
 
     #endregion
