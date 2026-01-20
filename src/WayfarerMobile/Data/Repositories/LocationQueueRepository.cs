@@ -61,7 +61,15 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
             IdempotencyKey = Guid.NewGuid().ToString("N"), // Unique key for idempotent sync
             IsUserInvoked = isUserInvoked,
             ActivityTypeId = activityTypeId,
-            CheckInNotes = notes
+            CheckInNotes = notes,
+            // Metadata fields for diagnostics and export
+            TimeZoneId = GetTimeZoneId(),
+            AppVersion = GetAppVersion(),
+            AppBuild = GetAppBuild(),
+            DeviceModel = GetDeviceModel(),
+            OsVersion = GetOsVersion(),
+            BatteryLevel = GetBatteryLevel(),
+            IsCharging = GetIsCharging()
         };
 
         await db.InsertAsync(queued);
@@ -107,6 +115,117 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
 
         return value;
     }
+
+    #region Metadata Capture Helpers
+
+    /// <summary>
+    /// Gets the device's current timezone ID.
+    /// </summary>
+    private static string? GetTimeZoneId()
+    {
+        try
+        {
+            return TimeZoneInfo.Local.Id;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the app version string.
+    /// </summary>
+    private static string? GetAppVersion()
+    {
+        try
+        {
+            return AppInfo.VersionString;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the app build number.
+    /// </summary>
+    private static string? GetAppBuild()
+    {
+        try
+        {
+            return AppInfo.BuildString;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the device model.
+    /// </summary>
+    private static string? GetDeviceModel()
+    {
+        try
+        {
+            return DeviceInfo.Model;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the OS version string.
+    /// </summary>
+    private static string? GetOsVersion()
+    {
+        try
+        {
+            return $"{DeviceInfo.Platform} {DeviceInfo.VersionString}";
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the battery level (0-100) or null if unavailable.
+    /// </summary>
+    private static int? GetBatteryLevel()
+    {
+        try
+        {
+            var level = Battery.ChargeLevel;
+            return level >= 0 ? (int)(level * 100) : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Gets whether the device is charging, or null if unavailable.
+    /// </summary>
+    private static bool? GetIsCharging()
+    {
+        try
+        {
+            var state = Battery.State;
+            return state == BatteryState.Charging || state == BatteryState.Full;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    #endregion
 
     /// <inheritdoc />
     public async Task<List<QueuedLocation>> GetLocationsForDateAsync(DateTime date)

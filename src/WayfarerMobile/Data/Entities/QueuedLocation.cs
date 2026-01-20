@@ -134,6 +134,53 @@ public class QueuedLocation
     /// </summary>
     public string? CheckInNotes { get; set; }
 
+    #region Metadata Fields (for diagnostics and export)
+
+    /// <summary>
+    /// Gets or sets the device's timezone ID when the location was captured.
+    /// Used for accurate LocalTimestamp calculation during export.
+    /// Example: "Europe/Athens", "America/New_York"
+    /// </summary>
+    public string? TimeZoneId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the mobile app version when the location was captured.
+    /// Example: "1.2.3"
+    /// </summary>
+    public string? AppVersion { get; set; }
+
+    /// <summary>
+    /// Gets or sets the mobile app build number when the location was captured.
+    /// Example: "45"
+    /// </summary>
+    public string? AppBuild { get; set; }
+
+    /// <summary>
+    /// Gets or sets the device model when the location was captured.
+    /// Example: "Pixel 7 Pro", "iPhone 14"
+    /// </summary>
+    public string? DeviceModel { get; set; }
+
+    /// <summary>
+    /// Gets or sets the OS version when the location was captured.
+    /// Example: "Android 14", "iOS 17.2"
+    /// </summary>
+    public string? OsVersion { get; set; }
+
+    /// <summary>
+    /// Gets or sets the battery level (0-100) when the location was captured.
+    /// Null if unavailable.
+    /// </summary>
+    public int? BatteryLevel { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the device was charging when the location was captured.
+    /// Null if unavailable.
+    /// </summary>
+    public bool? IsCharging { get; set; }
+
+    #endregion
+
     /// <summary>
     /// Gets or sets when this record was created.
     /// </summary>

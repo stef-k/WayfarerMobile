@@ -25,7 +25,7 @@ public class DatabaseService : IAsyncDisposable
     #region Constants
 
     private const string DatabaseFilename = "wayfarer.db3";
-    private const int CurrentSchemaVersion = 3; // Increment when schema changes
+    private const int CurrentSchemaVersion = 4; // Increment when schema changes
     private const string SchemaVersionKey = "db_schema_version";
 
     private static readonly SQLiteOpenFlags DbFlags =
@@ -131,6 +131,12 @@ public class DatabaseService : IAsyncDisposable
             await MigrateToVersion3Async();
         }
 
+        // Version 4: Add metadata fields for diagnostics and export
+        if (currentVersion < 4)
+        {
+            await MigrateToVersion4Async();
+        }
+
         // Update schema version
         await SetSchemaVersionAsync(CurrentSchemaVersion);
         Console.WriteLine($"[DatabaseService] Migration complete. Schema version: {CurrentSchemaVersion}");
@@ -156,6 +162,25 @@ public class DatabaseService : IAsyncDisposable
               ON QueuedLocations (ServerConfirmed) WHERE ServerConfirmed = 1");
 
         Console.WriteLine("[DatabaseService] Version 3 migration complete");
+    }
+
+    /// <summary>
+    /// Migration to version 4: Add metadata fields for diagnostics and export.
+    /// </summary>
+    private async Task MigrateToVersion4Async()
+    {
+        Console.WriteLine("[DatabaseService] Running migration to version 4: Adding metadata fields");
+
+        // Add metadata columns for diagnostics, statistics, and export compatibility
+        await _database!.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN TimeZoneId TEXT");
+        await _database.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN AppVersion TEXT");
+        await _database.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN AppBuild TEXT");
+        await _database.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN DeviceModel TEXT");
+        await _database.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN OsVersion TEXT");
+        await _database.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN BatteryLevel INTEGER");
+        await _database.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN IsCharging INTEGER");
+
+        Console.WriteLine("[DatabaseService] Version 4 migration complete");
     }
 
     /// <summary>
@@ -244,7 +269,15 @@ public class DatabaseService : IAsyncDisposable
             IdempotencyKey = Guid.NewGuid().ToString("N"),
             IsUserInvoked = isUserInvoked,
             ActivityTypeId = activityTypeId,
-            CheckInNotes = notes
+            CheckInNotes = notes,
+            // Metadata fields for diagnostics and export
+            TimeZoneId = GetTimeZoneId(),
+            AppVersion = GetAppVersion(),
+            AppBuild = GetAppBuild(),
+            DeviceModel = GetDeviceModel(),
+            OsVersion = GetOsVersion(),
+            BatteryLevel = GetBatteryLevel(),
+            IsCharging = GetIsCharging()
         };
 
         await _database!.InsertAsync(queued);
@@ -291,6 +324,117 @@ public class DatabaseService : IAsyncDisposable
 
         return value;
     }
+
+    #region Metadata Capture Helpers
+
+    /// <summary>
+    /// Gets the device's current timezone ID.
+    /// </summary>
+    private static string? GetTimeZoneId()
+    {
+        try
+        {
+            return TimeZoneInfo.Local.Id;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the app version string.
+    /// </summary>
+    private static string? GetAppVersion()
+    {
+        try
+        {
+            return AppInfo.VersionString;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the app build number.
+    /// </summary>
+    private static string? GetAppBuild()
+    {
+        try
+        {
+            return AppInfo.BuildString;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the device model.
+    /// </summary>
+    private static string? GetDeviceModel()
+    {
+        try
+        {
+            return DeviceInfo.Model;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the OS version string.
+    /// </summary>
+    private static string? GetOsVersion()
+    {
+        try
+        {
+            return $"{DeviceInfo.Platform} {DeviceInfo.VersionString}";
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the battery level (0-100) or null if unavailable.
+    /// </summary>
+    private static int? GetBatteryLevel()
+    {
+        try
+        {
+            var level = Battery.ChargeLevel;
+            return level >= 0 ? (int)(level * 100) : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Gets whether the device is charging, or null if unavailable.
+    /// </summary>
+    private static bool? GetIsCharging()
+    {
+        try
+        {
+            var state = Battery.State;
+            return state == BatteryState.Charging || state == BatteryState.Full;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    #endregion
 
     /// <summary>
     /// Enforces queue limit by removing oldest safe entries, then oldest pending if needed.

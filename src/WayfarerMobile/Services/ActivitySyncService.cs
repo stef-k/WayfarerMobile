@@ -177,6 +177,30 @@ public class ActivitySyncService : IActivitySyncService
     }
 
     /// <inheritdoc/>
+    public async Task<List<ActivityType>> GetAllActivityTypesAsync()
+    {
+        try
+        {
+            await EnsureInitializedAsync();
+
+            var db = await _databaseService.GetConnectionAsync();
+            return await db.Table<ActivityType>()
+                .OrderBy(a => a.Name)
+                .ToListAsync();
+        }
+        catch (SQLiteException ex)
+        {
+            _logger.LogError(ex, "Database error getting all activity types");
+            return [];
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error getting all activity types");
+            return [];
+        }
+    }
+
+    /// <inheritdoc/>
     public async Task<ActivityType?> GetActivityByIdAsync(int id)
     {
         try
