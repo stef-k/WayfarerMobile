@@ -1,5 +1,6 @@
 using SQLite;
 using WayfarerMobile.Core.Enums;
+using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
 
@@ -11,16 +12,20 @@ namespace WayfarerMobile.Data.Repositories;
 /// </summary>
 public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
 {
-    private const int MaxQueuedLocations = 25000;
+    private readonly ISettingsService _settingsService;
     private const int MaxBatchSize = 500; // SQLite parameter limit safety margin
 
     /// <summary>
     /// Creates a new instance of LocationQueueRepository.
     /// </summary>
     /// <param name="connectionFactory">Factory function that provides the database connection.</param>
-    public LocationQueueRepository(Func<Task<SQLiteAsyncConnection>> connectionFactory)
+    /// <param name="settingsService">Settings service for queue limit configuration.</param>
+    public LocationQueueRepository(
+        Func<Task<SQLiteAsyncConnection>> connectionFactory,
+        ISettingsService settingsService)
         : base(connectionFactory)
     {
+        _settingsService = settingsService;
     }
 
     #region Queue Operations
@@ -61,8 +66,8 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
 
         await db.InsertAsync(queued);
 
-        // Cleanup old locations if queue is too large
-        await CleanupOldLocationsAsync(db, MaxQueuedLocations);
+        // Cleanup old locations if queue is too large (uses user-configured limit)
+        await CleanupOldLocationsAsync(db, _settingsService.QueueLimitMaxLocations);
 
         return queued.Id;
     }

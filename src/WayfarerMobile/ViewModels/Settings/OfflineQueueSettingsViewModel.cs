@@ -121,7 +121,7 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
             if (TotalCount > clamped)
             {
                 await _repository.CleanupOldLocationsAsync(clamped);
-                await RefreshAsync();
+                await RefreshCoreAsync();
             }
         }
         catch (Exception ex)
@@ -140,8 +140,18 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task RefreshAsync()
     {
+        // Skip if already refreshing (prevents double-refresh from UI)
+        // Internal callers should use RefreshCoreAsync directly
         if (IsRefreshing) return;
+        await RefreshCoreAsync();
+    }
 
+    /// <summary>
+    /// Core refresh logic without reentrancy guard.
+    /// Use this from Clear commands to ensure UI updates.
+    /// </summary>
+    private async Task RefreshCoreAsync()
+    {
         try
         {
             IsRefreshing = true;
@@ -156,6 +166,7 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
             SyncedCount = status.SyncedCount;
             RejectedCount = status.RejectedCount;
             QueueLimit = status.QueueLimit;
+            QueueLimitText = status.QueueLimit.ToString(); // Sync text with actual limit
             HealthStatus = status.HealthStatus;
             UsagePercent = status.UsagePercent;
             IsOverLimit = status.IsOverLimit;
@@ -248,13 +259,13 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
         {
             var deleted = await _repository.ClearPendingQueueAsync();
             await _toastService.ShowSuccessAsync($"{deleted} pending locations cleared");
-            await RefreshAsync();
+            await RefreshCoreAsync();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error clearing pending queue");
             await _toastService.ShowErrorAsync("Failed to clear pending locations");
-            await RefreshAsync(); // Show actual state after partial failure
+            await RefreshCoreAsync(); // Show actual state after partial failure
         }
     }
 
@@ -281,13 +292,13 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
         {
             var deleted = await _repository.ClearSyncedAndRejectedQueueAsync();
             await _toastService.ShowSuccessAsync($"{deleted} locations cleared");
-            await RefreshAsync();
+            await RefreshCoreAsync();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error clearing synced queue");
             await _toastService.ShowErrorAsync("Failed to clear synced locations");
-            await RefreshAsync(); // Show actual state after partial failure
+            await RefreshCoreAsync(); // Show actual state after partial failure
         }
     }
 
@@ -315,13 +326,13 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
         {
             var deleted = await _repository.ClearAllQueueAsync();
             await _toastService.ShowSuccessAsync($"{deleted} locations cleared");
-            await RefreshAsync();
+            await RefreshCoreAsync();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error clearing all queue");
             await _toastService.ShowErrorAsync("Failed to clear queue");
-            await RefreshAsync(); // Show actual state after partial failure
+            await RefreshCoreAsync(); // Show actual state after partial failure
         }
     }
 

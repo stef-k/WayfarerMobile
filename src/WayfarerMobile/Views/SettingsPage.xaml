@@ -730,9 +730,17 @@
                     <VerticalStackLayout Padding="15" Spacing="10">
                         <!-- Status Summary -->
                         <Grid ColumnDefinitions="*,Auto">
-                            <Label Grid.Column="0"
-                                   Text="{Binding OfflineQueue.TotalCount, StringFormat='Queue: {0} locations'}"
-                                   FontSize="14" />
+                            <HorizontalStackLayout Grid.Column="0" Spacing="4">
+                                <Label Text="{Binding OfflineQueue.TotalCount, StringFormat='Queue: {0}'}"
+                                       FontSize="14" />
+                                <Label Text="/"
+                                       FontSize="14" />
+                                <Label Text="{Binding OfflineQueue.QueueLimit}"
+                                       FontSize="14" />
+                                <Label Text="{Binding OfflineQueue.UsagePercent, StringFormat='({0:F0}%)'}"
+                                       FontSize="14"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+                            </HorizontalStackLayout>
                             <Label Grid.Column="1"
                                    Text="{Binding OfflineQueue.HealthStatus}"
                                    FontSize="14"
