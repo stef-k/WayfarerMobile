@@ -728,51 +728,141 @@ ALTER TABLE LocalTimelineEntries ADD COLUMN BatteryLevel INTEGER;
 ALTER TABLE LocalTimelineEntries ADD COLUMN IsCharging INTEGER;
 ```
 
-## Timeline Export Format
+## Timeline Export Format (PascalCase - Backend Compatible)
 
-**CSV header (updated):**
+Timeline export now uses PascalCase property names to match the Wayfarer backend import parsers (`WayfarerGeoJsonParser` and `CsvLocationParser`). This enables direct roundtrip:
+- Mobile timeline export → Backend import
+- Backend export → Mobile timeline import
+
+**CSV header (PascalCase):**
 ```
-id,server_id,timestamp,latitude,longitude,accuracy,altitude,speed,bearing,provider,address,full_address,place,region,country,postcode,activity_type,timezone,notes,is_user_invoked,app_version,app_build,device_model,os_version,battery_level,is_charging
+Id,ServerId,TimestampUtc,LocalTimestamp,Latitude,Longitude,Accuracy,Altitude,Speed,Bearing,Provider,Address,FullAddress,Place,Region,Country,PostCode,Activity,TimeZoneId,Notes,IsUserInvoked,AppVersion,AppBuild,DeviceModel,OsVersion,BatteryLevel,IsCharging
 ```
 
-**GeoJSON properties (updated):**
+**GeoJSON properties (PascalCase):**
 ```json
 {
-  "id": 123,
-  "serverId": 456,
-  "timestamp": "2024-01-15T12:30:00.0000000Z",
-  ...existing fields...
-  "isUserInvoked": true,
-  "appVersion": "1.2.3",
-  "appBuild": "45",
-  "deviceModel": "Pixel 7 Pro",
-  "osVersion": "Android 14",
-  "batteryLevel": 85,
-  "isCharging": false
+  "Id": 123,
+  "ServerId": 456,
+  "TimestampUtc": "2024-01-15T10:30:00.0000000Z",
+  "LocalTimestamp": "2024-01-15T12:30:00.0000000",
+  "Latitude": 40.8497007,
+  "Longitude": 25.869276,
+  "Accuracy": 15.5,
+  "Altitude": 250.0,
+  "Speed": 5.2,
+  "Bearing": 180.0,
+  "Provider": "gps",
+  "Address": "10 Downing Street",
+  "FullAddress": "10 Downing Street, London SW1A 2AA",
+  "Place": "London",
+  "Region": "Greater London",
+  "Country": "United Kingdom",
+  "PostCode": "SW1A 2AA",
+  "Activity": "Walking",
+  "TimeZoneId": "Europe/London",
+  "Notes": "Test note",
+  "IsUserInvoked": true,
+  "AppVersion": "1.2.3",
+  "AppBuild": "45",
+  "DeviceModel": "Pixel 7 Pro",
+  "OsVersion": "Android 14",
+  "BatteryLevel": 85,
+  "IsCharging": false
 }
 ```
 
-## Timeline Import Updates
+**Key changes from previous format:**
+| Old Name | New Name | Notes |
+|----------|----------|-------|
+| `timestamp` | `TimestampUtc` | Backend expects this name |
+| (none) | `LocalTimestamp` | Computed from TimeZoneId |
+| `activity_type`/`activityType` | `Activity` | Backend expects this name |
+| `timezone` | `TimeZoneId` | Backend expects this name |
+| `postcode`/`postCode` | `PostCode` | PascalCase |
+| All camelCase | PascalCase | Matches backend parsers |
 
-**CSV column mapping (snake_case):**
-- `is_user_invoked` → `IsUserInvoked`
-- `app_version` → `AppVersion`
-- `app_build` → `AppBuild`
-- `device_model` → `DeviceModel`
-- `os_version` → `OsVersion`
-- `battery_level` → `BatteryLevel`
-- `is_charging` → `IsCharging`
+## Timeline Import - Alias Support for Roundtrip
 
-**GeoJSON property mapping (camelCase):**
-- `isUserInvoked` → `IsUserInvoked`
-- `appVersion` → `AppVersion`
-- `appBuild` → `AppBuild`
-- `deviceModel` → `DeviceModel`
-- `osVersion` → `OsVersion`
-- `batteryLevel` → `BatteryLevel`
-- `isCharging` → `IsCharging`
+The import service supports **both** naming conventions to enable bi-directional roundtrip:
 
-All fields are optional - import works with files that don't have these fields (external sources, historical data).
+### Supported Formats
+
+| Source | CSV Format | GeoJSON Format |
+|--------|------------|----------------|
+| Old mobile timeline export | snake_case | camelCase |
+| New mobile timeline export | PascalCase | PascalCase |
+| Queue export | PascalCase | PascalCase |
+| Backend export | PascalCase | PascalCase |
+
+### CSV Column Alias Mapping
+
+Primary (snake_case) → Alias (PascalCase):
+| Primary | Alias | Entity Field |
+|---------|-------|--------------|
+| `timestamp` | `TimestampUtc` | `Timestamp` |
+| `latitude` | `Latitude` | `Latitude` |
+| `longitude` | `Longitude` | `Longitude` |
+| `accuracy` | `Accuracy` | `Accuracy` |
+| `altitude` | `Altitude` | `Altitude` |
+| `speed` | `Speed` | `Speed` |
+| `bearing` | `Bearing` | `Bearing` |
+| `provider` | `Provider` | `Provider` |
+| `address` | `Address` | `Address` |
+| `full_address` | `FullAddress` | `FullAddress` |
+| `place` | `Place` | `Place` |
+| `region` | `Region` | `Region` |
+| `country` | `Country` | `Country` |
+| `postcode` | `PostCode` | `PostCode` |
+| `activity_type` | `Activity` | `ActivityType` |
+| `timezone` | `TimeZoneId` | `Timezone` |
+| `notes` | `Notes` | `Notes` |
+| `is_user_invoked` | `IsUserInvoked` | `IsUserInvoked` |
+| `app_version` | `AppVersion` | `AppVersion` |
+| `app_build` | `AppBuild` | `AppBuild` |
+| `device_model` | `DeviceModel` | `DeviceModel` |
+| `os_version` | `OsVersion` | `OsVersion` |
+| `battery_level` | `BatteryLevel` | `BatteryLevel` |
+| `is_charging` | `IsCharging` | `IsCharging` |
+
+### GeoJSON Property Alias Mapping
+
+Primary (camelCase) → Alias (PascalCase):
+| Primary | Alias | Entity Field |
+|---------|-------|--------------|
+| `timestamp` | `TimestampUtc` | `Timestamp` |
+| `accuracy` | `Accuracy` | `Accuracy` |
+| `altitude` | `Altitude` | `Altitude` |
+| `speed` | `Speed` | `Speed` |
+| `bearing` | `Bearing` | `Bearing` |
+| `provider` | `Provider` | `Provider` |
+| `address` | `Address` | `Address` |
+| `fullAddress` | `FullAddress` | `FullAddress` |
+| `place` | `Place` | `Place` |
+| `region` | `Region` | `Region` |
+| `country` | `Country` | `Country` |
+| `postCode` | `PostCode` | `PostCode` |
+| `activityType` | `Activity` | `ActivityType` |
+| `timezone` | `TimeZoneId` | `Timezone` |
+| `notes` | `Notes` | `Notes` |
+| `isUserInvoked` | `IsUserInvoked` | `IsUserInvoked` |
+| `appVersion` | `AppVersion` | `AppVersion` |
+| `appBuild` | `AppBuild` | `AppBuild` |
+| `deviceModel` | `DeviceModel` | `DeviceModel` |
+| `osVersion` | `OsVersion` | `OsVersion` |
+| `batteryLevel` | `BatteryLevel` | `BatteryLevel` |
+| `isCharging` | `IsCharging` | `IsCharging` |
+
+### Complete Roundtrip Support
+
+| Direction | Format | Status |
+|-----------|--------|--------|
+| Mobile timeline → Backend | CSV/GeoJSON | ✅ PascalCase |
+| Backend → Mobile timeline | CSV/GeoJSON | ✅ via aliases |
+| Queue → Mobile timeline | CSV/GeoJSON | ✅ via aliases |
+| Mobile timeline → Mobile timeline | CSV/GeoJSON | ✅ |
+
+All metadata fields are optional - import works with files that don't have these fields (external sources, historical data).
 
 ## Implementation Checklist
 
@@ -788,12 +878,33 @@ All fields are optional - import works with files that don't have these fields (
 ### Database Migration
 - [x] Add migration v5 in `DatabaseService.cs`
 
-### TimelineExportService
-- [x] Update CSV header with metadata columns
-- [x] Update `ToCsvRow()` to include metadata
-- [x] Update `GeoJsonProperties` DTO
-- [x] Update `ToGeoJsonFeature()` to include metadata
+### TimelineExportService (Backend-Compatible PascalCase)
+- [x] Update CSV header to use PascalCase column names
+- [x] Add `LocalTimestamp` field (computed from timezone)
+- [x] Rename `timestamp` → `TimestampUtc`
+- [x] Rename `activity_type` → `Activity`
+- [x] Rename `timezone` → `TimeZoneId`
+- [x] Update `ToCsvRow()` to include metadata and LocalTimestamp
+- [x] Remove `JsonNamingPolicy.CamelCase` for GeoJSON (use PascalCase)
+- [x] Update `GeoJsonProperties` DTO to PascalCase names
+- [x] Update `ToGeoJsonFeature()` to include metadata and LocalTimestamp
+- [x] Add `ComputeLocalTimestamp()` helper method
 
-### TimelineImportService
-- [x] Update `ParseCsvEntry()` to parse metadata columns
-- [x] Update `ParseGeoJsonFeature()` to parse metadata properties
+### TimelineImportService (Alias Support for Roundtrip)
+- [x] Add `TryGetValueWithAlias()` for CSV parsing
+- [x] Add `GetStringWithAlias()` for GeoJSON parsing
+- [x] Add `GetDoubleWithAlias()` for GeoJSON parsing
+- [x] Add `GetIntWithAlias()` for GeoJSON parsing
+- [x] Add `GetBoolWithAlias()` for GeoJSON parsing
+- [x] Update `ParseCsvEntry()` to support both snake_case and PascalCase
+- [x] Update `ParseGeoJsonFeature()` to support both camelCase and PascalCase
+- [x] Update `HasMoreData()` to include metadata fields
+- [x] Update `UpdateExisting()` to merge metadata fields
+
+### Tests
+- [x] Update test helpers to use PascalCase format
+- [x] Add `ComputeLocalTimestamp()` to test helpers
+- [x] Update GeoJSON export tests for PascalCase property names
+- [x] Add `ParseGeoJsonFeatureWithAlias()` test helper
+- [x] Add test for PascalCase GeoJSON parsing
+- [x] Add test to verify export format matches backend expectations
