@@ -109,6 +109,9 @@ public class QueueExportService : IQueueExportService
     /// <inheritdoc />
     public async Task ShareExportAsync(string format)
     {
+        // Clean up old export files from previous sessions (older than 1 hour)
+        CleanupOldExportFiles();
+
         var content = format == "geojson"
             ? await ExportToGeoJsonAsync()
             : await ExportToCsvAsync();
@@ -117,26 +120,48 @@ public class QueueExportService : IQueueExportService
         var fileName = $"wayfarer_queue_{DateTime.UtcNow:yyyyMMdd_HHmmss}.{extension}";
         var tempPath = Path.Combine(FileSystem.CacheDirectory, fileName);
 
+        await File.WriteAllTextAsync(tempPath, content);
+        await Share.Default.RequestAsync(new ShareFileRequest
+        {
+            Title = "Export Location Queue",
+            File = new ShareFile(tempPath)
+        });
+
+        // Note: File is NOT deleted immediately after share.
+        // The share sheet may still be reading the file asynchronously.
+        // Cleanup happens on next export via CleanupOldExportFiles().
+    }
+
+    /// <summary>
+    /// Cleans up old export files from previous sessions.
+    /// Files older than 1 hour are deleted to prevent accumulation.
+    /// </summary>
+    private static void CleanupOldExportFiles()
+    {
         try
         {
-            await File.WriteAllTextAsync(tempPath, content);
-            await Share.Default.RequestAsync(new ShareFileRequest
+            var cacheDir = FileSystem.CacheDirectory;
+            var cutoff = DateTime.UtcNow.AddHours(-1);
+
+            foreach (var file in Directory.GetFiles(cacheDir, "wayfarer_queue_*.*"))
             {
-                Title = "Export Location Queue",
-                File = new ShareFile(tempPath)
-            });
+                try
+                {
+                    var fileInfo = new FileInfo(file);
+                    if (fileInfo.CreationTimeUtc < cutoff)
+                    {
+                        File.Delete(file);
+                    }
+                }
+                catch
+                {
+                    // Best effort cleanup - file may be in use
+                }
+            }
         }
-        finally
+        catch
         {
-            try
-            {
-                if (File.Exists(tempPath))
-                    File.Delete(tempPath);
-            }
-            catch
-            {
-                // Best effort cleanup
-            }
+            // Best effort cleanup - directory access may fail
         }
     }
 
