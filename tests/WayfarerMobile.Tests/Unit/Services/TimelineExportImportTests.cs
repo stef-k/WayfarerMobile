@@ -36,8 +36,17 @@ public class TimelineExportImportTests
         string? Country,
         string? PostCode,
         string? ActivityType,
-        string? Timezone,
-        string? Notes);
+        string? TimeZoneId,
+        string? Source,
+        string? Notes,
+        // Capture metadata fields
+        bool? IsUserInvoked = null,
+        string? AppVersion = null,
+        string? AppBuild = null,
+        string? DeviceModel = null,
+        string? OsVersion = null,
+        int? BatteryLevel = null,
+        bool? IsCharging = null);
 
     private static TestTimelineEntry CreateSampleEntry(int id = 1) => new(
         Id: id,
@@ -57,8 +66,17 @@ public class TimelineExportImportTests
         Country: "United Kingdom",
         PostCode: "SW1A 2AA",
         ActivityType: "Walking",
-        Timezone: "Europe/London",
-        Notes: "Test note");
+        TimeZoneId: "Europe/London",
+        Source: "mobile-checkin",
+        Notes: "Test note",
+        // Capture metadata
+        IsUserInvoked: true,
+        AppVersion: "1.2.3",
+        AppBuild: "45",
+        DeviceModel: "Pixel 7 Pro",
+        OsVersion: "Android 14",
+        BatteryLevel: 85,
+        IsCharging: false);
 
     #endregion
 
@@ -103,17 +121,18 @@ public class TimelineExportImportTests
             Country: null,
             PostCode: null,
             ActivityType: null,
-            Timezone: null,
+            TimeZoneId: null,
+            Source: null,
             Notes: null);
 
         // Act
         var csvRow = ToCsvRow(entry);
         var parts = ParseCsvLine(csvRow);
 
-        // Assert
+        // Assert - Column order: Id,ServerId,TimestampUtc,LocalTimestamp,Latitude,Longitude,Accuracy,...
         parts[1].Should().BeEmpty("null ServerId should be empty");
-        parts[5].Should().BeEmpty("null Accuracy should be empty");
-        parts[10].Should().BeEmpty("null Address should be empty");
+        parts[6].Should().BeEmpty("null Accuracy should be empty (index 6 after LocalTimestamp)");
+        parts[11].Should().BeEmpty("null Address should be empty (index 11 after LocalTimestamp)");
     }
 
     [Fact]
@@ -181,6 +200,92 @@ public class TimelineExportImportTests
         csvRow.Should().Contain("51.1234567");
         csvRow.Should().Contain("10.5");
         csvRow.Should().NotContain("51,1234567", "should not use comma as decimal separator");
+    }
+
+    [Fact]
+    public void ToCsvRow_WithMetadata_IncludesAllMetadataFields()
+    {
+        // Arrange
+        var entry = CreateSampleEntry();
+
+        // Act
+        var csvRow = ToCsvRow(entry);
+
+        // Assert - verify metadata fields are present
+        csvRow.Should().Contain("True"); // IsUserInvoked
+        csvRow.Should().Contain("1.2.3"); // AppVersion
+        csvRow.Should().Contain("45"); // AppBuild
+        csvRow.Should().Contain("Pixel 7 Pro"); // DeviceModel
+        csvRow.Should().Contain("Android 14"); // OsVersion
+        csvRow.Should().Contain("85"); // BatteryLevel
+        csvRow.Should().Contain("False"); // IsCharging
+    }
+
+    [Fact]
+    public void ToCsvRow_WithSource_IncludesSourceField()
+    {
+        // Arrange
+        var entry = CreateSampleEntry();
+
+        // Act
+        var csvRow = ToCsvRow(entry);
+
+        // Assert - verify Source field is present
+        csvRow.Should().Contain("mobile-checkin");
+    }
+
+    [Fact]
+    public void ToGeoJsonFeature_WithSource_IncludesSourceField()
+    {
+        // Arrange
+        var entry = CreateSampleEntry();
+
+        // Act
+        var json = ToGeoJsonFeature(entry);
+        var parsed = ParseGeoJsonFeatureWithAlias(json);
+
+        // Assert - verify Source field is preserved in roundtrip
+        parsed.Should().NotBeNull();
+        parsed!.Source.Should().Be("mobile-checkin");
+    }
+
+    [Theory]
+    [InlineData("mobile-log", "Background location")]
+    [InlineData("mobile-checkin", "Manual check-in")]
+    [InlineData("api-log", "API location")]
+    [InlineData("queue-import", "Queue import")]
+    public void Source_Roundtrip_PreservesAllSourceValues(string sourceValue, string description)
+    {
+        // Arrange - entry with specific source value
+        var entry = new TestTimelineEntry(
+            Id: 1,
+            ServerId: 100,
+            Timestamp: new DateTime(2024, 12, 27, 10, 30, 0, DateTimeKind.Utc),
+            Latitude: 51.5074,
+            Longitude: -0.1278,
+            Accuracy: 10.5,
+            Altitude: null,
+            Speed: null,
+            Bearing: null,
+            Provider: "gps",
+            Address: null,
+            FullAddress: null,
+            Place: null,
+            Region: null,
+            Country: null,
+            PostCode: null,
+            ActivityType: null,
+            TimeZoneId: null,
+            Source: sourceValue,
+            Notes: null);
+
+        // Act - Export to GeoJSON and parse back
+        var json = ToGeoJsonFeature(entry);
+        var parsed = ParseGeoJsonFeatureWithAlias(json);
+
+        // Assert
+        parsed.Should().NotBeNull($"should parse {description}");
+        parsed!.Source.Should().Be(sourceValue, $"Source should preserve '{description}' value");
     }
 
     #endregion
@@ -369,10 +474,13 @@ public class TimelineExportImportTests
         coords[0].GetDouble().Should().Be(-0.1278);
         coords[1].GetDouble().Should().Be(51.5074);
 
+        // PascalCase property names matching Wayfarer backend
         var props = root.GetProperty("properties");
-        props.GetProperty("id").GetInt32().Should().Be(1);
-        props.GetProperty("serverId").GetInt32().Should().Be(101);
-        props.GetProperty("place").GetString().Should().Be("London");
+        props.GetProperty("Id").GetInt32().Should().Be(1);
+        props.GetProperty("ServerId").GetInt32().Should().Be(101);
+        props.GetProperty("Place").GetString().Should().Be("London");
+        props.GetProperty("TimestampUtc").GetString().Should().Contain("2024-12-27");
+        props.GetProperty("LocalTimestamp").GetString().Should().NotBeNullOrEmpty();
     }
 
     [Fact]
@@ -397,7 +505,8 @@ public class TimelineExportImportTests
             Country: null,
             PostCode: null,
             ActivityType: null,
-            Timezone: null,
+            TimeZoneId: null,
+            Source: null,
             Notes: null);
 
         // Act
@@ -405,10 +514,10 @@ public class TimelineExportImportTests
         var doc = JsonDocument.Parse(json);
         var props = doc.RootElement.GetProperty("properties");
 
-        // Assert - null fields should be omitted
-        props.TryGetProperty("serverId", out _).Should().BeFalse("null should be omitted");
-        props.TryGetProperty("accuracy", out _).Should().BeFalse("null should be omitted");
-        props.TryGetProperty("place", out _).Should().BeFalse("null should be omitted");
+        // Assert - null fields should be omitted (PascalCase property names)
+        props.TryGetProperty("ServerId", out _).Should().BeFalse("null should be omitted");
+        props.TryGetProperty("Accuracy", out _).Should().BeFalse("null should be omitted");
+        props.TryGetProperty("Place", out _).Should().BeFalse("null should be omitted");
     }
 
     [Fact]
@@ -427,14 +536,58 @@ public class TimelineExportImportTests
         coords[1].GetDouble().Should().Be(51.5074, "second coordinate should be latitude");
     }
 
+    [Fact]
+    public void ToGeoJsonFeature_WithMetadata_IncludesAllMetadataFields()
+    {
+        // Arrange
+        var entry = CreateSampleEntry();
+
+        // Act
+        var json = ToGeoJsonFeature(entry);
+        var doc = JsonDocument.Parse(json);
+        var props = doc.RootElement.GetProperty("properties");
+
+        // Assert - verify metadata fields are present (PascalCase)
+        props.GetProperty("IsUserInvoked").GetBoolean().Should().BeTrue();
+        props.GetProperty("AppVersion").GetString().Should().Be("1.2.3");
+        props.GetProperty("AppBuild").GetString().Should().Be("45");
+        props.GetProperty("DeviceModel").GetString().Should().Be("Pixel 7 Pro");
+        props.GetProperty("OsVersion").GetString().Should().Be("Android 14");
+        props.GetProperty("BatteryLevel").GetInt32().Should().Be(85);
+        props.GetProperty("IsCharging").GetBoolean().Should().BeFalse();
+    }
+
+    [Fact]
+    public void ToGeoJsonFeature_ExportFormat_MatchesWayfarerBackend()
+    {
+        // Arrange
+        var entry = CreateSampleEntry();
+
+        // Act
+        var json = ToGeoJsonFeature(entry);
+        var doc = JsonDocument.Parse(json);
+        var props = doc.RootElement.GetProperty("properties");
+
+        // Assert - verify backend-expected property names exist
+        props.TryGetProperty("TimestampUtc", out _).Should().BeTrue("backend expects TimestampUtc");
+        props.TryGetProperty("LocalTimestamp", out _).Should().BeTrue("backend expects LocalTimestamp");
+        props.TryGetProperty("Activity", out _).Should().BeTrue("backend expects Activity (not activityType)");
+        props.TryGetProperty("TimeZoneId", out _).Should().BeTrue("backend expects TimeZoneId (not timezone)");
+
+        // Verify old names are NOT present
+        props.TryGetProperty("timestamp", out _).Should().BeFalse("old camelCase should not be present");
+        props.TryGetProperty("activityType", out _).Should().BeFalse("old name should not be present");
+        props.TryGetProperty("timezone", out _).Should().BeFalse("old name should not be present");
+    }
+
     #endregion
 
     #region GeoJSON Parsing Tests
 
     [Fact]
-    public void ParseGeoJsonFeature_ValidFeature_ParsesCorrectly()
+    public void ParseGeoJsonFeature_CamelCaseFormat_ParsesCorrectly()
     {
-        // Arrange
+        // Arrange - Old camelCase format (for backwards compatibility)
         var json = @"{
             ""type"": ""Feature"",
             ""geometry"": {
@@ -457,6 +610,39 @@ public class TimelineExportImportTests
         entry.Latitude.Should().Be(51.5074);
         entry.Place.Should().Be("London");
         entry.Country.Should().Be("United Kingdom");
+    }
+
+    [Fact]
+    public void ParseGeoJsonFeature_PascalCaseFormat_ParsesCorrectly()
+    {
+        // Arrange - New PascalCase format (Wayfarer backend compatible)
+        var json = @"{
+            ""type"": ""Feature"",
+            ""geometry"": {
+                ""type"": ""Point"",
+                ""coordinates"": [-0.1278, 51.5074]
+            },
+            ""properties"": {
+                ""TimestampUtc"": ""2024-12-27T10:30:00Z"",
+                ""LocalTimestamp"": ""2024-12-27T10:30:00Z"",
+                ""Place"": ""London"",
+                ""Country"": ""United Kingdom"",
+                ""Activity"": ""Walking"",
+                ""TimeZoneId"": ""Europe/London""
+            }
+        }";
+
+        // Act
+        var entry = ParseGeoJsonFeatureWithAlias(json);
+
+        // Assert
+        entry.Should().NotBeNull();
+        entry!.Longitude.Should().Be(-0.1278);
+        entry.Latitude.Should().Be(51.5074);
+        entry.Place.Should().Be("London");
+        entry.Country.Should().Be("United Kingdom");
+        entry.ActivityType.Should().Be("Walking");
+        entry.TimeZoneId.Should().Be("Europe/London");
     }
 
     [Fact]
@@ -564,7 +750,7 @@ public class TimelineExportImportTests
         entry.Address.Should().Be("10 Downing Street");
         entry.Place.Should().Be("London");
         entry.ActivityType.Should().Be("Walking");
-        entry.Timezone.Should().Be("Europe/London");
+        entry.TimeZoneId.Should().Be("Europe/London");
         entry.Notes.Should().Be("Test note");
     }
 
@@ -709,13 +895,21 @@ public class TimelineExportImportTests
 
     #region Helper Method Implementations (Mirroring Service Logic)
 
+    /// <summary>
+    /// Converts to CSV row using PascalCase column order matching Wayfarer backend.
+    /// Column order: Id,ServerId,TimestampUtc,LocalTimestamp,Latitude,Longitude,...
+    /// </summary>
     private static string ToCsvRow(TestTimelineEntry entry)
     {
+        // Compute local timestamp from timezone if available
+        var localTimestamp = ComputeLocalTimestamp(entry.Timestamp, entry.TimeZoneId);
+
         var values = new[]
         {
             entry.Id.ToString(CultureInfo.InvariantCulture),
             entry.ServerId?.ToString(CultureInfo.InvariantCulture) ?? "",
             entry.Timestamp.ToString("o", CultureInfo.InvariantCulture),
+            localTimestamp.ToString("o", CultureInfo.InvariantCulture),
             entry.Latitude.ToString(CultureInfo.InvariantCulture),
             entry.Longitude.ToString(CultureInfo.InvariantCulture),
             entry.Accuracy?.ToString(CultureInfo.InvariantCulture) ?? "",
@@ -730,11 +924,40 @@ public class TimelineExportImportTests
             EscapeCsv(entry.Country),
             EscapeCsv(entry.PostCode),
             EscapeCsv(entry.ActivityType),
-            EscapeCsv(entry.Timezone),
-            EscapeCsv(entry.Notes)
+            EscapeCsv(entry.TimeZoneId),
+            EscapeCsv(entry.Source),
+            EscapeCsv(entry.Notes),
+            // Capture metadata fields
+            entry.IsUserInvoked?.ToString(CultureInfo.InvariantCulture) ?? "",
+            EscapeCsv(entry.AppVersion),
+            EscapeCsv(entry.AppBuild),
+            EscapeCsv(entry.DeviceModel),
+            EscapeCsv(entry.OsVersion),
+            entry.BatteryLevel?.ToString(CultureInfo.InvariantCulture) ?? "",
+            entry.IsCharging?.ToString(CultureInfo.InvariantCulture) ?? ""
         };
 
         return string.Join(",", values);
+    }
+
+    private static DateTime ComputeLocalTimestamp(DateTime utcTimestamp, string? timezoneId)
+    {
+        if (string.IsNullOrWhiteSpace(timezoneId))
+            return utcTimestamp;
+
+        try
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(timezoneId);
+            return TimeZoneInfo.ConvertTimeFromUtc(utcTimestamp, tz);
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return utcTimestamp;
+        }
+        catch (InvalidTimeZoneException)
+        {
+            return utcTimestamp;
+        }
     }
 
     private static string EscapeCsv(string? value)
@@ -817,27 +1040,42 @@ public class TimelineExportImportTests
         });
     }
 
+    /// <summary>
+    /// Builds GeoJSON properties using PascalCase matching Wayfarer backend.
+    /// </summary>
     private static Dictionary<string, object?> BuildProperties(TestTimelineEntry entry)
     {
+        var localTimestamp = ComputeLocalTimestamp(entry.Timestamp, entry.TimeZoneId);
+
         var props = new Dictionary<string, object?>
         {
-            ["id"] = entry.Id,
-            ["serverId"] = entry.ServerId,
-            ["timestamp"] = entry.Timestamp.ToString("o", CultureInfo.InvariantCulture),
-            ["accuracy"] = entry.Accuracy,
-            ["altitude"] = entry.Altitude,
-            ["speed"] = entry.Speed,
-            ["bearing"] = entry.Bearing,
-            ["provider"] = entry.Provider,
-            ["address"] = entry.Address,
-            ["fullAddress"] = entry.FullAddress,
-            ["place"] = entry.Place,
-            ["region"] = entry.Region,
-            ["country"] = entry.Country,
-            ["postCode"] = entry.PostCode,
-            ["activityType"] = entry.ActivityType,
-            ["timezone"] = entry.Timezone,
-            ["notes"] = entry.Notes
+            ["Id"] = entry.Id,
+            ["ServerId"] = entry.ServerId,
+            ["TimestampUtc"] = entry.Timestamp.ToString("o", CultureInfo.InvariantCulture),
+            ["LocalTimestamp"] = localTimestamp.ToString("o", CultureInfo.InvariantCulture),
+            ["Accuracy"] = entry.Accuracy,
+            ["Altitude"] = entry.Altitude,
+            ["Speed"] = entry.Speed,
+            ["Bearing"] = entry.Bearing,
+            ["Provider"] = entry.Provider,
+            ["Address"] = entry.Address,
+            ["FullAddress"] = entry.FullAddress,
+            ["Place"] = entry.Place,
+            ["Region"] = entry.Region,
+            ["Country"] = entry.Country,
+            ["PostCode"] = entry.PostCode,
+            ["Activity"] = entry.ActivityType,
+            ["TimeZoneId"] = entry.TimeZoneId,
+            ["Source"] = entry.Source,
+            ["Notes"] = entry.Notes,
+            // Capture metadata fields
+            ["IsUserInvoked"] = entry.IsUserInvoked,
+            ["AppVersion"] = entry.AppVersion,
+            ["AppBuild"] = entry.AppBuild,
+            ["DeviceModel"] = entry.DeviceModel,
+            ["OsVersion"] = entry.OsVersion,
+            ["BatteryLevel"] = entry.BatteryLevel,
+            ["IsCharging"] = entry.IsCharging
         };
 
         // Remove null values
@@ -861,9 +1099,21 @@ public class TimelineExportImportTests
         string? Place = null,
         string? Country = null,
         string? ActivityType = null,
-        string? Timezone = null,
-        string? Notes = null);
+        string? TimeZoneId = null,
+        string? Source = null,
+        string? Notes = null,
+        // Capture metadata fields
+        bool? IsUserInvoked = null,
+        string? AppVersion = null,
+        string? AppBuild = null,
+        string? DeviceModel = null,
+        string? OsVersion = null,
+        int? BatteryLevel = null,
+        bool? IsCharging = null);
 
+    /// <summary>
+    /// Parses GeoJSON using camelCase property names (old format).
+    /// </summary>
     private static ParsedEntry? ParseGeoJsonFeature(string json)
     {
         try
@@ -913,13 +1163,133 @@ public class TimelineExportImportTests
                 Place: GetNullableString(properties, "place"),
                 Country: GetNullableString(properties, "country"),
                 ActivityType: GetNullableString(properties, "activityType"),
-                Timezone: GetNullableString(properties, "timezone"),
-                Notes: GetNullableString(properties, "notes"));
+                TimeZoneId: GetNullableString(properties, "timezone"),
+                Source: GetNullableString(properties, "source"),
+                Notes: GetNullableString(properties, "notes"),
+                // Capture metadata fields
+                IsUserInvoked: GetNullableBool(properties, "isUserInvoked"),
+                AppVersion: GetNullableString(properties, "appVersion"),
+                AppBuild: GetNullableString(properties, "appBuild"),
+                DeviceModel: GetNullableString(properties, "deviceModel"),
+                OsVersion: GetNullableString(properties, "osVersion"),
+                BatteryLevel: GetNullableInt(properties, "batteryLevel"),
+                IsCharging: GetNullableBool(properties, "isCharging"));
         }
         catch
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Parses GeoJSON supporting both camelCase (old) and PascalCase (new) property names.
+    /// Mirrors the alias support in TimelineImportService.
+    /// </summary>
+    private static ParsedEntry? ParseGeoJsonFeatureWithAlias(string json)
+    {
+        try
+        {
+            var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (!root.TryGetProperty("geometry", out var geometry) ||
+                !geometry.TryGetProperty("coordinates", out var coordinates) ||
+                coordinates.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            var coordArray = coordinates.EnumerateArray().ToList();
+            if (coordArray.Count < 2)
+                return null;
+
+            var longitude = coordArray[0].GetDouble();
+            var latitude = coordArray[1].GetDouble();
+
+            if (!root.TryGetProperty("properties", out var properties))
+                return null;
+
+            // Support both "timestamp" (camelCase) and "TimestampUtc" (PascalCase)
+            var timestampStr = GetStringWithAlias(properties, "timestamp", "TimestampUtc");
+            if (timestampStr == null)
+                return null;
+
+            if (!DateTime.TryParse(timestampStr, CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind, out var timestamp))
+                return null;
+
+            if (timestamp.Kind == DateTimeKind.Local)
+                timestamp = timestamp.ToUniversalTime();
+            else if (timestamp.Kind == DateTimeKind.Unspecified)
+                timestamp = DateTime.SpecifyKind(timestamp, DateTimeKind.Utc);
+
+            return new ParsedEntry(
+                Latitude: latitude,
+                Longitude: longitude,
+                Timestamp: timestamp,
+                Accuracy: GetDoubleWithAlias(properties, "accuracy", "Accuracy"),
+                Altitude: GetDoubleWithAlias(properties, "altitude", "Altitude"),
+                Speed: GetDoubleWithAlias(properties, "speed", "Speed"),
+                Bearing: GetDoubleWithAlias(properties, "bearing", "Bearing"),
+                Provider: GetStringWithAlias(properties, "provider", "Provider"),
+                Address: GetStringWithAlias(properties, "address", "Address"),
+                Place: GetStringWithAlias(properties, "place", "Place"),
+                Country: GetStringWithAlias(properties, "country", "Country"),
+                ActivityType: GetStringWithAlias(properties, "activityType", "Activity"),
+                TimeZoneId: GetStringWithAlias(properties, "timezone", "TimeZoneId"),
+                Source: GetStringWithAlias(properties, "source", "Source"),
+                Notes: GetStringWithAlias(properties, "notes", "Notes"),
+                // Capture metadata fields
+                IsUserInvoked: GetBoolWithAlias(properties, "isUserInvoked", "IsUserInvoked"),
+                AppVersion: GetStringWithAlias(properties, "appVersion", "AppVersion"),
+                AppBuild: GetStringWithAlias(properties, "appBuild", "AppBuild"),
+                DeviceModel: GetStringWithAlias(properties, "deviceModel", "DeviceModel"),
+                OsVersion: GetStringWithAlias(properties, "osVersion", "OsVersion"),
+                BatteryLevel: GetIntWithAlias(properties, "batteryLevel", "BatteryLevel"),
+                IsCharging: GetBoolWithAlias(properties, "isCharging", "IsCharging"));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? GetStringWithAlias(JsonElement element, string primaryName, string aliasName)
+    {
+        if (element.TryGetProperty(primaryName, out var prop) && prop.ValueKind == JsonValueKind.String)
+            return prop.GetString();
+        if (element.TryGetProperty(aliasName, out prop) && prop.ValueKind == JsonValueKind.String)
+            return prop.GetString();
+        return null;
+    }
+
+    private static double? GetDoubleWithAlias(JsonElement element, string primaryName, string aliasName)
+    {
+        if (element.TryGetProperty(primaryName, out var prop) && prop.ValueKind == JsonValueKind.Number)
+            return prop.GetDouble();
+        if (element.TryGetProperty(aliasName, out prop) && prop.ValueKind == JsonValueKind.Number)
+            return prop.GetDouble();
+        return null;
+    }
+
+    private static int? GetIntWithAlias(JsonElement element, string primaryName, string aliasName)
+    {
+        if (element.TryGetProperty(primaryName, out var prop) && prop.ValueKind == JsonValueKind.Number)
+            return prop.GetInt32();
+        if (element.TryGetProperty(aliasName, out prop) && prop.ValueKind == JsonValueKind.Number)
+            return prop.GetInt32();
+        return null;
+    }
+
+    private static bool? GetBoolWithAlias(JsonElement element, string primaryName, string aliasName)
+    {
+        if (element.TryGetProperty(primaryName, out var prop) &&
+            (prop.ValueKind == JsonValueKind.True || prop.ValueKind == JsonValueKind.False))
+            return prop.GetBoolean();
+        if (element.TryGetProperty(aliasName, out prop) &&
+            (prop.ValueKind == JsonValueKind.True || prop.ValueKind == JsonValueKind.False))
+            return prop.GetBoolean();
+        return null;
     }
 
     private static double? GetNullableDouble(JsonElement element, string propertyName)
@@ -933,6 +1303,21 @@ public class TimelineExportImportTests
     {
         if (element.TryGetProperty(propertyName, out var prop) && prop.ValueKind == JsonValueKind.String)
             return prop.GetString();
+        return null;
+    }
+
+    private static bool? GetNullableBool(JsonElement element, string propertyName)
+    {
+        if (element.TryGetProperty(propertyName, out var prop) &&
+            (prop.ValueKind == JsonValueKind.True || prop.ValueKind == JsonValueKind.False))
+            return prop.GetBoolean();
+        return null;
+    }
+
+    private static int? GetNullableInt(JsonElement element, string propertyName)
+    {
+        if (element.TryGetProperty(propertyName, out var prop) && prop.ValueKind == JsonValueKind.Number)
+            return prop.GetInt32();
         return null;
     }
 
@@ -970,7 +1355,15 @@ public class TimelineExportImportTests
                (!string.IsNullOrEmpty(import.Place) && string.IsNullOrEmpty(existing.Place)) ||
                (!string.IsNullOrEmpty(import.Country) && string.IsNullOrEmpty(existing.Country)) ||
                (!string.IsNullOrEmpty(import.ActivityType) && string.IsNullOrEmpty(existing.ActivityType)) ||
-               (!string.IsNullOrEmpty(import.Notes) && string.IsNullOrEmpty(existing.Notes));
+               (!string.IsNullOrEmpty(import.Notes) && string.IsNullOrEmpty(existing.Notes)) ||
+               // Capture metadata fields
+               (import.IsUserInvoked.HasValue && !existing.IsUserInvoked.HasValue) ||
+               (!string.IsNullOrEmpty(import.AppVersion) && string.IsNullOrEmpty(existing.AppVersion)) ||
+               (!string.IsNullOrEmpty(import.AppBuild) && string.IsNullOrEmpty(existing.AppBuild)) ||
+               (!string.IsNullOrEmpty(import.DeviceModel) && string.IsNullOrEmpty(existing.DeviceModel)) ||
+               (!string.IsNullOrEmpty(import.OsVersion) && string.IsNullOrEmpty(existing.OsVersion)) ||
+               (import.BatteryLevel.HasValue && !existing.BatteryLevel.HasValue) ||
+               (import.IsCharging.HasValue && !existing.IsCharging.HasValue);
     }
 
     #endregion

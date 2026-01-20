@@ -15,6 +15,13 @@ public interface IActivitySyncService
     Task<List<ActivityType>> GetActivityTypesAsync();
 
     /// <summary>
+    /// Gets all activity types including both defaults and server activities.
+    /// Used for export/lookup scenarios where historical activity IDs may include both.
+    /// </summary>
+    /// <returns>List of all activity types.</returns>
+    Task<List<ActivityType>> GetAllActivityTypesAsync();
+
+    /// <summary>
     /// Gets an activity by its ID.
     /// </summary>
     /// <param name="id">The activity ID.</param>

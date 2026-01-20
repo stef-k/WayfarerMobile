@@ -1465,6 +1465,56 @@ public class LocationLogRequest
     /// Gets or sets notes for this location.
     /// </summary>
     public string? Notes { get; set; }
+
+    #region Metadata Fields
+
+    /// <summary>
+    /// Gets or sets the origin of this location record.
+    /// Values: "mobile-log", "mobile-checkin".
+    /// </summary>
+    public string? Source { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether this location was user-invoked (manual check-in).
+    /// </summary>
+    public bool IsUserInvoked { get; set; }
+
+    /// <summary>
+    /// Gets or sets the bearing/heading in degrees (0-360).
+    /// </summary>
+    public double? Bearing { get; set; }
+
+    /// <summary>
+    /// Gets or sets the mobile app version.
+    /// </summary>
+    public string? AppVersion { get; set; }
+
+    /// <summary>
+    /// Gets or sets the mobile app build number.
+    /// </summary>
+    public string? AppBuild { get; set; }
+
+    /// <summary>
+    /// Gets or sets the device model.
+    /// </summary>
+    public string? DeviceModel { get; set; }
+
+    /// <summary>
+    /// Gets or sets the OS version.
+    /// </summary>
+    public string? OsVersion { get; set; }
+
+    /// <summary>
+    /// Gets or sets the battery level (0-100) or null if unavailable.
+    /// </summary>
+    public int? BatteryLevel { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the device was charging.
+    /// </summary>
+    public bool? IsCharging { get; set; }
+
+    #endregion
 }
 
 #endregion

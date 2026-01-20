@@ -685,7 +685,19 @@ public sealed class QueueDrainService : IDisposable
                 Accuracy = location.Accuracy,
                 Speed = location.Speed,
                 Timestamp = location.Timestamp, // Original timestamp, not now
-                Provider = location.Provider ?? "queue-drain"
+                Provider = location.Provider ?? "queue-drain",
+                ActivityTypeId = location.ActivityTypeId,
+                Notes = location.CheckInNotes,
+                // Metadata fields
+                IsUserInvoked = location.IsUserInvoked,
+                Bearing = location.Bearing,
+                AppVersion = location.AppVersion,
+                AppBuild = location.AppBuild,
+                DeviceModel = location.DeviceModel,
+                OsVersion = location.OsVersion,
+                BatteryLevel = location.BatteryLevel,
+                IsCharging = location.IsCharging,
+                Source = location.Source
             };
 
             // Use provided cancellation token combined with timeout

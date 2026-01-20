@@ -1154,7 +1154,18 @@ public class ApiClient : IApiClient, IVisitApiClient
                 Speed = location.Speed,
                 LocationType = location.Provider,
                 ActivityTypeId = location.ActivityTypeId,
-                Notes = location.Notes
+                Notes = location.Notes,
+                // Metadata fields
+                Source = location.Source,
+                IsUserInvoked = location.IsUserInvoked,
+                Provider = location.Provider,
+                Bearing = location.Bearing,
+                AppVersion = location.AppVersion,
+                AppBuild = location.AppBuild,
+                DeviceModel = location.DeviceModel,
+                OsVersion = location.OsVersion,
+                BatteryLevel = location.BatteryLevel,
+                IsCharging = location.IsCharging
             };
 
             var request = CreateRequest(HttpMethod.Post, endpoint);
@@ -1297,5 +1308,17 @@ public class ApiClient : IApiClient, IVisitApiClient
         public string? LocationType { get; set; }
         public string? Notes { get; set; }
         public int? ActivityTypeId { get; set; }
+
+        // Metadata fields for diagnostics
+        public string? Source { get; set; }
+        public bool IsUserInvoked { get; set; }
+        public string? Provider { get; set; }
+        public double? Bearing { get; set; }
+        public string? AppVersion { get; set; }
+        public string? AppBuild { get; set; }
+        public string? DeviceModel { get; set; }
+        public string? OsVersion { get; set; }
+        public int? BatteryLevel { get; set; }
+        public bool? IsCharging { get; set; }
     }
 }

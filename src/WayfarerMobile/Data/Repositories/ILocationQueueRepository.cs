@@ -39,9 +39,10 @@ public interface ILocationQueueRepository
     Task<List<QueuedLocation>> GetAllQueuedLocationsAsync();
 
     /// <summary>
-    /// Gets all queued locations for export, ordered by Timestamp ASC, Id ASC.
+    /// Gets pending, non-rejected locations for export, ordered by Timestamp ASC, Id ASC.
+    /// Excludes Synced, Syncing, and Rejected locations to prevent duplicates on re-import.
     /// </summary>
-    /// <returns>All queued locations regardless of sync status.</returns>
+    /// <returns>Pending, non-rejected queued locations for export.</returns>
     Task<List<QueuedLocation>> GetAllQueuedLocationsForExportAsync();
 
     #endregion

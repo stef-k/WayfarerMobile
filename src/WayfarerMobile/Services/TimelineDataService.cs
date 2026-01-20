@@ -242,7 +242,7 @@ public class TimelineDataService
                     existing.Country = serverLocation.Country;
                     existing.PostCode = serverLocation.PostCode;
                     existing.ActivityType = serverLocation.ActivityType;
-                    existing.Timezone = serverLocation.Timezone;
+                    existing.TimeZoneId = serverLocation.Timezone;
 
                     // Preserve local Notes if user edited offline
                     if (string.IsNullOrEmpty(existing.Notes))
@@ -273,7 +273,7 @@ public class TimelineDataService
                         PostCode = serverLocation.PostCode,
                         ActivityType = serverLocation.ActivityType,
                         Notes = serverLocation.Notes,
-                        Timezone = serverLocation.Timezone,
+                        TimeZoneId = serverLocation.Timezone,
                         CreatedAt = DateTime.UtcNow,
                         LastEnrichedAt = DateTime.UtcNow
                     };
@@ -362,9 +362,9 @@ public class TimelineDataService
         {
             Id = entry.ServerId ?? entry.Id,
             Timestamp = entry.Timestamp,
-            LocalTimestamp = ConvertToLocalTime(entry.Timestamp, entry.Timezone),
+            LocalTimestamp = ConvertToLocalTime(entry.Timestamp, entry.TimeZoneId),
             Coordinates = new TimelineCoordinates { X = entry.Longitude, Y = entry.Latitude },
-            Timezone = entry.Timezone,
+            Timezone = entry.TimeZoneId,
             Accuracy = entry.Accuracy,
             Altitude = entry.Altitude,
             Speed = entry.Speed,

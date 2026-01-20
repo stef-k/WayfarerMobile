@@ -3,6 +3,7 @@ using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
+using WayfarerMobile.Helpers;
 
 namespace WayfarerMobile.Data.Repositories;
 
@@ -61,7 +62,16 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
             IdempotencyKey = Guid.NewGuid().ToString("N"), // Unique key for idempotent sync
             IsUserInvoked = isUserInvoked,
             ActivityTypeId = activityTypeId,
-            CheckInNotes = notes
+            CheckInNotes = notes,
+            // Metadata fields for diagnostics and export
+            Source = isUserInvoked ? "mobile-checkin" : "mobile-log",
+            TimeZoneId = DeviceMetadataHelper.GetTimeZoneId(),
+            AppVersion = DeviceMetadataHelper.GetAppVersion(),
+            AppBuild = DeviceMetadataHelper.GetAppBuild(),
+            DeviceModel = DeviceMetadataHelper.GetDeviceModel(),
+            OsVersion = DeviceMetadataHelper.GetOsVersion(),
+            BatteryLevel = DeviceMetadataHelper.GetBatteryLevel(),
+            IsCharging = DeviceMetadataHelper.GetIsCharging()
         };
 
         await db.InsertAsync(queued);
@@ -145,8 +155,10 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
     public async Task<List<QueuedLocation>> GetAllQueuedLocationsForExportAsync()
     {
         var db = await GetConnectionAsync();
+        // Export only Pending, non-rejected locations (excludes Synced, Syncing, Rejected)
+        // This prevents duplicates when re-importing queue data
         return await db.QueryAsync<QueuedLocation>(
-            "SELECT * FROM QueuedLocations ORDER BY Timestamp ASC, Id ASC");
+            "SELECT * FROM QueuedLocations WHERE SyncStatus = 0 AND IsRejected = 0 ORDER BY Timestamp ASC, Id ASC");
     }
 
     #endregion

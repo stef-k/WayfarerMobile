@@ -2,6 +2,7 @@ using SQLite;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
+using WayfarerMobile.Helpers;
 
 namespace WayfarerMobile.Data.Services;
 
@@ -25,7 +26,7 @@ public class DatabaseService : IAsyncDisposable
     #region Constants
 
     private const string DatabaseFilename = "wayfarer.db3";
-    private const int CurrentSchemaVersion = 3; // Increment when schema changes
+    private const int CurrentSchemaVersion = 6; // Increment when schema changes
     private const string SchemaVersionKey = "db_schema_version";
 
     private static readonly SQLiteOpenFlags DbFlags =
@@ -131,6 +132,24 @@ public class DatabaseService : IAsyncDisposable
             await MigrateToVersion3Async();
         }
 
+        // Version 4: Add metadata fields for diagnostics and export
+        if (currentVersion < 4)
+        {
+            await MigrateToVersion4Async();
+        }
+
+        // Version 5: Add metadata fields to LocalTimelineEntry for parity with QueuedLocation
+        if (currentVersion < 5)
+        {
+            await MigrateToVersion5Async();
+        }
+
+        // Version 6: Add Source field for roundtrip support
+        if (currentVersion < 6)
+        {
+            await MigrateToVersion6Async();
+        }
+
         // Update schema version
         await SetSchemaVersionAsync(CurrentSchemaVersion);
         Console.WriteLine($"[DatabaseService] Migration complete. Schema version: {CurrentSchemaVersion}");
@@ -156,6 +175,59 @@ public class DatabaseService : IAsyncDisposable
               ON QueuedLocations (ServerConfirmed) WHERE ServerConfirmed = 1");
 
         Console.WriteLine("[DatabaseService] Version 3 migration complete");
+    }
+
+    /// <summary>
+    /// Migration to version 4: Add metadata fields for diagnostics and export.
+    /// </summary>
+    private async Task MigrateToVersion4Async()
+    {
+        Console.WriteLine("[DatabaseService] Running migration to version 4: Adding metadata fields");
+
+        // Add metadata columns for diagnostics, statistics, and export compatibility
+        await _database!.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN TimeZoneId TEXT");
+        await _database.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN AppVersion TEXT");
+        await _database.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN AppBuild TEXT");
+        await _database.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN DeviceModel TEXT");
+        await _database.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN OsVersion TEXT");
+        await _database.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN BatteryLevel INTEGER");
+        await _database.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN IsCharging INTEGER");
+
+        Console.WriteLine("[DatabaseService] Version 4 migration complete");
+    }
+
+    /// <summary>
+    /// Migration to version 5: Add metadata fields to LocalTimelineEntry for parity with QueuedLocation.
+    /// </summary>
+    private async Task MigrateToVersion5Async()
+    {
+        Console.WriteLine("[DatabaseService] Running migration to version 5: Adding metadata fields to LocalTimelineEntry");
+
+        // Add capture metadata columns for round-trip parity with QueuedLocation and backend
+        await _database!.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN IsUserInvoked INTEGER");
+        await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN AppVersion TEXT");
+        await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN AppBuild TEXT");
+        await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN DeviceModel TEXT");
+        await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN OsVersion TEXT");
+        await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN BatteryLevel INTEGER");
+        await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN IsCharging INTEGER");
+
+        Console.WriteLine("[DatabaseService] Version 5 migration complete");
+    }
+
+    /// <summary>
+    /// Migration to version 6: Add Source field for roundtrip support.
+    /// </summary>
+    private async Task MigrateToVersion6Async()
+    {
+        Console.WriteLine("[DatabaseService] Running migration to version 6: Adding Source field");
+
+        // Add Source column to both tables for tracking location origin
+        // Values: "mobile-log", "mobile-checkin", "api-log", "api-checkin", "queue-import"
+        await _database!.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN Source TEXT");
+        await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN Source TEXT");
+
+        Console.WriteLine("[DatabaseService] Version 6 migration complete");
     }
 
     /// <summary>
@@ -244,7 +316,16 @@ public class DatabaseService : IAsyncDisposable
             IdempotencyKey = Guid.NewGuid().ToString("N"),
             IsUserInvoked = isUserInvoked,
             ActivityTypeId = activityTypeId,
-            CheckInNotes = notes
+            CheckInNotes = notes,
+            // Metadata fields for diagnostics and export
+            Source = isUserInvoked ? "mobile-checkin" : "mobile-log",
+            TimeZoneId = DeviceMetadataHelper.GetTimeZoneId(),
+            AppVersion = DeviceMetadataHelper.GetAppVersion(),
+            AppBuild = DeviceMetadataHelper.GetAppBuild(),
+            DeviceModel = DeviceMetadataHelper.GetDeviceModel(),
+            OsVersion = DeviceMetadataHelper.GetOsVersion(),
+            BatteryLevel = DeviceMetadataHelper.GetBatteryLevel(),
+            IsCharging = DeviceMetadataHelper.GetIsCharging()
         };
 
         await _database!.InsertAsync(queued);

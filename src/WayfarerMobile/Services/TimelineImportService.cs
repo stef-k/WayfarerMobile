@@ -285,13 +285,15 @@ public class TimelineImportService
 
     /// <summary>
     /// Parses a CSV row into a LocalTimelineEntry.
+    /// Supports both PascalCase (current export format) and snake_case (legacy format) column names.
     /// </summary>
     private static LocalTimelineEntry? ParseCsvEntry(List<string> values, Dictionary<string, int> columnMap)
     {
         // Required fields: timestamp, latitude, longitude
-        if (!TryGetValue(values, columnMap, "timestamp", out var timestampStr) ||
-            !TryGetValue(values, columnMap, "latitude", out var latStr) ||
-            !TryGetValue(values, columnMap, "longitude", out var lonStr))
+        // Support both formats: PascalCase (current export) and snake_case (legacy)
+        if (!TryGetValueWithAlias(values, columnMap, "TimestampUtc", "timestamp", out var timestampStr) ||
+            !TryGetValueWithAlias(values, columnMap, "Latitude", "latitude", out var latStr) ||
+            !TryGetValueWithAlias(values, columnMap, "Longitude", "longitude", out var lonStr))
         {
             return null;
         }
@@ -316,52 +318,83 @@ public class TimelineImportService
             Longitude = longitude
         };
 
-        // Optional fields
-        if (TryGetValue(values, columnMap, "accuracy", out var accuracyStr) &&
+        // Optional fields - support both PascalCase (current) and snake_case (legacy)
+        if (TryGetValueWithAlias(values, columnMap, "Accuracy", "accuracy", out var accuracyStr) &&
             double.TryParse(accuracyStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var accuracy))
             entry.Accuracy = accuracy;
 
-        if (TryGetValue(values, columnMap, "altitude", out var altitudeStr) &&
+        if (TryGetValueWithAlias(values, columnMap, "Altitude", "altitude", out var altitudeStr) &&
             double.TryParse(altitudeStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var altitude))
             entry.Altitude = altitude;
 
-        if (TryGetValue(values, columnMap, "speed", out var speedStr) &&
+        if (TryGetValueWithAlias(values, columnMap, "Speed", "speed", out var speedStr) &&
             double.TryParse(speedStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var speed))
             entry.Speed = speed;
 
-        if (TryGetValue(values, columnMap, "bearing", out var bearingStr) &&
+        if (TryGetValueWithAlias(values, columnMap, "Bearing", "bearing", out var bearingStr) &&
             double.TryParse(bearingStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var bearing))
             entry.Bearing = bearing;
 
-        if (TryGetValue(values, columnMap, "provider", out var provider))
+        if (TryGetValueWithAlias(values, columnMap, "Provider", "provider", out var provider))
             entry.Provider = provider;
 
-        if (TryGetValue(values, columnMap, "address", out var address))
+        if (TryGetValueWithAlias(values, columnMap, "Address", "address", out var address))
             entry.Address = address;
 
-        if (TryGetValue(values, columnMap, "full_address", out var fullAddress))
+        if (TryGetValueWithAlias(values, columnMap, "FullAddress", "full_address", out var fullAddress))
             entry.FullAddress = fullAddress;
 
-        if (TryGetValue(values, columnMap, "place", out var place))
+        if (TryGetValueWithAlias(values, columnMap, "Place", "place", out var place))
             entry.Place = place;
 
-        if (TryGetValue(values, columnMap, "region", out var region))
+        if (TryGetValueWithAlias(values, columnMap, "Region", "region", out var region))
             entry.Region = region;
 
-        if (TryGetValue(values, columnMap, "country", out var country))
+        if (TryGetValueWithAlias(values, columnMap, "Country", "country", out var country))
             entry.Country = country;
 
-        if (TryGetValue(values, columnMap, "postcode", out var postcode))
+        if (TryGetValueWithAlias(values, columnMap, "PostCode", "postcode", out var postcode))
             entry.PostCode = postcode;
 
-        if (TryGetValue(values, columnMap, "activity_type", out var activityType))
+        // Activity: PascalCase "Activity" or snake_case "activity_type"
+        if (TryGetValueWithAlias(values, columnMap, "Activity", "activity_type", out var activityType))
             entry.ActivityType = activityType;
 
-        if (TryGetValue(values, columnMap, "timezone", out var timezone))
-            entry.Timezone = timezone;
+        // Timezone: PascalCase "TimeZoneId" or snake_case "timezone"
+        if (TryGetValueWithAlias(values, columnMap, "TimeZoneId", "timezone", out var timezone))
+            entry.TimeZoneId = timezone;
 
-        if (TryGetValue(values, columnMap, "notes", out var notes))
+        if (TryGetValueWithAlias(values, columnMap, "Notes", "notes", out var notes))
             entry.Notes = notes;
+
+        // Source: PascalCase "Source" or snake_case "source"
+        if (TryGetValueWithAlias(values, columnMap, "Source", "source", out var source))
+            entry.Source = source;
+
+        // Capture metadata (optional fields) - support both formats
+        if (TryGetValueWithAlias(values, columnMap, "IsUserInvoked", "is_user_invoked", out var isUserInvokedStr) &&
+            bool.TryParse(isUserInvokedStr, out var isUserInvoked))
+            entry.IsUserInvoked = isUserInvoked;
+
+        if (TryGetValueWithAlias(values, columnMap, "AppVersion", "app_version", out var appVersion))
+            entry.AppVersion = appVersion;
+
+        if (TryGetValueWithAlias(values, columnMap, "AppBuild", "app_build", out var appBuild))
+            entry.AppBuild = appBuild;
+
+        if (TryGetValueWithAlias(values, columnMap, "DeviceModel", "device_model", out var deviceModel))
+            entry.DeviceModel = deviceModel;
+
+        if (TryGetValueWithAlias(values, columnMap, "OsVersion", "os_version", out var osVersion))
+            entry.OsVersion = osVersion;
+
+        if (TryGetValueWithAlias(values, columnMap, "BatteryLevel", "battery_level", out var batteryLevelStr) &&
+            int.TryParse(batteryLevelStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out var batteryLevel))
+            entry.BatteryLevel = batteryLevel;
+
+        if (TryGetValueWithAlias(values, columnMap, "IsCharging", "is_charging", out var isChargingStr) &&
+            bool.TryParse(isChargingStr, out var isCharging))
+            entry.IsCharging = isCharging;
 
         return entry;
     }
@@ -380,7 +413,22 @@ public class TimelineImportService
     }
 
     /// <summary>
+    /// Tries to get a value from CSV values by column name with an alias fallback.
+    /// Primary name is PascalCase (current export format), alias is snake_case (legacy format).
+    /// </summary>
+    private static bool TryGetValueWithAlias(List<string> values, Dictionary<string, int> columnMap, string primaryName, string aliasName, out string value)
+    {
+        // Try primary name first (PascalCase - matches current export format)
+        if (TryGetValue(values, columnMap, primaryName, out value))
+            return true;
+
+        // Fall back to alias (snake_case - legacy format)
+        return TryGetValue(values, columnMap, aliasName, out value);
+    }
+
+    /// <summary>
     /// Parses a GeoJSON feature into a LocalTimelineEntry.
+    /// Supports both PascalCase (current export format) and camelCase (legacy format) property names.
     /// </summary>
     private static LocalTimelineEntry? ParseGeoJsonFeature(JsonElement feature)
     {
@@ -403,11 +451,12 @@ public class TimelineImportService
         if (!feature.TryGetProperty("properties", out var properties))
             return null;
 
-        // Required: timestamp
-        if (!properties.TryGetProperty("timestamp", out var timestampProp))
+        // Required: timestamp - support both "TimestampUtc" (PascalCase) and "timestamp" (camelCase)
+        var timestampStr = GetStringWithAlias(properties, "TimestampUtc", "timestamp");
+        if (timestampStr == null)
             return null;
 
-        if (!DateTime.TryParse(timestampProp.GetString(), CultureInfo.InvariantCulture,
+        if (!DateTime.TryParse(timestampStr, CultureInfo.InvariantCulture,
             DateTimeStyles.RoundtripKind, out var timestamp))
             return null;
 
@@ -424,62 +473,38 @@ public class TimelineImportService
             Longitude = longitude
         };
 
-        // Optional properties
-        if (properties.TryGetProperty("accuracy", out var accuracy) &&
-            accuracy.ValueKind == JsonValueKind.Number)
-            entry.Accuracy = accuracy.GetDouble();
+        // Optional properties - support both PascalCase (current) and camelCase (legacy)
+        entry.Accuracy = GetDoubleWithAlias(properties, "Accuracy", "accuracy");
+        entry.Altitude = GetDoubleWithAlias(properties, "Altitude", "altitude");
+        entry.Speed = GetDoubleWithAlias(properties, "Speed", "speed");
+        entry.Bearing = GetDoubleWithAlias(properties, "Bearing", "bearing");
+        entry.Provider = GetStringWithAlias(properties, "Provider", "provider");
+        entry.Address = GetStringWithAlias(properties, "Address", "address");
+        entry.FullAddress = GetStringWithAlias(properties, "FullAddress", "fullAddress");
+        entry.Place = GetStringWithAlias(properties, "Place", "place");
+        entry.Region = GetStringWithAlias(properties, "Region", "region");
+        entry.Country = GetStringWithAlias(properties, "Country", "country");
+        entry.PostCode = GetStringWithAlias(properties, "PostCode", "postCode");
 
-        if (properties.TryGetProperty("altitude", out var altitude) &&
-            altitude.ValueKind == JsonValueKind.Number)
-            entry.Altitude = altitude.GetDouble();
+        // Activity: PascalCase "Activity" or camelCase "activityType"
+        entry.ActivityType = GetStringWithAlias(properties, "Activity", "activityType");
 
-        if (properties.TryGetProperty("speed", out var speed) &&
-            speed.ValueKind == JsonValueKind.Number)
-            entry.Speed = speed.GetDouble();
+        // Timezone: PascalCase "TimeZoneId" or camelCase "timezone"
+        entry.TimeZoneId = GetStringWithAlias(properties, "TimeZoneId", "timezone");
 
-        if (properties.TryGetProperty("bearing", out var bearing) &&
-            bearing.ValueKind == JsonValueKind.Number)
-            entry.Bearing = bearing.GetDouble();
+        entry.Notes = GetStringWithAlias(properties, "Notes", "notes");
 
-        if (properties.TryGetProperty("provider", out var provider) &&
-            provider.ValueKind == JsonValueKind.String)
-            entry.Provider = provider.GetString();
+        // Source: PascalCase "Source" or camelCase "source"
+        entry.Source = GetStringWithAlias(properties, "Source", "source");
 
-        if (properties.TryGetProperty("address", out var address) &&
-            address.ValueKind == JsonValueKind.String)
-            entry.Address = address.GetString();
-
-        if (properties.TryGetProperty("fullAddress", out var fullAddress) &&
-            fullAddress.ValueKind == JsonValueKind.String)
-            entry.FullAddress = fullAddress.GetString();
-
-        if (properties.TryGetProperty("place", out var place) &&
-            place.ValueKind == JsonValueKind.String)
-            entry.Place = place.GetString();
-
-        if (properties.TryGetProperty("region", out var region) &&
-            region.ValueKind == JsonValueKind.String)
-            entry.Region = region.GetString();
-
-        if (properties.TryGetProperty("country", out var country) &&
-            country.ValueKind == JsonValueKind.String)
-            entry.Country = country.GetString();
-
-        if (properties.TryGetProperty("postCode", out var postCode) &&
-            postCode.ValueKind == JsonValueKind.String)
-            entry.PostCode = postCode.GetString();
-
-        if (properties.TryGetProperty("activityType", out var activityType) &&
-            activityType.ValueKind == JsonValueKind.String)
-            entry.ActivityType = activityType.GetString();
-
-        if (properties.TryGetProperty("timezone", out var timezone) &&
-            timezone.ValueKind == JsonValueKind.String)
-            entry.Timezone = timezone.GetString();
-
-        if (properties.TryGetProperty("notes", out var notes) &&
-            notes.ValueKind == JsonValueKind.String)
-            entry.Notes = notes.GetString();
+        // Capture metadata (optional fields) - support both formats
+        entry.IsUserInvoked = GetBoolWithAlias(properties, "IsUserInvoked", "isUserInvoked");
+        entry.AppVersion = GetStringWithAlias(properties, "AppVersion", "appVersion");
+        entry.AppBuild = GetStringWithAlias(properties, "AppBuild", "appBuild");
+        entry.DeviceModel = GetStringWithAlias(properties, "DeviceModel", "deviceModel");
+        entry.OsVersion = GetStringWithAlias(properties, "OsVersion", "osVersion");
+        entry.BatteryLevel = GetIntWithAlias(properties, "BatteryLevel", "batteryLevel");
+        entry.IsCharging = GetBoolWithAlias(properties, "IsCharging", "isCharging");
 
         return entry;
     }
@@ -494,7 +519,16 @@ public class TimelineImportService
                (!string.IsNullOrEmpty(import.Place) && string.IsNullOrEmpty(existing.Place)) ||
                (!string.IsNullOrEmpty(import.Country) && string.IsNullOrEmpty(existing.Country)) ||
                (!string.IsNullOrEmpty(import.ActivityType) && string.IsNullOrEmpty(existing.ActivityType)) ||
-               (!string.IsNullOrEmpty(import.Notes) && string.IsNullOrEmpty(existing.Notes));
+               (!string.IsNullOrEmpty(import.Notes) && string.IsNullOrEmpty(existing.Notes)) ||
+               (!string.IsNullOrEmpty(import.Source) && string.IsNullOrEmpty(existing.Source)) ||
+               // Capture metadata fields
+               (import.IsUserInvoked.HasValue && !existing.IsUserInvoked.HasValue) ||
+               (!string.IsNullOrEmpty(import.AppVersion) && string.IsNullOrEmpty(existing.AppVersion)) ||
+               (!string.IsNullOrEmpty(import.AppBuild) && string.IsNullOrEmpty(existing.AppBuild)) ||
+               (!string.IsNullOrEmpty(import.DeviceModel) && string.IsNullOrEmpty(existing.DeviceModel)) ||
+               (!string.IsNullOrEmpty(import.OsVersion) && string.IsNullOrEmpty(existing.OsVersion)) ||
+               (import.BatteryLevel.HasValue && !existing.BatteryLevel.HasValue) ||
+               (import.IsCharging.HasValue && !existing.IsCharging.HasValue);
     }
 
     /// <summary>
@@ -524,12 +558,91 @@ public class TimelineImportService
         if (string.IsNullOrEmpty(existing.ActivityType) && !string.IsNullOrEmpty(import.ActivityType))
             existing.ActivityType = import.ActivityType;
 
-        if (string.IsNullOrEmpty(existing.Timezone) && !string.IsNullOrEmpty(import.Timezone))
-            existing.Timezone = import.Timezone;
+        if (string.IsNullOrEmpty(existing.TimeZoneId) && !string.IsNullOrEmpty(import.TimeZoneId))
+            existing.TimeZoneId = import.TimeZoneId;
 
         if (string.IsNullOrEmpty(existing.Notes) && !string.IsNullOrEmpty(import.Notes))
             existing.Notes = import.Notes;
+
+        if (string.IsNullOrEmpty(existing.Source) && !string.IsNullOrEmpty(import.Source))
+            existing.Source = import.Source;
+
+        // Capture metadata fields
+        if (!existing.IsUserInvoked.HasValue && import.IsUserInvoked.HasValue)
+            existing.IsUserInvoked = import.IsUserInvoked;
+
+        if (string.IsNullOrEmpty(existing.AppVersion) && !string.IsNullOrEmpty(import.AppVersion))
+            existing.AppVersion = import.AppVersion;
+
+        if (string.IsNullOrEmpty(existing.AppBuild) && !string.IsNullOrEmpty(import.AppBuild))
+            existing.AppBuild = import.AppBuild;
+
+        if (string.IsNullOrEmpty(existing.DeviceModel) && !string.IsNullOrEmpty(import.DeviceModel))
+            existing.DeviceModel = import.DeviceModel;
+
+        if (string.IsNullOrEmpty(existing.OsVersion) && !string.IsNullOrEmpty(import.OsVersion))
+            existing.OsVersion = import.OsVersion;
+
+        if (!existing.BatteryLevel.HasValue && import.BatteryLevel.HasValue)
+            existing.BatteryLevel = import.BatteryLevel;
+
+        if (!existing.IsCharging.HasValue && import.IsCharging.HasValue)
+            existing.IsCharging = import.IsCharging;
     }
+
+    #region GeoJSON Helper Methods
+
+    /// <summary>
+    /// Gets a string property with alias fallback for GeoJSON.
+    /// </summary>
+    private static string? GetStringWithAlias(JsonElement element, string primaryName, string aliasName)
+    {
+        if (element.TryGetProperty(primaryName, out var prop) && prop.ValueKind == JsonValueKind.String)
+            return prop.GetString();
+        if (element.TryGetProperty(aliasName, out prop) && prop.ValueKind == JsonValueKind.String)
+            return prop.GetString();
+        return null;
+    }
+
+    /// <summary>
+    /// Gets a double property with alias fallback for GeoJSON.
+    /// </summary>
+    private static double? GetDoubleWithAlias(JsonElement element, string primaryName, string aliasName)
+    {
+        if (element.TryGetProperty(primaryName, out var prop) && prop.ValueKind == JsonValueKind.Number)
+            return prop.GetDouble();
+        if (element.TryGetProperty(aliasName, out prop) && prop.ValueKind == JsonValueKind.Number)
+            return prop.GetDouble();
+        return null;
+    }
+
+    /// <summary>
+    /// Gets an int property with alias fallback for GeoJSON.
+    /// </summary>
+    private static int? GetIntWithAlias(JsonElement element, string primaryName, string aliasName)
+    {
+        if (element.TryGetProperty(primaryName, out var prop) && prop.ValueKind == JsonValueKind.Number)
+            return prop.GetInt32();
+        if (element.TryGetProperty(aliasName, out prop) && prop.ValueKind == JsonValueKind.Number)
+            return prop.GetInt32();
+        return null;
+    }
+
+    /// <summary>
+    /// Gets a bool property with alias fallback for GeoJSON.
+    /// </summary>
+    private static bool? GetBoolWithAlias(JsonElement element, string primaryName, string aliasName)
+    {
+        if (element.TryGetProperty(primaryName, out var prop) &&
+            (prop.ValueKind == JsonValueKind.True || prop.ValueKind == JsonValueKind.False))
+            return prop.GetBoolean();
+        if (element.TryGetProperty(aliasName, out prop) &&
+            (prop.ValueKind == JsonValueKind.True || prop.ValueKind == JsonValueKind.False))
+            return prop.GetBoolean();
+        return null;
+    }
+
+    #endregion
 
     /// <summary>
     /// Calculates distance between two points using Haversine formula.

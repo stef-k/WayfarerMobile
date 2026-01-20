@@ -13,7 +13,7 @@ namespace WayfarerMobile.Data.Entities;
 /// </para>
 /// <para>
 /// <strong>Timestamp handling:</strong> All timestamps are stored in UTC.
-/// Use <see cref="Timezone"/> for display conversion when available.
+/// Use <see cref="TimeZoneId"/> for display conversion when available.
 /// </para>
 /// </remarks>
 [Table("LocalTimelineEntries")]
@@ -131,11 +131,65 @@ public class LocalTimelineEntry
     /// Gets or sets the timezone identifier (e.g., "Europe/Athens").
     /// Used for converting UTC timestamp to local display time.
     /// </summary>
-    public string? Timezone { get; set; }
+    [Column("Timezone")] // Keep DB column name for backward compatibility
+    public string? TimeZoneId { get; set; }
 
     #endregion
 
-    #region Metadata
+    #region Capture Metadata
+
+    /// <summary>
+    /// Gets or sets the origin of this location record.
+    /// Values: "mobile-log", "mobile-checkin", "api-log", "api-checkin", "queue-import".
+    /// Preserved during import/export for roundtrip support.
+    /// </summary>
+    public string? Source { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether this location was user-invoked (manual check-in).
+    /// Null if unknown (e.g., imported from external source).
+    /// </summary>
+    public bool? IsUserInvoked { get; set; }
+
+    /// <summary>
+    /// Gets or sets the app version that captured this location.
+    /// Example: "1.2.3"
+    /// </summary>
+    public string? AppVersion { get; set; }
+
+    /// <summary>
+    /// Gets or sets the app build number that captured this location.
+    /// Example: "45"
+    /// </summary>
+    public string? AppBuild { get; set; }
+
+    /// <summary>
+    /// Gets or sets the device model that captured this location.
+    /// Example: "Pixel 7 Pro", "iPhone 14"
+    /// </summary>
+    public string? DeviceModel { get; set; }
+
+    /// <summary>
+    /// Gets or sets the OS version that captured this location.
+    /// Example: "Android 14", "iOS 17.2"
+    /// </summary>
+    public string? OsVersion { get; set; }
+
+    /// <summary>
+    /// Gets or sets the battery level (0-100) when location was captured.
+    /// Null if unavailable or unknown.
+    /// </summary>
+    public int? BatteryLevel { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether device was charging when location was captured.
+    /// Null if unavailable or unknown.
+    /// </summary>
+    public bool? IsCharging { get; set; }
+
+    #endregion
+
+    #region Record Metadata
 
     /// <summary>
     /// Gets or sets when this record was created locally (UTC).
