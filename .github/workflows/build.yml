@@ -59,4 +59,4 @@ jobs:
       with:
         name: android-build
         path: src/WayfarerMobile/bin/Release/net10.0-android/
-        retention-days: 7
+        retention-days: 1
