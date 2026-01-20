@@ -571,7 +571,9 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
             // FALLBACK: Direct database queue (no delegates wired)
             if (_database != null)
             {
-                await _database.QueueLocationAsync(location);
+                // Get queue limit from settings (Preferences accessed directly since platform service can't use DI)
+                var maxQueuedLocations = Preferences.Get(SettingsService.QueueLimitMaxLocationsKey, 25000);
+                await _database.QueueLocationAsync(location, maxQueuedLocations);
                 Console.WriteLine($"[iOS LocationService] Queued via database: {location}");
 
                 // Notify that location was queued - used by LocalTimelineStorageService

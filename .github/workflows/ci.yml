@@ -55,6 +55,7 @@ jobs:
     - name: Upload test results
       uses: actions/upload-artifact@v4
       if: always()
+      continue-on-error: true
       with:
         name: test-results
         path: TestResults/

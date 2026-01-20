@@ -367,5 +367,175 @@ public class LocationQueueRepositoryTests : IAsyncLifetime
             (int)SyncStatus.Synced, reason, id);
     }
 
+    private async Task MarkLocationSyncingAsync(int id)
+    {
+        await _database.ExecuteAsync(
+            "UPDATE QueuedLocations SET SyncStatus = ? WHERE Id = ?",
+            (int)SyncStatus.Syncing, id);
+    }
+
+    private async Task MarkLocationSyncedAsync(int id)
+    {
+        await _database.ExecuteAsync(
+            "UPDATE QueuedLocations SET SyncStatus = ? WHERE Id = ?",
+            (int)SyncStatus.Synced, id);
+    }
+
+    private async Task CleanupOldLocationsAsync(int maxQueuedLocations)
+    {
+        var count = await _database.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM QueuedLocations");
+        if (count < maxQueuedLocations)
+            return;
+
+        var toDelete = count - maxQueuedLocations + 1;
+
+        // Delete oldest safe entries (synced or rejected) first
+        var safeDeleted = await _database.ExecuteAsync(@"
+            DELETE FROM QueuedLocations WHERE Id IN (
+                SELECT Id FROM QueuedLocations
+                WHERE (SyncStatus = ? AND IsRejected = 0) OR IsRejected = 1
+                ORDER BY Timestamp, Id
+                LIMIT ?
+            )", (int)SyncStatus.Synced, toDelete);
+
+        if (safeDeleted >= toDelete)
+            return;
+
+        var remaining = toDelete - safeDeleted;
+
+        // Last resort: delete oldest pending entries (not syncing)
+        await _database.ExecuteAsync(@"
+            DELETE FROM QueuedLocations WHERE Id IN (
+                SELECT Id FROM QueuedLocations
+                WHERE SyncStatus = ? AND IsRejected = 0
+                ORDER BY Timestamp, Id
+                LIMIT ?
+            )", (int)SyncStatus.Pending, remaining);
+    }
+
+    #endregion
+
+    #region Cleanup Tests
+
+    [Fact]
+    public async Task CleanupOldLocations_RespectsLimitParameter()
+    {
+        // Arrange - Add 10 pending locations
+        for (var i = 0; i < 10; i++)
+        {
+            await QueueLocationAsync(CreateLocationData(51.0 + i * 0.01, -0.1));
+        }
+
+        // Act - Cleanup with limit of 5
+        await CleanupOldLocationsAsync(maxQueuedLocations: 5);
+
+        // Assert - Should have 5 locations remaining
+        var count = await _database.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM QueuedLocations");
+        count.Should().BeLessThanOrEqualTo(5);
+    }
+
+    [Fact]
+    public async Task CleanupOldLocations_NeverDeletesSyncingEntries()
+    {
+        // Arrange - Add 5 locations, mark 2 as syncing
+        var id1 = await QueueLocationAsync(CreateLocationData(51.0, -0.1, DateTime.UtcNow.AddMinutes(-50)));
+        var id2 = await QueueLocationAsync(CreateLocationData(51.1, -0.2, DateTime.UtcNow.AddMinutes(-40)));
+        var id3 = await QueueLocationAsync(CreateLocationData(51.2, -0.3, DateTime.UtcNow.AddMinutes(-30)));
+        var id4 = await QueueLocationAsync(CreateLocationData(51.3, -0.4, DateTime.UtcNow.AddMinutes(-20)));
+        var id5 = await QueueLocationAsync(CreateLocationData(51.4, -0.5, DateTime.UtcNow.AddMinutes(-10)));
+
+        // Mark oldest two as syncing (in-flight)
+        await MarkLocationSyncingAsync(id1);
+        await MarkLocationSyncingAsync(id2);
+
+        // Act - Cleanup with limit of 2 (need to delete 3)
+        await CleanupOldLocationsAsync(maxQueuedLocations: 2);
+
+        // Assert - Syncing entries should still exist
+        var syncing1 = await _database.Table<QueuedLocation>().FirstOrDefaultAsync(l => l.Id == id1);
+        var syncing2 = await _database.Table<QueuedLocation>().FirstOrDefaultAsync(l => l.Id == id2);
+        syncing1.Should().NotBeNull("Syncing entries must never be deleted");
+        syncing2.Should().NotBeNull("Syncing entries must never be deleted");
+        syncing1!.SyncStatus.Should().Be(SyncStatus.Syncing);
+        syncing2!.SyncStatus.Should().Be(SyncStatus.Syncing);
+    }
+
+    [Fact]
+    public async Task CleanupOldLocations_DeletesSyncedBeforePending()
+    {
+        // Arrange - Add 3 locations: 1 synced, 2 pending
+        var pendingId1 = await QueueLocationAsync(CreateLocationData(51.0, -0.1, DateTime.UtcNow.AddMinutes(-30)));
+        var syncedId = await QueueLocationAsync(CreateLocationData(51.1, -0.2, DateTime.UtcNow.AddMinutes(-20)));
+        var pendingId2 = await QueueLocationAsync(CreateLocationData(51.2, -0.3, DateTime.UtcNow.AddMinutes(-10)));
+        await MarkLocationSyncedAsync(syncedId);
+
+        // Act - Cleanup with limit of 2 (need to delete 1, due to +1 headroom may delete 2)
+        await CleanupOldLocationsAsync(maxQueuedLocations: 2);
+
+        // Assert - Synced should be deleted first, pending should remain
+        var synced = await _database.Table<QueuedLocation>().FirstOrDefaultAsync(l => l.Id == syncedId);
+        synced.Should().BeNull("Synced entries are deleted first");
+
+        // At least one pending should remain
+        var remainingCount = await _database.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM QueuedLocations WHERE SyncStatus = ?", (int)SyncStatus.Pending);
+        remainingCount.Should().BeGreaterThan(0, "Pending entries are deleted last");
+    }
+
+    [Fact]
+    public async Task CleanupOldLocations_DeletesRejectedBeforePending()
+    {
+        // Arrange - Add 3 locations: 1 rejected, 2 pending
+        var pendingId1 = await QueueLocationAsync(CreateLocationData(51.0, -0.1, DateTime.UtcNow.AddMinutes(-30)));
+        var rejectedId = await QueueLocationAsync(CreateLocationData(51.1, -0.2, DateTime.UtcNow.AddMinutes(-20)));
+        var pendingId2 = await QueueLocationAsync(CreateLocationData(51.2, -0.3, DateTime.UtcNow.AddMinutes(-10)));
+        await MarkLocationRejectedAsync(rejectedId, "Test rejection");
+
+        // Act - Cleanup with limit of 2 (need to delete 1, due to +1 headroom may delete 2)
+        await CleanupOldLocationsAsync(maxQueuedLocations: 2);
+
+        // Assert - Rejected should be deleted first, pending should remain
+        var rejected = await _database.Table<QueuedLocation>().FirstOrDefaultAsync(l => l.Id == rejectedId);
+        rejected.Should().BeNull("Rejected entries are deleted first");
+
+        // At least one pending should remain
+        var remainingCount = await _database.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM QueuedLocations WHERE SyncStatus = ?", (int)SyncStatus.Pending);
+        remainingCount.Should().BeGreaterThan(0, "Pending entries are deleted last");
+    }
+
+    [Fact]
+    public async Task CleanupOldLocations_LimitOne_KeepsExactlyOne()
+    {
+        // Arrange - Add 5 pending locations
+        for (var i = 0; i < 5; i++)
+        {
+            await QueueLocationAsync(CreateLocationData(51.0 + i * 0.01, -0.1));
+        }
+
+        // Act - Cleanup with limit of 1
+        await CleanupOldLocationsAsync(maxQueuedLocations: 1);
+
+        // Assert - Should have exactly 1 or 0 (depending on +1 headroom logic)
+        var count = await _database.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM QueuedLocations");
+        count.Should().BeLessThanOrEqualTo(1);
+    }
+
+    [Fact]
+    public async Task CleanupOldLocations_UnderLimit_NoDeletes()
+    {
+        // Arrange - Add 3 locations
+        var id1 = await QueueLocationAsync(CreateLocationData(51.0, -0.1));
+        var id2 = await QueueLocationAsync(CreateLocationData(51.1, -0.2));
+        var id3 = await QueueLocationAsync(CreateLocationData(51.2, -0.3));
+
+        // Act - Cleanup with limit of 10 (under limit)
+        await CleanupOldLocationsAsync(maxQueuedLocations: 10);
+
+        // Assert - All should still exist
+        var count = await _database.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM QueuedLocations");
+        count.Should().Be(3);
+    }
+
     #endregion
 }

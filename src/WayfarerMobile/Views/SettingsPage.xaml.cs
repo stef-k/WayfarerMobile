@@ -1,3 +1,4 @@
+using Syncfusion.Maui.Toolkit.Expander;
 using WayfarerMobile.ViewModels;
 
 namespace WayfarerMobile.Views;
@@ -36,5 +37,24 @@ public partial class SettingsPage : ContentPage
     {
         base.OnDisappearing();
         await _viewModel.OnDisappearingAsync();
+    }
+
+    /// <summary>
+    /// Called when the Offline Queue expander is expanding.
+    /// Refreshes status data when the section is opened.
+    /// </summary>
+    private async void OnOfflineQueueExpanding(object sender, ExpandingAndCollapsingEventArgs e)
+    {
+        // The event fires when expanding - refresh data
+        await _viewModel.OfflineQueue.RefreshCommand.ExecuteAsync(null);
+    }
+
+    /// <summary>
+    /// Called when the queue limit entry loses focus.
+    /// Applies and validates the new queue limit.
+    /// </summary>
+    private async void OnQueueLimitEntryUnfocused(object sender, FocusEventArgs e)
+    {
+        await _viewModel.OfflineQueue.ApplyQueueLimitCommand.ExecuteAsync(null);
     }
 }

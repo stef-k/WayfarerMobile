@@ -29,6 +29,7 @@ public class SettingsService : ISettingsService
     private const string KeyLocationTimeThreshold = "location_time_threshold";
     private const string KeyLocationDistanceThreshold = "location_distance_threshold";
     private const string KeyLocationAccuracyThreshold = "location_accuracy_threshold";
+    private const string KeyQueueLimitMaxLocations = "queue_limit_max_locations";
     private const string KeyLastSyncTime = "last_sync_time";
     private const string KeyThemePreference = "theme_preference";
     private const string KeyLanguagePreference = "language_preference";
@@ -277,6 +278,25 @@ public class SettingsService : ISettingsService
     {
         get => Preferences.Get(KeyLocationAccuracyThreshold, 50);
         set => Preferences.Set(KeyLocationAccuracyThreshold, value);
+    }
+
+    /// <summary>
+    /// Public key for QueueLimitMaxLocations setting, used by platform services.
+    /// </summary>
+    public const string QueueLimitMaxLocationsKey = "queue_limit_max_locations";
+
+    private const int QueueLimitDefault = 25000;
+    private const int QueueLimitMin = 1;
+    private const int QueueLimitMax = 100000;
+
+    /// <summary>
+    /// Gets or sets the maximum number of locations to keep in the offline queue.
+    /// Range: 1-100,000. Default: 25,000.
+    /// </summary>
+    public int QueueLimitMaxLocations
+    {
+        get => Preferences.Get(KeyQueueLimitMaxLocations, QueueLimitDefault);
+        set => Preferences.Set(KeyQueueLimitMaxLocations, Math.Clamp(value, QueueLimitMin, QueueLimitMax));
     }
 
     /// <summary>

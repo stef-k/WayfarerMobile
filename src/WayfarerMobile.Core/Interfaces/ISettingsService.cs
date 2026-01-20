@@ -50,6 +50,12 @@ public interface ISettingsService
     int LocationAccuracyThresholdMeters { get; set; }
 
     /// <summary>
+    /// Gets or sets the maximum number of locations to keep in the offline queue.
+    /// Range: 1-100,000. Default: 25,000.
+    /// </summary>
+    int QueueLimitMaxLocations { get; set; }
+
+    /// <summary>
     /// Gets whether the app is properly configured (has server URL and token).
     /// </summary>
     bool IsConfigured { get; }

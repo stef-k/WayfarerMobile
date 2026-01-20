@@ -63,6 +63,11 @@ public partial class SettingsViewModel : BaseViewModel
     public TimelineDataViewModel TimelineData { get; }
 
     /// <summary>
+    /// Gets the offline queue settings view model.
+    /// </summary>
+    public OfflineQueueSettingsViewModel OfflineQueue { get; }
+
+    /// <summary>
     /// Gets the PIN security view model for the security section.
     /// </summary>
     public PinSecurityViewModel PinSecurity { get; }
@@ -134,7 +139,8 @@ public partial class SettingsViewModel : BaseViewModel
         CacheSettingsViewModel cacheSettings,
         VisitNotificationSettingsViewModel visitNotificationSettings,
         AppearanceSettingsViewModel appearanceSettings,
-        TimelineDataViewModel timelineData)
+        TimelineDataViewModel timelineData,
+        OfflineQueueSettingsViewModel offlineQueue)
     {
         _settingsService = settingsService;
         _appLockService = appLockService;
@@ -147,6 +153,7 @@ public partial class SettingsViewModel : BaseViewModel
         VisitNotificationSettings = visitNotificationSettings;
         AppearanceSettings = appearanceSettings;
         TimelineData = timelineData;
+        OfflineQueue = offlineQueue;
         PinSecurity = new PinSecurityViewModel(appLockService);
 
         // Wire up property change forwarding for XAML bindings
@@ -155,6 +162,7 @@ public partial class SettingsViewModel : BaseViewModel
         VisitNotificationSettings.PropertyChanged += OnVisitNotificationSettingsPropertyChanged;
         AppearanceSettings.PropertyChanged += OnAppearanceSettingsPropertyChanged;
         TimelineData.PropertyChanged += OnTimelineDataPropertyChanged;
+        OfflineQueue.PropertyChanged += OnOfflineQueuePropertyChanged;
 
         Title = "Settings";
         LoadSettings();
@@ -326,6 +334,7 @@ public partial class SettingsViewModel : BaseViewModel
         await PinSecurity.LoadSettingsAsync();
         await TimelineData.RefreshQueueCountAsync();
         await TimelineData.RefreshTimelineCountAsync();
+        await OfflineQueue.RefreshCommand.ExecuteAsync(null);
         await base.OnAppearingAsync();
     }
 
@@ -342,6 +351,7 @@ public partial class SettingsViewModel : BaseViewModel
         VisitNotificationSettings.PropertyChanged -= OnVisitNotificationSettingsPropertyChanged;
         AppearanceSettings.PropertyChanged -= OnAppearanceSettingsPropertyChanged;
         TimelineData.PropertyChanged -= OnTimelineDataPropertyChanged;
+        OfflineQueue.PropertyChanged -= OnOfflineQueuePropertyChanged;
 
         base.Cleanup();
     }
@@ -364,6 +374,9 @@ public partial class SettingsViewModel : BaseViewModel
 
     private void OnTimelineDataPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         => OnPropertyChanged($"TimelineData.{e.PropertyName}");
+
+    private void OnOfflineQueuePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        => OnPropertyChanged($"OfflineQueue.{e.PropertyName}");
 
     #endregion
 }
