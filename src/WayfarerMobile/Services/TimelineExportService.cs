@@ -41,8 +41,8 @@ public class TimelineExportService
 
         var sb = new StringBuilder();
 
-        // Header row
-        sb.AppendLine("id,server_id,timestamp,latitude,longitude,accuracy,altitude,speed,bearing,provider,address,full_address,place,region,country,postcode,activity_type,timezone,notes,is_user_invoked,app_version,app_build,device_model,os_version,battery_level,is_charging");
+        // Header row - PascalCase to match Wayfarer backend import parsers
+        sb.AppendLine("Id,ServerId,TimestampUtc,LocalTimestamp,Latitude,Longitude,Accuracy,Altitude,Speed,Bearing,Provider,Address,FullAddress,Place,Region,Country,PostCode,Activity,TimeZoneId,Notes,IsUserInvoked,AppVersion,AppBuild,DeviceModel,OsVersion,BatteryLevel,IsCharging");
 
         // Data rows
         foreach (var entry in entries)
@@ -70,10 +70,10 @@ public class TimelineExportService
             Features = entries.Select(ToGeoJsonFeature).ToList()
         };
 
+        // Use PascalCase to match Wayfarer backend import parsers (no naming policy)
         return JsonSerializer.Serialize(featureCollection, new JsonSerializerOptions
         {
             WriteIndented = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
         });
     }
@@ -134,14 +134,19 @@ public class TimelineExportService
 
     /// <summary>
     /// Converts an entry to a CSV row.
+    /// Column order matches header: Id,ServerId,TimestampUtc,LocalTimestamp,Latitude,Longitude,...
     /// </summary>
     private static string ToCsvRow(LocalTimelineEntry entry)
     {
+        // LocalTimestamp: if we have timezone info, compute local time; otherwise use UTC
+        var localTimestamp = ComputeLocalTimestamp(entry.Timestamp, entry.Timezone);
+
         var values = new[]
         {
             entry.Id.ToString(CultureInfo.InvariantCulture),
             entry.ServerId?.ToString(CultureInfo.InvariantCulture) ?? "",
             entry.Timestamp.ToString("o", CultureInfo.InvariantCulture),
+            localTimestamp.ToString("o", CultureInfo.InvariantCulture),
             entry.Latitude.ToString(CultureInfo.InvariantCulture),
             entry.Longitude.ToString(CultureInfo.InvariantCulture),
             entry.Accuracy?.ToString(CultureInfo.InvariantCulture) ?? "",
@@ -172,6 +177,29 @@ public class TimelineExportService
     }
 
     /// <summary>
+    /// Computes local timestamp from UTC timestamp and timezone ID.
+    /// </summary>
+    private static DateTime ComputeLocalTimestamp(DateTime utcTimestamp, string? timezoneId)
+    {
+        if (string.IsNullOrWhiteSpace(timezoneId))
+            return utcTimestamp;
+
+        try
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(timezoneId);
+            return TimeZoneInfo.ConvertTimeFromUtc(utcTimestamp, tz);
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return utcTimestamp;
+        }
+        catch (InvalidTimeZoneException)
+        {
+            return utcTimestamp;
+        }
+    }
+
+    /// <summary>
     /// Escapes a CSV field value.
     /// </summary>
     private static string EscapeCsv(string? value)
@@ -190,9 +218,13 @@ public class TimelineExportService
 
     /// <summary>
     /// Converts an entry to a GeoJSON feature.
+    /// Property names match Wayfarer backend import parser expectations.
     /// </summary>
     private static GeoJsonFeature ToGeoJsonFeature(LocalTimelineEntry entry)
     {
+        // LocalTimestamp: if we have timezone info, compute local time; otherwise use UTC
+        var localTimestamp = ComputeLocalTimestamp(entry.Timestamp, entry.Timezone);
+
         return new GeoJsonFeature
         {
             Type = "Feature",
@@ -205,7 +237,8 @@ public class TimelineExportService
             {
                 Id = entry.Id,
                 ServerId = entry.ServerId,
-                Timestamp = entry.Timestamp.ToString("o", CultureInfo.InvariantCulture),
+                TimestampUtc = entry.Timestamp.ToString("o", CultureInfo.InvariantCulture),
+                LocalTimestamp = localTimestamp.ToString("o", CultureInfo.InvariantCulture),
                 Accuracy = entry.Accuracy,
                 Altitude = entry.Altitude,
                 Speed = entry.Speed,
@@ -217,8 +250,8 @@ public class TimelineExportService
                 Region = entry.Region,
                 Country = entry.Country,
                 PostCode = entry.PostCode,
-                ActivityType = entry.ActivityType,
-                Timezone = entry.Timezone,
+                Activity = entry.ActivityType,
+                TimeZoneId = entry.Timezone,
                 Notes = entry.Notes,
                 // Capture metadata (optional fields)
                 IsUserInvoked = entry.IsUserInvoked,
@@ -253,11 +286,15 @@ public class TimelineExportService
         public double[] Coordinates { get; set; } = Array.Empty<double>();
     }
 
+    /// <summary>
+    /// GeoJSON properties matching Wayfarer backend import parser expectations.
+    /// </summary>
     private class GeoJsonProperties
     {
         public int Id { get; set; }
         public int? ServerId { get; set; }
-        public string? Timestamp { get; set; }
+        public string? TimestampUtc { get; set; }
+        public string? LocalTimestamp { get; set; }
         public double? Accuracy { get; set; }
         public double? Altitude { get; set; }
         public double? Speed { get; set; }
@@ -269,8 +306,8 @@ public class TimelineExportService
         public string? Region { get; set; }
         public string? Country { get; set; }
         public string? PostCode { get; set; }
-        public string? ActivityType { get; set; }
-        public string? Timezone { get; set; }
+        public string? Activity { get; set; }
+        public string? TimeZoneId { get; set; }
         public string? Notes { get; set; }
         // Capture metadata (optional)
         public bool? IsUserInvoked { get; set; }
