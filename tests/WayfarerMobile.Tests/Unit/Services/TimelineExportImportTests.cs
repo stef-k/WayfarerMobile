@@ -37,7 +37,15 @@ public class TimelineExportImportTests
         string? PostCode,
         string? ActivityType,
         string? Timezone,
-        string? Notes);
+        string? Notes,
+        // Capture metadata fields
+        bool? IsUserInvoked = null,
+        string? AppVersion = null,
+        string? AppBuild = null,
+        string? DeviceModel = null,
+        string? OsVersion = null,
+        int? BatteryLevel = null,
+        bool? IsCharging = null);
 
     private static TestTimelineEntry CreateSampleEntry(int id = 1) => new(
         Id: id,
@@ -58,7 +66,15 @@ public class TimelineExportImportTests
         PostCode: "SW1A 2AA",
         ActivityType: "Walking",
         Timezone: "Europe/London",
-        Notes: "Test note");
+        Notes: "Test note",
+        // Capture metadata
+        IsUserInvoked: true,
+        AppVersion: "1.2.3",
+        AppBuild: "45",
+        DeviceModel: "Pixel 7 Pro",
+        OsVersion: "Android 14",
+        BatteryLevel: 85,
+        IsCharging: false);
 
     #endregion
 
@@ -181,6 +197,25 @@ public class TimelineExportImportTests
         csvRow.Should().Contain("51.1234567");
         csvRow.Should().Contain("10.5");
         csvRow.Should().NotContain("51,1234567", "should not use comma as decimal separator");
+    }
+
+    [Fact]
+    public void ToCsvRow_WithMetadata_IncludesAllMetadataFields()
+    {
+        // Arrange
+        var entry = CreateSampleEntry();
+
+        // Act
+        var csvRow = ToCsvRow(entry);
+
+        // Assert - verify metadata fields are present
+        csvRow.Should().Contain("True"); // IsUserInvoked
+        csvRow.Should().Contain("1.2.3"); // AppVersion
+        csvRow.Should().Contain("45"); // AppBuild
+        csvRow.Should().Contain("Pixel 7 Pro"); // DeviceModel
+        csvRow.Should().Contain("Android 14"); // OsVersion
+        csvRow.Should().Contain("85"); // BatteryLevel
+        csvRow.Should().Contain("False"); // IsCharging
     }
 
     #endregion
@@ -425,6 +460,27 @@ public class TimelineExportImportTests
         // Assert
         coords[0].GetDouble().Should().Be(-0.1278, "first coordinate should be longitude");
         coords[1].GetDouble().Should().Be(51.5074, "second coordinate should be latitude");
+    }
+
+    [Fact]
+    public void ToGeoJsonFeature_WithMetadata_IncludesAllMetadataFields()
+    {
+        // Arrange
+        var entry = CreateSampleEntry();
+
+        // Act
+        var json = ToGeoJsonFeature(entry);
+        var doc = JsonDocument.Parse(json);
+        var props = doc.RootElement.GetProperty("properties");
+
+        // Assert - verify metadata fields are present
+        props.GetProperty("isUserInvoked").GetBoolean().Should().BeTrue();
+        props.GetProperty("appVersion").GetString().Should().Be("1.2.3");
+        props.GetProperty("appBuild").GetString().Should().Be("45");
+        props.GetProperty("deviceModel").GetString().Should().Be("Pixel 7 Pro");
+        props.GetProperty("osVersion").GetString().Should().Be("Android 14");
+        props.GetProperty("batteryLevel").GetInt32().Should().Be(85);
+        props.GetProperty("isCharging").GetBoolean().Should().BeFalse();
     }
 
     #endregion
@@ -731,7 +787,15 @@ public class TimelineExportImportTests
             EscapeCsv(entry.PostCode),
             EscapeCsv(entry.ActivityType),
             EscapeCsv(entry.Timezone),
-            EscapeCsv(entry.Notes)
+            EscapeCsv(entry.Notes),
+            // Capture metadata fields
+            entry.IsUserInvoked?.ToString(CultureInfo.InvariantCulture) ?? "",
+            EscapeCsv(entry.AppVersion),
+            EscapeCsv(entry.AppBuild),
+            EscapeCsv(entry.DeviceModel),
+            EscapeCsv(entry.OsVersion),
+            entry.BatteryLevel?.ToString(CultureInfo.InvariantCulture) ?? "",
+            entry.IsCharging?.ToString(CultureInfo.InvariantCulture) ?? ""
         };
 
         return string.Join(",", values);
@@ -837,7 +901,15 @@ public class TimelineExportImportTests
             ["postCode"] = entry.PostCode,
             ["activityType"] = entry.ActivityType,
             ["timezone"] = entry.Timezone,
-            ["notes"] = entry.Notes
+            ["notes"] = entry.Notes,
+            // Capture metadata fields
+            ["isUserInvoked"] = entry.IsUserInvoked,
+            ["appVersion"] = entry.AppVersion,
+            ["appBuild"] = entry.AppBuild,
+            ["deviceModel"] = entry.DeviceModel,
+            ["osVersion"] = entry.OsVersion,
+            ["batteryLevel"] = entry.BatteryLevel,
+            ["isCharging"] = entry.IsCharging
         };
 
         // Remove null values
@@ -862,7 +934,15 @@ public class TimelineExportImportTests
         string? Country = null,
         string? ActivityType = null,
         string? Timezone = null,
-        string? Notes = null);
+        string? Notes = null,
+        // Capture metadata fields
+        bool? IsUserInvoked = null,
+        string? AppVersion = null,
+        string? AppBuild = null,
+        string? DeviceModel = null,
+        string? OsVersion = null,
+        int? BatteryLevel = null,
+        bool? IsCharging = null);
 
     private static ParsedEntry? ParseGeoJsonFeature(string json)
     {
@@ -914,7 +994,15 @@ public class TimelineExportImportTests
                 Country: GetNullableString(properties, "country"),
                 ActivityType: GetNullableString(properties, "activityType"),
                 Timezone: GetNullableString(properties, "timezone"),
-                Notes: GetNullableString(properties, "notes"));
+                Notes: GetNullableString(properties, "notes"),
+                // Capture metadata fields
+                IsUserInvoked: GetNullableBool(properties, "isUserInvoked"),
+                AppVersion: GetNullableString(properties, "appVersion"),
+                AppBuild: GetNullableString(properties, "appBuild"),
+                DeviceModel: GetNullableString(properties, "deviceModel"),
+                OsVersion: GetNullableString(properties, "osVersion"),
+                BatteryLevel: GetNullableInt(properties, "batteryLevel"),
+                IsCharging: GetNullableBool(properties, "isCharging"));
         }
         catch
         {
@@ -933,6 +1021,21 @@ public class TimelineExportImportTests
     {
         if (element.TryGetProperty(propertyName, out var prop) && prop.ValueKind == JsonValueKind.String)
             return prop.GetString();
+        return null;
+    }
+
+    private static bool? GetNullableBool(JsonElement element, string propertyName)
+    {
+        if (element.TryGetProperty(propertyName, out var prop) &&
+            (prop.ValueKind == JsonValueKind.True || prop.ValueKind == JsonValueKind.False))
+            return prop.GetBoolean();
+        return null;
+    }
+
+    private static int? GetNullableInt(JsonElement element, string propertyName)
+    {
+        if (element.TryGetProperty(propertyName, out var prop) && prop.ValueKind == JsonValueKind.Number)
+            return prop.GetInt32();
         return null;
     }
 
