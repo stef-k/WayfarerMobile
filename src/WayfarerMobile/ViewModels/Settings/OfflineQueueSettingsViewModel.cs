@@ -109,6 +109,32 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
 
         var clamped = Math.Clamp(newLimit, 1, 100000);
 
+        // Check if lowering limit would delete pending entries
+        if (TotalCount > clamped)
+        {
+            var toDelete = TotalCount - clamped;
+            var safeToDelete = SyncedCount + RejectedCount;
+            var pendingAtRisk = Math.Max(0, toDelete - safeToDelete);
+
+            if (pendingAtRisk > 0)
+            {
+                var confirm = await _dialogService.ShowConfirmAsync(
+                    "Pending Data Will Be Lost",
+                    $"Lowering the limit to {clamped:N0} will delete {pendingAtRisk:N0} pending " +
+                    $"location{(pendingAtRisk == 1 ? "" : "s")} that haven't synced yet. " +
+                    "This cannot be undone.\n\nContinue?",
+                    "Delete",
+                    "Cancel");
+
+                if (!confirm)
+                {
+                    // Revert to current limit
+                    QueueLimitText = _settingsService.QueueLimitMaxLocations.ToString();
+                    return;
+                }
+            }
+        }
+
         try
         {
             _settingsService.QueueLimitMaxLocations = clamped;
@@ -117,7 +143,7 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
 
             UpdateStorageWarning(clamped);
 
-            // Trim safe entries if needed (non-destructive to pending)
+            // Trim entries if needed (priority: synced > rejected > pending)
             if (TotalCount > clamped)
             {
                 await _repository.CleanupOldLocationsAsync(clamped);
