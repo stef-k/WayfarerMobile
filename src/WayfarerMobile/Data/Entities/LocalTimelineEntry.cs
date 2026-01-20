@@ -138,6 +138,13 @@ public class LocalTimelineEntry
     #region Capture Metadata
 
     /// <summary>
+    /// Gets or sets the origin of this location record.
+    /// Values: "mobile-log", "mobile-checkin", "api-log", "api-checkin", "queue-import".
+    /// Preserved during import/export for roundtrip support.
+    /// </summary>
+    public string? Source { get; set; }
+
+    /// <summary>
     /// Gets or sets whether this location was user-invoked (manual check-in).
     /// Null if unknown (e.g., imported from external source).
     /// </summary>

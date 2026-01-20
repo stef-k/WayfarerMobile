@@ -137,6 +137,13 @@ public class QueuedLocation
     #region Metadata Fields (for diagnostics and export)
 
     /// <summary>
+    /// Gets or sets the origin of this location record.
+    /// Set when queued: "mobile-log" (background) or "mobile-checkin" (manual).
+    /// Preserved during export/import for roundtrip support.
+    /// </summary>
+    public string? Source { get; set; }
+
+    /// <summary>
     /// Gets or sets the device's timezone ID when the location was captured.
     /// Used for accurate LocalTimestamp calculation during export.
     /// Example: "Europe/Athens", "America/New_York"

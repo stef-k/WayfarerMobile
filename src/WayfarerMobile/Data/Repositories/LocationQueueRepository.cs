@@ -63,6 +63,7 @@ public class LocationQueueRepository : RepositoryBase, ILocationQueueRepository
             ActivityTypeId = activityTypeId,
             CheckInNotes = notes,
             // Metadata fields for diagnostics and export
+            Source = isUserInvoked ? "mobile-checkin" : "mobile-log",
             TimeZoneId = GetTimeZoneId(),
             AppVersion = GetAppVersion(),
             AppBuild = GetAppBuild(),

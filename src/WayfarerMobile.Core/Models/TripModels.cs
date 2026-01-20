@@ -1469,6 +1469,12 @@ public class LocationLogRequest
     #region Metadata Fields
 
     /// <summary>
+    /// Gets or sets the origin of this location record.
+    /// Values: "mobile-log", "mobile-checkin".
+    /// </summary>
+    public string? Source { get; set; }
+
+    /// <summary>
     /// Gets or sets whether this location was user-invoked (manual check-in).
     /// </summary>
     public bool IsUserInvoked { get; set; }

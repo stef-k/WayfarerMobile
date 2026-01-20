@@ -25,7 +25,7 @@ public class DatabaseService : IAsyncDisposable
     #region Constants
 
     private const string DatabaseFilename = "wayfarer.db3";
-    private const int CurrentSchemaVersion = 5; // Increment when schema changes
+    private const int CurrentSchemaVersion = 6; // Increment when schema changes
     private const string SchemaVersionKey = "db_schema_version";
 
     private static readonly SQLiteOpenFlags DbFlags =
@@ -143,6 +143,12 @@ public class DatabaseService : IAsyncDisposable
             await MigrateToVersion5Async();
         }
 
+        // Version 6: Add Source field for roundtrip support
+        if (currentVersion < 6)
+        {
+            await MigrateToVersion6Async();
+        }
+
         // Update schema version
         await SetSchemaVersionAsync(CurrentSchemaVersion);
         Console.WriteLine($"[DatabaseService] Migration complete. Schema version: {CurrentSchemaVersion}");
@@ -206,6 +212,21 @@ public class DatabaseService : IAsyncDisposable
         await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN IsCharging INTEGER");
 
         Console.WriteLine("[DatabaseService] Version 5 migration complete");
+    }
+
+    /// <summary>
+    /// Migration to version 6: Add Source field for roundtrip support.
+    /// </summary>
+    private async Task MigrateToVersion6Async()
+    {
+        Console.WriteLine("[DatabaseService] Running migration to version 6: Adding Source field");
+
+        // Add Source column to both tables for tracking location origin
+        // Values: "mobile-log", "mobile-checkin", "api-log", "api-checkin", "queue-import"
+        await _database!.ExecuteAsync("ALTER TABLE QueuedLocations ADD COLUMN Source TEXT");
+        await _database.ExecuteAsync("ALTER TABLE LocalTimelineEntries ADD COLUMN Source TEXT");
+
+        Console.WriteLine("[DatabaseService] Version 6 migration complete");
     }
 
     /// <summary>
@@ -296,6 +317,7 @@ public class DatabaseService : IAsyncDisposable
             ActivityTypeId = activityTypeId,
             CheckInNotes = notes,
             // Metadata fields for diagnostics and export
+            Source = isUserInvoked ? "mobile-checkin" : "mobile-log",
             TimeZoneId = GetTimeZoneId(),
             AppVersion = GetAppVersion(),
             AppBuild = GetAppBuild(),

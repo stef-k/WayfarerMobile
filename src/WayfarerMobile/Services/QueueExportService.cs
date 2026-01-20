@@ -36,8 +36,8 @@ public class QueueExportService : IQueueExportService
         var activityLookup = await BuildActivityLookupAsync();
         var sb = new StringBuilder();
 
-        // Header: First 19 columns are backend-compatible, remaining 8 are debug fields
-        sb.AppendLine("Latitude,Longitude,TimestampUtc,LocalTimestamp,TimeZoneId,Accuracy,Altitude,Speed,Activity,Notes,IsUserInvoked,Provider,Bearing,AppVersion,AppBuild,DeviceModel,OsVersion,BatteryLevel,IsCharging,Id,Status,SyncAttempts,LastSyncAttempt,IsRejected,RejectionReason,LastError,ActivityTypeId");
+        // Header: First 20 columns are backend-compatible, remaining 8 are debug fields
+        sb.AppendLine("Latitude,Longitude,TimestampUtc,LocalTimestamp,TimeZoneId,Accuracy,Altitude,Speed,Activity,Source,Notes,IsUserInvoked,Provider,Bearing,AppVersion,AppBuild,DeviceModel,OsVersion,BatteryLevel,IsCharging,Id,Status,SyncAttempts,LastSyncAttempt,IsRejected,RejectionReason,LastError,ActivityTypeId");
 
         foreach (var loc in locations)
         {
@@ -46,8 +46,8 @@ public class QueueExportService : IQueueExportService
             var status = GetDisplayStatus(loc);
 
             sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
-                "{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12},{13},{14},{15},{16},{17},{18},{19},{20},{21},{22},{23},{24},{25},{26}",
-                // Backend-compatible fields (19 columns)
+                "{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12},{13},{14},{15},{16},{17},{18},{19},{20},{21},{22},{23},{24},{25},{26},{27}",
+                // Backend-compatible fields (20 columns)
                 loc.Latitude,
                 loc.Longitude,
                 loc.Timestamp.ToString("O", CultureInfo.InvariantCulture),
@@ -57,6 +57,7 @@ public class QueueExportService : IQueueExportService
                 loc.Altitude,
                 loc.Speed,
                 EscapeCsv(activity),
+                EscapeCsv(loc.Source),
                 EscapeCsv(loc.CheckInNotes),
                 loc.IsUserInvoked,
                 EscapeCsv(loc.Provider),
@@ -112,6 +113,7 @@ public class QueueExportService : IQueueExportService
                     Altitude = loc.Altitude,
                     Speed = loc.Speed,
                     Activity = activity,
+                    Source = loc.Source,
                     Notes = loc.CheckInNotes,
                     IsUserInvoked = loc.IsUserInvoked,
                     Provider = loc.Provider,

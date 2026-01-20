@@ -1156,6 +1156,7 @@ public class ApiClient : IApiClient, IVisitApiClient
                 ActivityTypeId = location.ActivityTypeId,
                 Notes = location.Notes,
                 // Metadata fields
+                Source = location.Source,
                 IsUserInvoked = location.IsUserInvoked,
                 Provider = location.Provider,
                 Bearing = location.Bearing,
@@ -1309,6 +1310,7 @@ public class ApiClient : IApiClient, IVisitApiClient
         public int? ActivityTypeId { get; set; }
 
         // Metadata fields for diagnostics
+        public string? Source { get; set; }
         public bool IsUserInvoked { get; set; }
         public string? Provider { get; set; }
         public double? Bearing { get; set; }

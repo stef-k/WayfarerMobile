@@ -367,6 +367,10 @@ public class TimelineImportService
         if (TryGetValueWithAlias(values, columnMap, "notes", "Notes", out var notes))
             entry.Notes = notes;
 
+        // Source: snake_case "source" or PascalCase "Source"
+        if (TryGetValueWithAlias(values, columnMap, "source", "Source", out var source))
+            entry.Source = source;
+
         // Capture metadata (optional fields) - support both formats
         if (TryGetValueWithAlias(values, columnMap, "is_user_invoked", "IsUserInvoked", out var isUserInvokedStr) &&
             bool.TryParse(isUserInvokedStr, out var isUserInvoked))
@@ -490,6 +494,9 @@ public class TimelineImportService
 
         entry.Notes = GetStringWithAlias(properties, "notes", "Notes");
 
+        // Source: camelCase "source" or PascalCase "Source"
+        entry.Source = GetStringWithAlias(properties, "source", "Source");
+
         // Capture metadata (optional fields) - support both formats
         entry.IsUserInvoked = GetBoolWithAlias(properties, "isUserInvoked", "IsUserInvoked");
         entry.AppVersion = GetStringWithAlias(properties, "appVersion", "AppVersion");
@@ -513,6 +520,7 @@ public class TimelineImportService
                (!string.IsNullOrEmpty(import.Country) && string.IsNullOrEmpty(existing.Country)) ||
                (!string.IsNullOrEmpty(import.ActivityType) && string.IsNullOrEmpty(existing.ActivityType)) ||
                (!string.IsNullOrEmpty(import.Notes) && string.IsNullOrEmpty(existing.Notes)) ||
+               (!string.IsNullOrEmpty(import.Source) && string.IsNullOrEmpty(existing.Source)) ||
                // Capture metadata fields
                (import.IsUserInvoked.HasValue && !existing.IsUserInvoked.HasValue) ||
                (!string.IsNullOrEmpty(import.AppVersion) && string.IsNullOrEmpty(existing.AppVersion)) ||
@@ -555,6 +563,9 @@ public class TimelineImportService
 
         if (string.IsNullOrEmpty(existing.Notes) && !string.IsNullOrEmpty(import.Notes))
             existing.Notes = import.Notes;
+
+        if (string.IsNullOrEmpty(existing.Source) && !string.IsNullOrEmpty(import.Source))
+            existing.Source = import.Source;
 
         // Capture metadata fields
         if (!existing.IsUserInvoked.HasValue && import.IsUserInvoked.HasValue)

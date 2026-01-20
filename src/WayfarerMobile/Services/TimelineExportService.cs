@@ -42,7 +42,7 @@ public class TimelineExportService
         var sb = new StringBuilder();
 
         // Header row - PascalCase to match Wayfarer backend import parsers
-        sb.AppendLine("Id,ServerId,TimestampUtc,LocalTimestamp,Latitude,Longitude,Accuracy,Altitude,Speed,Bearing,Provider,Address,FullAddress,Place,Region,Country,PostCode,Activity,TimeZoneId,Notes,IsUserInvoked,AppVersion,AppBuild,DeviceModel,OsVersion,BatteryLevel,IsCharging");
+        sb.AppendLine("Id,ServerId,TimestampUtc,LocalTimestamp,Latitude,Longitude,Accuracy,Altitude,Speed,Bearing,Provider,Address,FullAddress,Place,Region,Country,PostCode,Activity,TimeZoneId,Source,Notes,IsUserInvoked,AppVersion,AppBuild,DeviceModel,OsVersion,BatteryLevel,IsCharging");
 
         // Data rows
         foreach (var entry in entries)
@@ -162,6 +162,7 @@ public class TimelineExportService
             EscapeCsv(entry.PostCode),
             EscapeCsv(entry.ActivityType),
             EscapeCsv(entry.Timezone),
+            EscapeCsv(entry.Source),
             EscapeCsv(entry.Notes),
             // Capture metadata (optional fields)
             entry.IsUserInvoked?.ToString(CultureInfo.InvariantCulture) ?? "",
@@ -252,6 +253,7 @@ public class TimelineExportService
                 PostCode = entry.PostCode,
                 Activity = entry.ActivityType,
                 TimeZoneId = entry.Timezone,
+                Source = entry.Source,
                 Notes = entry.Notes,
                 // Capture metadata (optional fields)
                 IsUserInvoked = entry.IsUserInvoked,
@@ -308,6 +310,7 @@ public class TimelineExportService
         public string? PostCode { get; set; }
         public string? Activity { get; set; }
         public string? TimeZoneId { get; set; }
+        public string? Source { get; set; }
         public string? Notes { get; set; }
         // Capture metadata (optional)
         public bool? IsUserInvoked { get; set; }

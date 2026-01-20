@@ -32,8 +32,23 @@ The backend is adding metadata fields to the `Location` model. Mobile needs to c
 | `osVersion` | string? | DeviceInfo.Platform + VersionString | ✅ | ✅ | ✅ |
 | `batteryLevel` | int? | Battery.ChargeLevel * 100 | ✅ | ✅ | ✅ |
 | `isCharging` | bool? | Battery.State | ✅ | ✅ | ✅ |
+| `source` | string? | Context | ✅ | ✅ | ✅ |
 
-**Summary:** 9 metadata fields to capture at queue time, submit via API, and include in export.
+**Summary:** 10 metadata fields to capture at queue time, submit via API, and include in export.
+
+### Source Field Values
+
+The `Source` field tracks the origin of each location record:
+
+| Value | Description |
+|-------|-------------|
+| `mobile-log` | Background location logged automatically by mobile app |
+| `mobile-checkin` | Manual check-in triggered by user on mobile app |
+| `api-log` | Location logged via API (non-mobile source) |
+| `api-checkin` | Check-in via API (non-mobile source) |
+| `queue-import` | Imported from queue export file |
+
+Set at queue time based on `isUserInvoked`: `"mobile-checkin"` if true, `"mobile-log"` if false.
 
 ## Filename Format
 
@@ -120,6 +135,13 @@ public int? BatteryLevel { get; set; }
 /// Whether the device was charging when location was captured.
 /// </summary>
 public bool? IsCharging { get; set; }
+
+/// <summary>
+/// The origin of this location record.
+/// Values: "mobile-log" (background) or "mobile-checkin" (manual).
+/// Preserved during export/import for roundtrip support.
+/// </summary>
+public string? Source { get; set; }
 ```
 
 **Migration:**
@@ -132,6 +154,7 @@ ALTER TABLE QueuedLocations ADD COLUMN DeviceModel TEXT;
 ALTER TABLE QueuedLocations ADD COLUMN OsVersion TEXT;
 ALTER TABLE QueuedLocations ADD COLUMN BatteryLevel INTEGER;
 ALTER TABLE QueuedLocations ADD COLUMN IsCharging INTEGER;
+ALTER TABLE QueuedLocations ADD COLUMN Source TEXT;
 ```
 
 **Population (at queue time):**
@@ -142,6 +165,7 @@ ALTER TABLE QueuedLocations ADD COLUMN IsCharging INTEGER;
 - `OsVersion`: `DeviceInfo.VersionString`
 - `BatteryLevel`: `(int?)(Battery.ChargeLevel * 100)` (0-100)
 - `IsCharging`: `Battery.State == BatteryState.Charging || Battery.State == BatteryState.Full`
+- `Source`: `isUserInvoked ? "mobile-checkin" : "mobile-log"`
 
 **Fallback for existing rows:**
 - All new fields will be `null` for rows created before migration
@@ -261,7 +285,8 @@ Used for background/automatic location logging.
     "deviceModel": "Pixel 7 Pro",
     "osVersion": "Android 14",
     "batteryLevel": 85,
-    "isCharging": false
+    "isCharging": false,
+    "source": "mobile-log"
 }
 ```
 
@@ -308,7 +333,8 @@ Used for manual user check-ins.
     "deviceModel": "Pixel 7 Pro",
     "osVersion": "Android 14",
     "batteryLevel": 85,
-    "isCharging": false
+    "isCharging": false,
+    "source": "mobile-checkin"
 }
 ```
 
@@ -365,7 +391,8 @@ private async Task<SyncResult> SubmitLocationAsync(QueuedLocation queued, string
         deviceModel = queued.DeviceModel,
         osVersion = queued.OsVersion,
         batteryLevel = queued.BatteryLevel,
-        isCharging = queued.IsCharging
+        isCharging = queued.IsCharging,
+        source = queued.Source
     };
 
     // Determine endpoint based on IsUserInvoked
@@ -425,6 +452,7 @@ These remain unchanged:
         "OsVersion": "Android 14",
         "BatteryLevel": 85,
         "IsCharging": false,
+        "Source": "mobile-checkin",
 
         // Extra debug fields (ignored by backend, useful for diagnostics)
         "Id": 12345,
@@ -464,6 +492,7 @@ These remain unchanged:
 | `OsVersion` | `OsVersion` | String (e.g., "Android 14", "iOS 17.2") |
 | `BatteryLevel` | `BatteryLevel` | Integer 0-100, or null if unavailable |
 | `IsCharging` | `IsCharging` | Boolean, or null if unavailable |
+| `Source` | `Source` | String (e.g., "mobile-log", "mobile-checkin") |
 
 #### Extra Debug Fields (Ignored by Backend)
 
@@ -490,18 +519,18 @@ These remain unchanged:
 ### Header Row
 
 ```
-Latitude,Longitude,TimestampUtc,LocalTimestamp,TimeZoneId,Accuracy,Altitude,Speed,Activity,Notes,IsUserInvoked,Provider,Bearing,AppVersion,AppBuild,DeviceModel,OsVersion,BatteryLevel,IsCharging,Id,Status,SyncAttempts,LastSyncAttempt,IsRejected,RejectionReason,LastError,ActivityTypeId
+Latitude,Longitude,TimestampUtc,LocalTimestamp,TimeZoneId,Accuracy,Altitude,Speed,Activity,Source,Notes,IsUserInvoked,Provider,Bearing,AppVersion,AppBuild,DeviceModel,OsVersion,BatteryLevel,IsCharging,Id,Status,SyncAttempts,LastSyncAttempt,IsRejected,RejectionReason,LastError,ActivityTypeId
 ```
 
 ### Example Row
 
 ```
-40.8497007,25.869276,2024-01-15T10:30:00.0000000Z,2024-01-15T12:30:00.0000000,Europe/Athens,15.5,250.0,5.2,walking,Manual check-in,true,gps,180.0,1.2.3,45,Pixel 7 Pro,Android 14,85,false,12345,Pending,0,,false,,,5
+40.8497007,25.869276,2024-01-15T10:30:00.0000000Z,2024-01-15T12:30:00.0000000,Europe/Athens,15.5,250.0,5.2,walking,mobile-checkin,Manual check-in,true,gps,180.0,1.2.3,45,Pixel 7 Pro,Android 14,85,false,12345,Pending,0,,false,,,5
 ```
 
 ### Notes
 
-- First 19 columns are backend-compatible (required for import)
+- First 20 columns are backend-compatible (required for import)
 - Remaining columns are extra debug fields (ignored by backend)
 - Empty values represented as empty string (not "null")
 - Formula injection protection: Values starting with `=`, `+`, `-`, `@`, `\t`, `\r` are prefixed with single quote
@@ -599,7 +628,8 @@ The export format is compatible with `WayfarerGeoJsonParser` and `CsvLocationPar
   - [ ] `OsVersion` (string?)
   - [ ] `BatteryLevel` (int?)
   - [ ] `IsCharging` (bool?)
-- [ ] Add migration in `DatabaseService.cs` (version 4)
+- [ ] Add `Source` (string?) for roundtrip support
+- [ ] Add migration in `DatabaseService.cs` (version 4, version 6 for Source)
 
 ### Location Capture (LocationQueueRepository)
 - [ ] Ensure `Bearing` is captured from `Location.Course`
@@ -612,12 +642,14 @@ The export format is compatible with `WayfarerGeoJsonParser` and `CsvLocationPar
 - [ ] Capture `OsVersion` from `$"{DeviceInfo.Platform} {DeviceInfo.VersionString}"`
 - [ ] Capture `BatteryLevel` from `(int?)(Battery.ChargeLevel * 100)`
 - [ ] Capture `IsCharging` from `Battery.State`
+- [ ] Capture `Source` based on `isUserInvoked` ("mobile-checkin" or "mobile-log")
 - [ ] Add helper methods: `GetBatteryLevel()`, `GetIsCharging()`, `GetProviderString()`
 
 ### Sync Service (API Submission)
-- [ ] Update `log-location` request DTO to include all metadata fields
-- [ ] Update `check-in` request DTO to include all metadata fields
+- [ ] Update `log-location` request DTO to include all metadata fields (including `source`)
+- [ ] Update `check-in` request DTO to include all metadata fields (including `source`)
 - [ ] Ensure `isUserInvoked` is set correctly (false for log-location, true for check-in)
+- [ ] Ensure `source` is set correctly ("mobile-log" or "mobile-checkin")
 - [ ] Update sync service to populate all metadata fields from `QueuedLocation`
 
 ### Export Service
@@ -673,6 +705,7 @@ Without these fields in `LocalTimelineEntry`, metadata is lost on round-trip.
 | OsVersion | ✅ | ✅ (added) | ✅ |
 | BatteryLevel | ✅ | ✅ (added) | ✅ |
 | IsCharging | ✅ | ✅ (added) | ✅ |
+| Source | ✅ | ✅ (added) | ✅ |
 
 ## LocalTimelineEntry Schema Change
 
@@ -714,11 +747,19 @@ public int? BatteryLevel { get; set; }
 /// Whether device was charging when captured. Null if unavailable.
 /// </summary>
 public bool? IsCharging { get; set; }
+
+/// <summary>
+/// The origin of this location record.
+/// Values: "mobile-log", "mobile-checkin", "api-log", "api-checkin", "queue-import".
+/// Preserved during import/export for roundtrip support.
+/// </summary>
+public string? Source { get; set; }
 ```
 
-**Migration (version 5):**
+**Migration (version 5 and 6):**
 
 ```sql
+-- Version 5: Metadata fields
 ALTER TABLE LocalTimelineEntries ADD COLUMN IsUserInvoked INTEGER;
 ALTER TABLE LocalTimelineEntries ADD COLUMN AppVersion TEXT;
 ALTER TABLE LocalTimelineEntries ADD COLUMN AppBuild TEXT;
@@ -726,6 +767,10 @@ ALTER TABLE LocalTimelineEntries ADD COLUMN DeviceModel TEXT;
 ALTER TABLE LocalTimelineEntries ADD COLUMN OsVersion TEXT;
 ALTER TABLE LocalTimelineEntries ADD COLUMN BatteryLevel INTEGER;
 ALTER TABLE LocalTimelineEntries ADD COLUMN IsCharging INTEGER;
+
+-- Version 6: Source field for roundtrip support
+ALTER TABLE QueuedLocations ADD COLUMN Source TEXT;
+ALTER TABLE LocalTimelineEntries ADD COLUMN Source TEXT;
 ```
 
 ## Timeline Export Format (PascalCase - Backend Compatible)
@@ -736,7 +781,7 @@ Timeline export now uses PascalCase property names to match the Wayfarer backend
 
 **CSV header (PascalCase):**
 ```
-Id,ServerId,TimestampUtc,LocalTimestamp,Latitude,Longitude,Accuracy,Altitude,Speed,Bearing,Provider,Address,FullAddress,Place,Region,Country,PostCode,Activity,TimeZoneId,Notes,IsUserInvoked,AppVersion,AppBuild,DeviceModel,OsVersion,BatteryLevel,IsCharging
+Id,ServerId,TimestampUtc,LocalTimestamp,Latitude,Longitude,Accuracy,Altitude,Speed,Bearing,Provider,Address,FullAddress,Place,Region,Country,PostCode,Activity,TimeZoneId,Source,Notes,IsUserInvoked,AppVersion,AppBuild,DeviceModel,OsVersion,BatteryLevel,IsCharging
 ```
 
 **GeoJSON properties (PascalCase):**
@@ -761,6 +806,7 @@ Id,ServerId,TimestampUtc,LocalTimestamp,Latitude,Longitude,Accuracy,Altitude,Spe
   "PostCode": "SW1A 2AA",
   "Activity": "Walking",
   "TimeZoneId": "Europe/London",
+  "Source": "mobile-checkin",
   "Notes": "Test note",
   "IsUserInvoked": true,
   "AppVersion": "1.2.3",
@@ -817,6 +863,7 @@ Primary (snake_case) → Alias (PascalCase):
 | `activity_type` | `Activity` | `ActivityType` |
 | `timezone` | `TimeZoneId` | `Timezone` |
 | `notes` | `Notes` | `Notes` |
+| `source` | `Source` | `Source` |
 | `is_user_invoked` | `IsUserInvoked` | `IsUserInvoked` |
 | `app_version` | `AppVersion` | `AppVersion` |
 | `app_build` | `AppBuild` | `AppBuild` |
@@ -845,6 +892,7 @@ Primary (camelCase) → Alias (PascalCase):
 | `activityType` | `Activity` | `ActivityType` |
 | `timezone` | `TimeZoneId` | `Timezone` |
 | `notes` | `Notes` | `Notes` |
+| `source` | `Source` | `Source` |
 | `isUserInvoked` | `IsUserInvoked` | `IsUserInvoked` |
 | `appVersion` | `AppVersion` | `AppVersion` |
 | `appBuild` | `AppBuild` | `AppBuild` |
@@ -874,9 +922,11 @@ All metadata fields are optional - import works with files that don't have these
 - [x] Add `OsVersion` (string?)
 - [x] Add `BatteryLevel` (int?)
 - [x] Add `IsCharging` (bool?)
+- [x] Add `Source` (string?)
 
 ### Database Migration
-- [x] Add migration v5 in `DatabaseService.cs`
+- [x] Add migration v5 in `DatabaseService.cs` (metadata fields)
+- [x] Add migration v6 in `DatabaseService.cs` (Source field)
 
 ### TimelineExportService (Backend-Compatible PascalCase)
 - [x] Update CSV header to use PascalCase column names
@@ -889,6 +939,8 @@ All metadata fields are optional - import works with files that don't have these
 - [x] Update `GeoJsonProperties` DTO to PascalCase names
 - [x] Update `ToGeoJsonFeature()` to include metadata and LocalTimestamp
 - [x] Add `ComputeLocalTimestamp()` helper method
+- [x] Add `Source` field to CSV export
+- [x] Add `Source` field to GeoJSON export
 
 ### TimelineImportService (Alias Support for Roundtrip)
 - [x] Add `TryGetValueWithAlias()` for CSV parsing
@@ -898,8 +950,10 @@ All metadata fields are optional - import works with files that don't have these
 - [x] Add `GetBoolWithAlias()` for GeoJSON parsing
 - [x] Update `ParseCsvEntry()` to support both snake_case and PascalCase
 - [x] Update `ParseGeoJsonFeature()` to support both camelCase and PascalCase
-- [x] Update `HasMoreData()` to include metadata fields
-- [x] Update `UpdateExisting()` to merge metadata fields
+- [x] Update `HasMoreData()` to include metadata fields (including Source)
+- [x] Update `UpdateExisting()` to merge metadata fields (including Source)
+- [x] Add `Source` field parsing in `ParseCsvEntry()`
+- [x] Add `Source` field parsing in `ParseGeoJsonFeature()`
 
 ### Tests
 - [x] Update test helpers to use PascalCase format
@@ -908,3 +962,4 @@ All metadata fields are optional - import works with files that don't have these
 - [x] Add `ParseGeoJsonFeatureWithAlias()` test helper
 - [x] Add test for PascalCase GeoJSON parsing
 - [x] Add test to verify export format matches backend expectations
+- [ ] Add tests for Source field in export/import roundtrip
