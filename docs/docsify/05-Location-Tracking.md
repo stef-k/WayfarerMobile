@@ -276,32 +276,56 @@ Locations are queued locally before syncing to the server.
 ### Queue Behavior
 
 1. GPS provides location
-2. Passes accuracy filter (<100m)
+2. Passes accuracy filter (<100m by default, configurable)
 3. Passes threshold filter (time AND distance)
 4. Added to local SQLite queue
-5. Queue syncs when online
+5. Queue syncs when online via continuous drain loop
 
 ### Queue Limits
 
-- **Maximum queue size**: 25,000 locations
-- **Automatic cleanup**: When limit exceeded, oldest synced locations are purged
-- **Retention**: Unsynced locations are never deleted automatically
+- **Default queue size**: 25,000 locations (configurable 1-100,000)
+- **Automatic cleanup**: When limit exceeded, oldest synced/rejected locations are purged first
+- **Rolling buffer**: If still over limit, oldest pending entries are removed (never entries currently syncing)
 
 ### Sync Schedule
 
-- **Online**: Immediate sync attempts
-- **Batch size**: Up to 50 locations per sync
+- **Online**: Continuous drain loop processes queue until empty
+- **Rate limit**: One location every 12 seconds (server allows 10s, 2s safety margin)
+- **Batch size**: Up to 100 locations per claim cycle
 - **Retry**: Automatic with exponential backoff
 - **Offline**: Queue grows until reconnected
+- **Sync time**: ~17 minutes for 100 queued locations (improved from ~50 minutes)
 
-### Viewing Queue Status
+### Managing the Queue
 
-1. Go to **Settings** > **About** > **Diagnostics**
-2. Expand **Location Queue** section
-3. See:
-   - Pending locations count
-   - Last sync time
-   - Sync errors (if any)
+Go to **Settings** > **Offline Queue** to manage your location queue:
+
+**Status Display:**
+- **Total/Pending/Synced/Rejected counts**: See queue composition at a glance
+- **Health status**: Color-coded (Green=Healthy, Orange=Warning, Red=Critical/Over Limit)
+- **Coverage span**: Time range covered by queued locations
+- **Remaining headroom**: Estimated time until queue fills (based on your time threshold)
+
+**Queue Limit:**
+- Configurable from 1 to 100,000 locations
+- Storage warning shown above 50,000 entries
+- Lowering below current count prompts confirmation if pending data will be lost
+
+**Export Options:**
+- **Export CSV**: Download all queued locations as spreadsheet
+- **Export GeoJSON**: Download as geographic data format
+- Formula injection protection applied to exports
+
+**Clear Actions:**
+| Action | What's Cleared | Confirmation |
+|--------|---------------|--------------|
+| Clear Synced | Synced + rejected entries | Yes |
+| Clear Pending | Unsynced entries (data loss) | Yes (with count) |
+| Clear All | Entire queue | Yes (with warning if pending) |
+
+### Legacy Diagnostics Access
+
+The Diagnostics page (**Settings** > **About** > **Diagnostics**) shows read-only queue information and links to Settings for full management.
 
 ---
 

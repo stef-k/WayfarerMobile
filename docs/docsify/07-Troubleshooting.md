@@ -122,8 +122,12 @@ For detailed troubleshooting:
 1. **Check internet connection**
 2. **Verify server URL**: Settings > Account > Server URL
 3. **Check authentication**: Try logging out and back in
-4. **View queue status**: Diagnostics > Location Queue
-5. **Check server status**: Is the server online?
+4. **View queue status**: Settings > Offline Queue (shows detailed breakdown)
+5. **Check for rejected entries**: High rejected count may indicate server issues
+6. **Export queue for debugging**: Settings > Offline Queue > Export CSV
+7. **Check server status**: Is the server online?
+
+> **Tip**: The Offline Queue section in Settings shows health status, sync rate, and detailed breakdowns of pending/synced/rejected counts.
 
 ### No Locations Being Logged
 
@@ -353,9 +357,11 @@ If QR scanning doesn't work:
 **Solutions:**
 
 1. **Check date filter**: May be viewing wrong day
-2. **Wait for sync**: Data may not have synced yet
+2. **Wait for sync**: Data may not have synced yet (~12s per location)
 3. **Check tracking was enabled**: No logging = no data
-4. **Verify server has data**: Check web app timeline
+4. **Check queue status**: Settings > Offline Queue shows pending count
+5. **Verify server has data**: Check web app timeline
+6. **Check for rejected entries**: Some locations may have been filtered out
 
 ### Check-In Failed
 
