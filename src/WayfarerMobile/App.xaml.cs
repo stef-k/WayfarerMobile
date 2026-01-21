@@ -260,7 +260,7 @@ public partial class App : Application
             if (apiClient == null)
                 throw new InvalidOperationException("API client not available");
 
-            // Convert to API request model
+            // Convert to API request model with metadata
             var request = new LocationLogRequest
             {
                 Latitude = location.Latitude,
@@ -268,7 +268,18 @@ public partial class App : Application
                 Accuracy = location.Accuracy,
                 Altitude = location.Altitude,
                 Speed = location.Speed,
-                Timestamp = location.Timestamp
+                Timestamp = location.Timestamp,
+                Provider = location.Provider,
+                Bearing = location.Bearing,
+                // Metadata fields - captured at submission time
+                Source = "mobile-log",
+                IsUserInvoked = false,
+                AppVersion = DeviceMetadataHelper.GetAppVersion(),
+                AppBuild = DeviceMetadataHelper.GetAppBuild(),
+                DeviceModel = DeviceMetadataHelper.GetDeviceModel(),
+                OsVersion = DeviceMetadataHelper.GetOsVersion(),
+                BatteryLevel = DeviceMetadataHelper.GetBatteryLevel(),
+                IsCharging = DeviceMetadataHelper.GetIsCharging()
             };
 
             // Call the log-location endpoint (server is authoritative)
