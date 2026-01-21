@@ -19,8 +19,8 @@ This document provides detailed documentation for the key services in WayfarerMo
 
 | Service | Purpose | Sync Interval |
 |---------|---------|---------------|
-| `LocationSyncService` | Queue → server sync with retry | Min 65s / Max 55/hour |
-| `TimelineSyncService` | Optimistic UI mutations with rollback | On-demand |
+| `QueueDrainService` | Queue → server sync with continuous drain loop | 12s per location |
+| `TimelineSyncService` | Optimistic UI mutations with background processing | Background (60s timer) |
 | `TimelineDataService` | Server → local cache with enrichment | On-demand |
 | `ActivitySyncService` | Activity types from server | Every 6 hours |
 | `SettingsSyncService` | Threshold/config sync from server | On login |
@@ -227,34 +227,34 @@ public class MainViewModel : ObservableObject
 
 ---
 
-## LocationSyncService
+## QueueDrainService
 
-**Source**: `src/WayfarerMobile/Services/LocationSyncService.cs`
+**Source**: `src/WayfarerMobile/Services/QueueDrainService.cs`
 
-Manages synchronization of queued locations to the server.
+Manages synchronization of queued locations to the server using a continuous drain loop.
 
 ### Responsibilities
 
-- Monitors the location queue in SQLite
-- Batches locations for efficient sync
-- Handles transient failures with retry
+- Processes the location queue continuously when online
+- Rate-limits requests to respect server policies (12s minimum interval)
+- Handles transient failures with retry and exponential backoff
 - Marks locations as synced or server-rejected
-- Triggers automatic sync when queue exceeds threshold
+- Coordinates with background location service for piggyback syncing
 
 ### Sync Algorithm
 
 ```
-Queue Check Timer (every 30s)
+Drain Loop Trigger
         |
         v
 +-------------------+
-| Get Pending       |  SELECT WHERE SyncStatus = Pending
-| Locations         |  ORDER BY Timestamp LIMIT 100
+| Claim Pending     |  SELECT WHERE SyncStatus = Pending
+| Location          |  ORDER BY Timestamp LIMIT 1
 +-------------------+
         |
         v
 +-------------------+
-| Send Batch        |  POST /api/location/log-location
+| Send to Server    |  POST /api/location/log-location
 +-------------------+
         |
    +----+----+
@@ -262,30 +262,49 @@ Queue Check Timer (every 30s)
 Success    Failure
    |         |
    v         v
-Mark      Retry or
-Synced    Mark Failed
+Mark      Increment
+Synced    SyncAttempts
+   |         |
+   v         v
++-------------------+
+| Check More        |  Loop continues until:
+| Pending?          |  - Queue empty
++-------------------+  - Device offline
+        |              - Too many failures
+        v              - Service disposed
+  (12s delay, then
+   next location)
 ```
+
+### Rate Limiting
+
+| Setting | Value | Notes |
+|---------|-------|-------|
+| Minimum interval | 12 seconds | Server allows 10s, 2s safety margin |
+| Sync time for 100 locations | ~17 minutes | Improved from ~50 minutes (65s interval) |
 
 ### Sync Status
 
 | Status | Description |
 |--------|-------------|
-| `Pending` | Awaiting sync (retries until 300-day purge) |
+| `Pending` | Awaiting sync |
+| `Syncing` | Currently being sent |
 | `Synced` | Successfully sent to server |
+| `Rejected` | Server rejected (4xx response) |
 
 ### Rejection Handling
 
-Locations can be rejected by client threshold checks or server validation. These are marked with `IsRejected = true` and `RejectionReason` for debugging:
+Locations can be rejected by client threshold checks or server validation:
 
 ```csharp
 // Client rejection (threshold not met)
-await _databaseService.MarkLocationRejectedAsync(id, "Client: Time 2.3min below 5min threshold");
+await _repository.MarkLocationRejectedAsync(id, "Client: Time 2.3min below 5min threshold");
 
 // Server rejection (4xx response)
-await _databaseService.MarkLocationRejectedAsync(id, "Server: HTTP 400 Bad Request");
+await _repository.MarkLocationRejectedAsync(id, "Server: HTTP 400 Bad Request");
 ```
 
-Rejected locations are not retried and are purged after 2 days.
+Rejected locations are not retried and are removed during rolling buffer cleanup.
 
 ---
 
@@ -815,13 +834,23 @@ See [API Integration](13-API.md) for complete endpoint documentation.
 
 **Source**: `src/WayfarerMobile/Services/TimelineSyncService.cs`
 
-Manages optimistic UI updates for timeline mutations with offline queue and rollback support.
+Manages optimistic UI updates for timeline mutations with offline queue, rollback support, and background processing.
+
+### Background Processing
+
+Timeline mutations now sync automatically without requiring the Timeline page to be open:
+
+- **Timer-based processing**: 60-second interval checks for pending mutations
+- **App lifecycle integration**: Triggers sync on suspend/resume via AppLifecycleService
+- **Background location piggyback**: Syncs during background location service wakeups
+- **Self-contained connectivity**: Maintains own network subscription for online/offline awareness
+- **Exception isolation**: Fully isolated to protect background location services from crashes
 
 ### Sync Strategy
 
 1. Apply optimistic UI update immediately
 2. Save to local database (both `PendingTimelineMutation` and `LocalTimelineEntry`)
-3. Attempt server sync in background
+3. Attempt server sync in background (immediately if online, or via timer)
 4. On 4xx error: Server rejected → revert changes, notify caller
 5. On 5xx/network error: Queue for retry (local keeps optimistic values)
 

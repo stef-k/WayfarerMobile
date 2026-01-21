@@ -67,11 +67,24 @@ Tap any entry to see:
 ### Editing Timeline Entries
 
 1. Tap an entry to open details
-2. Tap **Edit**
-3. Modify date/time, activity type, or notes
-4. Tap **Save**
+2. Tap **Edit** to modify:
+   - **Date/Time**: Adjust the timestamp
+   - **Notes**: Add or update notes
+3. Tap **Save**
 
 > **Note**: Coordinates cannot be edited as they are GPS data.
+
+### Editing Activity Types
+
+Timeline entries can have an activity type assigned:
+
+1. Tap an entry to open details
+2. Tap **Edit Activity**
+3. In the activity picker popup:
+   - Select an activity from the list
+   - Tap **Refresh** to sync latest activities from server
+   - Tap **Clear** to remove the activity assignment
+4. Changes sync to server automatically (or queue if offline)
 
 ### Exporting Timeline Data
 
@@ -456,6 +469,42 @@ Configure app behavior in the Settings page.
 - **Distance threshold**: Minimum meters between logged locations
 
 > **Note**: Thresholds are set by your server and sync automatically.
+
+### Offline Queue
+
+Manage the local queue of locations waiting to sync to the server.
+
+**Queue Status Display:**
+| Field | Description |
+|-------|-------------|
+| Total | All queued locations |
+| Pending | Waiting to sync |
+| Retrying | Failed sync attempts being retried |
+| Synced | Successfully sent to server |
+| Rejected | Server rejected (invalid data) |
+| Health | Overall queue health (Healthy/Warning/Critical/Over Limit) |
+
+**Queue Limit:**
+- Configurable from 1 to 100,000 locations (default: 25,000)
+- Storage warning shown above 50,000
+- Coverage estimate shows how much time the current queue spans
+- Headroom shows estimated time until queue fills
+
+**Export Options:**
+- **CSV**: Export all queued locations to CSV format
+- **GeoJSON**: Export as geographic data for mapping tools
+
+**Clear Actions:**
+| Action | What It Clears |
+|--------|----------------|
+| Clear Synced | Synced + rejected locations (safe to clear) |
+| Clear Pending | Unsynced locations (data loss warning) |
+| Clear All | Entire queue (confirmation required) |
+
+**Rolling Buffer Cleanup:**
+When the queue reaches its limit, automatic cleanup runs:
+1. First removes synced/rejected entries
+2. Then removes oldest pending entries (never entries currently syncing)
 
 ### Map Cache
 

@@ -26,17 +26,18 @@ Wayfarer Mobile is a cross-platform .NET MAUI app for Android and iOS that serve
 | **Offline Maps** | Download map tiles (zoom 8-17) per trip for offline use |
 | **Turn-by-Turn Navigation** | Voice-guided navigation with multi-tier route fallback |
 | **Group Sharing** | Real-time location sharing via SSE with colored member markers |
-| **Activity Types** | 20 built-in activities with icons, server sync every 6 hours |
+| **Activity Types** | 20 built-in activities with icons, editable per-location, server sync every 6 hours |
 | **Manual Check-ins** | Quick location logging with activity type and notes |
 | **QR Setup** | Scan a QR code to instantly configure server connection |
 | **PIN Lock** | Protect your location data with app-level security |
+| **Queue Management** | Monitor sync status, configurable limits, export queue data |
 
 ### Key Highlights
 
 - **Offline-First Architecture**: Local SQLite storage with background sync, works without internet
 - **Smart Battery Usage**: Three-phase sleep/wake optimization for background tracking (~1-3% per hour)
 - **Dual Navigation Modes**: Trip navigation (user segments → cached → OSRM → direct) and ad-hoc navigation (OSRM → direct)
-- **Queue Resilience**: Up to 25,000 locations queued locally, syncs when online with retry
+- **Queue Resilience**: Configurable queue limit (default 25,000), fast sync (12s/location), export to CSV/GeoJSON
 
 ## Quick Start
 
