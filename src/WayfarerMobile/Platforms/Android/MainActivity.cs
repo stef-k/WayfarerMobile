@@ -2,6 +2,7 @@
 using Android.Content;
 using Android.Content.PM;
 using Android.OS;
+using Android.Runtime;
 using Android.Util;
 using Android.Views;
 using AndroidX.Core.View;
@@ -11,6 +12,10 @@ namespace WayfarerMobile;
 [Activity(Theme = "@style/Maui.SplashTheme", MainLauncher = true, LaunchMode = LaunchMode.SingleTop, ConfigurationChanges = ConfigChanges.ScreenSize | ConfigChanges.Orientation | ConfigChanges.UiMode | ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize | ConfigChanges.Density)]
 public class MainActivity : MauiAppCompatActivity
 {
+    /// <summary>
+    /// Static flag to ensure we only register the exception handler once per process.
+    /// </summary>
+    private static bool s_exceptionHandlerRegistered;
     /// <summary>
     /// Static flag that persists for the lifetime of the process.
     /// Set to true after first successful initialization.
@@ -26,6 +31,11 @@ public class MainActivity : MauiAppCompatActivity
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
+        // Issue #185: Register Android-specific exception handler to suppress
+        // ObjectDisposedException from IImageHandler.FireAndForget during Activity recreation.
+        // This is a known MAUI bug where async image load callbacks fire after IServiceProvider is disposed.
+        RegisterImageHandlerExceptionSuppressor();
+
         // Early check for corrupted state before MAUI initializes.
         // This handles the case where app data was cleared while the process was alive.
         if (DetectAndRecoverFromCorruptedState())
@@ -39,6 +49,57 @@ public class MainActivity : MauiAppCompatActivity
         base.OnCreate(savedInstanceState);
 
         ConfigureStatusBar();
+    }
+
+    /// <summary>
+    /// Issue #185: Registers an exception handler that suppresses ObjectDisposedException
+    /// from IImageHandler.FireAndForget. This is a MAUI framework bug where async image
+    /// load callbacks fire after IServiceProvider is disposed during Activity recreation.
+    /// </summary>
+    private static void RegisterImageHandlerExceptionSuppressor()
+    {
+        if (s_exceptionHandlerRegistered)
+            return;
+
+        s_exceptionHandlerRegistered = true;
+
+        AndroidEnvironment.UnhandledExceptionRaiser += (sender, args) =>
+        {
+            var ex = args.Exception;
+
+            // Check if this is the specific IImageHandler.FireAndForget ObjectDisposedException
+            if (IsImageHandlerDisposedException(ex))
+            {
+                Log.Warn(LogTag, "Suppressed IImageHandler ObjectDisposedException (MAUI bug, issue #185)");
+                args.Handled = true; // Prevent app termination
+                return;
+            }
+
+            // Let other exceptions propagate normally
+            Log.Error(LogTag, $"Unhandled exception: {ex.GetType().Name}: {ex.Message}");
+        };
+
+        Log.Debug(LogTag, "IImageHandler exception suppressor registered");
+    }
+
+    /// <summary>
+    /// Checks if the exception is the specific ObjectDisposedException from IImageHandler.FireAndForget.
+    /// </summary>
+    private static bool IsImageHandlerDisposedException(Exception? ex)
+    {
+        if (ex is not ObjectDisposedException disposedEx)
+            return false;
+
+        // Check the stack trace for IImageHandler.FireAndForget pattern
+        var stackTrace = ex.StackTrace;
+        if (stackTrace == null)
+            return false;
+
+        // The crash always has this pattern in the stack trace:
+        // - CreateLogger[IImageHandler]
+        // - FireAndForget
+        return stackTrace.Contains("IImageHandler") &&
+               stackTrace.Contains("FireAndForget");
     }
 
     /// <summary>
