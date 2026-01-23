@@ -1120,8 +1120,9 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     /// <param name="tripDetails">The trip details to load.</param>
     public async Task LoadTripForNavigationAsync(TripDetails tripDetails)
     {
-        _logger.LogInformation("Loading trip: {TripName} ({PlaceCount} places, {SegmentCount} segments, {AreaCount} areas)",
-            tripDetails.Name, tripDetails.AllPlaces.Count, tripDetails.Segments.Count, tripDetails.AllAreas.Count);
+        // Issue #185 instrumentation: Log visibility state to help diagnose crashes
+        _logger.LogInformation("Loading trip: {TripName} ({PlaceCount} places, {SegmentCount} segments, {AreaCount} areas), IsPageVisible={IsVisible}",
+            tripDetails.Name, tripDetails.AllPlaces.Count, tripDetails.Segments.Count, tripDetails.AllAreas.Count, _isPageVisible);
 
         // Debug: Log regions and their areas
         _logger.LogDebug("Trip has {RegionCount} regions", tripDetails.Regions.Count);

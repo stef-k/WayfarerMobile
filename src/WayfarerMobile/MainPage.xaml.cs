@@ -299,19 +299,32 @@ public partial class MainPage : ContentPage, IQueryAttributable
             var trip = _pendingTrip;
             _pendingTrip = null;
 
-            // D5 enhancement (issue #185): Wait for one Dispatcher tick to ensure
-            // platform handlers are fully initialized before loading trip images
+            // D5 enhancement (issue #185): Wait for platform to fully stabilize
+            // Task.Yield() alone wasn't enough - add small delay for Android Activity to settle
             await Task.Yield();
+            await Task.Delay(150); // Allow platform handlers and image pipelines to stabilize
 
-            // Re-check readiness after yield - page may have disappeared during the tick
+            // Re-check readiness after delay - page may have disappeared
             if (!_isLoaded || !_isAppearingComplete)
             {
-                _logger.LogDebug("LoadPendingTripIfReadyAsync: Page no longer ready after yield, aborting");
+                _logger.LogDebug("LoadPendingTripIfReadyAsync: Page no longer ready after delay, aborting");
                 return;
             }
 
-            await _viewModel.LoadTripForNavigationAsync(trip);
-            _logger.LogDebug("LoadPendingTripIfReadyAsync: After load, HasLoadedTrip={HasLoaded}", _viewModel.HasLoadedTrip);
+            // Final safety check: ensure we're on the main thread and context is valid
+            await MainThread.InvokeOnMainThreadAsync(async () =>
+            {
+                // One more check after dispatching to main thread
+                if (!_isLoaded || !_isAppearingComplete)
+                {
+                    _logger.LogDebug("LoadPendingTripIfReadyAsync: Page no longer ready on main thread, aborting");
+                    return;
+                }
+
+                _logger.LogDebug("LoadPendingTripIfReadyAsync: All checks passed, loading trip");
+                await _viewModel.LoadTripForNavigationAsync(trip);
+                _logger.LogDebug("LoadPendingTripIfReadyAsync: After load, HasLoadedTrip={HasLoaded}", _viewModel.HasLoadedTrip);
+            });
         }
     }
 
