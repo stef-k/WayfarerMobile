@@ -22,7 +22,10 @@ Trips are created in the Wayfarer web app and downloaded to your mobile device. 
 ### Trip List
 
 1. Tap the **Trips** tab
-2. View all trips from your server
+2. Choose a tab:
+   - **My Trips**: Your personal trips
+   - **Public Trips**: Shared/public trips to browse
+3. View trips from your server
 
 Each trip card shows:
 - Trip name
