@@ -657,23 +657,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
             MapDisplay.CenterOnLocation(location.Latitude, location.Longitude, zoomLevel: 16);
         }
 
-        // Issue #191: Clear Shell's cached LoadTrip query parameter.
-        // Shell caches query parameters and re-applies them when navigating back via flyout.
-        // By navigating to MainPage without parameters, we overwrite the cached params.
-        // Fire-and-forget on main thread to avoid blocking the unload flow.
-        MainThread.BeginInvokeOnMainThread(async () =>
-        {
-            try
-            {
-                _logger.LogInformation("[DIAG-UNLOAD] Clearing Shell cached LoadTrip parameter");
-                await Shell.Current.GoToAsync("//MainPage");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to clear Shell cached parameters");
-            }
-        });
-
         // DIAGNOSTIC: Log state after clearing
         _logger.LogInformation(
             "[DIAG-UNLOAD] MainViewModel.UnloadTripFromMap() completed. " +

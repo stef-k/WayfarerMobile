@@ -32,6 +32,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
     // This prevents Shell from re-loading the trip when navigating back to MainPage
     private Guid? _lastLoadedTripId;
     private Guid? _lastUnloadedTripId;
+    private DateTime _lastUnloadedTime;
 
     // Issue #185: Deterministic readiness gate to prevent ObjectDisposedException
     // Trip load awaits this gate; it fires only when all platform handlers are ready.
@@ -482,16 +483,33 @@ public partial class MainPage : ContentPage, IQueryAttributable
         {
             // Issue #191: Shell re-applies cached query parameters when navigating to cached pages.
             // If user unloaded a trip and then navigates back via flyout, Shell calls
-            // ApplyQueryAttributes with the OLD LoadTrip parameter. We must skip this.
+            // ApplyQueryAttributes with the OLD LoadTrip parameter.
+            //
+            // We use a time-based heuristic to distinguish:
+            // - Shell re-applying cached params (happens within ~3 seconds of navigation)
+            // - User intentionally selecting from TripsPage (takes longer to navigate there and select)
             if (_lastUnloadedTripId == trip.Id)
             {
-                _logger.LogInformation(
-                    "[DIAG-QUERY] ApplyQueryAttributes: SKIPPING trip {TripId} - it was explicitly unloaded. " +
-                    "Shell is re-applying cached parameters. Clearing marker for next explicit selection.",
-                    trip.Id);
-                // Clear marker so if user explicitly selects this trip again from TripsPage, it will load
-                _lastUnloadedTripId = null;
-                return;
+                var timeSinceUnload = DateTime.UtcNow - _lastUnloadedTime;
+                var isLikelyShellCache = timeSinceUnload < TimeSpan.FromSeconds(3);
+
+                if (isLikelyShellCache)
+                {
+                    _logger.LogInformation(
+                        "[DIAG-QUERY] ApplyQueryAttributes: SKIPPING trip {TripId} - unloaded {Seconds:F1}s ago. " +
+                        "Likely Shell re-applying cached parameters.",
+                        trip.Id, timeSinceUnload.TotalSeconds);
+                    // Don't clear the marker - keep blocking until time window passes
+                    return;
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "[DIAG-QUERY] ApplyQueryAttributes: Allowing trip {TripId} - unloaded {Seconds:F1}s ago. " +
+                        "User likely selected intentionally from TripsPage.",
+                        trip.Id, timeSinceUnload.TotalSeconds);
+                    _lastUnloadedTripId = null;
+                }
             }
 
             // Clear any unloaded marker for a DIFFERENT trip
@@ -703,11 +721,12 @@ public partial class MainPage : ContentPage, IQueryAttributable
         {
             if (!_viewModel.HasLoadedTrip && _lastLoadedTripId.HasValue)
             {
-                // Trip was unloaded - clear any pending trip to prevent Shell cached page from reloading
-                // Also track the unloaded trip ID for diagnostics
+                // Trip was unloaded - track the unloaded trip ID and timestamp
+                // Used to distinguish Shell re-applying cached params vs intentional user selection
                 _lastUnloadedTripId = _lastLoadedTripId;
+                _lastUnloadedTime = DateTime.UtcNow;
 
-                // KEY FIX: Clear _pendingTrip if it matches the unloaded trip
+                // Clear _pendingTrip if it matches the unloaded trip
                 // This handles the case where Shell caches the page with stale _pendingTrip
                 if (_pendingTrip?.Id == _lastLoadedTripId)
                 {
