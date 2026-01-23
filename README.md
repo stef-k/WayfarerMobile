@@ -101,8 +101,7 @@ WayfarerMobile/
 ├── tests/
 │   └── WayfarerMobile.Tests/        # Unit tests (xUnit)
 │
-└── docs/
-    └── docsify/                     # User and developer documentation
+└── docs/                            # User and developer documentation (Docsify)
 ```
 
 ## Technology Stack
@@ -122,10 +121,10 @@ WayfarerMobile/
 
 ## Documentation
 
-Full documentation is available in the `docs/docsify/` directory:
+Full documentation is available in the [`docs/`](docs/) directory and online at **[stef-k.github.io/WayfarerMobile](https://stef-k.github.io/WayfarerMobile/)**.
 
-- **[User Guide](docs/docsify/00-User-Guide.md)** - Getting started, features, troubleshooting
-- **[Developer Guide](docs/docsify/09-Developer-Guide.md)** - Architecture, services, API integration
+- **[User Guide](docs/00-User-Guide.md)** - Getting started, features, troubleshooting
+- **[Developer Guide](docs/09-Developer-Guide.md)** - Architecture, services, API integration
 
 To view the documentation locally with Docsify:
 
@@ -134,7 +133,7 @@ To view the documentation locally with Docsify:
 npm i -g docsify-cli
 
 # Serve the documentation
-cd docs/docsify
+cd docs
 docsify serve
 ```
 
@@ -153,7 +152,7 @@ Contributions are welcome! This is a spare-time project, so responses may be del
 - Follow the existing code style (XML comments, strict MVVM)
 - Include tests for new functionality
 
-See the [Contributing Guide](docs/docsify/16-Contributing.md) for more details.
+See the [Contributing Guide](docs/16-Contributing.md) for more details.
 
 ## License
 
