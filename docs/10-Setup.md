@@ -106,9 +106,7 @@ WayfarerMobile/
 |   +-- WayfarerMobile.Core/     # Platform-agnostic library
 +-- tests/
 |   +-- WayfarerMobile.Tests/    # Unit tests
-+-- docs/
-|   +-- docsify/                 # Documentation site
-|   +-- reference/               # Technical reference docs
++-- docs/                        # Documentation (Docsify)
 +-- CLAUDE.md                    # Project instructions
 ```
 
