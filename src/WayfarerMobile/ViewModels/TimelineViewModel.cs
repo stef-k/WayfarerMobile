@@ -489,13 +489,12 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
                 {
                     _mapBuilder.ZoomToPoints(_map, points);
                 }
-                else
+                else if (_map != null)
                 {
-                    _map?.Navigator.CenterOn(points[0]);
-                    if (_map?.Navigator.Resolutions?.Count > 15)
-                    {
-                        _map.Navigator.ZoomTo(_map.Navigator.Resolutions[15]);
-                    }
+                    // Single point - center and zoom to street level
+                    var point = points[0];
+                    var (lon, lat) = SphericalMercator.ToLonLat(point.X, point.Y);
+                    _mapBuilder.CenterOnLocation(_map, lat, lon, zoomLevel: 15);
                 }
             });
         }

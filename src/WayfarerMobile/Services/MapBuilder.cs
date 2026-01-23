@@ -266,16 +266,79 @@ public class MapBuilder : IMapBuilder
         map.Navigator.ZoomToBox(extent);
     }
 
+    /// <summary>
+    /// Maximum resolution at zoom level 0 for Web Mercator (meters per pixel at equator).
+    /// Standard value for OSM-compatible tile sources.
+    /// </summary>
+    private const double MaxResolutionAtZoom0 = 156543.03392;
+
+    /// <summary>
+    /// Minimum valid zoom level for OSM-style tiles.
+    /// </summary>
+    private const int MinZoomLevel = 0;
+
+    /// <summary>
+    /// Maximum valid zoom level for OSM-style tiles.
+    /// </summary>
+    private const int MaxZoomLevel = 20;
+
     /// <inheritdoc />
     public void CenterOnLocation(Map map, double latitude, double longitude, int? zoomLevel = null)
     {
-        var (x, y) = SphericalMercator.FromLonLat(longitude, latitude);
-        map.Navigator.CenterOn(new MPoint(x, y));
-
-        if (zoomLevel.HasValue && map.Navigator.Resolutions?.Count > zoomLevel.Value)
+        if (map == null)
         {
-            map.Navigator.ZoomTo(map.Navigator.Resolutions[zoomLevel.Value]);
+            _logger.LogWarning("CenterOnLocation called with null map");
+            return;
         }
+
+        try
+        {
+            // Validate and clamp coordinates to valid ranges
+            var clampedLat = Math.Clamp(latitude, -85.05112878, 85.05112878); // Web Mercator limits
+            var clampedLon = Math.Clamp(longitude, -180.0, 180.0);
+
+            if (Math.Abs(clampedLat - latitude) > 0.0001 || Math.Abs(clampedLon - longitude) > 0.0001)
+            {
+                _logger.LogDebug(
+                    "Coordinates clamped from ({OrigLat}, {OrigLon}) to ({ClampLat}, {ClampLon})",
+                    latitude, longitude, clampedLat, clampedLon);
+            }
+
+            // Convert to Web Mercator and center
+            var (x, y) = SphericalMercator.FromLonLat(clampedLon, clampedLat);
+            map.Navigator.CenterOn(new MPoint(x, y));
+
+            // Apply zoom if specified
+            if (zoomLevel.HasValue)
+            {
+                var targetResolution = CalculateResolutionForZoomLevel(zoomLevel.Value);
+                map.Navigator.ZoomTo(targetResolution);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error centering map on ({Lat}, {Lon}) at zoom {Zoom}",
+                latitude, longitude, zoomLevel);
+        }
+    }
+
+    /// <summary>
+    /// Calculates the map resolution (meters per pixel) for a given zoom level.
+    /// Uses the standard OSM/Web Mercator formula: resolution = maxResolution / 2^zoomLevel.
+    /// </summary>
+    /// <param name="zoomLevel">The zoom level (0-20). Values outside this range are clamped.</param>
+    /// <returns>The resolution in meters per pixel.</returns>
+    private double CalculateResolutionForZoomLevel(int zoomLevel)
+    {
+        // Clamp to valid range to prevent extreme values
+        var clampedZoom = Math.Clamp(zoomLevel, MinZoomLevel, MaxZoomLevel);
+
+        if (clampedZoom != zoomLevel)
+        {
+            _logger.LogDebug("Zoom level clamped from {Original} to {Clamped}", zoomLevel, clampedZoom);
+        }
+
+        return MaxResolutionAtZoom0 / Math.Pow(2, clampedZoom);
     }
 
     /// <inheritdoc />
@@ -297,11 +360,14 @@ public class MapBuilder : IMapBuilder
 
     /// <summary>
     /// Calculates the approximate web map zoom level from Mapsui resolution.
+    /// Inverse of <see cref="CalculateResolutionForZoomLevel"/>.
     /// </summary>
     private static double CalculateZoomLevel(double resolution)
     {
-        const double maxResolution = 156543.03392; // Zoom level 0
-        return Math.Log2(maxResolution / resolution);
+        if (resolution <= 0)
+            return MaxZoomLevel;
+
+        return Math.Log2(MaxResolutionAtZoom0 / resolution);
     }
 
     /// <inheritdoc />
