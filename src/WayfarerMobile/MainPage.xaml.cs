@@ -480,12 +480,25 @@ public partial class MainPage : ContentPage, IQueryAttributable
 
         if (query.TryGetValue("LoadTrip", out var tripObj) && tripObj is TripDetails trip)
         {
-            // Issue #191: Clear the unloaded marker when user explicitly selects a new trip
-            // (even if it's the same trip they just unloaded - they want to reload it)
+            // Issue #191: Shell re-applies cached query parameters when navigating to cached pages.
+            // If user unloaded a trip and then navigates back via flyout, Shell calls
+            // ApplyQueryAttributes with the OLD LoadTrip parameter. We must skip this.
+            if (_lastUnloadedTripId == trip.Id)
+            {
+                _logger.LogInformation(
+                    "[DIAG-QUERY] ApplyQueryAttributes: SKIPPING trip {TripId} - it was explicitly unloaded. " +
+                    "Shell is re-applying cached parameters. Clearing marker for next explicit selection.",
+                    trip.Id);
+                // Clear marker so if user explicitly selects this trip again from TripsPage, it will load
+                _lastUnloadedTripId = null;
+                return;
+            }
+
+            // Clear any unloaded marker for a DIFFERENT trip
             if (_lastUnloadedTripId.HasValue)
             {
                 _logger.LogInformation(
-                    "[DIAG-QUERY] ApplyQueryAttributes: Clearing _lastUnloadedTripId={OldId} for new trip {NewId}",
+                    "[DIAG-QUERY] ApplyQueryAttributes: Clearing _lastUnloadedTripId={OldId} for different trip {NewId}",
                     _lastUnloadedTripId, trip.Id);
                 _lastUnloadedTripId = null;
             }
