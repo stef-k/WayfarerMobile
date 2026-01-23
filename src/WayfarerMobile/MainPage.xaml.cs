@@ -28,11 +28,10 @@ public partial class MainPage : ContentPage, IQueryAttributable
     private TripDetails? _pendingTrip;
     private WritableLayer? _tempMarkerLayer;
 
-    // Issue #191: Track the last trip that was loaded and then explicitly unloaded
-    // This prevents Shell from re-loading the trip when navigating back to MainPage
-    private Guid? _lastLoadedTripId;
-    private Guid? _lastUnloadedTripId;
-    private DateTime _lastUnloadedTime;
+    // Issue #191: Track the last processed LoadTripToken to detect Shell re-applying cached params.
+    // Each navigation from TripsPage includes a unique token. If we see the same token twice,
+    // it means Shell is re-applying cached parameters, not a fresh user selection.
+    private Guid? _lastProcessedLoadTripToken;
 
     // Issue #185: Deterministic readiness gate to prevent ObjectDisposedException
     // Trip load awaits this gate; it fires only when all platform handlers are ready.
@@ -435,28 +434,16 @@ public partial class MainPage : ContentPage, IQueryAttributable
         // Clear pending trip now that we're committed to loading
         _pendingTrip = null;
 
-        // Issue #191: Track loaded trip ID to detect explicit unload later
-        _lastLoadedTripId = trip.Id;
-        // Clear any previous unload marker since we're loading a new trip
-        if (_lastUnloadedTripId == trip.Id)
-        {
-            _lastUnloadedTripId = null;
-        }
-
-        // DIAGNOSTIC: Confirm pending trip was cleared
         _logger.LogInformation(
-            "[DIAG-PENDING] LoadPendingTripIfReadyAsync: Cleared _pendingTrip, about to load trip {TripId} ({TripName}). " +
-            "Set _lastLoadedTripId={LastLoadedId}",
-            trip.Id, trip.Name, _lastLoadedTripId);
+            "[DIAG-PENDING] LoadPendingTripIfReadyAsync: Loading trip {TripId} ({TripName})",
+            trip.Id, trip.Name);
 
         _logger.LogDebug("LoadPendingTripIfReadyAsync: Readiness gate passed, loading trip {TripName}", trip.Name);
         await _viewModel.LoadTripForNavigationAsync(trip);
 
-        // DIAGNOSTIC: Confirm final state after load
         _logger.LogInformation(
-            "[DIAG-PENDING] LoadPendingTripIfReadyAsync: After load complete. " +
-            "HasLoadedTrip={HasLoaded}, _pendingTrip={PendingId}, _lastLoadedTripId={LastLoadedId}",
-            _viewModel.HasLoadedTrip, _pendingTrip?.Id, _lastLoadedTripId);
+            "[DIAG-PENDING] LoadPendingTripIfReadyAsync: Load complete. HasLoadedTrip={HasLoaded}",
+            _viewModel.HasLoadedTrip);
 
         _logger.LogDebug("LoadPendingTripIfReadyAsync: After load, HasLoadedTrip={HasLoaded}", _viewModel.HasLoadedTrip);
     }
@@ -481,44 +468,32 @@ public partial class MainPage : ContentPage, IQueryAttributable
 
         if (query.TryGetValue("LoadTrip", out var tripObj) && tripObj is TripDetails trip)
         {
-            // Issue #191: Shell re-applies cached query parameters when navigating to cached pages.
-            // If user unloaded a trip and then navigates back via flyout, Shell calls
-            // ApplyQueryAttributes with the OLD LoadTrip parameter.
-            //
-            // We use a time-based heuristic to distinguish:
-            // - Shell re-applying cached params (happens within ~3 seconds of navigation)
-            // - User intentionally selecting from TripsPage (takes longer to navigate there and select)
-            if (_lastUnloadedTripId == trip.Id)
-            {
-                var timeSinceUnload = DateTime.UtcNow - _lastUnloadedTime;
-                var isLikelyShellCache = timeSinceUnload < TimeSpan.FromSeconds(3);
+            // Issue #191: Detect Shell re-applying cached query parameters.
+            // Each navigation from TripsPage includes a unique LoadTripToken.
+            // If we see the same token twice, Shell is re-applying cached params → skip.
+            // If it's a new token (or no token from old code paths), proceed to load.
+            var token = query.TryGetValue("LoadTripToken", out var tokenObj) && tokenObj is Guid t ? t : (Guid?)null;
 
-                if (isLikelyShellCache)
-                {
-                    _logger.LogInformation(
-                        "[DIAG-QUERY] ApplyQueryAttributes: SKIPPING trip {TripId} - unloaded {Seconds:F1}s ago. " +
-                        "Likely Shell re-applying cached parameters.",
-                        trip.Id, timeSinceUnload.TotalSeconds);
-                    // Don't clear the marker - keep blocking until time window passes
-                    return;
-                }
-                else
-                {
-                    _logger.LogInformation(
-                        "[DIAG-QUERY] ApplyQueryAttributes: Allowing trip {TripId} - unloaded {Seconds:F1}s ago. " +
-                        "User likely selected intentionally from TripsPage.",
-                        trip.Id, timeSinceUnload.TotalSeconds);
-                    _lastUnloadedTripId = null;
-                }
-            }
-
-            // Clear any unloaded marker for a DIFFERENT trip
-            if (_lastUnloadedTripId.HasValue)
+            if (token.HasValue && token == _lastProcessedLoadTripToken)
             {
                 _logger.LogInformation(
-                    "[DIAG-QUERY] ApplyQueryAttributes: Clearing _lastUnloadedTripId={OldId} for different trip {NewId}",
-                    _lastUnloadedTripId, trip.Id);
-                _lastUnloadedTripId = null;
+                    "[DIAG-QUERY] ApplyQueryAttributes: SKIPPING trip {TripId} - same token {Token}. " +
+                    "Shell is re-applying cached parameters.",
+                    trip.Id, token);
+                return;
+            }
+
+            // Store the token (if present) to detect future re-applications
+            if (token.HasValue)
+            {
+                _lastProcessedLoadTripToken = token;
+                _logger.LogInformation(
+                    "[DIAG-QUERY] ApplyQueryAttributes: Processing trip {TripId} with new token {Token}",
+                    trip.Id, token);
+            }
+            else
+            {
+                _logger.LogDebug("ApplyQueryAttributes: Processing trip {TripId} (no token - legacy path)", trip.Id);
             }
 
             _logger.LogDebug("ApplyQueryAttributes: Setting pending trip {TripName} ({TripId})", trip.Name, trip.Id);
@@ -715,34 +690,6 @@ public partial class MainPage : ContentPage, IQueryAttributable
         else if (e.PropertyName == nameof(MainViewModel.IsCheckInSheetOpen) && _viewModel.IsCheckInSheetOpen)
         {
             MainBottomSheet.State = Syncfusion.Maui.Toolkit.BottomSheet.BottomSheetState.FullExpanded;
-        }
-        // Issue #191: Track when trip is explicitly unloaded to prevent auto-reload on navigation
-        else if (e.PropertyName == nameof(MainViewModel.HasLoadedTrip))
-        {
-            if (!_viewModel.HasLoadedTrip && _lastLoadedTripId.HasValue)
-            {
-                // Trip was unloaded - track the unloaded trip ID and timestamp
-                // Used to distinguish Shell re-applying cached params vs intentional user selection
-                _lastUnloadedTripId = _lastLoadedTripId;
-                _lastUnloadedTime = DateTime.UtcNow;
-
-                // Clear _pendingTrip if it matches the unloaded trip
-                // This handles the case where Shell caches the page with stale _pendingTrip
-                if (_pendingTrip?.Id == _lastLoadedTripId)
-                {
-                    _logger.LogInformation(
-                        "[DIAG-UNLOAD] MainPage detected trip unload. Clearing stale _pendingTrip={TripId}",
-                        _pendingTrip?.Id);
-                    _pendingTrip = null;
-                }
-                else
-                {
-                    _logger.LogInformation(
-                        "[DIAG-UNLOAD] MainPage detected trip unload. _lastUnloadedTripId={TripId}, " +
-                        "_pendingTrip={PendingId} (not matching, left as-is)",
-                        _lastUnloadedTripId, _pendingTrip?.Id);
-                }
-            }
         }
     }
 
