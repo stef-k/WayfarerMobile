@@ -32,7 +32,7 @@ public class ExceptionHandlerService : IExceptionHandlerService
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
         _isInitialized = true;
-        _logger.LogInformation("Global exception handler initialized");
+        _logger.LogDebug("Global exception handler initialized");
     }
 
     /// <inheritdoc/>

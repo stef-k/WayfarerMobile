@@ -90,6 +90,7 @@ public static class MauiProgram
 #endif
             .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
             .MinimumLevel.Override("System", LogEventLevel.Warning)
+            .MinimumLevel.Override("Microsoft.Maui.Controls.Element", LogEventLevel.Error) // Suppress Syncfusion binding warnings
             .Enrich.FromLogContext()
             .Enrich.WithProperty("Application", "WayfarerMobile")
             .WriteTo.File(

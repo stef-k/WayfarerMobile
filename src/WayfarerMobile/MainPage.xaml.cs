@@ -347,7 +347,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
         }
 
         // All conditions met - signal readiness
-        _logger.LogInformation("TrySetPageReady: All conditions met, signaling page ready");
+        _logger.LogDebug("TrySetPageReady: All conditions met, signaling page ready");
         _pageReadyTcs.TrySetResult();
     }
 
@@ -421,7 +421,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
         // Clear pending trip now that we're committed to loading
         _pendingTrip = null;
 
-        _logger.LogInformation("LoadPendingTripIfReadyAsync: Readiness gate passed, loading trip {TripName}", trip.Name);
+        _logger.LogDebug("LoadPendingTripIfReadyAsync: Readiness gate passed, loading trip {TripName}", trip.Name);
         await _viewModel.LoadTripForNavigationAsync(trip);
         _logger.LogDebug("LoadPendingTripIfReadyAsync: After load, HasLoadedTrip={HasLoaded}", _viewModel.HasLoadedTrip);
     }

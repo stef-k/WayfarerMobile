@@ -255,7 +255,7 @@ public class SseClient : ISseClient
                 if (reconnectAttempt > 0)
                 {
                     int delayMs = BackoffDelaysMs[Math.Min(reconnectAttempt - 1, BackoffDelaysMs.Length - 1)];
-                    _logger.LogInformation("Reconnecting to {Channel} in {Delay}ms (attempt {Attempt})",
+                    _logger.LogDebug("Reconnecting to {Channel} in {Delay}ms (attempt {Attempt})",
                         channelName, delayMs, reconnectAttempt);
 
                     Reconnecting?.Invoke(this, new SseReconnectEventArgs(reconnectAttempt, delayMs));
@@ -263,7 +263,7 @@ public class SseClient : ISseClient
                     await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
                 }
 
-                _logger.LogInformation("Connecting to SSE channel: {Channel}", channelName);
+                _logger.LogDebug("Connecting to SSE channel: {Channel}", channelName);
                 await ConnectAndStreamAsync(url, cancellationToken).ConfigureAwait(false);
 
                 // If we reach here, stream ended normally (not an error)
@@ -324,7 +324,7 @@ public class SseClient : ISseClient
     private async Task ConnectAndStreamAsync(string url, CancellationToken cancellationToken)
     {
         string? apiToken = _settings.ApiToken;
-        _logger.LogInformation(
+        _logger.LogDebug(
             "SSE connecting to {Url}, token available: {HasToken}, token length: {TokenLength}",
             url,
             !string.IsNullOrWhiteSpace(apiToken),
@@ -397,7 +397,7 @@ public class SseClient : ISseClient
 
             _isConnected = true;
             Connected?.Invoke(this, EventArgs.Empty);
-            _logger.LogInformation("SSE connected: {Url}", url);
+            _logger.LogDebug("SSE connected: {Url}", url);
 
             // Stream and parse SSE frames
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
@@ -523,7 +523,7 @@ public class SseClient : ISseClient
             if (root.TryGetProperty("type", out var typeProp))
             {
                 var eventType = typeProp.GetString();
-                _logger.LogInformation("SSE event received with type: {Type}", eventType);
+                _logger.LogDebug("SSE event received with type: {Type}", eventType);
                 ProcessTypedEvent(root, eventType);
                 return;
             }
@@ -534,7 +534,7 @@ public class SseClient : ISseClient
             var locationEvent = JsonSerializer.Deserialize<SseLocationEvent>(json, JsonOptions);
             if (locationEvent != null && !string.IsNullOrEmpty(locationEvent.UserName))
             {
-                _logger.LogInformation("SSE location received: {UserName} at {Timestamp}",
+                _logger.LogDebug("SSE location received: {UserName} at {Timestamp}",
                     locationEvent.UserName, locationEvent.TimestampUtc);
                 LocationReceived?.Invoke(this, new SseLocationEventArgs(locationEvent));
                 return;
@@ -544,7 +544,7 @@ public class SseClient : ISseClient
             var membershipEvent = JsonSerializer.Deserialize<SseMembershipEvent>(json, JsonOptions);
             if (membershipEvent != null && !string.IsNullOrEmpty(membershipEvent.Action))
             {
-                _logger.LogInformation("SSE membership event received: {Action} for user {UserId}",
+                _logger.LogDebug("SSE membership event received: {Action} for user {UserId}",
                     membershipEvent.Action, membershipEvent.UserId);
                 MembershipReceived?.Invoke(this, new SseMembershipEventArgs(membershipEvent));
             }
@@ -572,7 +572,7 @@ public class SseClient : ISseClient
                     IsLive = root.TryGetProperty("isLive", out var live) && live.GetBoolean(),
                     Type = root.TryGetProperty("locationType", out var lt) ? lt.GetString() : null
                 };
-                _logger.LogInformation("SSE location received: {UserName} at {Timestamp}",
+                _logger.LogDebug("SSE location received: {UserName} at {Timestamp}",
                     locationEvent.UserName, locationEvent.TimestampUtc);
                 LocationReceived?.Invoke(this, new SseLocationEventArgs(locationEvent));
                 break;
@@ -583,7 +583,7 @@ public class SseClient : ISseClient
                     LocationId = root.TryGetProperty("locationId", out var dlid) ? dlid.GetInt32() : 0,
                     UserId = root.TryGetProperty("userId", out var duid) ? duid.GetString() ?? string.Empty : string.Empty
                 };
-                _logger.LogInformation("SSE location deleted: {LocationId} for user {UserId}",
+                _logger.LogDebug("SSE location deleted: {LocationId} for user {UserId}",
                     deleteEvent.LocationId, deleteEvent.UserId);
                 LocationDeleted?.Invoke(this, new SseLocationDeletedEventArgs(deleteEvent));
                 break;
@@ -600,7 +600,7 @@ public class SseClient : ISseClient
                     UserId = root.TryGetProperty("userId", out var muid) ? muid.GetString() : null,
                     Disabled = root.TryGetProperty("disabled", out var dis) ? dis.GetBoolean() : null
                 };
-                _logger.LogInformation("SSE membership event received: {Action} for user {UserId}",
+                _logger.LogDebug("SSE membership event received: {Action} for user {UserId}",
                     membershipEvent.Action, membershipEvent.UserId);
                 MembershipReceived?.Invoke(this, new SseMembershipEventArgs(membershipEvent));
                 break;
@@ -612,7 +612,7 @@ public class SseClient : ISseClient
                         ? guid
                         : Guid.Empty
                 };
-                _logger.LogInformation("SSE invite created: {InvitationId}", inviteEvent.InvitationId);
+                _logger.LogDebug("SSE invite created: {InvitationId}", inviteEvent.InvitationId);
                 InviteCreated?.Invoke(this, new SseInviteCreatedEventArgs(inviteEvent));
                 break;
 
@@ -641,7 +641,7 @@ public class SseClient : ISseClient
                     IconName = root.TryGetProperty("iconName", out var icon) ? icon.GetString() : null,
                     MarkerColor = root.TryGetProperty("markerColor", out var color) ? color.GetString() : null
                 };
-                _logger.LogInformation("SSE visit started: {PlaceName} in {TripName} (VisitId: {VisitId})",
+                _logger.LogDebug("SSE visit started: {PlaceName} in {TripName} (VisitId: {VisitId})",
                     visitEvent.PlaceName, visitEvent.TripName, visitEvent.VisitId);
                 VisitStarted?.Invoke(this, new SseVisitStartedEventArgs(visitEvent));
                 break;
@@ -698,7 +698,7 @@ public class SseClient : ISseClient
             return; // Already have network
         }
 
-        _logger.LogInformation("SSE waiting for network connectivity...");
+        _logger.LogDebug("SSE waiting for network connectivity...");
 
         var tcs = new TaskCompletionSource<bool>();
 
@@ -724,7 +724,7 @@ public class SseClient : ISseClient
             using var registration = cancellationToken.Register(() => tcs.TrySetCanceled());
             await tcs.Task.ConfigureAwait(false);
 
-            _logger.LogInformation("SSE network connectivity restored");
+            _logger.LogDebug("SSE network connectivity restored");
         }
         finally
         {

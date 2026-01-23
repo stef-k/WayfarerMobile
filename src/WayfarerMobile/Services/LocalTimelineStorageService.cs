@@ -91,13 +91,13 @@ public class LocalTimelineStorageService : IDisposable
                     Provider = lastEntry.Provider
                 };
                 _filter.Initialize(lastLocation);
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "Initialized filter with last stored location from {Timestamp:u}",
                     lastEntry.Timestamp);
             }
             else
             {
-                _logger.LogInformation("No previous timeline entries found, filter will accept first location");
+                _logger.LogDebug("No previous timeline entries found, filter will accept first location");
             }
 
             // Subscribe to events BEFORE running recovery to avoid missing new events
@@ -112,7 +112,7 @@ public class LocalTimelineStorageService : IDisposable
             await BackfillMissedQueueEntriesAsync();
 
             _isInitialized = true;
-            _logger.LogInformation("LocalTimelineStorageService initialized");
+            _logger.LogDebug("LocalTimelineStorageService initialized");
         }
         catch (SQLiteException ex)
         {
@@ -185,7 +185,7 @@ public class LocalTimelineStorageService : IDisposable
 
             if (reconciled > 0)
             {
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "EDGE-14 reconciliation: Updated {Count} local entries with missing ServerId",
                     reconciled);
             }
@@ -323,7 +323,7 @@ public class LocalTimelineStorageService : IDisposable
 
             if (backfilled > 0 || filtered > 0)
             {
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "EDGE-1 backfill: Created {Backfilled} local timeline entries from queue ({Filtered} filtered)",
                     backfilled, filtered);
             }
@@ -546,7 +546,7 @@ public class LocalTimelineStorageService : IDisposable
     public void ResetFilter()
     {
         _filter.Reset();
-        _logger.LogInformation("Local timeline filter reset");
+        _logger.LogDebug("Local timeline filter reset");
     }
 
     /// <summary>

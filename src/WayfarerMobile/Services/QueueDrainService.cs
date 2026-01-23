@@ -197,7 +197,7 @@ public sealed class QueueDrainService : IDisposable
 
         try
         {
-            _logger.LogInformation("Starting QueueDrainService");
+            _logger.LogDebug("Starting QueueDrainService");
 
             // Initialize: validate reference point and reset stuck locations
             await InitializeAsync();
@@ -226,7 +226,7 @@ public sealed class QueueDrainService : IDisposable
                 TimeSpan.FromHours(CleanupIntervalHours));
 
             _isStarted = true;
-            _logger.LogInformation("QueueDrainService started successfully");
+            _logger.LogDebug("QueueDrainService started successfully");
         }
         catch (Exception ex)
         {
@@ -242,7 +242,7 @@ public sealed class QueueDrainService : IDisposable
         if (!_isStarted)
             return;
 
-        _logger.LogInformation("Stopping QueueDrainService");
+        _logger.LogDebug("Stopping QueueDrainService");
 
         // Cancel any pending timer callbacks first
         _timerCts?.Cancel();
@@ -260,7 +260,7 @@ public sealed class QueueDrainService : IDisposable
         _timerCts = null;
 
         _isStarted = false;
-        _logger.LogInformation("QueueDrainService stopped");
+        _logger.LogDebug("QueueDrainService stopped");
     }
 
     /// <summary>
@@ -468,13 +468,13 @@ public sealed class QueueDrainService : IDisposable
 
             if (!wasOnline && _isOnline)
             {
-                _logger.LogInformation("Network restored, queue drain will resume");
+                _logger.LogDebug("Network restored, queue drain will resume");
                 // Reset consecutive failures on network restore
                 Interlocked.Exchange(ref _consecutiveFailures, 0);
             }
             else if (wasOnline && !_isOnline)
             {
-                _logger.LogInformation("Network lost, queue drain paused");
+                _logger.LogDebug("Network lost, queue drain paused");
             }
         }
         catch (Exception ex)

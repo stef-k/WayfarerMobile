@@ -114,12 +114,12 @@ public class TripLayerService : ITripLayerService
         layer.Clear();
 
         var areaList = areas.ToList();
-        _logger.LogInformation("UpdateTripAreas called with {Count} areas", areaList.Count);
+        _logger.LogDebug("UpdateTripAreas called with {Count} areas", areaList.Count);
 
         var areaCount = 0;
         foreach (var area in areaList)
         {
-            _logger.LogInformation("Processing area '{Name}': GeometryGeoJson={HasGeo}, Boundary={BoundaryCount} pts, Fill={Fill}",
+            _logger.LogDebug("Processing area '{Name}': GeometryGeoJson={HasGeo}, Boundary={BoundaryCount} pts, Fill={Fill}",
                 area.Name,
                 !string.IsNullOrEmpty(area.GeometryGeoJson) ? $"yes({area.GeometryGeoJson.Length} chars)" : "null",
                 area.Boundary?.Count ?? 0,
@@ -180,7 +180,7 @@ public class TripLayerService : ITripLayerService
 
                 layer.Add(feature);
                 areaCount++;
-                _logger.LogInformation("Successfully added area '{Name}' to layer", area.Name);
+                _logger.LogDebug("Successfully added area '{Name}' to layer", area.Name);
             }
             catch (Exception ex)
             {
@@ -205,7 +205,7 @@ public class TripLayerService : ITripLayerService
         layer.Clear();
 
         var segmentList = segments.ToList();
-        _logger.LogInformation("UpdateTripSegments called with {Count} segments", segmentList.Count);
+        _logger.LogDebug("UpdateTripSegments called with {Count} segments", segmentList.Count);
 
         var segmentCount = 0;
         foreach (var segment in segmentList)

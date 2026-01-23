@@ -169,7 +169,7 @@ public class VisitNotificationService : IVisitNotificationService
             // Create cancellation token for subscription
             _subscriptionCts = new CancellationTokenSource();
 
-            _logger.LogInformation("Starting visit SSE subscription");
+            _logger.LogDebug("Starting visit SSE subscription");
 
             // Start subscription in background (fire-and-forget)
             _ = Task.Run(async () =>
@@ -198,7 +198,7 @@ public class VisitNotificationService : IVisitNotificationService
     /// <inheritdoc />
     public void Stop()
     {
-        _logger.LogInformation("Stopping visit notification service");
+        _logger.LogDebug("Stopping visit notification service");
         UnsubscribeFromSyncEvents();
         CleanupClient();
     }
@@ -285,7 +285,7 @@ public class VisitNotificationService : IVisitNotificationService
         // Determine notification mode based on navigation state
         var mode = DetermineNotificationMode(visit);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Visit notification: {PlaceName} in {TripName}, mode={Mode}",
             visit.PlaceName, visit.TripName, mode);
 
@@ -608,12 +608,12 @@ public class VisitNotificationService : IVisitNotificationService
 
     private void OnConnected(object? sender, EventArgs e)
     {
-        _logger.LogInformation("Visit SSE connected");
+        _logger.LogDebug("Visit SSE connected");
     }
 
     private void OnReconnecting(object? sender, SseReconnectEventArgs e)
     {
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Visit SSE reconnecting: attempt {Attempt}, delay {Delay}ms",
             e.Attempt, e.DelayMs);
     }
