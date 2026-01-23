@@ -170,7 +170,7 @@ public class SseManagementViewModel : IDisposable
         _groupSseClient.Reconnecting += OnSseReconnecting;
         _groupSseClient.PermanentError += OnSsePermanentError;
 
-        _logger.LogInformation("Starting SSE subscription for group {GroupId}", groupIdString);
+        _logger.LogDebug("Starting SSE subscription for group {GroupId}", groupIdString);
 
         // Start subscription in background (fire and forget)
         _ = Task.Run(async () =>
@@ -391,7 +391,7 @@ public class SseManagementViewModel : IDisposable
                 case "invite-declined":
                 case "invite-revoked":
                     // These are informational - no UI action needed
-                    _logger.LogInformation("Invite event: {Action}", membership.Action);
+                    _logger.LogDebug("Invite event: {Action}", membership.Action);
                     break;
 
                 default:
@@ -419,7 +419,7 @@ public class SseManagementViewModel : IDisposable
         if (_isDisposed || _callbacks == null || _callbacks.IsDisposed)
             return;
 
-        _logger.LogInformation("SSE invite created: {InvitationId}", e.InviteCreated.InvitationId);
+        _logger.LogDebug("SSE invite created: {InvitationId}", e.InviteCreated.InvitationId);
         // Future: Could refresh pending invitations list if UI is added
     }
 
@@ -428,7 +428,7 @@ public class SseManagementViewModel : IDisposable
     /// </summary>
     private void OnSseConnected(object? sender, EventArgs e)
     {
-        _logger.LogInformation("SSE connected");
+        _logger.LogDebug("SSE connected");
     }
 
     /// <summary>
@@ -436,7 +436,7 @@ public class SseManagementViewModel : IDisposable
     /// </summary>
     private void OnSseReconnecting(object? sender, SseReconnectEventArgs e)
     {
-        _logger.LogInformation("SSE reconnecting (attempt {Attempt}, delay {DelayMs}ms)", e.Attempt, e.DelayMs);
+        _logger.LogDebug("SSE reconnecting (attempt {Attempt}, delay {DelayMs}ms)", e.Attempt, e.DelayMs);
     }
 
     /// <summary>
@@ -491,7 +491,7 @@ public class SseManagementViewModel : IDisposable
                     _callbacks.UpdateMapMarkers();
                 }
 
-                _logger.LogInformation("Updated peer visibility for {UserId}: disabled={Disabled}", userId, isDisabled);
+                _logger.LogDebug("Updated peer visibility for {UserId}: disabled={Disabled}", userId, isDisabled);
             }
         });
     }
@@ -517,7 +517,7 @@ public class SseManagementViewModel : IDisposable
                     _callbacks.UpdateMapMarkers();
                 }
 
-                _logger.LogInformation("Removed member {UserId} from group", userId);
+                _logger.LogDebug("Removed member {UserId} from group", userId);
             }
         });
     }

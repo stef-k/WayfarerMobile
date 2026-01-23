@@ -198,7 +198,7 @@ public sealed class TimelineSyncService : ITimelineSyncService
 
         try
         {
-            _logger.LogInformation("Starting TimelineSyncService");
+            _logger.LogDebug("Starting TimelineSyncService");
 
             // Ensure database is initialized
             await EnsureInitializedAsync();
@@ -220,7 +220,7 @@ public sealed class TimelineSyncService : ITimelineSyncService
                 TimeSpan.FromSeconds(TimerIntervalSeconds));
 
             _isStarted = true;
-            _logger.LogInformation("TimelineSyncService started successfully");
+            _logger.LogDebug("TimelineSyncService started successfully");
         }
         catch (Exception ex)
         {
@@ -236,7 +236,7 @@ public sealed class TimelineSyncService : ITimelineSyncService
         if (!_isStarted)
             return;
 
-        _logger.LogInformation("Stopping TimelineSyncService");
+        _logger.LogDebug("Stopping TimelineSyncService");
 
         // Cancel any pending timer callbacks first
         _timerCts?.Cancel();
@@ -250,7 +250,7 @@ public sealed class TimelineSyncService : ITimelineSyncService
         _timerCts = null;
 
         _isStarted = false;
-        _logger.LogInformation("TimelineSyncService stopped");
+        _logger.LogDebug("TimelineSyncService stopped");
     }
 
     /// <summary>
@@ -324,7 +324,7 @@ public sealed class TimelineSyncService : ITimelineSyncService
 
             if (!wasOnline && _isOnline)
             {
-                _logger.LogInformation("Network restored, timeline sync will resume");
+                _logger.LogDebug("Network restored, timeline sync will resume");
                 // Reset consecutive failures on network restore
                 Interlocked.Exchange(ref _consecutiveFailures, 0);
 
@@ -333,7 +333,7 @@ public sealed class TimelineSyncService : ITimelineSyncService
             }
             else if (wasOnline && !_isOnline)
             {
-                _logger.LogInformation("Network lost, timeline sync paused");
+                _logger.LogDebug("Network lost, timeline sync paused");
             }
         }
         catch (Exception ex)

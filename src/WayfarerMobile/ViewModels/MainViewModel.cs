@@ -1121,7 +1121,7 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     public async Task LoadTripForNavigationAsync(TripDetails tripDetails)
     {
         // Issue #185 instrumentation: Log visibility state to help diagnose crashes
-        _logger.LogInformation("Loading trip: {TripName} ({PlaceCount} places, {SegmentCount} segments, {AreaCount} areas), IsPageVisible={IsVisible}",
+        _logger.LogDebug("Loading trip: {TripName} ({PlaceCount} places, {SegmentCount} segments, {AreaCount} areas), IsPageVisible={IsVisible}",
             tripDetails.Name, tripDetails.AllPlaces.Count, tripDetails.Segments.Count, tripDetails.AllAreas.Count, _isPageVisible);
 
         // Debug: Log regions and their areas
@@ -1157,7 +1157,7 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         {
             MapDisplay.ZoomToPoints(placePoints);
             MapDisplay.IsFollowingLocation = false; // Don't auto-center on user location
-            _logger.LogInformation("Zoomed map to fit {Count} trip places", placePoints.Count);
+            _logger.LogDebug("Zoomed map to fit {Count} trip places", placePoints.Count);
         }
         else if (tripDetails.BoundingBox != null)
         {
@@ -1167,7 +1167,7 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
             var centerLon = (bb.East + bb.West) / 2;
             MapDisplay.CenterOnLocation(centerLat, centerLon, zoomLevel: 12);
             MapDisplay.IsFollowingLocation = false;
-            _logger.LogInformation("Centered map on trip bounding box center");
+            _logger.LogDebug("Centered map on trip bounding box center");
         }
 
         // Force map refresh to ensure layers are rendered
