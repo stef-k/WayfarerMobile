@@ -54,9 +54,9 @@
 
 	<ItemGroup>
 		<!-- MAUI -->
-		<PackageReference Include="Microsoft.Maui.Controls" Version="10.0.20" />
-		<PackageReference Include="Microsoft.Maui.Essentials" Version="10.0.20" />
-		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.1" />
+		<PackageReference Include="Microsoft.Maui.Controls" Version="10.0.30" />
+		<PackageReference Include="Microsoft.Maui.Essentials" Version="10.0.30" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.2" />
 
 		<!-- MVVM -->
 		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
@@ -72,10 +72,10 @@
 		<PackageReference Include="SQLitePCLRaw.bundle_green" Version="2.1.11" />
 
 		<!-- QR Code -->
-		<PackageReference Include="ZXing.Net.Maui.Controls" Version="0.7.2" />
+		<PackageReference Include="ZXing.Net.Maui.Controls" Version="0.7.4" />
 
 		<!-- HTTP -->
-		<PackageReference Include="Microsoft.Extensions.Http" Version="10.0.1" />
+		<PackageReference Include="Microsoft.Extensions.Http" Version="10.0.2" />
 		<PackageReference Include="Polly" Version="8.6.5" />
 
 		<!-- Logging -->
@@ -85,7 +85,7 @@
 	</ItemGroup>
 
 	<ItemGroup Condition="'$(TargetFramework)' == 'net10.0-android'">
-	  <PackageReference Include="Xamarin.GooglePlayServices.Location" Version="121.3.0.7" />
+	  <PackageReference Include="Xamarin.GooglePlayServices.Location" Version="121.3.0.8" />
 	</ItemGroup>
 
 	<!-- Project References -->
