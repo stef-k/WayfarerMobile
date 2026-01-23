@@ -426,15 +426,6 @@ public partial class MapDisplayViewModel : BaseViewModel
     /// </summary>
     public void ClearTripLayers()
     {
-        // DIAGNOSTIC: Log layer state before clearing
-        var placesCount = _tripPlacesLayer?.GetFeatures()?.Count() ?? 0;
-        var areasCount = _tripAreasLayer?.GetFeatures()?.Count() ?? 0;
-        var segmentsCount = _tripSegmentsLayer?.GetFeatures()?.Count() ?? 0;
-        _logger.LogInformation(
-            "[DIAG-CLEAR] MapDisplayViewModel.ClearTripLayers() called. " +
-            "Before: Places={Places}, Areas={Areas}, Segments={Segments}",
-            placesCount, areasCount, segmentsCount);
-
         _tripPlacesLayer?.Clear();
         _tripPlacesLayer?.DataHasChanged();
         _tripAreasLayer?.Clear();
@@ -442,15 +433,6 @@ public partial class MapDisplayViewModel : BaseViewModel
         _tripSegmentsLayer?.Clear();
         _tripSegmentsLayer?.DataHasChanged();
         ClearPlaceSelection();
-
-        // DIAGNOSTIC: Log layer state after clearing
-        placesCount = _tripPlacesLayer?.GetFeatures()?.Count() ?? 0;
-        areasCount = _tripAreasLayer?.GetFeatures()?.Count() ?? 0;
-        segmentsCount = _tripSegmentsLayer?.GetFeatures()?.Count() ?? 0;
-        _logger.LogInformation(
-            "[DIAG-CLEAR] MapDisplayViewModel.ClearTripLayers() completed. " +
-            "After: Places={Places}, Areas={Areas}, Segments={Segments}",
-            placesCount, areasCount, segmentsCount);
     }
 
     /// <summary>

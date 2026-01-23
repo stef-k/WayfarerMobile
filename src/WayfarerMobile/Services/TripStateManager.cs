@@ -140,10 +140,8 @@ public class TripStateManager : ITripStateManager
             _currentTripId = newId;
             _currentTripName = newName;
 
-            // DIAGNOSTIC: Changed to Info level for release build visibility
-            _logger.LogInformation(
-                "[DIAG-STATE] TripStateManager.SetLoadedTrip(): " +
-                "Changed from {PreviousTripId} to {NewTripId} ({TripName})",
+            _logger.LogDebug(
+                "TripStateManager: Trip changed from {PreviousTripId} to {NewTripId} ({TripName})",
                 previousTrip?.Id,
                 trip?.Id,
                 trip?.Name ?? "(null)");

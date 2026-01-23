@@ -549,14 +549,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         _isContextMenuVisible = ContextMenu.IsContextMenuVisible;
         _contextMenuLatitude = ContextMenu.ContextMenuLatitude;
         _contextMenuLongitude = ContextMenu.ContextMenuLongitude;
-
-        // DIAGNOSTIC: Log state when new MainViewModel is created
-        _logger.LogInformation(
-            "[DIAG-INIT] MainViewModel constructor completed. InstanceId={InstanceId}, " +
-            "HasLoadedTrip={HasLoaded}, TripSheet.LoadedTrip={TripId}, " +
-            "TripStateManager.LoadedTrip={StateManagerTripId}, TripNavigationService.IsTripLoaded={NavLoaded}",
-            GetHashCode(), _hasLoadedTrip, TripSheet.LoadedTrip?.Id,
-            _tripStateManager.LoadedTrip?.Id, _tripNavigationService.IsTripLoaded);
     }
 
     #endregion
@@ -642,12 +634,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     /// <inheritdoc/>
     void ITripSheetCallbacks.UnloadTripFromMap()
     {
-        // DIAGNOSTIC: Log when map layers are being cleared
-        _logger.LogInformation(
-            "[DIAG-UNLOAD] MainViewModel.UnloadTripFromMap() called. " +
-            "HasLoadedTrip={HasLoaded}, TripNavigationService.IsTripLoaded={NavLoaded}",
-            HasLoadedTrip, _tripNavigationService.IsTripLoaded);
-
         MapDisplay.ClearTripLayers();
 
         // Recenter map on user location at street level
@@ -656,12 +642,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         {
             MapDisplay.CenterOnLocation(location.Latitude, location.Longitude, zoomLevel: 16);
         }
-
-        // DIAGNOSTIC: Log state after clearing
-        _logger.LogInformation(
-            "[DIAG-UNLOAD] MainViewModel.UnloadTripFromMap() completed. " +
-            "Note: TripNavigationService.IsTripLoaded={NavLoaded} (NOT cleared here)",
-            _tripNavigationService.IsTripLoaded);
     }
 
     /// <inheritdoc/>
@@ -1248,14 +1228,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     /// </summary>
     public override async Task OnAppearingAsync()
     {
-        // DIAGNOSTIC: Log state when page appears
-        _logger.LogInformation(
-            "[DIAG-APPEAR] MainViewModel.OnAppearingAsync() called. InstanceId={InstanceId}, " +
-            "HasLoadedTrip={HasLoaded}, TripSheet.LoadedTrip={TripId}, " +
-            "TripStateManager.LoadedTrip={StateManagerTripId}, TripNavigationService.IsTripLoaded={NavLoaded}",
-            GetHashCode(), HasLoadedTrip, TripSheet.LoadedTrip?.Id,
-            _tripStateManager.LoadedTrip?.Id, _tripNavigationService.IsTripLoaded);
-
         // Mark page visible and restore image bindings
         MarkPageVisible();
 

@@ -88,11 +88,6 @@ public partial class MainPage : ContentPage, IQueryAttributable
         // NOTE: Do NOT subscribe to Unloaded event for Shell root pages.
         // Shell caches root pages and reuses them on navigation.
         // Disposing on Unloaded breaks event subscriptions when Shell reuses the page.
-
-        // DIAGNOSTIC: Log page instance creation
-        _logger.LogInformation(
-            "[DIAG-PAGE] MainPage constructor completed. PageInstanceId={PageId}, ViewModelInstanceId={VmId}",
-            GetHashCode(), _viewModel.GetHashCode());
     }
 
     #region Context Menu Event Handlers
@@ -366,12 +361,6 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// </summary>
     protected override async void OnAppearing()
     {
-        // DIAGNOSTIC: Log page appearing with instance tracking
-        _logger.LogInformation(
-            "[DIAG-PAGE] MainPage.OnAppearing() called. PageInstanceId={PageId}, " +
-            "_pendingTrip={HasPending}, HasLoadedTrip={HasLoaded}, _isLoaded={IsLoaded}",
-            GetHashCode(), _pendingTrip != null, _viewModel.HasLoadedTrip, _isLoaded);
-
         // Issue #185: Reset readiness gate at start of each appearance cycle
         // This ensures stale readiness from previous suspend/resume never persists
         ResetPageReadyGate();
@@ -434,17 +423,8 @@ public partial class MainPage : ContentPage, IQueryAttributable
         // Clear pending trip now that we're committed to loading
         _pendingTrip = null;
 
-        _logger.LogInformation(
-            "[DIAG-PENDING] LoadPendingTripIfReadyAsync: Loading trip {TripId} ({TripName})",
-            trip.Id, trip.Name);
-
         _logger.LogDebug("LoadPendingTripIfReadyAsync: Readiness gate passed, loading trip {TripName}", trip.Name);
         await _viewModel.LoadTripForNavigationAsync(trip);
-
-        _logger.LogInformation(
-            "[DIAG-PENDING] LoadPendingTripIfReadyAsync: Load complete. HasLoadedTrip={HasLoaded}",
-            _viewModel.HasLoadedTrip);
-
         _logger.LogDebug("LoadPendingTripIfReadyAsync: After load, HasLoadedTrip={HasLoaded}", _viewModel.HasLoadedTrip);
     }
 
@@ -454,16 +434,6 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// <param name="query">The query parameters from navigation.</param>
     public void ApplyQueryAttributes(IDictionary<string, object> query)
     {
-        // DIAGNOSTIC: Log every call to ApplyQueryAttributes
-        _logger.LogInformation(
-            "[DIAG-QUERY] ApplyQueryAttributes called. PageInstanceId={PageId}, " +
-            "Keys=[{Keys}], HasLoadTrip={HasLoad}, CurrentPendingTrip={PendingId}, LoadedTrip={LoadedId}",
-            GetHashCode(),
-            string.Join(", ", query.Keys),
-            query.ContainsKey("LoadTrip"),
-            _pendingTrip?.Id,
-            _viewModel.TripSheet.LoadedTrip?.Id);
-
         _logger.LogDebug("ApplyQueryAttributes: query keys={Keys}", string.Join(", ", query.Keys));
 
         if (query.TryGetValue("LoadTrip", out var tripObj) && tripObj is TripDetails trip)
@@ -476,10 +446,9 @@ public partial class MainPage : ContentPage, IQueryAttributable
 
             if (token.HasValue && token == _lastProcessedLoadTripToken)
             {
-                _logger.LogInformation(
-                    "[DIAG-QUERY] ApplyQueryAttributes: SKIPPING trip {TripId} - same token {Token}. " +
-                    "Shell is re-applying cached parameters.",
-                    trip.Id, token);
+                _logger.LogDebug(
+                    "ApplyQueryAttributes: Skipping trip {TripId} - same token (Shell re-applying cached params)",
+                    trip.Id);
                 return;
             }
 
@@ -487,13 +456,6 @@ public partial class MainPage : ContentPage, IQueryAttributable
             if (token.HasValue)
             {
                 _lastProcessedLoadTripToken = token;
-                _logger.LogInformation(
-                    "[DIAG-QUERY] ApplyQueryAttributes: Processing trip {TripId} with new token {Token}",
-                    trip.Id, token);
-            }
-            else
-            {
-                _logger.LogDebug("ApplyQueryAttributes: Processing trip {TripId} (no token - legacy path)", trip.Id);
             }
 
             _logger.LogDebug("ApplyQueryAttributes: Setting pending trip {TripName} ({TripId})", trip.Name, trip.Id);
@@ -535,11 +497,6 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// </summary>
     protected override async void OnDisappearing()
     {
-        // DIAGNOSTIC: Log page disappearing with instance tracking
-        _logger.LogInformation(
-            "[DIAG-PAGE] MainPage.OnDisappearing() called. PageInstanceId={PageId}, HasLoadedTrip={HasLoaded}",
-            GetHashCode(), _viewModel.HasLoadedTrip);
-
         base.OnDisappearing();
 
         // Issue #185: Reset readiness gate immediately to cancel any pending trip load
