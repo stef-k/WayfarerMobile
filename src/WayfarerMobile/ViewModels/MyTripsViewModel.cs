@@ -60,6 +60,13 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     /// </summary>
     private bool _isLoadingToMap;
 
+    /// <summary>
+    /// Guard to prevent navigation before page initialization completes.
+    /// This prevents the ObjectDisposedException crash when user taps Load
+    /// before OnAppearingAsync finishes (issue #185).
+    /// </summary>
+    private bool _isPageReady;
+
     #endregion
 
     #region Observable Properties - Sync Queue Status
@@ -336,6 +343,14 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     {
         if (item == null)
             return;
+
+        // Guard against navigation before page is ready (issue #185)
+        // This prevents ObjectDisposedException when user taps Load before OnAppearingAsync completes
+        if (!_isPageReady)
+        {
+            _logger.LogDebug("LoadTripToMapAsync: Page not ready, ignoring tap");
+            return;
+        }
 
         // Guard against rapid taps - prevent multiple concurrent loads
         if (_isLoadingToMap)
@@ -666,34 +681,45 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     /// <inheritdoc/>
     public override async Task OnAppearingAsync()
     {
+        // Mark page as not ready until initialization completes (issue #185)
+        _isPageReady = false;
         _logger.LogDebug("OnAppearingAsync: Trips.Count = {Count}", Trips.Count);
 
-        // Recover stuck downloads once per session (downloads interrupted by app closure)
-        if (!_hasRecoveredStuckDownloads)
+        try
         {
-            _hasRecoveredStuckDownloads = true;
-            var recovered = await _downloadStateService.RecoverStuckDownloadsAsync();
-            if (recovered > 0)
+            // Recover stuck downloads once per session (downloads interrupted by app closure)
+            if (!_hasRecoveredStuckDownloads)
             {
-                _logger.LogInformation("Recovered {Count} stuck download(s) from previous session", recovered);
+                _hasRecoveredStuckDownloads = true;
+                var recovered = await _downloadStateService.RecoverStuckDownloadsAsync();
+                if (recovered > 0)
+                {
+                    _logger.LogInformation("Recovered {Count} stuck download(s) from previous session", recovered);
+                }
             }
-        }
 
-        // Load trips if empty
-        if (Trips.Count == 0)
+            // Load trips if empty
+            if (Trips.Count == 0)
+            {
+                _logger.LogDebug("OnAppearingAsync: Calling LoadTripsAsync");
+                await LoadTripsAsync();
+            }
+
+            // Check for paused downloads from previous sessions
+            await CheckForPausedDownloadsAsync();
+
+            // Always refresh loaded state (even after LoadTripsAsync, in case there's timing issues)
+            _logger.LogDebug("OnAppearingAsync: Calling RefreshLoadedTripState");
+            RefreshLoadedTripState();
+
+            await base.OnAppearingAsync();
+        }
+        finally
         {
-            _logger.LogDebug("OnAppearingAsync: Calling LoadTripsAsync");
-            await LoadTripsAsync();
+            // Mark page as ready - safe to navigate now (issue #185)
+            _isPageReady = true;
+            _logger.LogDebug("OnAppearingAsync: Page ready");
         }
-
-        // Check for paused downloads from previous sessions
-        await CheckForPausedDownloadsAsync();
-
-        // Always refresh loaded state (even after LoadTripsAsync, in case there's timing issues)
-        _logger.LogDebug("OnAppearingAsync: Calling RefreshLoadedTripState");
-        RefreshLoadedTripState();
-
-        await base.OnAppearingAsync();
     }
 
     /// <inheritdoc/>

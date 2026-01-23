@@ -281,6 +281,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// D5: Loads the pending trip only when both ordering guard conditions are met.
     /// 1. Visual tree is attached (Loaded fired - Android Activity ready)
     /// 2. ViewModel initialization complete (OnAppearingAsync finished)
+    /// 3. One Dispatcher tick has passed (ensures platform handlers are ready) - issue #185
     /// </summary>
     private async Task LoadPendingTripIfReadyAsync()
     {
@@ -297,6 +298,11 @@ public partial class MainPage : ContentPage, IQueryAttributable
             _logger.LogDebug("LoadPendingTripIfReadyAsync: Loading pending trip {TripName}", _pendingTrip.Name);
             var trip = _pendingTrip;
             _pendingTrip = null;
+
+            // D5 enhancement (issue #185): Wait for one Dispatcher tick to ensure
+            // platform handlers are fully initialized before loading trip images
+            await Task.Yield();
+
             await _viewModel.LoadTripForNavigationAsync(trip);
             _logger.LogDebug("LoadPendingTripIfReadyAsync: After load, HasLoadedTrip={HasLoaded}", _viewModel.HasLoadedTrip);
         }

@@ -185,9 +185,12 @@
 
                     <!-- Row 1: List View -->
                     <Grid Grid.Row="1" IsVisible="{Binding ShowListView}">
-                        <!-- Shimmer Loading Placeholder -->
-                        <controls:ShimmerLoadingView IsActive="{Binding IsLoadingMembers}"
-                                                     IsVisible="{Binding IsLoadingMembers}" />
+                        <!-- Loading Indicator -->
+                        <ActivityIndicator IsRunning="{Binding IsLoadingMembers}"
+                                           IsVisible="{Binding IsLoadingMembers}"
+                                           HorizontalOptions="Center"
+                                           VerticalOptions="Center"
+                                           Color="{StaticResource Primary}" />
 
                         <RefreshView Command="{Binding LoadMembersCommand}"
                                     IsRefreshing="{Binding IsLoadingMembers}"
