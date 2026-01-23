@@ -86,6 +86,9 @@
 
 	<ItemGroup Condition="'$(TargetFramework)' == 'net10.0-android'">
 	  <PackageReference Include="Xamarin.GooglePlayServices.Location" Version="121.3.0.8" />
+	  <!-- Exclude duplicate JVM packages to resolve D8 compilation conflicts with Android variants -->
+	  <!-- See: https://github.com/dotnet/android-libraries/issues/1341 -->
+	  <PackageReference Include="Xamarin.AndroidX.Compose.Runtime.Annotation.Jvm" Version="1.10.0.1" ExcludeAssets="all" />
 	</ItemGroup>
 
 	<!-- Project References -->
