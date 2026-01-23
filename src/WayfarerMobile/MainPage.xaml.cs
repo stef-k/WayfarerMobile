@@ -28,6 +28,11 @@ public partial class MainPage : ContentPage, IQueryAttributable
     private TripDetails? _pendingTrip;
     private WritableLayer? _tempMarkerLayer;
 
+    // Issue #191: Track the last trip that was loaded and then explicitly unloaded
+    // This prevents Shell from re-loading the trip when navigating back to MainPage
+    private Guid? _lastLoadedTripId;
+    private Guid? _lastUnloadedTripId;
+
     // Issue #185: Deterministic readiness gate to prevent ObjectDisposedException
     // Trip load awaits this gate; it fires only when all platform handlers are ready.
     // _isLoaded: Visual tree is attached (Loaded event fired)
@@ -429,8 +434,29 @@ public partial class MainPage : ContentPage, IQueryAttributable
         // Clear pending trip now that we're committed to loading
         _pendingTrip = null;
 
+        // Issue #191: Track loaded trip ID to detect explicit unload later
+        _lastLoadedTripId = trip.Id;
+        // Clear any previous unload marker since we're loading a new trip
+        if (_lastUnloadedTripId == trip.Id)
+        {
+            _lastUnloadedTripId = null;
+        }
+
+        // DIAGNOSTIC: Confirm pending trip was cleared
+        _logger.LogInformation(
+            "[DIAG-PENDING] LoadPendingTripIfReadyAsync: Cleared _pendingTrip, about to load trip {TripId} ({TripName}). " +
+            "Set _lastLoadedTripId={LastLoadedId}",
+            trip.Id, trip.Name, _lastLoadedTripId);
+
         _logger.LogDebug("LoadPendingTripIfReadyAsync: Readiness gate passed, loading trip {TripName}", trip.Name);
         await _viewModel.LoadTripForNavigationAsync(trip);
+
+        // DIAGNOSTIC: Confirm final state after load
+        _logger.LogInformation(
+            "[DIAG-PENDING] LoadPendingTripIfReadyAsync: After load complete. " +
+            "HasLoadedTrip={HasLoaded}, _pendingTrip={PendingId}, _lastLoadedTripId={LastLoadedId}",
+            _viewModel.HasLoadedTrip, _pendingTrip?.Id, _lastLoadedTripId);
+
         _logger.LogDebug("LoadPendingTripIfReadyAsync: After load, HasLoadedTrip={HasLoaded}", _viewModel.HasLoadedTrip);
     }
 
@@ -440,10 +466,30 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// <param name="query">The query parameters from navigation.</param>
     public void ApplyQueryAttributes(IDictionary<string, object> query)
     {
+        // DIAGNOSTIC: Log every call to ApplyQueryAttributes
+        _logger.LogInformation(
+            "[DIAG-QUERY] ApplyQueryAttributes called. PageInstanceId={PageId}, " +
+            "Keys=[{Keys}], HasLoadTrip={HasLoad}, CurrentPendingTrip={PendingId}, LoadedTrip={LoadedId}",
+            GetHashCode(),
+            string.Join(", ", query.Keys),
+            query.ContainsKey("LoadTrip"),
+            _pendingTrip?.Id,
+            _viewModel.TripSheet.LoadedTrip?.Id);
+
         _logger.LogDebug("ApplyQueryAttributes: query keys={Keys}", string.Join(", ", query.Keys));
 
         if (query.TryGetValue("LoadTrip", out var tripObj) && tripObj is TripDetails trip)
         {
+            // Issue #191: Clear the unloaded marker when user explicitly selects a new trip
+            // (even if it's the same trip they just unloaded - they want to reload it)
+            if (_lastUnloadedTripId.HasValue)
+            {
+                _logger.LogInformation(
+                    "[DIAG-QUERY] ApplyQueryAttributes: Clearing _lastUnloadedTripId={OldId} for new trip {NewId}",
+                    _lastUnloadedTripId, trip.Id);
+                _lastUnloadedTripId = null;
+            }
+
             _logger.LogDebug("ApplyQueryAttributes: Setting pending trip {TripName} ({TripId})", trip.Name, trip.Id);
             _pendingTrip = trip;
 
@@ -638,6 +684,33 @@ public partial class MainPage : ContentPage, IQueryAttributable
         else if (e.PropertyName == nameof(MainViewModel.IsCheckInSheetOpen) && _viewModel.IsCheckInSheetOpen)
         {
             MainBottomSheet.State = Syncfusion.Maui.Toolkit.BottomSheet.BottomSheetState.FullExpanded;
+        }
+        // Issue #191: Track when trip is explicitly unloaded to prevent auto-reload on navigation
+        else if (e.PropertyName == nameof(MainViewModel.HasLoadedTrip))
+        {
+            if (!_viewModel.HasLoadedTrip && _lastLoadedTripId.HasValue)
+            {
+                // Trip was unloaded - clear any pending trip to prevent Shell cached page from reloading
+                // Also track the unloaded trip ID for diagnostics
+                _lastUnloadedTripId = _lastLoadedTripId;
+
+                // KEY FIX: Clear _pendingTrip if it matches the unloaded trip
+                // This handles the case where Shell caches the page with stale _pendingTrip
+                if (_pendingTrip?.Id == _lastLoadedTripId)
+                {
+                    _logger.LogInformation(
+                        "[DIAG-UNLOAD] MainPage detected trip unload. Clearing stale _pendingTrip={TripId}",
+                        _pendingTrip?.Id);
+                    _pendingTrip = null;
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "[DIAG-UNLOAD] MainPage detected trip unload. _lastUnloadedTripId={TripId}, " +
+                        "_pendingTrip={PendingId} (not matching, left as-is)",
+                        _lastUnloadedTripId, _pendingTrip?.Id);
+                }
+            }
         }
     }
 
