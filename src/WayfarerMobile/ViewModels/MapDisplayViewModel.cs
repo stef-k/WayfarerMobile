@@ -200,11 +200,9 @@ public partial class MapDisplayViewModel : BaseViewModel
         }
         else
         {
-            // No location available - show globe view (zoom 2)
-            if (map.Navigator.Resolutions?.Count > 2)
-            {
-                map.Navigator.ZoomTo(map.Navigator.Resolutions[2]);
-            }
+            // No location available - show globe view centered on Atlantic (zoom 2)
+            // Using 0,0 as center point shows a balanced world view
+            _mapBuilder.CenterOnLocation(map, 0, 0, zoomLevel: 2);
             _logger.LogDebug("Map initialized at globe view (no location available)");
         }
     }
