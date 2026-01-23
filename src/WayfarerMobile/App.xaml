@@ -34,6 +34,8 @@
             <converters:BoolToStrokeThicknessConverter x:Key="BoolToStrokeThicknessConverter" />
             <converters:BoolToSelectionColorConverter x:Key="BoolToSelectionColorConverter" />
             <converters:BoolToSyncBannerColorConverter x:Key="BoolToSyncBannerColorConverter" />
+            <converters:VisibilityGatedImageSourceConverter x:Key="VisibilityGatedImageSourceConverter" />
+            <converters:VisibilityGatedMauiAssetImageConverter x:Key="VisibilityGatedMauiAssetImageConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

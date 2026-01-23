@@ -1120,8 +1120,9 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     /// <param name="tripDetails">The trip details to load.</param>
     public async Task LoadTripForNavigationAsync(TripDetails tripDetails)
     {
-        _logger.LogInformation("Loading trip: {TripName} ({PlaceCount} places, {SegmentCount} segments, {AreaCount} areas)",
-            tripDetails.Name, tripDetails.AllPlaces.Count, tripDetails.Segments.Count, tripDetails.AllAreas.Count);
+        // Issue #185 instrumentation: Log visibility state to help diagnose crashes
+        _logger.LogInformation("Loading trip: {TripName} ({PlaceCount} places, {SegmentCount} segments, {AreaCount} areas), IsPageVisible={IsVisible}",
+            tripDetails.Name, tripDetails.AllPlaces.Count, tripDetails.Segments.Count, tripDetails.AllAreas.Count, _isPageVisible);
 
         // Debug: Log regions and their areas
         _logger.LogDebug("Trip has {RegionCount} regions", tripDetails.Regions.Count);
@@ -1323,9 +1324,10 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         // Create a fresh CTS for the next appearance
         _pageLifetimeCts = new CancellationTokenSource();
 
-        // Set TripCoverImageUrl to null to cancel any pending image load
+        // Set image bindings to null to cancel any pending image loads
         // MAUI will cancel the native load when the ImageSource is set to null
         OnPropertyChanged(nameof(TripCoverImageUrl));
+        OnPropertyChanged(nameof(IsPageVisible));
     }
 
     /// <summary>
@@ -1335,9 +1337,16 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     private void MarkPageVisible()
     {
         _isPageVisible = true;
-        // Restore TripCoverImageUrl binding (will now return actual URL)
+        // Restore image bindings (will now return actual URLs)
         OnPropertyChanged(nameof(TripCoverImageUrl));
+        OnPropertyChanged(nameof(IsPageVisible));
     }
+
+    /// <summary>
+    /// Gets whether the page is currently visible.
+    /// Use this for visibility-gated image bindings in DataTemplates.
+    /// </summary>
+    public bool IsPageVisible => _isPageVisible;
 
     /// <summary>
     /// Cleans up event subscriptions to prevent memory leaks.

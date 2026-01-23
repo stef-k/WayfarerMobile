@@ -3,7 +3,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:viewmodels="clr-namespace:WayfarerMobile.ViewModels"
              xmlns:models="clr-namespace:WayfarerMobile.Core.Models;assembly=WayfarerMobile.Core"
-             xmlns:controls="clr-namespace:WayfarerMobile.Shared.Controls"
              x:Class="WayfarerMobile.Views.Controls.MyTripsView"
              x:Name="ThisView"
              x:DataType="viewmodels:MyTripsViewModel">
@@ -167,6 +166,7 @@
                                                 Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MyTripsViewModel}}, Path=LoadTripToMapCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanLoadToMap}"
+                                                IsEnabled="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MyTripsViewModel}}, Path=IsPageReady}"
                                                 BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
                                                 TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
                                                 FontSize="12"
@@ -261,10 +261,14 @@
             </CollectionView>
         </RefreshView>
 
-        <!-- Shimmer overlay - only shown on initial load, not on pull-to-refresh -->
-        <controls:ShimmerLoadingView Grid.Row="1"
-                                     IsActive="{Binding IsInitialLoad}"
-                                     IsVisible="{Binding IsInitialLoad}"
-                                     BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}" />
+        <!-- Loading overlay - only shown on initial load, not on pull-to-refresh -->
+        <Grid Grid.Row="1"
+              IsVisible="{Binding IsInitialLoad}"
+              BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}">
+            <ActivityIndicator IsRunning="{Binding IsInitialLoad}"
+                               HorizontalOptions="Center"
+                               VerticalOptions="Center"
+                               Color="{StaticResource Primary}" />
+        </Grid>
     </Grid>
 </ContentView>

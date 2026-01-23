@@ -137,8 +137,15 @@
                                                                   CommandParameter="{Binding .}" />
                                         </Border.GestureRecognizers>
                                         <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                                            <Image Grid.Column="0" Source="{Binding IconPath, Converter={StaticResource MauiAssetImageConverter}}"
-                                                   WidthRequest="36" HeightRequest="36" VerticalOptions="Center" />
+                                            <!-- Issue #185: Visibility-gated to prevent async load crashes -->
+                                            <Image Grid.Column="0" WidthRequest="36" HeightRequest="36" VerticalOptions="Center">
+                                                <Image.Source>
+                                                    <MultiBinding Converter="{StaticResource VisibilityGatedMauiAssetImageConverter}">
+                                                        <Binding Path="IconPath" />
+                                                        <Binding Path="IsPageVisible" Source="{RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}" />
+                                                    </MultiBinding>
+                                                </Image.Source>
+                                            </Image>
                                             <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="2">
                                                 <Label Text="{Binding Name}" FontSize="15" FontAttributes="Bold"
                                                        LineBreakMode="TailTruncation" />
@@ -283,10 +290,18 @@
                                     <sfExpander:SfExpander.Content>
                                         <VerticalStackLayout Spacing="0">
                                             <!-- Region Cover Image (shown directly if exists) -->
+                                            <!-- Issue #185: Use visibility-gated binding to prevent async image load crashes -->
                                             <Border StrokeThickness="0" HeightRequest="100" Margin="8,4,8,6"
                                                     IsVisible="{Binding HasCoverImage}">
                                                 <Border.StrokeShape><RoundRectangle CornerRadius="6" /></Border.StrokeShape>
-                                                <Image Source="{Binding CleanCoverImageUrl}" Aspect="AspectFill" />
+                                                <Image Aspect="AspectFill">
+                                                    <Image.Source>
+                                                        <MultiBinding Converter="{StaticResource VisibilityGatedImageSourceConverter}">
+                                                            <Binding Path="CleanCoverImageUrl" />
+                                                            <Binding Path="IsPageVisible" Source="{RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}" />
+                                                        </MultiBinding>
+                                                    </Image.Source>
+                                                </Image>
                                             </Border>
                                             <!-- Region Notes (button to show details, styled like trip notes) -->
                                             <Border StrokeThickness="0"
@@ -325,8 +340,15 @@
                                                                                       CommandParameter="{Binding .}" />
                                                             </Border.GestureRecognizers>
                                                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="4">
-                                                                <Image Grid.Column="0" Source="{Binding IconPath, Converter={StaticResource MauiAssetImageConverter}}"
-                                                                       WidthRequest="32" HeightRequest="32" VerticalOptions="Center" />
+                                                                <!-- Issue #185: Visibility-gated to prevent async load crashes -->
+                                                                <Image Grid.Column="0" WidthRequest="32" HeightRequest="32" VerticalOptions="Center">
+                                                                    <Image.Source>
+                                                                        <MultiBinding Converter="{StaticResource VisibilityGatedMauiAssetImageConverter}">
+                                                                            <Binding Path="IconPath" />
+                                                                            <Binding Path="IsPageVisible" Source="{RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}" />
+                                                                        </MultiBinding>
+                                                                    </Image.Source>
+                                                                </Image>
                                                                 <Label Grid.Column="1" Text="{Binding Name}" FontSize="14" VerticalOptions="Center"
                                                                        LineBreakMode="WordWrap" />
                                                                 <!-- Move Up/Down Buttons (compact with negative margins) -->
@@ -542,8 +564,15 @@
 
             <!-- Row 0: Place Header with Icon and Name -->
             <Grid Grid.Row="0" ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                <Image Grid.Column="0" Source="{Binding TripSheet.SelectedTripPlace.IconPath, Converter={StaticResource MauiAssetImageConverter}}"
-                       WidthRequest="36" HeightRequest="36" VerticalOptions="Start" />
+                <!-- Issue #185: Visibility-gated to prevent async load crashes -->
+                <Image Grid.Column="0" WidthRequest="36" HeightRequest="36" VerticalOptions="Start">
+                    <Image.Source>
+                        <MultiBinding Converter="{StaticResource VisibilityGatedMauiAssetImageConverter}">
+                            <Binding Path="TripSheet.SelectedTripPlace.IconPath" />
+                            <Binding Path="IsPageVisible" />
+                        </MultiBinding>
+                    </Image.Source>
+                </Image>
                 <Label Grid.Column="1" Text="{Binding TripSheet.SelectedTripPlace.Name}" FontSize="18" FontAttributes="Bold"
                        VerticalOptions="Center" LineBreakMode="WordWrap" />
             </Grid>

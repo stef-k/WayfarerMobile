@@ -28,11 +28,15 @@ public partial class MainPage : ContentPage, IQueryAttributable
     private TripDetails? _pendingTrip;
     private WritableLayer? _tempMarkerLayer;
 
-    // D5: Ordering guard flags to prevent image load crash
-    // _isLoaded: Visual tree is attached (Loaded event fired) - safe to load images
+    // Issue #185: Deterministic readiness gate to prevent ObjectDisposedException
+    // Trip load awaits this gate; it fires only when all platform handlers are ready.
+    // _isLoaded: Visual tree is attached (Loaded event fired)
     // _isAppearingComplete: ViewModel initialization (OnAppearingAsync) is done
+    // Handler checks: Critical controls have non-null handlers (platform is truly ready)
     private bool _isLoaded;
     private bool _isAppearingComplete;
+    private TaskCompletionSource _pageReadyTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private CancellationTokenSource _pageReadyCts = new();
 
     /// <summary>
     /// Creates a new instance of MainPage.
@@ -49,6 +53,12 @@ public partial class MainPage : ContentPage, IQueryAttributable
         // D5: Use Loaded event - fires when visual tree is attached to window
         // This ensures Android Activity is ready before image loads can occur
         Loaded += OnPageLoaded;
+
+        // Issue #185: Subscribe to HandlerChanged events for deterministic readiness
+        // These fire when the platform-specific handlers are attached/ready
+        HandlerChanged += OnControlHandlerChanged;
+        MapControl.HandlerChanged += OnControlHandlerChanged;
+        MainBottomSheet.HandlerChanged += OnControlHandlerChanged;
 
         // Subscribe to map info events for tap handling (page-owned control)
         MapControl.Info += OnMapInfo;
@@ -253,7 +263,92 @@ public partial class MainPage : ContentPage, IQueryAttributable
     {
         _logger.LogDebug("OnPageLoaded: Visual tree attached, _isAppearingComplete={Flag}", _isAppearingComplete);
         _isLoaded = true;
+        TrySetPageReady();
         await LoadPendingTripIfReadyAsync();
+    }
+
+    /// <summary>
+    /// Issue #185: Handles HandlerChanged events from critical controls.
+    /// Used to determine when platform handlers are ready.
+    /// </summary>
+    private void OnControlHandlerChanged(object? sender, EventArgs e)
+    {
+        // Determine control name and whether handler is attached or detached
+        var (controlName, isAttached) = sender switch
+        {
+            MainPage page => ("MainPage", page.Handler != null),
+            Mapsui.UI.Maui.MapControl map => ("MapControl", map.Handler != null),
+            Syncfusion.Maui.Toolkit.BottomSheet.SfBottomSheet sheet => ("MainBottomSheet", sheet.Handler != null),
+            _ => ("Unknown", false)
+        };
+
+        var action = isAttached ? "attached" : "detached";
+        _logger.LogDebug("OnControlHandlerChanged: {ControlName} handler {Action}", controlName, action);
+
+        // Only try to signal readiness on attach events
+        if (isAttached)
+        {
+            TrySetPageReady();
+        }
+    }
+
+    /// <summary>
+    /// Issue #185: Resets the page readiness gate.
+    /// Called on OnDisappearing and before each OnAppearing to ensure stale readiness never persists.
+    /// </summary>
+    private void ResetPageReadyGate()
+    {
+        _logger.LogDebug("ResetPageReadyGate: Resetting readiness gate");
+
+        // Cancel any pending wait on the old gate
+        _pageReadyCts.Cancel();
+        _pageReadyCts.Dispose();
+
+        // Create fresh CTS and TCS for the next appearance cycle
+        _pageReadyCts = new CancellationTokenSource();
+        _pageReadyTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    /// <summary>
+    /// Issue #185: Checks if all readiness conditions are met and signals the gate if so.
+    /// Conditions: Loaded fired, OnAppearingAsync complete, all critical handlers non-null.
+    /// </summary>
+    private void TrySetPageReady()
+    {
+        // All conditions must be true
+        if (!_isLoaded)
+        {
+            _logger.LogDebug("TrySetPageReady: Not ready - _isLoaded=false");
+            return;
+        }
+
+        if (!_isAppearingComplete)
+        {
+            _logger.LogDebug("TrySetPageReady: Not ready - _isAppearingComplete=false");
+            return;
+        }
+
+        if (Handler == null)
+        {
+            _logger.LogDebug("TrySetPageReady: Not ready - MainPage.Handler is null");
+            return;
+        }
+
+        if (MapControl.Handler == null)
+        {
+            _logger.LogDebug("TrySetPageReady: Not ready - MapControl.Handler is null");
+            return;
+        }
+
+        if (MainBottomSheet.Handler == null)
+        {
+            _logger.LogDebug("TrySetPageReady: Not ready - MainBottomSheet.Handler is null");
+            return;
+        }
+
+        // All conditions met - signal readiness
+        _logger.LogInformation("TrySetPageReady: All conditions met, signaling page ready");
+        _pageReadyTcs.TrySetResult();
     }
 
     /// <summary>
@@ -264,6 +359,10 @@ public partial class MainPage : ContentPage, IQueryAttributable
         _logger.LogDebug("OnAppearing: Start, _pendingTrip={HasPending}, HasLoadedTrip={HasLoaded}, _isLoaded={IsLoaded}",
             _pendingTrip != null, _viewModel.HasLoadedTrip, _isLoaded);
 
+        // Issue #185: Reset readiness gate at start of each appearance cycle
+        // This ensures stale readiness from previous suspend/resume never persists
+        ResetPageReadyGate();
+
         base.OnAppearing();
 
         // Initialize map state, permissions, etc.
@@ -273,33 +372,58 @@ public partial class MainPage : ContentPage, IQueryAttributable
         _isAppearingComplete = true;
         _logger.LogDebug("OnAppearing: OnAppearingAsync complete, _isLoaded={IsLoaded}", _isLoaded);
 
-        // D5: Try to load trip (will only proceed if Loaded has also fired)
+        // Issue #185: Check if all conditions now met (handlers may already be attached)
+        TrySetPageReady();
+
+        // D5: Try to load trip (will await the readiness gate)
         await LoadPendingTripIfReadyAsync();
     }
 
     /// <summary>
-    /// D5: Loads the pending trip only when both ordering guard conditions are met.
-    /// 1. Visual tree is attached (Loaded fired - Android Activity ready)
-    /// 2. ViewModel initialization complete (OnAppearingAsync finished)
+    /// Issue #185: Loads the pending trip only when the deterministic readiness gate is satisfied.
+    /// The gate requires: Loaded fired, OnAppearingAsync complete, all critical handlers non-null.
+    /// No magic delays - uses concrete platform readiness signals.
     /// </summary>
     private async Task LoadPendingTripIfReadyAsync()
     {
-        // ORDERING GUARD: Only load when BOTH conditions are met
-        if (!_isLoaded || !_isAppearingComplete)
+        if (_pendingTrip == null)
         {
-            _logger.LogDebug("LoadPendingTripIfReadyAsync: Not ready - _isLoaded={IsLoaded}, _isAppearingComplete={IsAppearing}",
-                _isLoaded, _isAppearingComplete);
+            _logger.LogDebug("LoadPendingTripIfReadyAsync: No pending trip");
             return;
         }
 
-        if (_pendingTrip != null)
+        var trip = _pendingTrip;
+        _logger.LogDebug("LoadPendingTripIfReadyAsync: Waiting for readiness gate, trip={TripName}", trip.Name);
+
+        try
         {
-            _logger.LogDebug("LoadPendingTripIfReadyAsync: Loading pending trip {TripName}", _pendingTrip.Name);
-            var trip = _pendingTrip;
-            _pendingTrip = null;
-            await _viewModel.LoadTripForNavigationAsync(trip);
-            _logger.LogDebug("LoadPendingTripIfReadyAsync: After load, HasLoadedTrip={HasLoaded}", _viewModel.HasLoadedTrip);
+            // Wait for the deterministic readiness gate with cancellation support
+            // This will complete when TrySetPageReady() signals all conditions are met
+            using var reg = _pageReadyCts.Token.Register(() =>
+                _logger.LogDebug("LoadPendingTripIfReadyAsync: Readiness gate cancelled (page disappeared)"));
+
+            await _pageReadyTcs.Task.WaitAsync(_pageReadyCts.Token);
         }
+        catch (OperationCanceledException)
+        {
+            // Page disappeared while waiting - keep pending trip for retry on next appear
+            _logger.LogDebug("LoadPendingTripIfReadyAsync: Cancelled, keeping pending trip for retry");
+            return;
+        }
+
+        // Re-check that pending trip is still set (another caller may have processed it)
+        if (_pendingTrip == null)
+        {
+            _logger.LogDebug("LoadPendingTripIfReadyAsync: Pending trip was cleared by another caller");
+            return;
+        }
+
+        // Clear pending trip now that we're committed to loading
+        _pendingTrip = null;
+
+        _logger.LogInformation("LoadPendingTripIfReadyAsync: Readiness gate passed, loading trip {TripName}", trip.Name);
+        await _viewModel.LoadTripForNavigationAsync(trip);
+        _logger.LogDebug("LoadPendingTripIfReadyAsync: After load, HasLoadedTrip={HasLoaded}", _viewModel.HasLoadedTrip);
     }
 
     /// <summary>
@@ -353,12 +477,13 @@ public partial class MainPage : ContentPage, IQueryAttributable
     {
         base.OnDisappearing();
 
+        // Issue #185: Reset readiness gate immediately to cancel any pending trip load
+        // This ensures stale readiness never persists after suspend/resume
+        _isAppearingComplete = false;
+        ResetPageReadyGate();
+
         // Call existing ViewModel cleanup
         await _viewModel.OnDisappearingAsync();
-
-        // D5: Reset appearing flag for next appearance cycle
-        // Note: _isLoaded stays true - Loaded fires once per page instance (visual tree attachment)
-        _isAppearingComplete = false;
     }
 
     /// <summary>

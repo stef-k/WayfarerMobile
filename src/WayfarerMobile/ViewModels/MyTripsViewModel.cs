@@ -60,6 +60,30 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     /// </summary>
     private bool _isLoadingToMap;
 
+    /// <summary>
+    /// Backing field for IsPageReady.
+    /// </summary>
+    private bool _isPageReady;
+
+    /// <summary>
+    /// Gets whether the page is ready for navigation.
+    /// This prevents the ObjectDisposedException crash when user taps Load
+    /// before OnAppearingAsync finishes (issue #185).
+    /// Exposed for UI binding to disable Load button during initialization.
+    /// </summary>
+    public bool IsPageReady
+    {
+        get => _isPageReady;
+        private set
+        {
+            if (_isPageReady != value)
+            {
+                _isPageReady = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
     #endregion
 
     #region Observable Properties - Sync Queue Status
@@ -336,6 +360,14 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     {
         if (item == null)
             return;
+
+        // Guard against navigation before page is ready (issue #185)
+        // This prevents ObjectDisposedException when user taps Load before OnAppearingAsync completes
+        if (!IsPageReady)
+        {
+            _logger.LogDebug("LoadTripToMapAsync: Page not ready, ignoring tap");
+            return;
+        }
 
         // Guard against rapid taps - prevent multiple concurrent loads
         if (_isLoadingToMap)
@@ -666,6 +698,8 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     /// <inheritdoc/>
     public override async Task OnAppearingAsync()
     {
+        // Mark page as not ready until initialization completes (issue #185)
+        IsPageReady = false;
         _logger.LogDebug("OnAppearingAsync: Trips.Count = {Count}", Trips.Count);
 
         // Recover stuck downloads once per session (downloads interrupted by app closure)
@@ -694,6 +728,22 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         RefreshLoadedTripState();
 
         await base.OnAppearingAsync();
+
+        // Mark page as ready only on successful initialization (issue #185)
+        // If any step above fails/throws, page remains not ready to prevent navigation
+        IsPageReady = true;
+        _logger.LogDebug("OnAppearingAsync: Page ready");
+    }
+
+    /// <inheritdoc/>
+    public override Task OnDisappearingAsync()
+    {
+        // Reset page ready state when page disappears (issue #185)
+        // This handles app suspend/resume - IsPageReady must be re-established
+        // by OnAppearingAsync when page becomes visible again
+        IsPageReady = false;
+        _logger.LogDebug("OnDisappearingAsync: Page ready reset");
+        return base.OnDisappearingAsync();
     }
 
     /// <inheritdoc/>
