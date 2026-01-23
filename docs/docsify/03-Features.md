@@ -8,6 +8,8 @@ Wayfarer Mobile provides a comprehensive set of features for location tracking, 
 
 The main screen displays an interactive map powered by OpenStreetMap.
 
+![Main Map](images/main-page.jpg)
+
 ### Map Display
 
 - **Your location**: Blue dot with accuracy circle
@@ -29,6 +31,8 @@ The map has four floating action buttons on the right side:
 ### Drop Pin Feature
 
 Tap the **Drop Pin** button to place a temporary marker at the center of the map. Once dropped, tap the pin to see available actions:
+
+![Drop Pin Actions](images/drop-temp-pin-map-actions.jpg)
 
 | Action | Description |
 |--------|-------------|
@@ -58,6 +62,8 @@ This is useful for:
 
 Timeline tracking automatically records your location history to your server.
 
+![Timeline](images/timeline.jpg)
+
 ### How It Works
 
 1. Your device acquires GPS coordinates using sleep/wake optimization
@@ -85,6 +91,8 @@ Tap any entry to see:
 - Sync status
 - Mini-map preview
 
+![Timeline Location Details](images/timeline-location-details.jpg)
+
 ### Editing Timeline Entries
 
 1. Tap an entry to open details
@@ -92,6 +100,12 @@ Tap any entry to see:
    - **Date/Time**: Adjust the timestamp
    - **Notes**: Add or update notes
 3. Tap **Save**
+
+![Edit Timeline Location](images/edit-timeline-location.jpg)
+
+![Edit Date/Time](images/edit-timeline-location-datetime.jpg)
+
+![Edit Notes](images/edit-notes.jpg)
 
 > **Note**: Coordinates cannot be edited as they are GPS data.
 
@@ -106,6 +120,8 @@ Timeline entries can have an activity type assigned:
    - Tap **Refresh** to sync latest activities from server
    - Tap **Clear** to remove the activity assignment
 4. Changes sync to server automatically (or queue if offline)
+
+![Edit Activity Type](images/edit-timeline-location-activity.jpg)
 
 ### Exporting Timeline Data
 
@@ -155,6 +171,8 @@ Import previously exported data or data from other sources:
 ## Trip Management
 
 Trips are planned routes with places and segments that can be downloaded for offline use.
+
+![Trips List](images/trips.jpg)
 
 ### Trips Page Tabs
 
@@ -218,6 +236,8 @@ When a trip is selected:
 3. Route segments connect places with colored lines
 4. Sidebar shows places and segment list
 
+![Trip Loaded on Map](images/trip-loaded.jpg)
+
 ### Trip Sheet
 
 When a trip is loaded, tap the **Trip** FAB button to open the trip sheet. The sheet shows:
@@ -227,6 +247,8 @@ When a trip is loaded, tap the **Trip** FAB button to open the trip sheet. The s
 - **Places**: Listed with icons and names
 - **Areas**: Geographic zones within the trip
 - **Segments**: Routes between places with transport mode
+
+![Trip Sheet Overview](images/trip-overview.jpg)
 
 **Trip Sheet Features:**
 - **Search**: Filter places by name using the search bar
@@ -238,9 +260,13 @@ Tap a place to see the detail panel with:
 - Notes (if any)
 - Action buttons (Navigate, Maps, Wikipedia, Share, Copy)
 
+![Trip Place Details](images/trip-place-details.jpg)
+
 ### Trip Editing
 
 The mobile app supports on-the-go trip editing for quick updates:
+
+![Trip Edit Options](images/trip-edit-options.jpg)
 
 **Place Actions:**
 | Action | Description |
@@ -252,10 +278,14 @@ The mobile app supports on-the-go trip editing for quick updates:
 | Share | Share location with others |
 | Copy Coordinates | Copy lat/lon to clipboard |
 
+![Edit Place Options](images/edit-trip-place-options.jpg)
+
 **Region Management:**
 - **Reorder regions**: Move regions up or down in the list
 - **Delete regions**: Remove a region (places move to default region)
 - **Edit notes**: Update region notes
+
+![Edit Region Options](images/edit-trip-region-options.jpg)
 
 **Place Management:**
 - **Reorder places**: Move places up or down within their region
@@ -263,6 +293,8 @@ The mobile app supports on-the-go trip editing for quick updates:
 
 **Add to Trip:**
 From the main map, you can add your current location to the loaded trip as a new place.
+
+![Add to Trip](images/add-to-trip-regions-places.jpg)
 
 > **Note**: Full trip creation and advanced editing is done in the Wayfarer web app. Mobile editing is for on-the-go adjustments.
 
@@ -381,6 +413,8 @@ If you deviate more than 100m from the planned route:
 
 Share your location with group members in real-time.
 
+![Groups](images/groups.jpg)
+
 ### Viewing Groups
 
 1. Go to **Groups** tab
@@ -393,6 +427,8 @@ The map shows:
 - Each member's location with a colored marker
 - Member names on markers
 - Update times
+
+![Group Details](images/group-details.jpg)
 
 ### View Toggle
 
@@ -420,6 +456,8 @@ For historical days:
 ## Manual Check-In
 
 Create location entries manually at memorable places.
+
+![Check-in Screen](images/check-in.jpg)
 
 ### Creating a Check-In
 
@@ -521,6 +559,8 @@ When you reconnect:
 
 Configure app behavior in the Settings page.
 
+![Settings](images/settings-collapsed.jpg)
+
 ### Account
 
 - View logged-in email
@@ -621,6 +661,8 @@ When enabled and you have a trip loaded, the app monitors your location and noti
 ## Diagnostics
 
 For troubleshooting, access detailed diagnostics:
+
+![Diagnostics](images/diagnostics-expanded.jpg)
 
 1. Go to **Settings** > **About** > **Diagnostics**
 2. View sections:

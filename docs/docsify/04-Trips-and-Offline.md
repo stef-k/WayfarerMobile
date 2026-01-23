@@ -112,6 +112,8 @@ Map tiles are downloaded for:
 - **Bounding box**: Area covering all places + buffer
 - **High-detail areas**: Extra detail around each place
 
+![Cache Visual Coverage](images/cache-visual-coverage.jpg)
+
 ---
 
 ## Using Trips Offline
