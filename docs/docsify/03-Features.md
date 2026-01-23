@@ -8,6 +8,8 @@ Wayfarer Mobile provides a comprehensive set of features for location tracking, 
 
 The main screen displays an interactive map powered by OpenStreetMap.
 
+![Main Map](images/main-page.jpg)
+
 ### Map Display
 
 - **Your location**: Blue dot with accuracy circle
@@ -15,13 +17,36 @@ The main screen displays an interactive map powered by OpenStreetMap.
 - **Accuracy circle**: Shows GPS accuracy (smaller = more accurate)
 - **Zoom controls**: Pinch to zoom or use buttons
 
-### Map Controls
+### Map Controls (FAB Buttons)
 
-| Button | Function |
-|--------|----------|
-| Center | Return to your current location |
-| Trips | Open trip sidebar |
-| Check-in | Create a manual location entry |
+The map has four floating action buttons on the right side:
+
+| Button | Icon | Function |
+|--------|------|----------|
+| Trip | Trip icon | Open trip sheet (visible when a trip is loaded) |
+| Drop Pin | Pin icon | Drop a temporary marker at map center |
+| Center | Crosshair | Return to and zoom on your current location |
+| Check-in | Checkmark | Create a manual location entry |
+
+### Drop Pin Feature
+
+Tap the **Drop Pin** button to place a temporary marker at the center of the map. Once dropped, tap the pin to see available actions:
+
+![Drop Pin Actions](images/drop-temp-pin-map-actions.jpg)
+
+| Action | Description |
+|--------|-------------|
+| Navigate | Start navigation to this location |
+| Share | Share the coordinates with others |
+| Wikipedia | Search for nearby places on Wikipedia |
+| Google Maps | Open location in Google/Apple Maps |
+| Copy | Copy coordinates to clipboard |
+| Clear | Remove the dropped pin |
+
+This is useful for:
+- Navigating to a point you see on the map
+- Sharing a location that isn't a saved place
+- Exploring what's nearby any map location
 
 ### Location Indicator States
 
@@ -36,6 +61,8 @@ The main screen displays an interactive map powered by OpenStreetMap.
 ## Timeline Tracking
 
 Timeline tracking automatically records your location history to your server.
+
+![Timeline](images/timeline.jpg)
 
 ### How It Works
 
@@ -64,6 +91,8 @@ Tap any entry to see:
 - Sync status
 - Mini-map preview
 
+![Timeline Location Details](images/timeline-location-details.jpg)
+
 ### Editing Timeline Entries
 
 1. Tap an entry to open details
@@ -71,6 +100,12 @@ Tap any entry to see:
    - **Date/Time**: Adjust the timestamp
    - **Notes**: Add or update notes
 3. Tap **Save**
+
+![Edit Timeline Location](images/edit-timeline-location.jpg)
+
+![Edit Date/Time](images/edit-timeline-location-datetime.jpg)
+
+![Edit Notes](images/edit-notes.jpg)
 
 > **Note**: Coordinates cannot be edited as they are GPS data.
 
@@ -85,6 +120,8 @@ Timeline entries can have an activity type assigned:
    - Tap **Refresh** to sync latest activities from server
    - Tap **Clear** to remove the activity assignment
 4. Changes sync to server automatically (or queue if offline)
+
+![Edit Activity Type](images/edit-timeline-location-activity.jpg)
 
 ### Exporting Timeline Data
 
@@ -135,10 +172,21 @@ Import previously exported data or data from other sources:
 
 Trips are planned routes with places and segments that can be downloaded for offline use.
 
+![Trips List](images/trips.jpg)
+
+### Trips Page Tabs
+
+The Trips page has two tabs:
+
+| Tab | Content |
+|-----|---------|
+| **My Trips** | Your personal trips from the server |
+| **Public Trips** | Shared/public trips you can browse and download |
+
 ### Viewing Available Trips
 
 1. Go to **Trips** tab
-2. See your trips from the server
+2. Switch between **My Trips** and **Public Trips** tabs
 3. Downloaded trips show a checkmark
 
 ### Downloading a Trip
@@ -188,17 +236,67 @@ When a trip is selected:
 3. Route segments connect places with colored lines
 4. Sidebar shows places and segment list
 
-### Trip Sidebar
+![Trip Loaded on Map](images/trip-loaded.jpg)
 
-Open the sidebar to see:
+### Trip Sheet
 
+When a trip is loaded, tap the **Trip** FAB button to open the trip sheet. The sheet shows:
+
+- **Trip info**: Name and notes
+- **Regions**: Expandable sections containing places
 - **Places**: Listed with icons and names
+- **Areas**: Geographic zones within the trip
 - **Segments**: Routes between places with transport mode
 
-Tap a place to:
-- View details in bottom sheet
-- Start navigation
-- See notes and address
+![Trip Sheet Overview](images/trip-overview.jpg)
+
+**Trip Sheet Features:**
+- **Search**: Filter places by name using the search bar
+- **Notes**: View notes for trip, regions, areas, and segments
+- **Selection**: Tap items to highlight them on the map
+
+Tap a place to see the detail panel with:
+- Name, address, and coordinates
+- Notes (if any)
+- Action buttons (Navigate, Maps, Wikipedia, Share, Copy)
+
+![Trip Place Details](images/trip-place-details.jpg)
+
+### Trip Editing
+
+The mobile app supports on-the-go trip editing for quick updates:
+
+![Trip Edit Options](images/trip-edit-options.jpg)
+
+**Place Actions:**
+| Action | Description |
+|--------|-------------|
+| Edit Coordinates | Drag the place marker to a new location |
+| Navigate | Start navigation to this place |
+| Open in Maps | View in Google/Apple Maps |
+| Wikipedia | Search nearby on Wikipedia |
+| Share | Share location with others |
+| Copy Coordinates | Copy lat/lon to clipboard |
+
+![Edit Place Options](images/edit-trip-place-options.jpg)
+
+**Region Management:**
+- **Reorder regions**: Move regions up or down in the list
+- **Delete regions**: Remove a region (places move to default region)
+- **Edit notes**: Update region notes
+
+![Edit Region Options](images/edit-trip-region-options.jpg)
+
+**Place Management:**
+- **Reorder places**: Move places up or down within their region
+- **Edit coordinates**: Drag marker on map then save
+
+**Add to Trip:**
+From the main map, you can add your current location to the loaded trip as a new place.
+
+![Add to Trip](images/add-to-trip-regions-places.jpg)
+
+> **Note**: Full trip creation and advanced editing is done in the Wayfarer web app. Mobile editing is for on-the-go adjustments.
 
 ### Transport Mode Colors
 
@@ -315,6 +413,8 @@ If you deviate more than 100m from the planned route:
 
 Share your location with group members in real-time.
 
+![Groups](images/groups.jpg)
+
 ### Viewing Groups
 
 1. Go to **Groups** tab
@@ -327,6 +427,8 @@ The map shows:
 - Each member's location with a colored marker
 - Member names on markers
 - Update times
+
+![Group Details](images/group-details.jpg)
 
 ### View Toggle
 
@@ -354,6 +456,8 @@ For historical days:
 ## Manual Check-In
 
 Create location entries manually at memorable places.
+
+![Check-in Screen](images/check-in.jpg)
 
 ### Creating a Check-In
 
@@ -455,6 +559,8 @@ When you reconnect:
 
 Configure app behavior in the Settings page.
 
+![Settings](images/settings-collapsed.jpg)
+
 ### Account
 
 - View logged-in email
@@ -520,6 +626,18 @@ When the queue reaches its limit, automatic cleanup runs:
 - **Auto-reroute**: Automatically recalculate when off route
 - **Distance units**: Kilometers or miles
 
+### Visit Notifications
+
+Get notified when you arrive at places in your loaded trip.
+
+- **Enable/Disable**: Toggle arrival notifications on or off
+- **Notification style**: Choose how you want to be alerted:
+  - **Notification**: System notification only
+  - **Voice**: Voice announcement only
+  - **Both**: Notification and voice announcement
+
+When enabled and you have a trip loaded, the app monitors your location and notifies you when you arrive at a trip place. This works even when the app is in the background.
+
 ### Appearance
 
 - **Dark mode**: Toggle dark/light theme
@@ -535,13 +653,16 @@ When the queue reaches its limit, automatic cleanup runs:
 - App version
 - Open source licenses
 - OpenStreetMap attribution
-- Diagnostics link
+- **Diagnostics**: Access detailed system diagnostics
+- **Rerun Setup**: Re-run the onboarding wizard to reconfigure server connection
 
 ---
 
 ## Diagnostics
 
 For troubleshooting, access detailed diagnostics:
+
+![Diagnostics](images/diagnostics-expanded.jpg)
 
 1. Go to **Settings** > **About** > **Diagnostics**
 2. View sections:

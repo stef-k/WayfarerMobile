@@ -22,7 +22,10 @@ Trips are created in the Wayfarer web app and downloaded to your mobile device. 
 ### Trip List
 
 1. Tap the **Trips** tab
-2. View all trips from your server
+2. Choose a tab:
+   - **My Trips**: Your personal trips
+   - **Public Trips**: Shared/public trips to browse
+3. View trips from your server
 
 Each trip card shows:
 - Trip name
@@ -108,6 +111,8 @@ Map tiles are downloaded for:
 - **Zoom levels 8-17**: Regional overview to street level
 - **Bounding box**: Area covering all places + buffer
 - **High-detail areas**: Extra detail around each place
+
+![Cache Visual Coverage](images/cache-visual-coverage.jpg)
 
 ---
 

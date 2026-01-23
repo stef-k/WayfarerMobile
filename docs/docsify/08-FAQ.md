@@ -176,12 +176,19 @@ Trips are created in the Wayfarer web application. The mobile app is for viewing
 
 ### Can I edit trips on mobile?
 
-Basic editing is available for on-the-go updates:
-- View place details
-- Add/edit notes on places
-- Update basic trip information
+Yes, the mobile app supports on-the-go trip editing:
 
-Full trip editing (adding places, creating segments, detailed planning) is done on the web.
+**Place Actions:**
+- Drag place markers to update coordinates
+- Navigate, open in external maps, search Wikipedia
+- Share or copy coordinates
+
+**Organization:**
+- Reorder places within regions
+- Reorder, delete, or edit region notes
+- Add your current location as a new trip place
+
+Full trip creation (defining regions, creating route segments, detailed planning) is done in the Wayfarer web app.
 
 ### Why doesn't navigation show a route line?
 

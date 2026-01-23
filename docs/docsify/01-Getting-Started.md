@@ -115,6 +115,8 @@ Once onboarding is complete:
 
 The app has five main sections:
 
+![Main Menu](images/main-menu.jpg)
+
 | Icon | Section | Purpose |
 |------|---------|---------|
 | Map | Main Page | View map and current location |
