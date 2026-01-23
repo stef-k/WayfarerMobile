@@ -56,6 +56,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
 
         // Issue #185: Subscribe to HandlerChanged events for deterministic readiness
         // These fire when the platform-specific handlers are attached/ready
+        HandlerChanged += OnControlHandlerChanged;
         MapControl.HandlerChanged += OnControlHandlerChanged;
         MainBottomSheet.HandlerChanged += OnControlHandlerChanged;
 
@@ -272,14 +273,23 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// </summary>
     private void OnControlHandlerChanged(object? sender, EventArgs e)
     {
-        var controlName = sender switch
+        // Determine control name and whether handler is attached or detached
+        var (controlName, isAttached) = sender switch
         {
-            Mapsui.UI.Maui.MapControl => "MapControl",
-            Syncfusion.Maui.Toolkit.BottomSheet.SfBottomSheet => "MainBottomSheet",
-            _ => "Unknown"
+            MainPage page => ("MainPage", page.Handler != null),
+            Mapsui.UI.Maui.MapControl map => ("MapControl", map.Handler != null),
+            Syncfusion.Maui.Toolkit.BottomSheet.SfBottomSheet sheet => ("MainBottomSheet", sheet.Handler != null),
+            _ => ("Unknown", false)
         };
-        _logger.LogDebug("OnControlHandlerChanged: {ControlName} handler attached", controlName);
-        TrySetPageReady();
+
+        var action = isAttached ? "attached" : "detached";
+        _logger.LogDebug("OnControlHandlerChanged: {ControlName} handler {Action}", controlName, action);
+
+        // Only try to signal readiness on attach events
+        if (isAttached)
+        {
+            TrySetPageReady();
+        }
     }
 
     /// <summary>
