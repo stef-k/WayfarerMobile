@@ -166,6 +166,7 @@
                                                 Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MyTripsViewModel}}, Path=LoadTripToMapCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanLoadToMap}"
+                                                IsEnabled="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MyTripsViewModel}}, Path=IsPageReady}"
                                                 BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
                                                 TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
                                                 FontSize="12"

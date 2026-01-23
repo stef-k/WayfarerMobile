@@ -303,6 +303,13 @@ public partial class MainPage : ContentPage, IQueryAttributable
             // platform handlers are fully initialized before loading trip images
             await Task.Yield();
 
+            // Re-check readiness after yield - page may have disappeared during the tick
+            if (!_isLoaded || !_isAppearingComplete)
+            {
+                _logger.LogDebug("LoadPendingTripIfReadyAsync: Page no longer ready after yield, aborting");
+                return;
+            }
+
             await _viewModel.LoadTripForNavigationAsync(trip);
             _logger.LogDebug("LoadPendingTripIfReadyAsync: After load, HasLoadedTrip={HasLoaded}", _viewModel.HasLoadedTrip);
         }

@@ -61,11 +61,28 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     private bool _isLoadingToMap;
 
     /// <summary>
-    /// Guard to prevent navigation before page initialization completes.
-    /// This prevents the ObjectDisposedException crash when user taps Load
-    /// before OnAppearingAsync finishes (issue #185).
+    /// Backing field for IsPageReady.
     /// </summary>
     private bool _isPageReady;
+
+    /// <summary>
+    /// Gets whether the page is ready for navigation.
+    /// This prevents the ObjectDisposedException crash when user taps Load
+    /// before OnAppearingAsync finishes (issue #185).
+    /// Exposed for UI binding to disable Load button during initialization.
+    /// </summary>
+    public bool IsPageReady
+    {
+        get => _isPageReady;
+        private set
+        {
+            if (_isPageReady != value)
+            {
+                _isPageReady = value;
+                OnPropertyChanged();
+            }
+        }
+    }
 
     #endregion
 
@@ -346,7 +363,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
 
         // Guard against navigation before page is ready (issue #185)
         // This prevents ObjectDisposedException when user taps Load before OnAppearingAsync completes
-        if (!_isPageReady)
+        if (!IsPageReady)
         {
             _logger.LogDebug("LoadTripToMapAsync: Page not ready, ignoring tap");
             return;
@@ -682,44 +699,40 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     public override async Task OnAppearingAsync()
     {
         // Mark page as not ready until initialization completes (issue #185)
-        _isPageReady = false;
+        IsPageReady = false;
         _logger.LogDebug("OnAppearingAsync: Trips.Count = {Count}", Trips.Count);
 
-        try
+        // Recover stuck downloads once per session (downloads interrupted by app closure)
+        if (!_hasRecoveredStuckDownloads)
         {
-            // Recover stuck downloads once per session (downloads interrupted by app closure)
-            if (!_hasRecoveredStuckDownloads)
+            _hasRecoveredStuckDownloads = true;
+            var recovered = await _downloadStateService.RecoverStuckDownloadsAsync();
+            if (recovered > 0)
             {
-                _hasRecoveredStuckDownloads = true;
-                var recovered = await _downloadStateService.RecoverStuckDownloadsAsync();
-                if (recovered > 0)
-                {
-                    _logger.LogInformation("Recovered {Count} stuck download(s) from previous session", recovered);
-                }
+                _logger.LogInformation("Recovered {Count} stuck download(s) from previous session", recovered);
             }
-
-            // Load trips if empty
-            if (Trips.Count == 0)
-            {
-                _logger.LogDebug("OnAppearingAsync: Calling LoadTripsAsync");
-                await LoadTripsAsync();
-            }
-
-            // Check for paused downloads from previous sessions
-            await CheckForPausedDownloadsAsync();
-
-            // Always refresh loaded state (even after LoadTripsAsync, in case there's timing issues)
-            _logger.LogDebug("OnAppearingAsync: Calling RefreshLoadedTripState");
-            RefreshLoadedTripState();
-
-            await base.OnAppearingAsync();
         }
-        finally
+
+        // Load trips if empty
+        if (Trips.Count == 0)
         {
-            // Mark page as ready - safe to navigate now (issue #185)
-            _isPageReady = true;
-            _logger.LogDebug("OnAppearingAsync: Page ready");
+            _logger.LogDebug("OnAppearingAsync: Calling LoadTripsAsync");
+            await LoadTripsAsync();
         }
+
+        // Check for paused downloads from previous sessions
+        await CheckForPausedDownloadsAsync();
+
+        // Always refresh loaded state (even after LoadTripsAsync, in case there's timing issues)
+        _logger.LogDebug("OnAppearingAsync: Calling RefreshLoadedTripState");
+        RefreshLoadedTripState();
+
+        await base.OnAppearingAsync();
+
+        // Mark page as ready only on successful initialization (issue #185)
+        // If any step above fails/throws, page remains not ready to prevent navigation
+        IsPageReady = true;
+        _logger.LogDebug("OnAppearingAsync: Page ready");
     }
 
     /// <inheritdoc/>
