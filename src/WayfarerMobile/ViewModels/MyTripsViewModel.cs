@@ -398,9 +398,12 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
             }
 
             // Navigate to main page with trip
+            // Issue #191: Include a unique token so MainPage can distinguish
+            // fresh navigation from Shell re-applying cached parameters
             await Shell.Current.GoToAsync("//main", new Dictionary<string, object>
             {
-                ["LoadTrip"] = tripDetails
+                ["LoadTrip"] = tripDetails,
+                ["LoadTripToken"] = Guid.NewGuid()
             });
         }
         catch (IOException ex)

@@ -141,10 +141,10 @@ public class TripStateManager : ITripStateManager
             _currentTripName = newName;
 
             _logger.LogDebug(
-                "TripStateManager: LoadedTrip changed from {PreviousTripId} to {NewTripId} ({TripName})",
+                "TripStateManager: Trip changed from {PreviousTripId} to {NewTripId} ({TripName})",
                 previousTrip?.Id,
                 trip?.Id,
-                trip?.Name ?? "(no trip)");
+                trip?.Name ?? "(null)");
 
             // Create event args while still holding lock
             if (tripChanged)

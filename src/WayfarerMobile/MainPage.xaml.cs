@@ -28,6 +28,11 @@ public partial class MainPage : ContentPage, IQueryAttributable
     private TripDetails? _pendingTrip;
     private WritableLayer? _tempMarkerLayer;
 
+    // Issue #191: Track the last processed LoadTripToken to detect Shell re-applying cached params.
+    // Each navigation from TripsPage includes a unique token. If we see the same token twice,
+    // it means Shell is re-applying cached parameters, not a fresh user selection.
+    private Guid? _lastProcessedLoadTripToken;
+
     // Issue #185: Deterministic readiness gate to prevent ObjectDisposedException
     // Trip load awaits this gate; it fires only when all platform handlers are ready.
     // _isLoaded: Visual tree is attached (Loaded event fired)
@@ -356,9 +361,6 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// </summary>
     protected override async void OnAppearing()
     {
-        _logger.LogDebug("OnAppearing: Start, _pendingTrip={HasPending}, HasLoadedTrip={HasLoaded}, _isLoaded={IsLoaded}",
-            _pendingTrip != null, _viewModel.HasLoadedTrip, _isLoaded);
-
         // Issue #185: Reset readiness gate at start of each appearance cycle
         // This ensures stale readiness from previous suspend/resume never persists
         ResetPageReadyGate();
@@ -436,6 +438,26 @@ public partial class MainPage : ContentPage, IQueryAttributable
 
         if (query.TryGetValue("LoadTrip", out var tripObj) && tripObj is TripDetails trip)
         {
+            // Issue #191: Detect Shell re-applying cached query parameters.
+            // Each navigation from TripsPage includes a unique LoadTripToken.
+            // If we see the same token twice, Shell is re-applying cached params → skip.
+            // If it's a new token (or no token from old code paths), proceed to load.
+            var token = query.TryGetValue("LoadTripToken", out var tokenObj) && tokenObj is Guid t ? t : (Guid?)null;
+
+            if (token.HasValue && token == _lastProcessedLoadTripToken)
+            {
+                _logger.LogDebug(
+                    "ApplyQueryAttributes: Skipping trip {TripId} - same token (Shell re-applying cached params)",
+                    trip.Id);
+                return;
+            }
+
+            // Store the token (if present) to detect future re-applications
+            if (token.HasValue)
+            {
+                _lastProcessedLoadTripToken = token;
+            }
+
             _logger.LogDebug("ApplyQueryAttributes: Setting pending trip {TripName} ({TripId})", trip.Name, trip.Id);
             _pendingTrip = trip;
 
