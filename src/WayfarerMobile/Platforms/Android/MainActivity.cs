@@ -70,7 +70,9 @@ public class MainActivity : MauiAppCompatActivity
             // Check if this is the specific IImageHandler.FireAndForget ObjectDisposedException
             if (IsImageHandlerDisposedException(ex))
             {
+                // Log to both Android logcat and Serilog file for diagnostics
                 Log.Warn(LogTag, "Suppressed IImageHandler ObjectDisposedException (MAUI bug, issue #185)");
+                Serilog.Log.Warning("Suppressed IImageHandler ObjectDisposedException during Activity recreation (MAUI bug, issue #185)");
                 args.Handled = true; // Prevent app termination
                 return;
             }
