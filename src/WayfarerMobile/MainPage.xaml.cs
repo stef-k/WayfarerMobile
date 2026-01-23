@@ -83,6 +83,11 @@ public partial class MainPage : ContentPage, IQueryAttributable
         // NOTE: Do NOT subscribe to Unloaded event for Shell root pages.
         // Shell caches root pages and reuses them on navigation.
         // Disposing on Unloaded breaks event subscriptions when Shell reuses the page.
+
+        // DIAGNOSTIC: Log page instance creation
+        _logger.LogInformation(
+            "[DIAG-PAGE] MainPage constructor completed. PageInstanceId={PageId}, ViewModelInstanceId={VmId}",
+            GetHashCode(), _viewModel.GetHashCode());
     }
 
     #region Context Menu Event Handlers
@@ -356,8 +361,11 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// </summary>
     protected override async void OnAppearing()
     {
-        _logger.LogDebug("OnAppearing: Start, _pendingTrip={HasPending}, HasLoadedTrip={HasLoaded}, _isLoaded={IsLoaded}",
-            _pendingTrip != null, _viewModel.HasLoadedTrip, _isLoaded);
+        // DIAGNOSTIC: Log page appearing with instance tracking
+        _logger.LogInformation(
+            "[DIAG-PAGE] MainPage.OnAppearing() called. PageInstanceId={PageId}, " +
+            "_pendingTrip={HasPending}, HasLoadedTrip={HasLoaded}, _isLoaded={IsLoaded}",
+            GetHashCode(), _pendingTrip != null, _viewModel.HasLoadedTrip, _isLoaded);
 
         // Issue #185: Reset readiness gate at start of each appearance cycle
         // This ensures stale readiness from previous suspend/resume never persists
@@ -475,6 +483,11 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// </summary>
     protected override async void OnDisappearing()
     {
+        // DIAGNOSTIC: Log page disappearing with instance tracking
+        _logger.LogInformation(
+            "[DIAG-PAGE] MainPage.OnDisappearing() called. PageInstanceId={PageId}, HasLoadedTrip={HasLoaded}",
+            GetHashCode(), _viewModel.HasLoadedTrip);
+
         base.OnDisappearing();
 
         // Issue #185: Reset readiness gate immediately to cancel any pending trip load

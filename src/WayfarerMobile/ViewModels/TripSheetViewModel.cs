@@ -1112,6 +1112,12 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
     /// </summary>
     public void UnloadTrip()
     {
+        // DIAGNOSTIC: Log state before unload
+        _logger.LogInformation(
+            "[DIAG-UNLOAD] TripSheetViewModel.UnloadTrip() called. " +
+            "Before: TripStateManager.LoadedTrip={TripId}, HasLoadedTrip={HasLoaded}",
+            _tripStateManager.LoadedTrip?.Id, HasLoadedTrip);
+
         _tripStateManager.SetLoadedTrip(null);
         SelectedPlace = null;
         ClearTripSheetSelection();
@@ -1122,6 +1128,12 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
 
         // Resume following user location
         _callbacks?.SetFollowingLocation(true);
+
+        // DIAGNOSTIC: Log state after unload
+        _logger.LogInformation(
+            "[DIAG-UNLOAD] TripSheetViewModel.UnloadTrip() completed. " +
+            "After: TripStateManager.LoadedTrip={TripId}, HasLoadedTrip={HasLoaded}",
+            _tripStateManager.LoadedTrip?.Id, HasLoadedTrip);
     }
 
     /// <summary>
