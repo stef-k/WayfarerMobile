@@ -283,10 +283,18 @@
                                     <sfExpander:SfExpander.Content>
                                         <VerticalStackLayout Spacing="0">
                                             <!-- Region Cover Image (shown directly if exists) -->
+                                            <!-- Issue #185: Use visibility-gated binding to prevent async image load crashes -->
                                             <Border StrokeThickness="0" HeightRequest="100" Margin="8,4,8,6"
                                                     IsVisible="{Binding HasCoverImage}">
                                                 <Border.StrokeShape><RoundRectangle CornerRadius="6" /></Border.StrokeShape>
-                                                <Image Source="{Binding CleanCoverImageUrl}" Aspect="AspectFill" />
+                                                <Image Aspect="AspectFill">
+                                                    <Image.Source>
+                                                        <MultiBinding Converter="{StaticResource VisibilityGatedImageSourceConverter}">
+                                                            <Binding Path="CleanCoverImageUrl" />
+                                                            <Binding Path="IsPageVisible" Source="{RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}" />
+                                                        </MultiBinding>
+                                                    </Image.Source>
+                                                </Image>
                                             </Border>
                                             <!-- Region Notes (button to show details, styled like trip notes) -->
                                             <Border StrokeThickness="0"

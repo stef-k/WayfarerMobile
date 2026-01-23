@@ -34,6 +34,7 @@
             <converters:BoolToStrokeThicknessConverter x:Key="BoolToStrokeThicknessConverter" />
             <converters:BoolToSelectionColorConverter x:Key="BoolToSelectionColorConverter" />
             <converters:BoolToSyncBannerColorConverter x:Key="BoolToSyncBannerColorConverter" />
+            <converters:VisibilityGatedImageSourceConverter x:Key="VisibilityGatedImageSourceConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

@@ -135,12 +135,14 @@ public partial class PublicTripsViewModel : BaseViewModel
     /// <summary>
     /// Refreshes the trips list from the beginning.
     /// </summary>
+    /// <remarks>
+    /// Note: Don't guard with IsBusy here - RefreshView's TwoWay binding
+    /// sets it to true before invoking the command, which would cause early return
+    /// and leave the spinner spinning forever.
+    /// </remarks>
     [RelayCommand]
     private async Task RefreshAsync()
     {
-        if (IsBusy)
-            return;
-
         try
         {
             IsBusy = true;
