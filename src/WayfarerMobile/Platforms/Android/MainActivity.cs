@@ -52,7 +52,7 @@ public class MainActivity : MauiAppCompatActivity
     }
 
     /// <summary>
-    /// Issue #185: Registers an exception handler that suppresses ObjectDisposedException
+    /// Issue #185: Registers exception handlers that suppress ObjectDisposedException
     /// from IImageHandler.FireAndForget. This is a MAUI framework bug where async image
     /// load callbacks fire after IServiceProvider is disposed during Activity recreation.
     /// </summary>
@@ -63,25 +63,27 @@ public class MainActivity : MauiAppCompatActivity
 
         s_exceptionHandlerRegistered = true;
 
+        // Handler 1: AndroidEnvironment for managed exceptions
         AndroidEnvironment.UnhandledExceptionRaiser += (sender, args) =>
         {
             var ex = args.Exception;
 
-            // Check if this is the specific IImageHandler.FireAndForget ObjectDisposedException
             if (IsImageHandlerDisposedException(ex))
             {
-                // Log to both Android logcat and Serilog file for diagnostics
-                Log.Warn(LogTag, "Suppressed IImageHandler ObjectDisposedException (MAUI bug, issue #185)");
-                Serilog.Log.Warning("Suppressed IImageHandler ObjectDisposedException during Activity recreation (MAUI bug, issue #185)");
-                args.Handled = true; // Prevent app termination
+                Log.Warn(LogTag, "Suppressed IImageHandler ObjectDisposedException via AndroidEnvironment (MAUI bug, issue #185)");
+                Serilog.Log.Warning("Suppressed IImageHandler ObjectDisposedException via AndroidEnvironment (MAUI bug, issue #185)");
+                args.Handled = true;
                 return;
             }
 
-            // Let other exceptions propagate normally
             Log.Error(LogTag, $"Unhandled exception: {ex.GetType().Name}: {ex.Message}");
         };
 
-        Log.Debug(LogTag, "IImageHandler exception suppressor registered");
+        // Handler 2: Java Thread UncaughtExceptionHandler for exceptions from SyncContext.Post
+        var defaultHandler = Java.Lang.Thread.DefaultUncaughtExceptionHandler;
+        Java.Lang.Thread.DefaultUncaughtExceptionHandler = new ImageHandlerExceptionHandler(defaultHandler);
+
+        Log.Debug(LogTag, "IImageHandler exception suppressor registered (both AndroidEnvironment and Java Thread handlers)");
     }
 
     /// <summary>
@@ -102,6 +104,41 @@ public class MainActivity : MauiAppCompatActivity
         // - FireAndForget
         return stackTrace.Contains("IImageHandler") &&
                stackTrace.Contains("FireAndForget");
+    }
+
+    /// <summary>
+    /// Issue #185: Custom Java UncaughtExceptionHandler that suppresses IImageHandler
+    /// ObjectDisposedException. This catches exceptions from Android.App.SyncContext.Post
+    /// that bypass AndroidEnvironment.UnhandledExceptionRaiser.
+    /// </summary>
+    private class ImageHandlerExceptionHandler : Java.Lang.Object, Java.Lang.Thread.IUncaughtExceptionHandler
+    {
+        private readonly Java.Lang.Thread.IUncaughtExceptionHandler? _defaultHandler;
+
+        public ImageHandlerExceptionHandler(Java.Lang.Thread.IUncaughtExceptionHandler? defaultHandler)
+        {
+            _defaultHandler = defaultHandler;
+        }
+
+        public void UncaughtException(Java.Lang.Thread t, Java.Lang.Throwable e)
+        {
+            // Check if this is the IImageHandler ObjectDisposedException
+            // The Java throwable wraps the .NET exception
+            var message = e.Message ?? "";
+            var stackTrace = e.ToString() ?? "";
+
+            if (message.Contains("ObjectDisposedException") &&
+                (stackTrace.Contains("IImageHandler") || stackTrace.Contains("FireAndForget")))
+            {
+                Log.Warn(LogTag, "Suppressed IImageHandler ObjectDisposedException via Java UncaughtExceptionHandler (MAUI bug, issue #185)");
+                Serilog.Log.Warning("Suppressed IImageHandler ObjectDisposedException via Java UncaughtExceptionHandler (MAUI bug, issue #185)");
+                // Don't call default handler - suppress the crash
+                return;
+            }
+
+            // For all other exceptions, delegate to the default handler
+            _defaultHandler?.UncaughtException(t, e);
+        }
     }
 
     /// <summary>
