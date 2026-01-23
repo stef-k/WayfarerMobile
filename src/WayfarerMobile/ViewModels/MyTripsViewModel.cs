@@ -736,6 +736,17 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     }
 
     /// <inheritdoc/>
+    public override Task OnDisappearingAsync()
+    {
+        // Reset page ready state when page disappears (issue #185)
+        // This handles app suspend/resume - IsPageReady must be re-established
+        // by OnAppearingAsync when page becomes visible again
+        IsPageReady = false;
+        _logger.LogDebug("OnDisappearingAsync: Page ready reset");
+        return base.OnDisappearingAsync();
+    }
+
+    /// <inheritdoc/>
     protected override void Cleanup()
     {
         Download.Dispose();
