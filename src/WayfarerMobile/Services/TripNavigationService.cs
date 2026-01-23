@@ -27,6 +27,7 @@ public class TripNavigationService : ITripNavigationService
     private readonly RouteCacheService _routeCacheService;
     private readonly INavigationAudioService _audioService;
     private readonly INavigationRouteBuilder _routeBuilder;
+    private readonly ITripStateManager _tripStateManager;
 
     private TripNavigationGraph? _currentGraph;
     private TripDetails? _currentTrip;
@@ -78,24 +79,29 @@ public class TripNavigationService : ITripNavigationService
     /// <param name="osrmService">The OSRM routing service.</param>
     /// <param name="routeCacheService">The route cache service.</param>
     /// <param name="audioService">The navigation audio service.</param>
+    /// <param name="routeBuilder">The navigation route builder.</param>
+    /// <param name="tripStateManager">The trip state manager for fresh place data.</param>
     public TripNavigationService(
         ILogger<TripNavigationService> logger,
         OsrmRoutingService osrmService,
         RouteCacheService routeCacheService,
         INavigationAudioService audioService,
-        INavigationRouteBuilder routeBuilder)
+        INavigationRouteBuilder routeBuilder,
+        ITripStateManager tripStateManager)
     {
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(osrmService);
         ArgumentNullException.ThrowIfNull(routeCacheService);
         ArgumentNullException.ThrowIfNull(audioService);
         ArgumentNullException.ThrowIfNull(routeBuilder);
+        ArgumentNullException.ThrowIfNull(tripStateManager);
 
         _logger = logger;
         _osrmService = osrmService;
         _routeCacheService = routeCacheService;
         _audioService = audioService;
         _routeBuilder = routeBuilder;
+        _tripStateManager = tripStateManager;
     }
 
     /// <summary>
@@ -151,7 +157,10 @@ public class TripNavigationService : ITripNavigationService
             return null;
         }
 
-        if (!_currentGraph.Nodes.TryGetValue(destinationPlaceId, out var destination))
+        // Issue #191: Get fresh place data from TripStateManager to ensure we use
+        // current coordinates/name after edits, not stale cached graph data
+        var destination = GetFreshPlaceAsNode(destinationPlaceId);
+        if (destination == null)
         {
             _logger.LogWarning("Destination place {PlaceId} not found in trip", destinationPlaceId);
             return null;
@@ -208,7 +217,10 @@ public class TripNavigationService : ITripNavigationService
             return null;
         }
 
-        if (!_currentGraph.Nodes.TryGetValue(destinationPlaceId, out var destination))
+        // Issue #191: Get fresh place data from TripStateManager to ensure we use
+        // current coordinates/name after edits, not stale cached graph data
+        var destination = GetFreshPlaceAsNode(destinationPlaceId);
+        if (destination == null)
         {
             _logger.LogWarning("Destination place {PlaceId} not found in trip", destinationPlaceId);
             return null;
@@ -584,6 +596,38 @@ public class TripNavigationService : ITripNavigationService
     }
 
     #region Private Methods
+
+    /// <summary>
+    /// Gets fresh place data from TripStateManager and converts to NavigationNode.
+    /// This ensures we use current coordinates/name after edits, not stale cached data.
+    /// </summary>
+    /// <param name="placeId">The place ID to look up.</param>
+    /// <returns>NavigationNode with fresh data, or null if not found.</returns>
+    private NavigationNode? GetFreshPlaceAsNode(string placeId)
+    {
+        var loadedTrip = _tripStateManager.LoadedTrip;
+        if (loadedTrip == null)
+            return null;
+
+        if (!Guid.TryParse(placeId, out var placeGuid))
+            return null;
+
+        var place = loadedTrip.AllPlaces.FirstOrDefault(p => p.Id == placeGuid);
+        if (place == null)
+            return null;
+
+        return new NavigationNode
+        {
+            Id = place.Id.ToString(),
+            Name = place.Name,
+            Latitude = place.Latitude,
+            Longitude = place.Longitude,
+            Type = NavigationNodeType.Place,
+            SortOrder = place.SortOrder,
+            Notes = place.Notes,
+            IconName = place.Icon
+        };
+    }
 
     /// <summary>
     /// Builds a navigation graph from trip details.
