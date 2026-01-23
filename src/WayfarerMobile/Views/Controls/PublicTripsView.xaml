@@ -33,7 +33,7 @@
 
         <!-- Trips List -->
         <RefreshView Grid.Row="2"
-                     IsRefreshing="{Binding IsBusy}"
+                     IsRefreshing="{Binding IsBusy, Mode=TwoWay}"
                      Command="{Binding RefreshCommand}">
             <CollectionView ItemsSource="{Binding Trips}"
                             RemainingItemsThreshold="5"

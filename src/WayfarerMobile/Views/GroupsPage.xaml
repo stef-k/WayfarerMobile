@@ -193,7 +193,7 @@
                                            Color="{StaticResource Primary}" />
 
                         <RefreshView Command="{Binding LoadMembersCommand}"
-                                    IsRefreshing="{Binding IsLoadingMembers}"
+                                    IsRefreshing="{Binding IsLoadingMembers, Mode=TwoWay}"
                                     IsVisible="{Binding IsLoadingMembers, Converter={StaticResource InvertedBoolConverter}}">
                             <CollectionView ItemsSource="{Binding Members}"
                                            SelectionMode="None"
