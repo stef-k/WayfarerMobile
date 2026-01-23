@@ -6,6 +6,7 @@ using Android.Runtime;
 using Android.Util;
 using Android.Views;
 using AndroidX.Core.View;
+using WayfarerMobile.Platforms.Android;
 
 namespace WayfarerMobile;
 
@@ -16,12 +17,19 @@ public class MainActivity : MauiAppCompatActivity
     /// Static flag to ensure we only register the exception handler once per process.
     /// </summary>
     private static bool s_exceptionHandlerRegistered;
+
     /// <summary>
     /// Static flag that persists for the lifetime of the process.
     /// Set to true after first successful initialization.
     /// If this is true but preferences are cleared, we know data was cleared externally.
     /// </summary>
     private static bool s_processInitialized;
+
+    /// <summary>
+    /// Static flag set when OnDestroy is called. Used to detect Activity recreation
+    /// where Singleton services have stale IServiceProvider references.
+    /// </summary>
+    private static bool s_activityWasDestroyed;
 
     /// <summary>
     /// Key used to mark that we've written to preferences in this process.
@@ -31,9 +39,26 @@ public class MainActivity : MauiAppCompatActivity
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
-        // Issue #185: Register Android-specific exception handler to suppress
-        // ObjectDisposedException from IImageHandler.FireAndForget during Activity recreation.
-        // This is a known MAUI bug where async image load callbacks fire after IServiceProvider is disposed.
+        // Issue #185: Detect Activity recreation after OnDestroy.
+        // When Activity is destroyed but process stays alive, Singleton services
+        // hold stale IServiceProvider references. Restart to get clean state.
+        if (s_activityWasDestroyed)
+        {
+            Log.Warn(LogTag, "Activity recreated after OnDestroy - restarting for clean state (issue #185)");
+            Serilog.Log.Warning("Activity recreated after OnDestroy - restarting for clean state (issue #185)");
+            s_activityWasDestroyed = false; // Reset to avoid infinite restart loop
+            RestartApp();
+            return;
+        }
+
+        // Issue #185: Install SafeSynchronizationContext FIRST, before any async operations.
+        // This wraps SyncContext.Post to catch ObjectDisposedException from IImageHandler.FireAndForget.
+        // The exception occurs when async image callbacks fire after IServiceProvider is disposed.
+        SafeSynchronizationContext.Install();
+
+        // Issue #185: Register Android-specific exception handler as a backup.
+        // The SafeSynchronizationContext should catch exceptions in Post callbacks,
+        // but we keep these handlers as a defense-in-depth measure.
         RegisterImageHandlerExceptionSuppressor();
 
         // Early check for corrupted state before MAUI initializes.
@@ -49,6 +74,16 @@ public class MainActivity : MauiAppCompatActivity
         base.OnCreate(savedInstanceState);
 
         ConfigureStatusBar();
+    }
+
+    protected override void OnDestroy()
+    {
+        // Mark that Activity was destroyed. If OnCreate is called again in this process,
+        // we know we have an Activity recreation scenario with stale Singleton services.
+        s_activityWasDestroyed = true;
+        Log.Debug(LogTag, "Activity destroyed - marking for potential restart on recreation");
+
+        base.OnDestroy();
     }
 
     /// <summary>
@@ -122,21 +157,31 @@ public class MainActivity : MauiAppCompatActivity
 
         public void UncaughtException(Java.Lang.Thread t, Java.Lang.Throwable e)
         {
-            // Check if this is the IImageHandler ObjectDisposedException
-            // The Java throwable wraps the .NET exception
+            // Log ALL exceptions that reach this handler for diagnostics
             var message = e.Message ?? "";
-            var stackTrace = e.ToString() ?? "";
+            var fullTrace = e.ToString() ?? "";
 
-            if (message.Contains("ObjectDisposedException") &&
-                (stackTrace.Contains("IImageHandler") || stackTrace.Contains("FireAndForget")))
+            Log.Warn(LogTag, $"Java UncaughtExceptionHandler invoked: {e.GetType().Name}");
+            Log.Warn(LogTag, $"Message: {message}");
+            Serilog.Log.Warning("Java UncaughtExceptionHandler invoked: {ExType}, Message: {Msg}", e.GetType().Name, message);
+
+            // Check if this is a fire-and-forget ObjectDisposedException (MAUI bug)
+            // ONLY suppress FireAndForget callbacks - NOT actual UI rendering exceptions
+            var isFireAndForgetException =
+                message.Contains("ObjectDisposed") &&
+                message.Contains("IServiceProvider") &&
+                fullTrace.Contains("FireAndForget");
+
+            if (isFireAndForgetException)
             {
-                Log.Warn(LogTag, "Suppressed IImageHandler ObjectDisposedException via Java UncaughtExceptionHandler (MAUI bug, issue #185)");
-                Serilog.Log.Warning("Suppressed IImageHandler ObjectDisposedException via Java UncaughtExceptionHandler (MAUI bug, issue #185)");
+                Log.Warn(LogTag, "Suppressed ObjectDisposedException via Java UncaughtExceptionHandler (MAUI bug, issue #185)");
+                Serilog.Log.Warning("Suppressed ObjectDisposedException via Java UncaughtExceptionHandler (MAUI bug, issue #185)");
                 // Don't call default handler - suppress the crash
                 return;
             }
 
             // For all other exceptions, delegate to the default handler
+            Log.Warn(LogTag, "Delegating to default handler");
             _defaultHandler?.UncaughtException(t, e);
         }
     }
