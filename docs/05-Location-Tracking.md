@@ -8,32 +8,17 @@ This guide explains how Wayfarer Mobile tracks your location, privacy controls, 
 
 Wayfarer Mobile uses a background service to continuously track your location.
 
-### Android Architecture
+### How the App Tracks Your Location
 
-```
-┌──────────────────────────────────────────────────────┐
-│ LocationTrackingService (Foreground Service)          │
-│ ├── Owns GPS via FusedLocationProviderClient         │
-│ ├── Sleep/wake optimization (saves battery)          │
-│ ├── Filters locations by accuracy (<100m)            │
-│ ├── Applies time/distance thresholds                 │
-│ ├── Writes to local SQLite queue (max 25,000)        │
-│ ├── Syncs queue to server when online                │
-│ └── Shows notification with status and accuracy      │
-└──────────────────────────────────────────────────────┘
-```
+On both Android and iOS, the app runs a background service that:
 
-### iOS Architecture
+1. **Acquires GPS coordinates** using your device's location services
+2. **Filters low-accuracy readings** (only keeps locations accurate to within 100m)
+3. **Applies thresholds** to avoid logging every tiny movement
+4. **Saves locations locally** until they can be synced to your server
+5. **Syncs to server** when you're online
 
-```
-┌──────────────────────────────────────────────────────┐
-│ CLLocationManager                                     │
-│ ├── Significant-change monitoring                    │
-│ ├── Background location updates                      │
-│ ├── Same filtering and threshold logic               │
-│ └── Syncs via background fetch                       │
-└──────────────────────────────────────────────────────┘
-```
+On Android, a notification shows that tracking is active. On iOS, a blue bar appears when the app is using your location in the background.
 
 ---
 

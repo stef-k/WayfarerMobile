@@ -67,7 +67,7 @@ Backend server code is at: `~\source\repos\Wayfarer`
 
 Do not fabricate “fallback connections” between trip places to simulate a multi-hop itinerary. If a real route cannot be computed, prefer honest fallbacks (direct line / distance + bearing) rather than misleading multi-hop polylines.
 
-See `docs/reference/NAVIGATION_SYSTEM.md` for full documentation.
+See `docs/12-Services.md` for full service documentation.
 
 ## Technology Stack
 
