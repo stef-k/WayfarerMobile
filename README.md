@@ -18,6 +18,12 @@ Wayfarer Mobile is a cross-platform .NET MAUI app for Android and iOS that serve
 
 Wayfarer Mobile is a privacy-first companion app for self-hosted Wayfarer servers. Location history is stored locally (SQLite) and synced only to your configured Wayfarer server. The app does not use third-party analytics or tracking by default. Background location tracking requires elevated OS permissions; review and configure tracking settings carefully before enabling continuous logging.
 
+## Screenshots
+
+[![Timeline](docs/images/timeline.jpg)](docs/images/timeline.jpg)
+
+[![Trip loaded](docs/images/trip-loaded.jpg)](docs/images/trip-loaded.jpg)
+
 ## Features
 
 ### Core Features
@@ -164,6 +170,7 @@ docsify serve
 Contributions are welcome! This is a spare-time project, so responses may be delayed.
 
 **Before contributing:**
+
 - Open an issue to discuss major changes
 - Keep pull requests small and focused
 - Follow the existing code style (XML comments, strict MVVM)
