@@ -1,0 +1,379 @@
+THIRD-PARTY NOTICES
+
+This project incorporates components from the projects listed below. The original
+copyright notices and the licenses under which WayfarerMobile received such components
+are set forth below.
+
+================================================================================
+
+                             ICONS AND ASSETS
+
+================================================================================
+
+Google Material Symbols
+-----------------------
+Licensed under the Apache License, Version 2.0
+https://fonts.google.com/icons
+Copyright 2023 Google LLC.
+
+Modifications:
+- Icons have been adapted for use in a mapping application context.
+- Changes may include visual styling, sizing, alignment, and embedding in
+  circular or marker-shaped containers.
+
+Modifications by: Stef Kariotidis / Wayfarer
+
+================================================================================
+
+                         NUGET PACKAGES (.NET MAUI APP)
+
+================================================================================
+
+Microsoft.Maui.Controls 10.0.30
+-------------------------------
+https://github.com/dotnet/maui
+Copyright (c) .NET Foundation and Contributors
+
+Licensed under the MIT License.
+
+--------------------------------------------------------------------------------
+
+Microsoft.Maui.Essentials 10.0.30
+---------------------------------
+https://github.com/dotnet/maui
+Copyright (c) .NET Foundation and Contributors
+
+Licensed under the MIT License.
+
+--------------------------------------------------------------------------------
+
+Microsoft.Extensions.Logging.Debug 10.0.2
+-----------------------------------------
+https://github.com/dotnet/runtime
+Copyright (c) .NET Foundation and Contributors
+
+Licensed under the MIT License.
+
+--------------------------------------------------------------------------------
+
+Microsoft.Extensions.Logging.Abstractions 10.0.2
+------------------------------------------------
+https://github.com/dotnet/runtime
+Copyright (c) .NET Foundation and Contributors
+
+Licensed under the MIT License.
+
+--------------------------------------------------------------------------------
+
+Microsoft.Extensions.Http 10.0.2
+--------------------------------
+https://github.com/dotnet/runtime
+Copyright (c) .NET Foundation and Contributors
+
+Licensed under the MIT License.
+
+--------------------------------------------------------------------------------
+
+CommunityToolkit.Mvvm 8.4.0
+---------------------------
+https://github.com/CommunityToolkit/dotnet
+Copyright (c) .NET Foundation and Contributors
+
+Licensed under the MIT License.
+
+--------------------------------------------------------------------------------
+
+Syncfusion.Maui.Toolkit 1.0.8
+-----------------------------
+https://github.com/syncfusion/maui-toolkit
+Copyright (c) Syncfusion Inc.
+
+Licensed under the MIT License.
+
+--------------------------------------------------------------------------------
+
+Mapsui.Maui 5.0.2
+-----------------
+https://github.com/Mapsui/Mapsui
+Copyright (c) Paul den Dulk and contributors
+
+Licensed under the MIT License.
+
+--------------------------------------------------------------------------------
+
+sqlite-net-pcl 1.9.172
+----------------------
+https://github.com/praeclarum/sqlite-net
+Copyright (c) Krueger Systems, Inc.
+
+Licensed under the MIT License.
+
+--------------------------------------------------------------------------------
+
+SQLitePCLRaw.bundle_green 2.1.11
+--------------------------------
+https://github.com/ericsink/SQLitePCL.raw
+Copyright (c) 2014-2021 Zumero, LLC
+
+Licensed under the Apache License, Version 2.0.
+
+--------------------------------------------------------------------------------
+
+ZXing.Net.Maui.Controls 0.7.4
+-----------------------------
+https://github.com/Redth/ZXing.Net.Maui
+Copyright (c) Jonathan Dick
+
+Licensed under the Apache License, Version 2.0.
+
+Based on ZXing.Net:
+https://github.com/micjahn/ZXing.Net
+Copyright (c) Michael Jahn
+
+--------------------------------------------------------------------------------
+
+Serilog 4.3.0
+-------------
+https://serilog.net/
+Copyright (c) 2013-2024 Serilog Contributors
+
+Licensed under the Apache License, Version 2.0.
+
+Includes:
+- Serilog.Extensions.Logging 10.0.0
+- Serilog.Sinks.File 7.0.0
+
+--------------------------------------------------------------------------------
+
+Polly 8.6.5
+-----------
+https://github.com/App-vNext/Polly
+Copyright (c) 2015-2024 App vNext
+
+Licensed under the BSD 3-Clause License.
+
+--------------------------------------------------------------------------------
+
+Xamarin.GooglePlayServices.Location 121.3.0.8
+---------------------------------------------
+https://github.com/xamarin/GooglePlayServicesComponents
+Copyright (c) .NET Foundation Contributors
+
+Licensed under the MIT License (binding library).
+
+Note: Google Play Services Location is subject to Google's Terms of Service.
+https://developers.google.com/terms
+
+--------------------------------------------------------------------------------
+
+Xamarin.AndroidX.Compose.Runtime.Annotation.Jvm 1.10.0.1
+--------------------------------------------------------
+https://github.com/xamarin/AndroidX
+Copyright (c) .NET Foundation Contributors
+
+Licensed under the Apache License, Version 2.0.
+
+================================================================================
+
+                          TEST DEPENDENCIES
+
+================================================================================
+
+Microsoft.NET.Test.Sdk 18.0.1
+-----------------------------
+https://github.com/microsoft/vstest
+Copyright (c) Microsoft Corporation
+
+Licensed under the MIT License.
+
+--------------------------------------------------------------------------------
+
+xUnit 2.9.3
+-----------
+https://xunit.net/
+Copyright (c) .NET Foundation and Contributors
+
+Licensed under the Apache License, Version 2.0.
+
+--------------------------------------------------------------------------------
+
+xunit.runner.visualstudio 3.1.5
+-------------------------------
+https://xunit.net/
+Copyright (c) .NET Foundation and Contributors
+
+Licensed under the Apache License, Version 2.0.
+
+--------------------------------------------------------------------------------
+
+Moq 4.20.72
+-----------
+https://github.com/devlooped/moq
+Copyright (c) 2007-2024 Moq Contributors
+
+Licensed under the MIT License.
+
+--------------------------------------------------------------------------------
+
+FluentAssertions 8.8.0
+----------------------
+https://fluentassertions.com/
+Copyright (c) Dennis Doomen
+
+Licensed under the Apache License, Version 2.0.
+
+--------------------------------------------------------------------------------
+
+Coverlet 6.0.4
+--------------
+https://github.com/coverlet-coverage/coverlet
+Copyright (c) 2018 Toni Solarin-Sodara
+
+Licensed under the MIT License.
+
+Includes:
+- coverlet.collector 6.0.4
+- coverlet.msbuild 6.0.4
+
+================================================================================
+
+                          MAP DATA AND SERVICES
+
+================================================================================
+
+OpenStreetMap
+-------------
+https://www.openstreetmap.org/
+Copyright (c) OpenStreetMap contributors
+
+Map data is made available under the Open Database License (ODbL).
+https://opendatacommons.org/licenses/odbl/
+
+Note: This application uses a local tile cache to respect OpenStreetMap's
+fair use policy. See https://operations.osmfoundation.org/policies/tiles/
+
+--------------------------------------------------------------------------------
+
+OSRM (Open Source Routing Machine)
+----------------------------------
+https://project-osrm.org/
+https://github.com/Project-OSRM/osrm-backend
+Copyright (c) Project OSRM contributors
+
+Licensed under the BSD 2-Clause License.
+
+Note: Routing service provided by Project OSRM's demo server.
+
+================================================================================
+
+                          LICENSE TEXTS
+
+================================================================================
+
+MIT License
+-----------
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+Apache License, Version 2.0
+---------------------------
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+--------------------------------------------------------------------------------
+
+BSD 3-Clause License
+--------------------
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice,
+   this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors
+   may be used to endorse or promote products derived from this software
+   without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+--------------------------------------------------------------------------------
+
+BSD 2-Clause License
+--------------------
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice,
+   this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+================================================================================
+
+Copyright 2025 Stef Kariotidis / Wayfarer
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
