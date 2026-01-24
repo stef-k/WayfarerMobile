@@ -171,6 +171,11 @@ Contributions are welcome! This is a spare-time project, so responses may be del
 
 See the [Contributing Guide](docs/16-Contributing.md) for more details.
 
+### Branding
+
+**WayfarerMobile** refers to the official companion app for the Wayfarer project.
+Forks and modified redistributions should use a **different name** to avoid confusion or false association.
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
