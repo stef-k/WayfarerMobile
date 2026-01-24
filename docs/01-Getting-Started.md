@@ -77,8 +77,6 @@ Connect to your Wayfarer server:
 2. Point your camera at the QR code from your server
 3. The app automatically configures the connection
 
-![QR Code Scanning Placeholder]
-
 #### Option B: Manual Entry
 
 1. Enter your server URL (e.g., `https://wayfarer.example.com`)
@@ -99,7 +97,7 @@ The QR code contains your server configuration in a secure format:
 | API Token | Authenticates you with the server (user identity determined server-side) |
 | Settings | Default tracking thresholds |
 
-> **Security**: The QR code is encrypted. Keep it private like a password.
+> **Security**: The QR code contains sensitive credentials. Keep it private like a password.
 
 ---
 

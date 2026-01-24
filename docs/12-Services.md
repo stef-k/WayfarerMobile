@@ -736,24 +736,69 @@ Manages application settings using MAUI Preferences and SecureStorage.
 
 ### Regular Settings (Preferences)
 
+#### Core Settings
+
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | `IsFirstRun` | bool | true | First launch flag |
-| `TimelineTrackingEnabled` | bool | true | Server logging enabled |
+| `TimelineTrackingEnabled` | bool | false | Enable background location logging (privacy-first) |
+| `BackgroundTrackingEnabled` | bool | false | Background GPS acquisition (set during onboarding) |
+| `KeepScreenOn` | bool | false | Prevent screen dimming |
+
+#### Location Thresholds
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
 | `LocationTimeThresholdMinutes` | int | 5 | Min time between logs (server-configurable) |
 | `LocationDistanceThresholdMeters` | int | 15 | Min distance between logs (server-configurable) |
-| `NavigationAudioEnabled` | bool | true | TTS announcements |
-| `NavigationVibrationEnabled` | bool | true | Haptic feedback |
-| `AutoRerouteEnabled` | bool | true | Automatic rerouting |
-| `DistanceUnits` | string | "kilometers" | km or miles |
-| `DarkModeEnabled` | bool | false | Dark theme |
+| `LocationAccuracyThresholdMeters` | int | 50 | Maximum GPS accuracy to accept |
+
+**Note**: Location thresholds are server-configurable and use AND logic - both the time AND distance thresholds must be exceeded for a location to be logged.
+
+#### Map Cache Settings
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `MapOfflineCacheEnabled` | bool | true | Enable tile caching |
 | `MaxLiveCacheSizeMB` | int | 500 | Live tile cache limit |
 | `MaxTripCacheSizeMB` | int | 2000 | Trip tile cache limit |
 | `TileServerUrl` | string | OSM tiles | User-configurable tile server URL |
-| `LiveCachePrefetchRadius` | int | 5 | Prefetch radius (1-9 tiles from center) |
+| `MaxConcurrentTileDownloads` | int | 2 | Parallel download limit (1-4) |
+| `MinTileRequestDelayMs` | int | 100 | Rate limiting delay (50-5000) |
+| `LiveCachePrefetchRadius` | int | 5 | Prefetch radius (1-10 tiles from center) |
 | `PrefetchDistanceThresholdMeters` | int | 500 | Min distance before prefetching tiles |
 
-**Note**: Location thresholds are server-configurable and use AND logic - both the time AND distance thresholds must be exceeded for a location to be logged.
+#### Navigation Settings
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `NavigationAudioEnabled` | bool | true | TTS announcements |
+| `NavigationVolume` | float | 0.7 | Voice announcement volume (0.0-1.0) |
+| `NavigationLanguage` | string | "" | TTS language code (empty = device default) |
+| `NavigationVibrationEnabled` | bool | true | Haptic feedback |
+| `AutoRerouteEnabled` | bool | true | Automatic rerouting |
+| `DistanceUnits` | string | "kilometers" | km or miles |
+
+#### Visit Notification Settings
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `VisitNotificationsEnabled` | bool | false | Notify on place visits |
+| `VisitNotificationStyle` | string | "notification" | Notification type (notification/voice/both) |
+| `VisitVoiceAnnouncementEnabled` | bool | false | Voice announcements for visits |
+
+#### Battery Settings
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `AutoPauseTrackingOnCriticalBattery` | bool | false | Auto-pause at critical battery (<10%) |
+| `ShowBatteryWarnings` | bool | true | Show battery warnings |
+
+#### Appearance
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `ThemePreference` | string | "System" | Theme (System/Light/Dark) |
 
 ### Usage
 

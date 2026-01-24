@@ -2,6 +2,19 @@
 
 ## 1.0
 
+### 2026-01-24
+- **Documentation: Review fixes**
+  - Fixed CLAUDE.md reference to non-existent navigation docs
+  - Corrected TimelineTrackingEnabled default value (false, not true)
+  - Removed broken image placeholder in Getting Started guide
+  - Clarified QR code security claim (contains credentials, not encrypted)
+  - Added About page with project info, attribution, and disclaimer
+  - Simplified Location Tracking guide for end-users (removed architecture diagrams)
+  - Added warranty disclaimer to documentation README
+  - Documented 14 undocumented settings in Services.md
+  - Fixed LiveCachePrefetchRadius range (1-10, not 1-9)
+  - Archived QUEUE.md spec to docs/specs/
+
 ### 2026-01-19 (PR #179)
 - **Feature: Offline queue UX/controls (#152)**
   - Added Settings > Offline Queue section for user-facing queue management
