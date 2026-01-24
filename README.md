@@ -14,6 +14,10 @@
 
 Wayfarer Mobile is a cross-platform .NET MAUI app for Android and iOS that serves as the mobile companion for the [Wayfarer](https://github.com/stef-k/Wayfarer) platform — a self-hosted trip planning and personal location timeline system. Track your location history, navigate trips offline, and share your location with groups.
 
+### Privacy & Data Handling
+
+Wayfarer Mobile is a privacy-first companion app for self-hosted Wayfarer servers. Location history is stored locally (SQLite) and synced only to your configured Wayfarer server. The app does not use third-party analytics or tracking by default. Background location tracking requires elevated OS permissions; review and configure tracking settings carefully before enabling continuous logging.
+
 ## Features
 
 ### Core Features
@@ -38,6 +42,8 @@ Wayfarer Mobile is a cross-platform .NET MAUI app for Android and iOS that serve
 - **Smart Battery Usage**: Three-phase sleep/wake optimization for background tracking (~1-3% per hour)
 - **Dual Navigation Modes**: Trip navigation (user segments → cached → OSRM → direct) and ad-hoc navigation (OSRM → direct)
 - **Queue Resilience**: Configurable queue limit (default 25,000), fast sync (12s/location), export to CSV/GeoJSON
+
+> **Offline Maps Note**: Offline tile downloads can consume significant storage depending on trip area and zoom levels. The app adapts maximum zoom based on trip size and provides cache limits (default 500 MB live, 2 GB trip tiles). Monitor device storage on older devices.
 
 ## Quick Start
 
@@ -65,12 +71,23 @@ dotnet build -f net10.0-ios
 dotnet build -t:Run -f net10.0-android
 ```
 
+### Platform Permissions
+
+To enable background location tracking:
+
+- **Android**: Requires foreground service and background location permissions
+- **iOS**: Requires "Always" location permission and background modes enabled
+
+Refer to the [User Guide](docs/00-User-Guide.md) for platform-specific setup and troubleshooting.
+
 ### Connect to Server
 
 1. Open the Wayfarer Mobile app
 2. Go to **Settings** → **Scan QR Code**
 3. Scan the configuration QR from your [Wayfarer server](https://github.com/stef-k/Wayfarer)
 4. The app will automatically configure the server URL and authentication token
+
+> **Security Note**: Treat your server token like a password. If you believe it was exposed, revoke and regenerate it on the Wayfarer server, then re-scan the QR code to re-pair the app.
 
 ## Project Structure
 
