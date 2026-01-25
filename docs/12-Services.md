@@ -65,7 +65,7 @@ public class LocationTrackingService : Service, ILocationListener
 
 - **GPS Acquisition**: Uses FusedLocationProviderClient (Google Play Services) or standard LocationManager as fallback
 - **Sleep/Wake Optimization**: Three-phase approach for battery efficiency in Normal mode
-- **Quality Filtering**: Rejects locations with accuracy > 100m
+- **Quality Filtering**: Rejects locations with accuracy > 50m (configurable)
 - **Threshold Filtering**: Applies server-configured time/distance thresholds via ThresholdFilter
 - **Queue Writing**: Writes filtered locations to SQLite queue (max 25,000)
 - **Notification Management**: Shows foreground notification with pause/stop actions and current accuracy
@@ -101,7 +101,7 @@ GPS Update Received
         |
         v
 +-------------------+
-| Quality Filter    |  Reject if accuracy > 100m
+| Quality Filter    |  Reject if accuracy > 50m (configurable)
 +-------------------+
         |
         v

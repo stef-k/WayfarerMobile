@@ -15,7 +15,7 @@ The main screen displays an interactive map powered by OpenStreetMap.
 - **Your location**: Blue dot with accuracy circle
 - **Heading indicator**: Cone showing your direction of movement
 - **Accuracy circle**: Shows GPS accuracy (smaller = more accurate)
-- **Zoom controls**: Pinch to zoom or use buttons
+- **Zoom controls**: Pinch to zoom
 
 ### Map Controls (FAB Buttons)
 
@@ -67,8 +67,8 @@ Timeline tracking automatically records your location history to your server.
 ### How It Works
 
 1. Your device acquires GPS coordinates using sleep/wake optimization
-2. Locations are filtered by accuracy (<100m) and time/distance thresholds
-3. Filtered locations are queued locally (up to 25,000 entries)
+2. Locations are filtered by accuracy (default <50m, configurable) and time/distance thresholds
+3. Filtered locations are queued locally (default 25,000, configurable 1-100,000)
 4. Queue syncs to your server when online
 5. Timeline entries are cached locally for offline viewing
 
@@ -107,7 +107,7 @@ Tap any entry to see:
 
 ![Edit Notes](images/edit-notes.jpg)
 
-> **Note**: Coordinates cannot be edited as they are GPS data.
+Coordinates can be edited manually if needed - see Trip Editing for how to update place locations.
 
 ### Editing Activity Types
 
@@ -302,10 +302,10 @@ From the main map, you can add your current location to the loaded trip as a new
 
 | Mode | Color | Icon |
 |------|-------|------|
-| Walking | Blue | Pedestrian |
-| Driving | Green | Car |
-| Transit | Orange | Bus/Train |
-| Cycling | Purple | Bicycle |
+| Walking | Green | Pedestrian |
+| Driving | Blue | Car |
+| Transit | Purple | Bus/Train |
+| Cycling | Orange | Bicycle |
 | Other | Gray | Generic |
 
 ---

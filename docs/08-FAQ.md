@@ -74,7 +74,7 @@ Yes, if timeline tracking is enabled and you've granted background location perm
 
 ### How often does the app log my location?
 
-The frequency depends on your server settings (time and distance thresholds). Typical settings are every 5 minutes or when you've moved 100 meters. More frequent updates use more battery.
+The frequency depends on your server settings (time and distance thresholds). Default settings are every 5 minutes or when you've moved 15 meters (server-configurable). More frequent updates use more battery.
 
 ### Can I stop tracking temporarily?
 
