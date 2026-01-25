@@ -115,8 +115,7 @@ Each member's location shows:
 ### Member Colors
 
 Each member has a unique color:
-- Colors are deterministic (same color everywhere)
-- Based on username hash
+- Colors are assigned by the server
 - Consistent across web and mobile apps
 
 Example colors:
@@ -138,7 +137,7 @@ When viewing "Today":
 ### Update Frequency
 
 - **SSE events**: Pushed instantly when members log locations
-- **Fallback refresh**: Every 30 seconds
+- **Throttling**: Updates throttled to 2-second intervals per user
 - **Historical days**: No live updates (static view)
 
 ### SSE Connection

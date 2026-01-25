@@ -13,7 +13,7 @@ Wayfarer Mobile uses a background service to continuously track your location.
 On both Android and iOS, the app runs a background service that:
 
 1. **Acquires GPS coordinates** using your device's location services
-2. **Filters low-accuracy readings** (only keeps locations accurate to within 100m)
+2. **Filters low-accuracy readings** (default: keeps locations accurate to within 50m, configurable)
 3. **Applies thresholds** to avoid logging every tiny movement
 4. **Saves locations locally** until they can be synced to your server
 5. **Syncs to server** when you're online
@@ -121,7 +121,7 @@ Low-quality GPS readings are discarded:
 
 | Metric | Filter |
 |--------|--------|
-| Accuracy | Must be < 100m (configurable) |
+| Accuracy | Default: < 50m (configurable 10-1000m) |
 | Age | Must be recent (not stale) |
 | Altitude | Checked for reasonableness |
 
@@ -261,7 +261,7 @@ Locations are queued locally before syncing to the server.
 ### Queue Behavior
 
 1. GPS provides location
-2. Passes accuracy filter (<100m by default, configurable)
+2. Passes accuracy filter (default <50m, configurable 10-1000m)
 3. Passes threshold filter (time AND distance)
 4. Added to local SQLite queue
 5. Queue syncs when online via continuous drain loop

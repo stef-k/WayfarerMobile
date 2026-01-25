@@ -259,7 +259,7 @@ For detailed troubleshooting:
 **Solutions:**
 
 1. **Check you're following the planned route**
-2. **50m tolerance**: Must be within 100m of route
+2. **100m tolerance**: Must be within 100m of route
 3. **Reroute manually**: Tap Reroute button
 4. **Use direct navigation**: May not have detailed route
 
