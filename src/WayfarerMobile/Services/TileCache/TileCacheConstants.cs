@@ -14,14 +14,14 @@ public static class TileCacheConstants
     /// <summary>
     /// Maximum zoom level for tile caching (zoomed in, street detail).
     /// </summary>
-    public const int MaxZoomLevel = 17;
+    public const int MaxZoomLevel = 18;
 
     /// <summary>
     /// All zoom levels for full tile operations (prefetch, full status check, trip download).
     /// Ordered by priority: most commonly used navigation zoom levels first.
-    /// Range: 8-17 (10 zoom levels total).
+    /// Range: 8-18 (11 zoom levels total).
     /// </summary>
-    public static readonly int[] AllZoomLevels = { 15, 14, 16, 13, 12, 11, 10, 9, 8, 17 };
+    public static readonly int[] AllZoomLevels = { 15, 14, 16, 13, 12, 11, 10, 9, 8, 17, 18 };
 
     /// <summary>
     /// Quick check zoom levels for fast cache status verification.

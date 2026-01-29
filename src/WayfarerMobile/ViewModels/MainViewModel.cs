@@ -370,6 +370,33 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     public bool HasAltitude => CurrentLocation?.Altitude != null;
 
     /// <summary>
+    /// Gets or sets the current map zoom level.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ZoomLevelText))]
+    [NotifyPropertyChangedFor(nameof(HasZoomLevel))]
+    private int _currentZoomLevel = -1;
+
+    /// <summary>
+    /// Gets the zoom level text to display.
+    /// </summary>
+    public string ZoomLevelText => CurrentZoomLevel >= 0 ? $"Z{CurrentZoomLevel}" : string.Empty;
+
+    /// <summary>
+    /// Gets whether a valid zoom level is available.
+    /// </summary>
+    public bool HasZoomLevel => CurrentZoomLevel >= 0;
+
+    /// <summary>
+    /// Updates the current zoom level from viewport changes.
+    /// </summary>
+    /// <param name="zoomLevel">The current zoom level.</param>
+    public void UpdateZoomLevel(double zoomLevel)
+    {
+        CurrentZoomLevel = (int)Math.Round(zoomLevel);
+    }
+
+    /// <summary>
     /// Gets the cache health indicator color.
     /// Forwards to MapDisplayViewModel.
     /// </summary>
