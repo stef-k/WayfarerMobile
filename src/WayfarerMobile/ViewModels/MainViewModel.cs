@@ -1260,11 +1260,8 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
 
         // Cache health is updated by CacheStatusService when location changes - NOT here on startup
 
-        // Set high performance mode for real-time updates when map is visible
-        if (Tracking.TrackingState == TrackingState.Active)
-        {
-            await Tracking.SetPerformanceModeCommand.ExecuteAsync(PerformanceMode.HighPerformance);
-        }
+        // Request high performance mode - applied when tracking becomes Active
+        await Tracking.RequestPerformanceModeAsync(PerformanceMode.HighPerformance);
 
         await base.OnAppearingAsync();
     }
@@ -1287,11 +1284,8 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
             IsTripSheetOpen = false;
         }
 
-        // Set normal mode to conserve battery when map is not visible
-        if (Tracking.TrackingState == TrackingState.Active)
-        {
-            await Tracking.SetPerformanceModeCommand.ExecuteAsync(PerformanceMode.Normal);
-        }
+        // Request normal mode to conserve battery when map is not visible
+        await Tracking.RequestPerformanceModeAsync(PerformanceMode.Normal);
 
         await base.OnDisappearingAsync();
     }
