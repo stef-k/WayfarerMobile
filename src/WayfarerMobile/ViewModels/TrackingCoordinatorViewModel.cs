@@ -19,6 +19,12 @@ public partial class TrackingCoordinatorViewModel : BaseViewModel
     private readonly ILogger<TrackingCoordinatorViewModel> _logger;
     private ITrackingCallbacks? _callbacks;
 
+    /// <summary>
+    /// The performance mode requested by the active page.
+    /// Applied when tracking state becomes Active.
+    /// </summary>
+    private PerformanceMode _requestedMode = PerformanceMode.Normal;
+
     #endregion
 
     #region Observable Properties
@@ -177,6 +183,22 @@ public partial class TrackingCoordinatorViewModel : BaseViewModel
         }
     }
 
+    /// <summary>
+    /// Requests a performance mode to be applied when tracking becomes Active.
+    /// If tracking is already Active, the mode is applied immediately.
+    /// </summary>
+    /// <param name="mode">The performance mode to request.</param>
+    public async Task RequestPerformanceModeAsync(PerformanceMode mode)
+    {
+        _requestedMode = mode;
+        _logger.LogDebug("Performance mode requested: {Mode}, TrackingState: {State}", mode, TrackingState);
+
+        if (TrackingState == TrackingState.Active)
+        {
+            await ApplyRequestedModeAsync();
+        }
+    }
+
     #endregion
 
     #region Commands
@@ -280,6 +302,12 @@ public partial class TrackingCoordinatorViewModel : BaseViewModel
     {
         TrackingState = state;
 
+        // Apply requested performance mode when tracking becomes Active
+        if (state == TrackingState.Active)
+        {
+            _ = ApplyRequestedModeAsync();
+        }
+
         // Clear location indicator when stopping
         if (state == TrackingState.Ready || state == TrackingState.NotInitialized)
         {
@@ -290,6 +318,24 @@ public partial class TrackingCoordinatorViewModel : BaseViewModel
     #endregion
 
     #region Private Methods
+
+    /// <summary>
+    /// Applies the currently requested performance mode.
+    /// </summary>
+    private async Task ApplyRequestedModeAsync()
+    {
+        try
+        {
+            _logger.LogDebug("Applying performance mode: {Mode}", _requestedMode);
+            await _locationBridge.SetPerformanceModeAsync(_requestedMode);
+            PerformanceMode = _requestedMode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to apply performance mode {Mode}", _requestedMode);
+        }
+    }
+
 
     /// <summary>
     /// Checks and requests required permissions.
