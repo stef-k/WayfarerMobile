@@ -756,6 +756,15 @@ public sealed class QueueDrainService : IDisposable
                     location.Longitude,
                     result.Message ?? "Threshold not met");
             }
+            else if (result.StatusCode == 408 || result.StatusCode == 429)
+            {
+                // Transient 4xx (timeout/rate limit) - reset to pending for retry
+                await _locationQueue.ResetLocationToPendingAsync(location.Id);
+                Interlocked.Increment(ref _consecutiveFailures);
+                _logger.LogWarning(
+                    "Location {Id} sync deferred (HTTP {StatusCode}): {Message}",
+                    location.Id, result.StatusCode, result.Message);
+            }
             else if (result.StatusCode.HasValue && result.StatusCode >= 400 && result.StatusCode < 500)
             {
                 // Client error (4xx) - server rejection, don't retry
@@ -766,6 +775,14 @@ public sealed class QueueDrainService : IDisposable
                 _logger.LogWarning(
                     "Location {Id} rejected by server (HTTP {StatusCode}): {Message}",
                     location.Id, result.StatusCode, result.Message);
+
+                // Notify listeners for local timeline cleanup (fixes stuck pending entries)
+                LocationSyncCallbacks.NotifyLocationSkipped(
+                    location.Id,
+                    location.Timestamp,
+                    location.Latitude,
+                    location.Longitude,
+                    result.Message ?? $"Server rejected (HTTP {result.StatusCode})");
             }
             else
             {
