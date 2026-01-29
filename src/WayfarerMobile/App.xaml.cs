@@ -255,10 +255,21 @@ public partial class App : Application
         var locationQueue = _serviceProvider.GetService<ILocationQueueRepository>();
 
         // Online submit delegate: Submit directly to server via log-location endpoint
+        // Return semantics:
+        //   - Returns serverId: Server accepted the location
+        //   - Returns null: Server explicitly skipped (threshold not met) - don't queue
+        //   - Throws exception: Network or API failure - triggers offline queue fallback
         Func<LocationData, Task<int?>> onlineSubmit = async location =>
         {
             if (apiClient == null)
                 throw new InvalidOperationException("API client not available");
+
+            // Early connectivity check - avoids timeout delays when completely offline
+            // Only block on NetworkAccess.None (no network interface at all).
+            // Allow Local/ConstrainedInternet to attempt the call for LAN-only server deployments.
+            // The IsTransient check below handles actual network failures.
+            if (Connectivity.Current.NetworkAccess == NetworkAccess.None)
+                throw new HttpRequestException("No network connectivity");
 
             // Convert to API request model with metadata
             var request = new LocationLogRequest
@@ -285,17 +296,34 @@ public partial class App : Application
             // Call the log-location endpoint (server is authoritative)
             var result = await apiClient.LogLocationAsync(request, idempotencyKey: null);
 
-            if (result.Success && !result.Skipped && result.LocationId.HasValue)
+            // Case 1: Server accepted or skipped - don't queue
+            // Note: log-location API may return just { "success": true } without locationId
+            if (result.Success)
             {
-                // Server accepted - update local timeline with server-assigned ID
-                if (timelineStorageService != null)
+                // Only update local timeline if server returned a locationId (not skipped)
+                if (!result.Skipped && result.LocationId.HasValue && timelineStorageService != null)
                 {
                     await timelineStorageService.AddAcceptedLocationAsync(location, result.LocationId.Value);
                 }
-                return result.LocationId.Value;
+                // Return locationId if available, null otherwise (either skipped or accepted without ID)
+                return result.LocationId;
             }
 
-            // Server skipped (threshold not met) or failed - return null (don't queue)
+            // Case 2: Transient failure - throw to trigger offline queue
+            // Check both IsTransient flag AND status code, since ApiClient may not set
+            // IsTransient for HTTP status failures (they come through with IsTransient=false)
+            // Transient codes: 408 (Request Timeout), 429 (Too Many Requests), 5xx (Server Error)
+            // QueueDrainService handles these appropriately with retry logic.
+            var isTransientStatusCode = result.StatusCode.HasValue &&
+                (result.StatusCode == 408 || result.StatusCode == 429 || result.StatusCode >= 500);
+
+            if (result.IsTransient || isTransientStatusCode)
+                throw new HttpRequestException($"Transient failure: {result.Message}");
+
+            // Case 3: Permanent API failure (4xx client errors) - return null, don't queue
+            // These won't succeed on retry (bad request, unauthorized, etc.) and queueing them
+            // creates pending timeline entries that never clear since QueueDrainService's 4xx
+            // handling doesn't emit LocationSkipped events.
             return null;
         };
 

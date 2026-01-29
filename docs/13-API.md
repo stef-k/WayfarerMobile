@@ -150,20 +150,27 @@ Logs a single location to the server timeline.
 }
 ```
 
-**Response** (Success):
+**Response** (Success - Location Stored):
 ```json
 {
-  "success": true
+  "success": true,
+  "skipped": false,
+  "locationId": 12345
 }
 ```
 
 **Response** (Threshold Skipped):
 ```json
 {
-  "success": false,
-  "error": "threshold skipped"
+  "success": true,
+  "skipped": true,
+  "locationId": null
 }
 ```
+
+> **Note**: When `skipped` is `true`, the location was not stored because it didn't meet
+> time/distance thresholds. The client should NOT queue this for retry - the server
+> explicitly chose to skip it.
 
 #### Batch Log Locations
 
