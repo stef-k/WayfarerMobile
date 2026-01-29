@@ -80,6 +80,11 @@
                                        IsVisible="{Binding HasAltitude}"
                                        VerticalOptions="Center"
                                        TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+                                <Label Text="{Binding ZoomLevelText}"
+                                       FontSize="11"
+                                       IsVisible="{Binding HasZoomLevel}"
+                                       VerticalOptions="Center"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
                                 <!-- Cache health indicator (tappable, larger hit area) -->
                                 <Border Padding="4,0" StrokeThickness="0" BackgroundColor="Transparent" VerticalOptions="Center">
                                     <Border.GestureRecognizers>

@@ -33,6 +33,11 @@ public partial class MainPage : ContentPage, IQueryAttributable
     // it means Shell is re-applying cached parameters, not a fresh user selection.
     private Guid? _lastProcessedLoadTripToken;
 
+    // Issue #204: Throttle viewport change updates to avoid excessive UI updates
+    private DateTime _lastViewportUpdate = DateTime.MinValue;
+    private const int ViewportUpdateThrottleMs = 500;
+    private Mapsui.Navigator? _subscribedNavigator; // Track subscribed navigator to avoid leaks
+
     // Issue #185: Deterministic readiness gate to prevent ObjectDisposedException
     // Trip load awaits this gate; it fires only when all platform handlers are ready.
     // _isLoaded: Visual tree is attached (Loaded event fired)
@@ -379,6 +384,16 @@ public partial class MainPage : ContentPage, IQueryAttributable
 
         // D5: Try to load trip (will await the readiness gate)
         await LoadPendingTripIfReadyAsync();
+
+        // Issue #204: Subscribe to viewport changes for zoom level display
+        // Unsubscribe first to prevent handler accumulation if OnAppearing called multiple times
+        UnsubscribeFromViewportChanges();
+        var navigator = MapControl.Map?.Navigator;
+        if (navigator != null)
+        {
+            navigator.ViewportChanged += OnViewportChanged;
+            _subscribedNavigator = navigator;
+        }
     }
 
     /// <summary>
@@ -499,6 +514,9 @@ public partial class MainPage : ContentPage, IQueryAttributable
     {
         base.OnDisappearing();
 
+        // Issue #204: Unsubscribe from viewport changes
+        UnsubscribeFromViewportChanges();
+
         // Issue #185: Reset readiness gate immediately to cancel any pending trip load
         // This ensures stale readiness never persists after suspend/resume
         _isAppearingComplete = false;
@@ -559,6 +577,36 @@ public partial class MainPage : ContentPage, IQueryAttributable
                 _viewModel.IsTripSheetOpen = false;
                 _viewModel.TripSheet.TripSheetBackCommand.Execute(null);
             }
+        }
+    }
+
+    /// <summary>
+    /// Handles viewport changes from the map navigator to update zoom level display.
+    /// Throttled to avoid excessive UI updates during pan/zoom gestures.
+    /// </summary>
+    private void OnViewportChanged(object? sender, Mapsui.ViewportChangedEventArgs e)
+    {
+        var now = DateTime.UtcNow;
+        if ((now - _lastViewportUpdate).TotalMilliseconds < ViewportUpdateThrottleMs)
+            return;
+
+        _lastViewportUpdate = now;
+
+        var bounds = _viewModel.MapDisplay.GetViewportBounds();
+        if (bounds.HasValue)
+            _viewModel.UpdateZoomLevel(bounds.Value.ZoomLevel);
+    }
+
+    /// <summary>
+    /// Unsubscribes from viewport changes on the tracked navigator.
+    /// Uses tracked reference to ensure we unsubscribe from the same navigator we subscribed to.
+    /// </summary>
+    private void UnsubscribeFromViewportChanges()
+    {
+        if (_subscribedNavigator != null)
+        {
+            _subscribedNavigator.ViewportChanged -= OnViewportChanged;
+            _subscribedNavigator = null;
         }
     }
 

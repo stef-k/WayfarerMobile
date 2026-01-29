@@ -200,7 +200,7 @@ public class CacheStatusServiceTests
     /// <summary>
     /// Zoom levels used for full status check (matches CacheStatusService.FullCheckZoomLevels).
     /// </summary>
-    private static readonly int[] FullCheckZoomLevels = { 15, 14, 16, 13, 12, 11, 10, 17 };
+    private static readonly int[] FullCheckZoomLevels = { 15, 14, 16, 13, 12, 11, 10, 9, 8, 17, 18 };
 
     #endregion
 
@@ -694,8 +694,8 @@ public class CacheStatusServiceTests
     [Fact]
     public void FullCheckZoomLevels_ContainsAllLevels()
     {
-        FullCheckZoomLevels.Should().BeEquivalentTo(new[] { 15, 14, 16, 13, 12, 11, 10, 17 },
-            "Full check should include 8 zoom levels for complete coverage");
+        FullCheckZoomLevels.Should().BeEquivalentTo(new[] { 15, 14, 16, 13, 12, 11, 10, 9, 8, 17, 18 },
+            "Full check should include 11 zoom levels for complete coverage");
     }
 
     /// <summary>
@@ -928,9 +928,9 @@ public class CacheStatusServiceTests
     {
         int radius = 5; // Default prefetch radius
         int tilesPerZoom = (2 * radius + 1) * (2 * radius + 1); // 121
-        int totalTiles = tilesPerZoom * FullCheckZoomLevels.Length; // 121 * 8 = 968
+        int totalTiles = tilesPerZoom * FullCheckZoomLevels.Length; // 121 * 11 = 1331
 
-        totalTiles.Should().Be(968, "Full check with radius 5 should check 968 tiles total");
+        totalTiles.Should().Be(1331, "Full check with radius 5 should check 1331 tiles total");
     }
 
     #endregion
