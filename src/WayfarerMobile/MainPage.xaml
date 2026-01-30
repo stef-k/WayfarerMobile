@@ -42,7 +42,7 @@
                     <!-- Floating status overlay at top (2 rows, tappable to copy coords) -->
                     <Frame VerticalOptions="Start"
                            HorizontalOptions="Start"
-                           Margin="8,8,0,0"
+                           Margin="{Binding IsOffline, Converter={StaticResource BoolToThicknessConverter}, ConverterParameter='8,44,0,0|8,8,0,0'}"
                            Padding="12,6"
                            CornerRadius="16"
                            BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}"
@@ -110,7 +110,7 @@
                                  Command="{Binding MapDisplay.ResetNorthCommand}"
                                  VerticalOptions="Start"
                                  HorizontalOptions="End"
-                                 Margin="0,8,15,0"
+                                 Margin="{Binding IsOffline, Converter={StaticResource BoolToThicknessConverter}, ConverterParameter='0,44,15,0|0,8,15,0'}"
                                  WidthRequest="44"
                                  HeightRequest="44"
                                  CornerRadius="22"
@@ -169,7 +169,7 @@
                     <!-- Place Coordinate Edit Overlay (shown when editing place coordinates) -->
                     <Border VerticalOptions="Start"
                             HorizontalOptions="Fill"
-                            Margin="8,60,8,0"
+                            Margin="{Binding IsOffline, Converter={StaticResource BoolToThicknessConverter}, ConverterParameter='8,96,8,0|8,60,8,0'}"
                             Padding="16,12"
                             BackgroundColor="{AppThemeBinding Light=Black, Dark={StaticResource Gray900}}"
                             Opacity="0.95"
