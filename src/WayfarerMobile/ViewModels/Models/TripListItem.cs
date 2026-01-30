@@ -314,6 +314,33 @@ public partial class TripListItem : ObservableObject
     }
 
     /// <summary>
+    /// Creates a trip list item from a downloaded entity only (offline mode).
+    /// </summary>
+    /// <param name="downloaded">The downloaded trip entity.</param>
+    public TripListItem(Data.Entities.DownloadedTripEntity downloaded)
+    {
+        ServerId = downloaded.ServerId;
+        Name = downloaded.Name;
+        UpdatedAt = downloaded.UpdatedAt;
+
+        // Construct bounding box from entity coordinates
+        BoundingBox = new BoundingBox
+        {
+            North = downloaded.BoundingBoxNorth,
+            South = downloaded.BoundingBoxSouth,
+            East = downloaded.BoundingBoxEast,
+            West = downloaded.BoundingBoxWest
+        };
+        if (!BoundingBox.IsValid)
+            BoundingBox = null;
+
+        _serverStatsText = null;
+        _downloadedEntity = downloaded;
+        _unifiedState = downloaded.UnifiedState;
+        _isDownloading = _unifiedState.IsDownloading();
+    }
+
+    /// <summary>
     /// Updates the unified state and related properties.
     /// Call this when receiving state change events.
     /// </summary>
