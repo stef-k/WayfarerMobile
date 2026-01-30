@@ -2,6 +2,30 @@
 
 ## 1.0
 
+### 2026-01-30
+- **Fix: Downloaded trips not showing when offline (#212)**
+  - Trips with completed tile downloads now display correctly when device is offline
+  - Fixed race condition in offline trip loading logic
+- **Fix: Offline banner hiding top info overlay (#207)**
+  - Offline connectivity banner no longer obscures the top information overlay
+  - Adjusted banner positioning and z-index for proper layering
+- **Documentation: Fix inconsistencies (#208)**
+  - Updated Architecture and Contributing docs to use current MapBuilder + layer services pattern
+  - Replaced outdated MapService references with ILocationLayerService and IMapBuilder
+  - Added 20+ new service documentation sections in Services.md
+  - Added `/api/location/check-in` endpoint documentation
+
+### 2026-01-29
+- **Feature: Zoom level display and extended tile cache (PR #209)**
+  - Added zoom level indicator to map display
+  - Extended tile cache support to zoom level 18 for higher detail offline maps
+- **Fix: Offline queue not working due to silent location loss (#205)**
+  - Fixed issue where queued locations were silently lost when offline
+  - Improved queue persistence and recovery logic
+- **Fix: GPS high performance mode not applied at cold start (PR #206)**
+  - High performance GPS mode now correctly activates on app cold start
+  - Fixed initialization order issue in location tracking service
+
 ### 2026-01-24
 - **Documentation: Review fixes**
   - Fixed CLAUDE.md reference to non-existent navigation docs
