@@ -131,9 +131,16 @@ These HTTP status codes trigger automatic retry:
 
 ### Location Endpoints
 
+There are two location logging endpoints serving different use cases:
+
+| Endpoint | Service | Purpose |
+|----------|---------|---------|
+| `/api/location/log-location` | `LocationTrackingService` | Automatic background logging |
+| `/api/location/check-in` | `QueueDrainService`, UI | Queued sync and manual check-ins |
+
 #### Log Location
 
-Logs a single location to the server timeline.
+Logs a single location to the server timeline. Used by the background location service for immediate logging.
 
 **Endpoint**: `POST /api/location/log-location`
 
@@ -171,6 +178,37 @@ Logs a single location to the server timeline.
 > **Note**: When `skipped` is `true`, the location was not stored because it didn't meet
 > time/distance thresholds. The client should NOT queue this for retry - the server
 > explicitly chose to skip it.
+
+#### Check In
+
+Logs a location via the queue drain service or manual check-in. Supports idempotency keys for replay safety.
+
+**Endpoint**: `POST /api/location/check-in`
+
+**Request**:
+```json
+{
+  "lat": 51.5074,
+  "lon": -0.1278,
+  "accuracy": 15.0,
+  "altitude": 25.0,
+  "speed": 1.5,
+  "bearing": 180.0,
+  "timestamp": "2025-01-15T14:30:00Z"
+}
+```
+
+**Headers**:
+| Header | Description |
+|--------|-------------|
+| `X-Idempotency-Key` | Unique key to prevent duplicate processing |
+
+**Response**: Same as Log Location.
+
+**Use Cases**:
+- **QueueDrainService**: Drains offline location queue with rate limiting (12s intervals)
+- **Manual Check-In**: User-initiated location logging from notification action or UI
+- **Offline Recovery**: Syncs locations queued while offline
 
 #### Batch Log Locations
 

@@ -10,10 +10,73 @@ This document provides detailed documentation for the key services in WayfarerMo
 |---------|---------|----------|
 | `LocationTrackingService` | GPS acquisition, foreground notification | Platform singleton |
 | `LocationBridge` | Platform-to-MAUI location bridge | Singleton |
-| `MapService` | Mapsui integration, layers, markers | Singleton |
+| `MapBuilder` | Mapsui map creation, layers, navigation routes | Singleton |
 | `DatabaseService` | SQLite operations | Singleton |
 | `SettingsService` | App configuration | Singleton |
 | `ApiClient` | Backend HTTP communication | Singleton |
+
+### Map Layer Services
+
+| Service | Purpose | Lifetime |
+|---------|---------|----------|
+| `LocationLayerService` | User location indicator (blue dot, accuracy, heading) | Singleton |
+| `TripLayerService` | Trip place markers and segment polylines | Singleton |
+| `GroupLayerService` | Group member markers and breadcrumbs | Singleton |
+| `TimelineLayerService` | Timeline location markers | Singleton |
+| `DroppedPinLayerService` | Dropped pin marker (map long-press) | Singleton |
+
+### Tile/Download Services
+
+| Service | Purpose | Lifetime |
+|---------|---------|----------|
+| `TileDownloadOrchestrator` | Batch tile downloads with pause/resume | Singleton |
+| `DownloadStateService` | Download state transitions and validation | Singleton |
+| `DownloadStateManager` | Pause/resume state, progress tracking | Singleton |
+| `DownloadProgressAggregator` | Centralized download progress events | Singleton |
+| `CacheLimitEnforcer` | Cache size limit enforcement (80%/90%/100%) | Singleton |
+
+### Trip Services
+
+| Service | Purpose | Lifetime |
+|---------|---------|----------|
+| `TripStateManager` | Currently loaded trip state (thread-safe) | Singleton |
+| `TripSyncCoordinator` | Trip sync with server (version checks) | Singleton |
+| `TripContentService` | Trip metadata fetch, sync, offline retrieval | Singleton |
+| `TripMetadataBuilder` | Builds offline entities from trip details | Singleton |
+| `PlaceOperationsHandler` | Place CRUD with optimistic UI | Singleton |
+| `RegionOperationsHandler` | Region CRUD with optimistic UI | Singleton |
+| `TripEntityOperationsHandler` | Trip/Segment/Area entity updates | Singleton |
+
+### Timeline Services
+
+| Service | Purpose | Lifetime |
+|---------|---------|----------|
+| `TimelineDataService` | Timeline data access with offline fallback | Singleton |
+| `LocalTimelineStorageService` | Local timeline filtering and persistence | Singleton |
+| `MutationQueueService` | Offline mutation queue management | Singleton |
+
+### Event/Communication Services
+
+| Service | Purpose | Lifetime |
+|---------|---------|----------|
+| `SyncEventBus` | Centralized sync-related events | Singleton |
+| `LocationSyncEventBridge` | Bridges static callbacks to interface | Singleton |
+| `SseClient` | Server-Sent Events client | Per-instance |
+| `SseClientFactory` | Creates SSE client instances | Singleton |
+
+### Group Services
+
+| Service | Purpose | Lifetime |
+|---------|---------|----------|
+| `GroupsService` | Group data and member locations | Singleton |
+| `GroupMemberManager` | Member operations, visibility, utilities | Singleton |
+
+### Other Services
+
+| Service | Purpose | Lifetime |
+|---------|---------|----------|
+| `AppLockService` | App lock/PIN security | Singleton |
+| `VisitNotificationService` | Visit notifications via SSE/polling | Singleton |
 
 ### Sync Services
 
@@ -308,80 +371,86 @@ Rejected locations are not retried and are removed during rolling buffer cleanup
 
 ---
 
-## MapService
+## MapBuilder
 
-**Source**: `src/WayfarerMobile/Services/MapService.cs`
+**Source**: `src/WayfarerMobile/Services/MapBuilder.cs`
 
-Manages the Mapsui map display including layers, markers, and navigation routes.
+Injectable service for creating Mapsui map instances and managing map configuration.
 
-### Map Layers
+### Interface
 
-| Layer | Purpose |
-|-------|---------|
-| `OpenStreetMap` | Base tile layer |
-| `Track` | User movement track line |
-| `CurrentLocation` | Location indicator with accuracy circle |
-| `GroupMembers` | Group member location markers |
-| `TripPlaces` | Trip place markers with icons |
-| `TripSegments` | Trip segment polylines |
-| `NavigationRoute` | Active navigation route (blue) |
-| `NavigationRouteCompleted` | Completed route portion (gray) |
+```csharp
+public interface IMapBuilder
+{
+    Map CreateMap();
+    WritableLayer CreateLayer(string name);
+    void UpdateNavigationRoute(Map map, NavigationRoute route);
+    void UpdateNavigationRouteProgress(Map map, double lat, double lon);
+    void CenterOnLocation(Map map, double lat, double lon, double? resolution = null);
+    void ZoomToPoints(Map map, IEnumerable<(double lat, double lon)> points, double padding);
+    ViewportBounds? GetViewportBounds(Map map);
+}
+```
 
-### Location Indicator
+### Responsibilities
 
-The location indicator includes:
-- **Accuracy Circle**: Pulsing semi-transparent circle
+- Creates Map instances with tile layer and additional feature layers
+- Manages navigation route rendering with progress tracking
+- Provides viewport manipulation (center, zoom, bounds)
+- Decoupled from per-feature layer management (handled by layer services)
+
+### Usage
+
+```csharp
+public class MainViewModel : ObservableObject
+{
+    private readonly IMapBuilder _mapBuilder;
+
+    public MainViewModel(IMapBuilder mapBuilder)
+    {
+        _mapBuilder = mapBuilder;
+        Map = _mapBuilder.CreateMap();
+    }
+
+    public Map Map { get; }
+}
+```
+
+---
+
+## Layer Services
+
+The map uses separate layer services for each feature domain, following the single-responsibility principle.
+
+### LocationLayerService
+
+**Source**: `src/WayfarerMobile/Services/LocationLayerService.cs`
+
+Manages the current user location indicator on the map.
+
+**Components**:
+- **Accuracy Circle**: Semi-transparent circle showing GPS accuracy
 - **Heading Cone**: Direction indicator (30-90 degrees based on calibration)
 - **Center Marker**: Blue dot with white border
 
 ```csharp
-public void UpdateLocation(LocationData location, bool centerMap = false)
+public interface ILocationLayerService
 {
-    var (x, y) = SphericalMercator.FromLonLat(location.Longitude, location.Latitude);
-    var point = new MPoint(x, y);
-
-    // Update accuracy circle
-    if (accuracy > 0)
-    {
-        _accuracyFeature.Geometry = CreateAccuracyCircle(point, accuracy * pulseScale);
-    }
-
-    // Update heading cone
-    if (heading >= 0 && heading < 360)
-    {
-        _headingFeature.Geometry = CreateHeadingCone(point, heading, coneAngle);
-    }
-
-    // Update center marker
-    _markerFeature.Geometry = new Point(point.X, point.Y);
+    void UpdateLocation(WritableLayer layer, LocationData location);
+    void Clear(WritableLayer layer);
 }
 ```
 
-### Navigation Route Display
+### TripLayerService
 
-```csharp
-public void ShowNavigationRoute(NavigationRoute route)
-{
-    var coordinates = route.Waypoints
-        .Select(w => {
-            var (x, y) = SphericalMercator.FromLonLat(w.Longitude, w.Latitude);
-            return new Coordinate(x, y);
-        })
-        .ToArray();
+**Source**: `src/WayfarerMobile/Services/TripLayerService.cs`
 
-    var lineString = new LineString(coordinates);
-    _navigationRouteLayer.Add(new GeometryFeature(lineString));
-}
+Manages trip place markers and segment polylines.
 
-public void UpdateNavigationRouteProgress(double currentLat, double currentLon)
-{
-    // Split route into completed (gray) and remaining (blue) portions
-}
-```
-
-### Trip Segment Styling
-
-Segments are styled based on transport mode:
+**Features**:
+- Dynamic icon caching with colorization
+- Place selection highlighting
+- Transport mode styling for segments
 
 | Mode | Color | Style |
 |------|-------|-------|
@@ -391,6 +460,29 @@ Segments are styled based on transport mode:
 | Transit | Purple | Solid |
 | Ferry | Teal | Dashed |
 | Flight | Light Blue | Dotted |
+
+### GroupLayerService
+
+**Source**: `src/WayfarerMobile/Services/GroupLayerService.cs`
+
+Manages group member markers and historical location breadcrumbs.
+
+**Features**:
+- Live vs latest location indicators
+- Pulse animation for live locations
+- Member color coding
+
+### TimelineLayerService
+
+**Source**: `src/WayfarerMobile/Services/TimelineLayerService.cs`
+
+Manages timeline location markers for the timeline page. Pure rendering service (stateless).
+
+### DroppedPinLayerService
+
+**Source**: `src/WayfarerMobile/Services/DroppedPinLayerService.cs`
+
+Manages the dropped pin marker for map long-press interactions. Stateless rendering service.
 
 ---
 
@@ -1117,6 +1209,415 @@ public class CachedRoute
     public DateTime FetchedAtUtc { get; set; }
 }
 ```
+
+---
+
+## TileDownloadOrchestrator
+
+**Source**: `src/WayfarerMobile/Services/TileDownloadOrchestrator.cs`
+
+Orchestrates batch tile downloads with parallel execution, pause/resume support, and cache limit enforcement.
+
+### Interface
+
+```csharp
+public interface ITileDownloadOrchestrator
+{
+    Task<TileDownloadResult> DownloadTilesAsync(
+        BoundingBox bbox, int tripId, IProgress<TileProgress>? progress, CancellationToken ct);
+    IEnumerable<TileIndex> CalculateTilesForBoundingBox(BoundingBox bbox, int maxZoom);
+    int GetRecommendedMaxZoom(BoundingBox bbox);
+    string? GetCachedTilePath(int x, int y, int z, int tripId);
+}
+```
+
+### Features
+
+- **Parallel downloads**: Configurable concurrent tile fetching
+- **Pause/Resume**: Downloads can be paused and resumed via stop requests
+- **Cache limits**: Enforces 80%/90%/100% thresholds with warnings
+- **Rate limiting**: Handles 429 responses with retry-after header
+- **Atomic writes**: Uses temp file pattern for integrity
+- **PNG validation**: Validates downloaded tile signatures
+
+### Tile Download Configuration
+
+| Setting | Value |
+|---------|-------|
+| Zoom levels | 8-17 |
+| Concurrent downloads | Configurable (default 4) |
+| Checkpoint interval | Every 50 tiles |
+| Estimated tile size | 40 KB (urban areas) |
+
+---
+
+## DownloadStateService
+
+**Source**: `src/WayfarerMobile/Services/DownloadStateService.cs`
+
+Manages download state transitions with validation and events.
+
+### Download States
+
+| Status | Description |
+|--------|-------------|
+| `ServerOnly` | Trip exists on server, not downloaded |
+| `DownloadingMetadata` | Fetching trip metadata |
+| `DownloadingTiles` | Downloading map tiles |
+| `Complete` | All tiles downloaded |
+| `MetadataOnly` | Trip data without tiles |
+| `PausedUser` | User paused download |
+| `PausedNetwork` | Network lost |
+| `PausedStorage` | Device storage low |
+| `PausedCacheLimit` | Trip cache full |
+| `Failed` | Download failed |
+| `Cancelled` | User cancelled |
+
+### Key Methods
+
+```csharp
+Task<bool> TransitionAsync(int tripId, DownloadStatus newStatus);
+bool IsValidTransition(DownloadStatus from, DownloadStatus to);
+Task<List<DownloadedTripEntity>> GetResumableTripsAsync();
+Task RecoverStuckDownloadsAsync();
+```
+
+---
+
+## DownloadStateManager
+
+**Source**: `src/WayfarerMobile/Services/DownloadStateManager.cs`
+
+Manages download pause/resume state, progress tracking, and stop requests.
+
+### Features
+
+- **Thread-safe stop management**: Uses ConcurrentDictionary for stop requests
+- **State persistence**: Saves/restores download checkpoints for resumability
+- **Progress tracking**: Tracks tile completion per trip
+
+### Key Methods
+
+```csharp
+void RequestStop(int tripId, StopReason reason);
+bool TryGetStopReason(int tripId, out StopReason reason);
+void ClearStopRequest(int tripId);
+Task SaveStateAsync(int tripId, DownloadCheckpoint checkpoint);
+Task<DownloadCheckpoint?> GetStateAsync(int tripId);
+```
+
+---
+
+## DownloadProgressAggregator
+
+**Source**: `src/WayfarerMobile/Services/DownloadProgressAggregator.cs`
+
+Centralizes download progress events from multiple services.
+
+### Events
+
+| Event | When Raised |
+|-------|-------------|
+| `ProgressChanged` | Tile download progress update |
+| `DownloadCompleted` | Download finished successfully |
+| `DownloadFailed` | Download failed with error |
+| `DownloadPaused` | Download paused (user or limit) |
+
+---
+
+## CacheLimitEnforcer
+
+**Source**: `src/WayfarerMobile/Services/CacheLimitEnforcer.cs`
+
+Enforces cache size limits for trip tile downloads.
+
+### Thresholds
+
+| Level | Threshold | Action |
+|-------|-----------|--------|
+| Warning | 80% | Notify user |
+| Critical | 90% | Urgent warning |
+| Limit | 100% | Pause download |
+
+### Key Methods
+
+```csharp
+Task<CacheLimitResult> CheckLimitAsync();
+Task<CacheLimitResult> GetCachedLimitCheckAsync(); // 2-second cache
+```
+
+---
+
+## TripStateManager
+
+**Source**: `src/WayfarerMobile/Services/TripStateManager.cs`
+
+Thread-safe management of currently loaded trip state across the application.
+
+### Events
+
+| Event | When Raised |
+|-------|-------------|
+| `CurrentTripChanged` | Active trip changed |
+| `LoadedTripChanged` | Trip data loaded/unloaded |
+
+### Features
+
+- Singleton registration
+- Lock-based thread safety for concurrent access
+- Central source of truth for trip state
+
+---
+
+## TripSyncCoordinator
+
+**Source**: `src/WayfarerMobile/Services/TripSyncCoordinator.cs`
+
+Coordinates synchronization of downloaded trips with the server.
+
+### Key Methods
+
+```csharp
+Task<bool> CheckTripUpdateNeededAsync(Guid serverId);
+Task<SyncResult> SyncTripAsync(Guid serverId, CancellationToken ct);
+```
+
+### Features
+
+- Prevents concurrent syncs of same trip
+- Compares server vs local versions
+- Re-downloads tiles if bounding box changed
+
+---
+
+## TripContentService
+
+**Source**: `src/WayfarerMobile/Services/TripContentService.cs`
+
+Service for trip content operations: metadata fetch, sync, and offline retrieval.
+
+### Key Methods
+
+```csharp
+Task<bool> CheckTripUpdateNeededAsync(Guid serverId);
+Task<List<Guid>> GetTripsNeedingUpdateAsync();
+Task<bool> SyncTripMetadataAsync(Guid serverId, CancellationToken ct);
+```
+
+### Features
+
+- Handles Places, Segments, Areas, and Polygons
+- Offline-first approach with online enrichment
+
+---
+
+## TripMetadataBuilder
+
+**Source**: `src/WayfarerMobile/Services/TripMetadataBuilder.cs`
+
+Builds offline entity collections from trip details.
+
+```csharp
+public interface ITripMetadataBuilder
+{
+    List<OfflineAreaEntity> BuildAreas(TripDetails trip, int tripId);
+    List<OfflinePlaceEntity> BuildPlaces(TripDetails trip, int tripId);
+    List<OfflineSegmentEntity> BuildSegments(TripDetails trip, int tripId);
+    List<OfflinePolygonEntity> BuildPolygons(TripDetails trip, int tripId);
+}
+```
+
+Pure transformation service with no side effects.
+
+---
+
+## Operations Handlers
+
+### PlaceOperationsHandler
+
+**Source**: `src/WayfarerMobile/Services/PlaceOperationsHandler.cs`
+
+Handles place CRUD operations with optimistic UI pattern.
+
+### RegionOperationsHandler
+
+**Source**: `src/WayfarerMobile/Services/RegionOperationsHandler.cs`
+
+Handles region CRUD operations with optimistic UI pattern.
+
+### TripEntityOperationsHandler
+
+**Source**: `src/WayfarerMobile/Services/TripEntityOperationsHandler.cs`
+
+Handles trip entity updates (Trip, Segment, Area).
+
+### Common Features
+
+- Optimistic UI updates (apply locally, sync to server)
+- Returns operation results instead of raising events
+- Enforces dependency ordering (e.g., Region must exist before Place)
+
+---
+
+## TimelineDataService
+
+**Source**: `src/WayfarerMobile/Services/TimelineDataService.cs`
+
+Abstraction layer for timeline data access with offline fallback.
+
+### Key Methods
+
+```csharp
+Task<List<LocalTimelineEntry>> GetEntriesForDateAsync(DateOnly date);
+Task<List<LocalTimelineEntry>> GetEntriesInRangeAsync(DateOnly from, DateOnly to);
+Task EnrichFromServerAsync(DateOnly date, CancellationToken ct);
+```
+
+### Features
+
+- Per-date locks for enrichment concurrency control
+- Offline-first with server enrichment
+- Merges server data into local entries
+
+---
+
+## LocalTimelineStorageService
+
+**Source**: `src/WayfarerMobile/Services/LocalTimelineStorageService.cs`
+
+Manages local timeline storage by filtering and persisting location data.
+
+### Features
+
+- Subscribes to location events and sync callbacks
+- Applies AND filter logic (matching server behavior)
+- Both time AND distance thresholds must be exceeded
+
+---
+
+## MutationQueueService
+
+**Source**: `src/WayfarerMobile/Services/MutationQueueService.cs`
+
+Manages the offline mutation queue for pending sync operations.
+
+### Features
+
+- Queues Place, Region, and entity mutations
+- Lifecycle tracking: pending → syncing → synced
+- Shares database connection for transactional consistency
+
+---
+
+## SyncEventBus
+
+**Source**: `src/WayfarerMobile/Services/SyncEventBus.cs`
+
+Centralizes sync-related events from multiple services.
+
+### Events
+
+| Event | When Raised |
+|-------|-------------|
+| `SyncSucceeded` | Server accepted sync |
+| `SyncFailed` | Sync failed |
+| `SyncQueued` | Queued for offline retry |
+| `EntityCreated` | New entity created |
+| `TripsUpdated` | Trips list changed |
+| `TripDataChanged` | Trip content changed |
+| `ConnectivityChanged` | Network status changed |
+
+---
+
+## LocationSyncEventBridge
+
+**Source**: `src/WayfarerMobile/Services/LocationSyncEventBridge.cs`
+
+Bridges static LocationSyncCallbacks to ILocationSyncEventBridge interface.
+
+Allows Core services to observe sync events without platform-specific coupling.
+
+---
+
+## SseClient
+
+**Source**: `src/WayfarerMobile/Services/SseClient.cs`
+
+Client for subscribing to Server-Sent Events (SSE) for real-time location updates.
+
+### Events
+
+| Event | Description |
+|-------|-------------|
+| `LocationReceived` | Member location update |
+| `LocationDeleted` | Location removed |
+| `MembershipReceived` | Membership change |
+| `InviteCreated` | New group invite |
+| `VisitStarted` | Place visit detected |
+| `HeartbeatReceived` | Connection keepalive |
+| `Connected` | SSE connection established |
+| `Reconnecting` | Attempting reconnection |
+| `PermanentError` | Non-recoverable error |
+
+### Reconnection
+
+- Automatic reconnection with exponential backoff (1s, 2s, 5s)
+- Non-retryable status codes: 401, 403, 404
+
+---
+
+## GroupMemberManager
+
+**Source**: `src/WayfarerMobile/Services/GroupMemberManager.cs`
+
+Manages group member operations (load, refresh, visibility, utilities).
+
+### Key Methods
+
+```csharp
+Task<List<GroupMemberWithLocation>> LoadMembersWithLocationsAsync(Guid groupId);
+Task RefreshMemberLocationsAsync(Guid groupId);
+Task UpdatePeerVisibilityAsync(Guid groupId, bool visible);
+```
+
+---
+
+## AppLockService
+
+**Source**: `src/WayfarerMobile/Services/Security/AppLockService.cs`
+
+App lock/PIN security service.
+
+### Security States
+
+| State | Description |
+|-------|-------------|
+| S0 | No PIN configured |
+| S1 | PIN configured but disabled |
+| S2 | Locked (requires PIN) |
+| S3 | Unlocked |
+
+### Features
+
+- Secure PIN hashing with PBKDF2
+- Salt-based storage
+- Legacy preference migration
+
+---
+
+## VisitNotificationService
+
+**Source**: `src/WayfarerMobile.Core/Services/VisitNotificationService.cs`
+
+Handles visit notifications via SSE and background polling.
+
+### Features
+
+- SSE subscription when in foreground
+- Background polling after location sync
+- Deduplication with circular buffer (max 10 recent visits)
+- Per-place daily notification limit
+- Navigation conflict handling (10-second cooldown)
 
 ---
 

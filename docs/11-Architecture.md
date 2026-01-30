@@ -59,7 +59,7 @@ ViewModels use CommunityToolkit.Mvvm attributes for automatic property and comma
 public partial class MainViewModel : ObservableObject
 {
     private readonly ILocationBridge _locationBridge;
-    private readonly MapService _mapService;
+    private readonly ILocationLayerService _locationLayer;
 
     [ObservableProperty]
     private LocationData? _currentLocation;
@@ -70,10 +70,10 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string _trackingStatus = "Not tracking";
 
-    public MainViewModel(ILocationBridge locationBridge, MapService mapService)
+    public MainViewModel(ILocationBridge locationBridge, ILocationLayerService locationLayer)
     {
         _locationBridge = locationBridge;
-        _mapService = mapService;
+        _locationLayer = locationLayer;
 
         _locationBridge.LocationReceived += OnLocationReceived;
         _locationBridge.StateChanged += OnStateChanged;
@@ -96,7 +96,7 @@ public partial class MainViewModel : ObservableObject
     private void OnLocationReceived(object? sender, LocationData location)
     {
         CurrentLocation = location;
-        _mapService.UpdateLocation(location, centerMap: true);
+        _locationLayer.UpdateLocation(location, centerMap: true);
     }
 }
 ```
@@ -137,11 +137,11 @@ public static class MauiProgram
         // Infrastructure Services
         services.AddSingleton<DatabaseService>();
         services.AddSingleton<ISettingsService, SettingsService>();
-        services.AddSingleton<MapService>();
+        services.AddSingleton<IMapBuilder, MapBuilder>();
 
         // API Services
         services.AddSingleton<IApiClient, ApiClient>();
-        services.AddSingleton<LocationSyncService>();
+        services.AddSingleton<QueueDrainService>();
         services.AddSingleton<IGroupsService, GroupsService>();
 
         // Platform Services (conditional)
@@ -312,7 +312,7 @@ The timeline uses an **offline-first** pattern with server enrichment:
 │                        Location Lifecycle                                │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
-│  GPS Fix → ThresholdFilter → QueuedLocations → LocationSyncService       │
+│  GPS Fix → ThresholdFilter → QueuedLocations → QueueDrainService         │
 │                                    │                    │                │
 │                                    │              (Server Sync)          │
 │                                    ▼                    ▼                │
@@ -329,7 +329,7 @@ The timeline uses an **offline-first** pattern with server enrichment:
 
 1. **GPS Acquisition**: LocationTrackingService acquires GPS fix
 2. **Queue Entry**: Location is queued to `QueuedLocations` table
-3. **Server Sync**: `LocationSyncService` sends to server when online
+3. **Server Sync**: `QueueDrainService` sends to server when online (via `/api/location/check-in`)
 4. **Local Cache**: Entry is copied to `LocalTimelineEntries` for offline viewing
 5. **Enrichment**: `TimelineDataService.EnrichFromServerAsync()` fetches:
    - Reverse-geocoded address
@@ -377,13 +377,16 @@ public class SettingsService : ISettingsService
 
 | Category | Services |
 |----------|----------|
-| **API** | `ApiClient`, `GroupsService` |
-| **Sync** | `LocationSyncService`, `TripSyncService`, `TimelineSyncService` |
-| **Maps** | `MapService`, `LocationIndicatorService` |
+| **API** | `ApiClient`, `GroupsService`, `GroupMemberManager` |
+| **Sync** | `QueueDrainService`, `TripSyncCoordinator`, `TimelineSyncService`, `SyncEventBus` |
+| **Maps** | `MapBuilder`, `LocationLayerService`, `TripLayerService`, `GroupLayerService`, `TimelineLayerService`, `DroppedPinLayerService` |
 | **Navigation** | `TripNavigationService`, `OsrmRoutingService`, `RouteCacheService` |
-| **Tiles** | `UnifiedTileCacheService`, `LiveTileCacheService` |
+| **Tiles** | `TileDownloadOrchestrator`, `DownloadStateService`, `DownloadStateManager`, `CacheLimitEnforcer` |
+| **Trip** | `TripStateManager`, `TripContentService`, `TripMetadataBuilder`, `PlaceOperationsHandler`, `RegionOperationsHandler` |
+| **Timeline** | `TimelineDataService`, `LocalTimelineStorageService`, `MutationQueueService` |
 | **Security** | `AppLockService` |
 | **Audio** | `NavigationAudioService`, `TextToSpeechService` |
+| **Real-time** | `SseClient`, `SseClientFactory`, `VisitNotificationService` |
 
 ### HttpClient Configuration
 
