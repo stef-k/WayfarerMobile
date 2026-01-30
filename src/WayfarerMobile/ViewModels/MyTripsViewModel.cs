@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
@@ -54,6 +55,12 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     /// </summary>
     [ObservableProperty]
     private string? _errorMessage;
+
+    /// <summary>
+    /// Gets or sets whether the device is currently online.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isOnline = true;
 
     /// <summary>
     /// Guard against rapid taps on Load to Map button.
@@ -180,7 +187,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     #region Commands - Load Trips
 
     /// <summary>
-    /// Loads user's trips from the server and local database.
+    /// Loads user's trips from the server (when online) or local database (when offline).
     /// </summary>
     [RelayCommand]
     public async Task LoadTripsAsync()
@@ -192,59 +199,87 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
             IsLoadingTrips = true;
             ErrorMessage = null;
 
-            var serverTrips = await _apiClient.GetTripsAsync();
+            // Determine connectivity state deterministically
+            UpdateConnectivityState();
+            _logger.LogDebug("LoadTripsAsync: IsOnline={IsOnline}", IsOnline);
+
+            // Always fetch local downloaded trips
             var downloadedTrips = await _downloadService.GetDownloadedTripsAsync();
+            _logger.LogDebug("LoadTripsAsync: {Count} trips in local storage", downloadedTrips.Count);
 
-            // Check which trip is currently loaded on the map
             var loadedTripId = _tripStateManager.CurrentLoadedTripId;
-            _logger.LogDebug("LoadTripsAsync: CurrentLoadedTripId = {TripId}", loadedTripId);
-
-            // Build grouped list
             var items = new List<TripListItem>();
 
-            // Add server trips with download status
-            foreach (var trip in serverTrips.OrderByDescending(t => t.UpdatedAt))
+            if (IsOnline)
             {
-                var downloaded = downloadedTrips.FirstOrDefault(d => d.ServerId == trip.Id);
-                var item = new TripListItem(trip, downloaded);
+                // Online: fetch from server and merge with local data
+                var serverTrips = await _apiClient.GetTripsAsync();
+                _logger.LogDebug("LoadTripsAsync: {Count} trips from server", serverTrips.Count);
 
-                // Mark as currently loaded if it matches
-                if (loadedTripId.HasValue && trip.Id == loadedTripId.Value)
+                foreach (var trip in serverTrips.OrderByDescending(t => t.UpdatedAt))
                 {
-                    _logger.LogDebug("LoadTripsAsync: Marking trip {TripName} ({TripId}) as currently loaded", trip.Name, trip.Id);
-                    item.IsCurrentlyLoaded = true;
+                    var downloaded = downloadedTrips.FirstOrDefault(d => d.ServerId == trip.Id);
+                    var item = new TripListItem(trip, downloaded);
+
+                    if (loadedTripId.HasValue && trip.Id == loadedTripId.Value)
+                        item.IsCurrentlyLoaded = true;
+
+                    items.Add(item);
+                }
+            }
+            else
+            {
+                // Offline: show downloaded trips that have usable metadata
+                _logger.LogInformation("LoadTripsAsync: Offline mode - {Count} downloaded trips available", downloadedTrips.Count);
+
+                var usableTrips = downloadedTrips
+                    .Where(d => d.UnifiedState.HasMetadata() || d.IsMetadataComplete)
+                    .OrderByDescending(d => d.UpdatedAt)
+                    .ToList();
+
+                foreach (var downloaded in usableTrips)
+                {
+                    var item = new TripListItem(downloaded);
+
+                    if (loadedTripId.HasValue && downloaded.ServerId == loadedTripId.Value)
+                        item.IsCurrentlyLoaded = true;
+
+                    items.Add(item);
                 }
 
-                items.Add(item);
+                if (usableTrips.Count == 0 && downloadedTrips.Count > 0)
+                    _logger.LogWarning("LoadTripsAsync: {Count} downloaded trips but none have usable metadata", downloadedTrips.Count);
             }
 
             // Group by download status
             var groups = items
                 .GroupBy(t => t.GroupName)
-                .OrderBy(g => g.Key == "Downloaded" ? 0 : g.Key == "Metadata Only" ? 1 : 2)
+                .OrderBy(g => g.Key == "Downloaded" ? 0 : g.Key == "Metadata Only" ? 1 : g.Key == "In Progress" ? 2 : 3)
                 .Select(g => new TripGrouping(g.Key, g.ToList()))
                 .ToList();
 
             Trips.Clear();
             foreach (var group in groups)
-            {
                 Trips.Add(group);
-            }
 
-            _logger.LogDebug("Loaded {Count} trips", items.Count);
+            _logger.LogDebug("Loaded {Count} trips{Suffix}", items.Count, IsOnline ? "" : " (offline)");
 
-            // Refresh sync queue status
-            await RefreshSyncStatusAsync();
+            // Refresh sync status only when online
+            if (IsOnline)
+                await RefreshSyncStatusAsync();
         }
         catch (HttpRequestException ex)
         {
             _logger.LogNetworkWarningIfOnline("Network error loading trips: {Message}", ex.Message);
-            ErrorMessage = "Failed to load trips. Please check your connection.";
+            IsOnline = false;
+            await LoadFromLocalOnlyAsync();
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
         {
             _logger.LogError(ex, "Request timed out loading trips");
             ErrorMessage = "Request timed out. Please try again.";
+            IsOnline = false;
+            await LoadFromLocalOnlyAsync();
         }
         catch (Exception ex)
         {
@@ -254,8 +289,50 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         finally
         {
             IsLoadingTrips = false;
-            // Mark initial load complete - shimmer won't show on subsequent refreshes
             IsInitialLoad = false;
+        }
+    }
+
+    /// <summary>
+    /// Loads trips from local storage only (fallback when network fails).
+    /// </summary>
+    private async Task LoadFromLocalOnlyAsync()
+    {
+        try
+        {
+            var downloadedTrips = await _downloadService.GetDownloadedTripsAsync();
+            var loadedTripId = _tripStateManager.CurrentLoadedTripId;
+
+            var usableTrips = downloadedTrips
+                .Where(d => d.UnifiedState.HasMetadata() || d.IsMetadataComplete)
+                .OrderByDescending(d => d.UpdatedAt)
+                .ToList();
+
+            var items = new List<TripListItem>();
+            foreach (var downloaded in usableTrips)
+            {
+                var item = new TripListItem(downloaded);
+                if (loadedTripId.HasValue && downloaded.ServerId == loadedTripId.Value)
+                    item.IsCurrentlyLoaded = true;
+                items.Add(item);
+            }
+
+            var groups = items
+                .GroupBy(t => t.GroupName)
+                .OrderBy(g => g.Key == "Downloaded" ? 0 : g.Key == "Metadata Only" ? 1 : 2)
+                .Select(g => new TripGrouping(g.Key, g.ToList()))
+                .ToList();
+
+            Trips.Clear();
+            foreach (var group in groups)
+                Trips.Add(group);
+
+            _logger.LogInformation("Loaded {Count} trips from local storage (offline fallback)", items.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load trips from local storage");
+            ErrorMessage = "Failed to load offline trips";
         }
     }
 
@@ -277,6 +354,37 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         {
             _logger.LogWarning(ex, "Unexpected error refreshing sync status");
         }
+    }
+
+    #endregion
+
+    #region Connectivity
+
+    /// <summary>
+    /// Handles connectivity change events.
+    /// </summary>
+    private void OnConnectivityChanged(object? sender, ConnectivityChangedEventArgs e)
+    {
+        var access = e.NetworkAccess;
+        var wasOnline = IsOnline;
+        IsOnline = access == NetworkAccess.Internet || access == NetworkAccess.ConstrainedInternet;
+
+        _logger.LogInformation("Connectivity changed: {WasOnline} -> {IsOnline}", wasOnline, IsOnline);
+
+        // Auto-refresh when coming back online
+        if (!wasOnline && IsOnline && Trips.Count > 0)
+        {
+            MainThread.BeginInvokeOnMainThread(async () => await LoadTripsAsync());
+        }
+    }
+
+    /// <summary>
+    /// Updates IsOnline property based on current connectivity.
+    /// </summary>
+    private void UpdateConnectivityState()
+    {
+        var access = Connectivity.Current.NetworkAccess;
+        IsOnline = access == NetworkAccess.Internet || access == NetworkAccess.ConstrainedInternet;
     }
 
     #endregion
@@ -705,6 +813,10 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         IsPageReady = false;
         _logger.LogDebug("OnAppearingAsync: Trips.Count = {Count}", Trips.Count);
 
+        // Subscribe to connectivity changes
+        Connectivity.ConnectivityChanged += OnConnectivityChanged;
+        UpdateConnectivityState();
+
         // Recover stuck downloads once per session (downloads interrupted by app closure)
         if (!_hasRecoveredStuckDownloads)
         {
@@ -741,6 +853,9 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     /// <inheritdoc/>
     public override Task OnDisappearingAsync()
     {
+        // Unsubscribe from connectivity changes
+        Connectivity.ConnectivityChanged -= OnConnectivityChanged;
+
         // Reset page ready state when page disappears (issue #185)
         // This handles app suspend/resume - IsPageReady must be re-established
         // by OnAppearingAsync when page becomes visible again
@@ -752,6 +867,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     /// <inheritdoc/>
     protected override void Cleanup()
     {
+        Connectivity.ConnectivityChanged -= OnConnectivityChanged;
         Download.Dispose();
         base.Cleanup();
     }
