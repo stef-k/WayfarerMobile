@@ -51,10 +51,10 @@ All public classes, methods, and properties require XML documentation:
 
 ```csharp
 /// <summary>
-/// Service for managing the map display and location markers.
+/// Service for managing the location marker layer on the map.
 /// Supports smooth heading calculation, pulsing animation, and navigation state colors.
 /// </summary>
-public class MapService : IDisposable
+public class LocationLayerService : ILocationLayerService, IDisposable
 {
     /// <summary>
     /// Updates the current location marker on the map.
@@ -222,7 +222,7 @@ Includes progress tracking and download cancellation.
 
 fix: resolve crash when GPS unavailable
 
-Handle null location gracefully in MapService.UpdateLocation.
+Handle null location gracefully in LocationLayerService.UpdateLocation.
 Show last known location with gray indicator when GPS stale.
 
 refactor: extract navigation graph from TripNavigationService

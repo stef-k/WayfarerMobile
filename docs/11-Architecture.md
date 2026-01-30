@@ -59,7 +59,7 @@ ViewModels use CommunityToolkit.Mvvm attributes for automatic property and comma
 public partial class MainViewModel : ObservableObject
 {
     private readonly ILocationBridge _locationBridge;
-    private readonly MapService _mapService;
+    private readonly ILocationLayerService _locationLayer;
 
     [ObservableProperty]
     private LocationData? _currentLocation;
@@ -70,10 +70,10 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string _trackingStatus = "Not tracking";
 
-    public MainViewModel(ILocationBridge locationBridge, MapService mapService)
+    public MainViewModel(ILocationBridge locationBridge, ILocationLayerService locationLayer)
     {
         _locationBridge = locationBridge;
-        _mapService = mapService;
+        _locationLayer = locationLayer;
 
         _locationBridge.LocationReceived += OnLocationReceived;
         _locationBridge.StateChanged += OnStateChanged;
@@ -96,7 +96,7 @@ public partial class MainViewModel : ObservableObject
     private void OnLocationReceived(object? sender, LocationData location)
     {
         CurrentLocation = location;
-        _mapService.UpdateLocation(location, centerMap: true);
+        _locationLayer.UpdateLocation(location, centerMap: true);
     }
 }
 ```
@@ -137,7 +137,7 @@ public static class MauiProgram
         // Infrastructure Services
         services.AddSingleton<DatabaseService>();
         services.AddSingleton<ISettingsService, SettingsService>();
-        services.AddSingleton<MapService>();
+        services.AddSingleton<IMapBuilder, MapBuilder>();
 
         // API Services
         services.AddSingleton<IApiClient, ApiClient>();
