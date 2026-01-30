@@ -36,6 +36,7 @@
             <converters:BoolToSyncBannerColorConverter x:Key="BoolToSyncBannerColorConverter" />
             <converters:VisibilityGatedImageSourceConverter x:Key="VisibilityGatedImageSourceConverter" />
             <converters:VisibilityGatedMauiAssetImageConverter x:Key="VisibilityGatedMauiAssetImageConverter" />
+            <converters:BoolToThicknessConverter x:Key="BoolToThicknessConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

@@ -170,6 +170,13 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     [ObservableProperty]
     private double _contextMenuLongitude;
 
+    /// <summary>
+    /// Gets or sets whether the device is currently offline.
+    /// Used to adjust UI margins when the offline banner is visible.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isOffline;
+
     #region Tracking Forwarding Properties
 
     /// <summary>
@@ -566,6 +573,9 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         Tracking.PropertyChanged += OnTrackingPropertyChanged;
         ContextMenu.PropertyChanged += OnContextMenuPropertyChanged;
 
+        // Subscribe to connectivity changes for offline banner margin adjustment
+        Connectivity.ConnectivityChanged += OnConnectivityChanged;
+
         // Initialize observable properties from child VMs
         // This ensures bindings have correct initial values even if TripStateManager already has a trip loaded
         _hasLoadedTrip = TripSheet.HasLoadedTrip;
@@ -576,6 +586,9 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         _isContextMenuVisible = ContextMenu.IsContextMenuVisible;
         _contextMenuLatitude = ContextMenu.ContextMenuLatitude;
         _contextMenuLongitude = ContextMenu.ContextMenuLongitude;
+
+        // Initialize offline state
+        UpdateOfflineState();
     }
 
     #endregion
@@ -1049,6 +1062,24 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         }
     }
 
+    /// <summary>
+    /// Handles connectivity change events.
+    /// Updates the offline state to adjust UI margins.
+    /// </summary>
+    private void OnConnectivityChanged(object? sender, ConnectivityChangedEventArgs e)
+    {
+        MainThread.BeginInvokeOnMainThread(UpdateOfflineState);
+    }
+
+    /// <summary>
+    /// Updates the offline state based on current connectivity.
+    /// </summary>
+    private void UpdateOfflineState()
+    {
+        var access = Connectivity.Current.NetworkAccess;
+        IsOffline = access != NetworkAccess.Internet && access != NetworkAccess.ConstrainedInternet;
+    }
+
     #endregion
 
     #region Partial Methods
@@ -1406,6 +1437,9 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
 
         // ContextMenu is Singleton - do not dispose
         ContextMenu.PropertyChanged -= OnContextMenuPropertyChanged;
+
+        // Unsubscribe from connectivity events
+        Connectivity.ConnectivityChanged -= OnConnectivityChanged;
 
         base.Cleanup();
     }
