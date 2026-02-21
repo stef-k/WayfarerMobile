@@ -24,6 +24,14 @@ public class ApiClient : IApiClient, IVisitApiClient
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ResiliencePipeline<HttpResponseMessage> _retryPipeline;
 
+    /// <summary>
+    /// Lightweight circuit breaker: tracks consecutive API failures to short-circuit
+    /// calls when the server is known to be unreachable.
+    /// See #216: MAUI Connectivity reports "Internet" when device has WiFi/cellular,
+    /// regardless of whether the Wayfarer server is actually reachable.
+    /// </summary>
+    private readonly CircuitBreakerState _circuitBreaker = new(threshold: 3, cooldown: TimeSpan.FromSeconds(30));
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -1240,6 +1248,8 @@ public class ApiClient : IApiClient, IVisitApiClient
 
     /// <summary>
     /// Executes an HTTP request with retry policy for transient failures.
+    /// Respects the circuit breaker — if the server is known to be unreachable,
+    /// throws immediately instead of waiting for timeouts.
     /// </summary>
     /// <param name="requestFactory">Factory to create the request (needed for retries as requests can't be reused).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -1248,50 +1258,55 @@ public class ApiClient : IApiClient, IVisitApiClient
         Func<HttpRequestMessage> requestFactory,
         CancellationToken cancellationToken)
     {
-        return await _retryPipeline.ExecuteAsync(
-            async token =>
+        // Circuit breaker: skip if server is known to be unreachable
+        if (_circuitBreaker.IsOpen)
+        {
+            _logger.LogDebug("Circuit breaker open — skipping server call ({Failures} consecutive failures)",
+                _circuitBreaker.ConsecutiveFailures);
+            throw new HttpRequestException("Server unreachable (circuit breaker open)");
+        }
+
+        try
+        {
+            var response = await _retryPipeline.ExecuteAsync(
+                async token =>
+                {
+                    var request = requestFactory();
+                    return await HttpClientInstance.SendAsync(request, token);
+                },
+                cancellationToken);
+
+            // Success — reset circuit breaker
+            if (_circuitBreaker.RecordSuccess())
             {
-                var request = requestFactory();
-                return await HttpClientInstance.SendAsync(request, token);
-            },
-            cancellationToken);
+                _logger.LogDebug("Circuit breaker closed — server is reachable");
+            }
+
+            return response;
+        }
+        catch (Exception)
+        {
+            _circuitBreaker.RecordFailure();
+            throw;
+        }
     }
 
     /// <summary>
     /// Parses a successful response to determine if location was logged or skipped.
+    /// Delegates to <see cref="ApiResponseParser"/> (extracted for testability).
     /// </summary>
     private static ApiResult ParseSuccessResponse(string responseBody)
     {
-        try
+        var parsed = ApiResponseParser.Parse(responseBody);
+
+        if (parsed.Skipped)
         {
-            using var doc = JsonDocument.Parse(responseBody);
-            var root = doc.RootElement;
-
-            var message = root.TryGetProperty("message", out var msgProp)
-                ? msgProp.GetString()
-                : "Success";
-
-            // Extract locationId if present (returned by server when location is stored)
-            int? locationId = root.TryGetProperty("locationId", out var idProp)
-                && idProp.ValueKind == JsonValueKind.Number
-                    ? idProp.GetInt32()
-                    : null;
-
-            // Check if location was skipped due to thresholds
-            if (message?.Contains("skipped", StringComparison.OrdinalIgnoreCase) == true)
-            {
-                return ApiResult.SkippedResult(message);
-            }
-
-            var result = ApiResult.Ok(message);
-            result.LocationId = locationId;
-            return result;
+            return ApiResult.SkippedResult(parsed.Message);
         }
-        catch (JsonException)
-        {
-            // Non-JSON response or malformed JSON - treat as success with default message
-            return ApiResult.Ok("Location logged");
-        }
+
+        var result = ApiResult.Ok(parsed.Message);
+        result.LocationId = parsed.LocationId;
+        return result;
     }
 
     /// <summary>
