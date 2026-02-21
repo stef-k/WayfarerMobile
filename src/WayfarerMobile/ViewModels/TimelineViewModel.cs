@@ -314,8 +314,26 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     #region Commands
 
     /// <summary>
-    /// Loads timeline data from server (when online) or local storage (when offline).
+    /// Loads timeline data with local-first strategy.
+    /// Always shows local data immediately, then enriches from server in background when online.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Previous implementation tried the server first and fell back to local on error.
+    /// This caused two problems (see #216):
+    /// <list type="bullet">
+    /// <item>GetTimelineLocationsAsync swallows exceptions and returns null, so the catch
+    /// blocks that called LoadFromLocalAsync were dead code — null was treated as "no data"
+    /// instead of "server unreachable."</item>
+    /// <item>Even if the catch blocks fired, the user would wait 30-100s (Polly retries +
+    /// HTTP timeouts) before seeing any data.</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// The local-first approach eliminates both problems: local data is shown instantly,
+    /// and server enrichment happens asynchronously without blocking the UI.
+    /// </para>
+    /// </remarks>
     [RelayCommand]
     private async Task LoadDataAsync()
     {
@@ -328,79 +346,76 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
             IsBusy = true;
             IsRefreshing = true;
 
-            // Offline fallback: load from local storage
-            if (!IsOnline)
+            // Always load local data first for instant display
+            await LoadFromLocalAsync();
+
+            // If online, fetch server data in background to enrich/update
+            if (IsOnline)
             {
-                await LoadFromLocalAsync();
-                return;
+                _ = FetchAndMergeServerDataAsync();
             }
-
-            // Online: fetch from server and also enrich local storage
-            var response = await _apiClient.GetTimelineLocationsAsync(
-                dateType: "day",
-                year: SelectedDate.Year,
-                month: SelectedDate.Month,
-                day: SelectedDate.Day);
-
-            // Enrich local storage in background (don't await - fire and forget)
-            _ = _timelineDataService.EnrichFromServerAsync(SelectedDate);
-
-            if (response?.Data == null || !response.Data.Any())
-            {
-                _allLocations.Clear();
-                TimelineGroups = new ObservableCollection<TimelineGroup>();
-                TotalCount = 0;
-                IsEmpty = true;
-                StatsText = "No locations";
-                UpdateMapLocations();
-                return;
-            }
-
-            _allLocations = response.Data;
-
-            // Group by hour for better organization (use LocalTimestamp for grouping)
-            var groups = response.Data
-                .GroupBy(l => l.LocalTimestamp.Hour)
-                .OrderByDescending(g => g.Key)
-                .Select(g => new TimelineGroup(
-                    $"{g.Key:00}:00 - {g.Key:00}:59",
-                    g.OrderByDescending(l => l.LocalTimestamp).ToList()))
-                .ToList();
-
-            TimelineGroups = new ObservableCollection<TimelineGroup>(groups);
-            TotalCount = response.TotalItems;
-            IsEmpty = !groups.Any();
-
-            // Update stats
-            StatsText = $"{TotalCount} location{(TotalCount == 1 ? "" : "s")}";
-
-            // Update map
-            UpdateMapLocations();
-        }
-        catch (HttpRequestException ex)
-        {
-            // On network error, try loading from local storage as fallback
-            _logger.LogNetworkWarningIfOnline("Network error loading timeline data: {Message}", ex.Message);
-            await LoadFromLocalAsync();
-            await _toastService.ShowWarningAsync("Server unavailable. Showing local data.");
-        }
-        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-        {
-            // On timeout, try loading from local storage as fallback
-            await LoadFromLocalAsync();
-            await _toastService.ShowWarningAsync("Request timed out. Showing local data.");
-        }
-        catch (Exception)
-        {
-            // On any other error, try loading from local storage as fallback
-            await LoadFromLocalAsync();
-            await _toastService.ShowWarningAsync("Server unavailable. Showing local data.");
         }
         finally
         {
             IsBusy = false;
             IsRefreshing = false;
             Interlocked.Exchange(ref _loadDataGuard, 0); // Release atomic guard
+        }
+    }
+
+    /// <summary>
+    /// Fetches timeline data from the server and merges it with the currently displayed local data.
+    /// Runs in background after local data is already shown — does not block the UI.
+    /// </summary>
+    private async Task FetchAndMergeServerDataAsync()
+    {
+        try
+        {
+            var response = await _apiClient.GetTimelineLocationsAsync(
+                dateType: "day",
+                year: SelectedDate.Year,
+                month: SelectedDate.Month,
+                day: SelectedDate.Day);
+
+            // null means network error (GetTimelineLocationsAsync swallows exceptions)
+            if (response == null)
+            {
+                _logger.LogDebug("Server unreachable for timeline fetch, local data already displayed");
+                return;
+            }
+
+            // Enrich local storage in background (don't await - fire and forget)
+            _ = _timelineDataService.EnrichFromServerAsync(SelectedDate);
+
+            // If server returned data, merge it with local display
+            if (response.Data != null && response.Data.Any())
+            {
+                _allLocations = response.Data;
+
+                // Group by hour for better organization (use LocalTimestamp for grouping)
+                var groups = response.Data
+                    .GroupBy(l => l.LocalTimestamp.Hour)
+                    .OrderByDescending(g => g.Key)
+                    .Select(g => new TimelineGroup(
+                        $"{g.Key:00}:00 - {g.Key:00}:59",
+                        g.OrderByDescending(l => l.LocalTimestamp).ToList()))
+                    .ToList();
+
+                TimelineGroups = new ObservableCollection<TimelineGroup>(groups);
+                TotalCount = response.TotalItems;
+                IsEmpty = !groups.Any();
+
+                // Update stats
+                StatsText = $"{TotalCount} location{(TotalCount == 1 ? "" : "s")}";
+
+                // Update map
+                UpdateMapLocations();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Server fetch failed — local data is already displayed, just log it
+            _logger.LogDebug(ex, "Background server fetch failed, local data already displayed");
         }
     }
 
