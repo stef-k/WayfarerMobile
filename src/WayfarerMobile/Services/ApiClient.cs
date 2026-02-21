@@ -30,22 +30,7 @@ public class ApiClient : IApiClient, IVisitApiClient
     /// See #216: MAUI Connectivity reports "Internet" when device has WiFi/cellular,
     /// regardless of whether the Wayfarer server is actually reachable.
     /// </summary>
-    private int _consecutiveFailures;
-
-    /// <summary>
-    /// Number of consecutive failures before the circuit opens (skips server calls).
-    /// </summary>
-    private const int CircuitBreakerThreshold = 3;
-
-    /// <summary>
-    /// Time after which the circuit half-opens to allow a probe request.
-    /// </summary>
-    private static readonly TimeSpan CircuitBreakerCooldown = TimeSpan.FromSeconds(30);
-
-    /// <summary>
-    /// Timestamp of the last failure (UTC), used for cooldown calculation.
-    /// </summary>
-    private DateTime _lastFailureUtc = DateTime.MinValue;
+    private readonly CircuitBreakerState _circuitBreaker = new(threshold: 3, cooldown: TimeSpan.FromSeconds(30));
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -1274,10 +1259,10 @@ public class ApiClient : IApiClient, IVisitApiClient
         CancellationToken cancellationToken)
     {
         // Circuit breaker: skip if server is known to be unreachable
-        if (IsCircuitOpen)
+        if (_circuitBreaker.IsOpen)
         {
-            _logger.LogDebug("Circuit breaker open — skipping server call (last failure {Ago}s ago)",
-                (DateTime.UtcNow - _lastFailureUtc).TotalSeconds);
+            _logger.LogDebug("Circuit breaker open — skipping server call ({Failures} consecutive failures)",
+                _circuitBreaker.ConsecutiveFailures);
             throw new HttpRequestException("Server unreachable (circuit breaker open)");
         }
 
@@ -1292,99 +1277,36 @@ public class ApiClient : IApiClient, IVisitApiClient
                 cancellationToken);
 
             // Success — reset circuit breaker
-            RecordSuccess();
+            if (_circuitBreaker.RecordSuccess())
+            {
+                _logger.LogDebug("Circuit breaker closed — server is reachable");
+            }
+
             return response;
         }
         catch (Exception)
         {
-            RecordFailure();
+            _circuitBreaker.RecordFailure();
             throw;
         }
     }
 
     /// <summary>
-    /// Whether the circuit breaker is open (server known unreachable).
-    /// Half-opens after cooldown to allow a probe request.
-    /// </summary>
-    private bool IsCircuitOpen =>
-        Volatile.Read(ref _consecutiveFailures) >= CircuitBreakerThreshold
-        && (DateTime.UtcNow - _lastFailureUtc) < CircuitBreakerCooldown;
-
-    /// <summary>
-    /// Records a successful API call, closing the circuit breaker.
-    /// </summary>
-    private void RecordSuccess()
-    {
-        if (Volatile.Read(ref _consecutiveFailures) > 0)
-        {
-            Interlocked.Exchange(ref _consecutiveFailures, 0);
-            _logger.LogDebug("Circuit breaker closed — server is reachable");
-        }
-    }
-
-    /// <summary>
-    /// Records a failed API call, incrementing the circuit breaker counter.
-    /// </summary>
-    private void RecordFailure()
-    {
-        Interlocked.Increment(ref _consecutiveFailures);
-        _lastFailureUtc = DateTime.UtcNow;
-    }
-
-    /// <summary>
     /// Parses a successful response to determine if location was logged or skipped.
+    /// Delegates to <see cref="ApiResponseParser"/> (extracted for testability).
     /// </summary>
-    /// <remarks>
-    /// Handles two server response formats:
-    /// <list type="bullet">
-    /// <item>log-location: <c>{ "success": true, "skipped": false, "locationId": 123 }</c></item>
-    /// <item>check-in: <c>{ "message": "...", "location": { "id": 123, ... } }</c></item>
-    /// </list>
-    /// See #216 Bug 2: previously only the flat <c>locationId</c> format was parsed,
-    /// causing all check-in syncs to return <c>LocationId = null</c>.
-    /// </remarks>
     private static ApiResult ParseSuccessResponse(string responseBody)
     {
-        try
+        var parsed = ApiResponseParser.Parse(responseBody);
+
+        if (parsed.Skipped)
         {
-            using var doc = JsonDocument.Parse(responseBody);
-            var root = doc.RootElement;
-
-            var message = root.TryGetProperty("message", out var msgProp)
-                ? msgProp.GetString()
-                : "Success";
-
-            // Extract locationId — try flat format first (log-location), then nested (check-in)
-            int? locationId = root.TryGetProperty("locationId", out var idProp)
-                && idProp.ValueKind == JsonValueKind.Number
-                    ? idProp.GetInt32()
-                    : null;
-
-            // Fallback: check-in returns { "location": { "id": N, ... } }
-            if (!locationId.HasValue
-                && root.TryGetProperty("location", out var locProp)
-                && locProp.ValueKind == JsonValueKind.Object
-                && locProp.TryGetProperty("id", out var nestedIdProp)
-                && nestedIdProp.ValueKind == JsonValueKind.Number)
-            {
-                locationId = nestedIdProp.GetInt32();
-            }
-
-            // Check if location was skipped due to thresholds
-            if (message?.Contains("skipped", StringComparison.OrdinalIgnoreCase) == true)
-            {
-                return ApiResult.SkippedResult(message);
-            }
-
-            var result = ApiResult.Ok(message);
-            result.LocationId = locationId;
-            return result;
+            return ApiResult.SkippedResult(parsed.Message);
         }
-        catch (JsonException)
-        {
-            // Non-JSON response or malformed JSON - treat as success with default message
-            return ApiResult.Ok("Location logged");
-        }
+
+        var result = ApiResult.Ok(parsed.Message);
+        result.LocationId = parsed.LocationId;
+        return result;
     }
 
     /// <summary>

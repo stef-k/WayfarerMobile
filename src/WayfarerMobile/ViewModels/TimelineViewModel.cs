@@ -87,6 +87,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     private int? _pendingLocationIdToReopen;
     private DateTime? _dateBeforePickerOpened;
     private int _loadDataGuard; // Atomic guard to prevent concurrent LoadDataAsync calls
+    private CancellationTokenSource? _fetchCts; // Cancels stale background server fetches on date change
 
     #endregion
 
@@ -346,13 +347,21 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
             IsBusy = true;
             IsRefreshing = true;
 
+            // Cancel any in-flight background fetch from a previous date
+            _fetchCts?.Cancel();
+            _fetchCts?.Dispose();
+            _fetchCts = new CancellationTokenSource();
+
+            // Capture date snapshot — background fetch uses this to detect stale results
+            var dateSnapshot = SelectedDate;
+
             // Always load local data first for instant display
             await LoadFromLocalAsync();
 
             // If online, fetch server data in background to enrich/update
             if (IsOnline)
             {
-                _ = FetchAndMergeServerDataAsync();
+                _ = FetchAndMergeServerDataAsync(dateSnapshot, _fetchCts.Token);
             }
         }
         finally
@@ -367,15 +376,18 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     /// Fetches timeline data from the server and merges it with the currently displayed local data.
     /// Runs in background after local data is already shown — does not block the UI.
     /// </summary>
-    private async Task FetchAndMergeServerDataAsync()
+    /// <param name="dateSnapshot">The date that was active when the fetch started.</param>
+    /// <param name="cancellationToken">Token cancelled when a new load starts (date change).</param>
+    private async Task FetchAndMergeServerDataAsync(DateTime dateSnapshot, CancellationToken cancellationToken)
     {
         try
         {
             var response = await _apiClient.GetTimelineLocationsAsync(
                 dateType: "day",
-                year: SelectedDate.Year,
-                month: SelectedDate.Month,
-                day: SelectedDate.Day);
+                year: dateSnapshot.Year,
+                month: dateSnapshot.Month,
+                day: dateSnapshot.Day,
+                cancellationToken: cancellationToken);
 
             // null means network error (GetTimelineLocationsAsync swallows exceptions)
             if (response == null)
@@ -384,8 +396,15 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
                 return;
             }
 
+            // Bail if the user changed dates while we were fetching
+            if (cancellationToken.IsCancellationRequested || SelectedDate.Date != dateSnapshot.Date)
+            {
+                _logger.LogDebug("Discarding stale server response for {Date:yyyy-MM-dd}", dateSnapshot);
+                return;
+            }
+
             // Enrich local storage in background (don't await - fire and forget)
-            _ = _timelineDataService.EnrichFromServerAsync(SelectedDate);
+            _ = _timelineDataService.EnrichFromServerAsync(dateSnapshot);
 
             // If server returned data, merge it with local display
             if (response.Data != null && response.Data.Any())
@@ -411,6 +430,11 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
                 // Update map
                 UpdateMapLocations();
             }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when user changes date — silently discard
+            _logger.LogDebug("Background server fetch cancelled (date changed)");
         }
         catch (Exception ex)
         {
