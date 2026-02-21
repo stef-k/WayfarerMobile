@@ -2,6 +2,16 @@
 
 ## 1.0
 
+### 2026-02-21
+- **Fix: Timeline not showing data when server is unreachable (#216, PR #217)**
+  - Reversed data flow to local-first: local timeline data shown instantly, server enrichment in background
+  - Fixed dead-code offline fallback where null API response was treated as "no data" instead of "server error"
+  - Fixed check-in response parsing: nested `location.id` format now correctly populates ServerId
+  - Added lightweight circuit breaker (3 failures, 30s cooldown) for actual server reachability tracking
+  - Added race condition protection: stale background fetches cancelled on date change
+  - Made circuit breaker timestamp atomic for 32-bit ARM (Interlocked)
+  - Extracted ApiResponseParser and CircuitBreakerState to Core with 24 unit tests
+
 ### 2026-01-30
 - **Fix: Downloaded trips not showing when offline (#212)**
   - Trips with completed tile downloads now display correctly when device is offline
