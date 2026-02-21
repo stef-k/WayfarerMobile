@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0
+## 1.0.2
 
 ### 2026-02-21
 - **Fix: Timeline not showing data when server is unreachable (#216, PR #217)**
