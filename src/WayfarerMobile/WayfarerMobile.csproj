@@ -91,6 +91,11 @@
 	  <PackageReference Include="Xamarin.AndroidX.Compose.Runtime.Annotation.Jvm" Version="1.10.0.1" ExcludeAssets="all" />
 	</ItemGroup>
 
+	<!-- Expose internals to test project -->
+	<ItemGroup>
+	  <InternalsVisibleTo Include="WayfarerMobile.Tests" />
+	</ItemGroup>
+
 	<!-- Project References -->
 	<ItemGroup>
 	  <ProjectReference Include="..\WayfarerMobile.Core\WayfarerMobile.Core.csproj" />

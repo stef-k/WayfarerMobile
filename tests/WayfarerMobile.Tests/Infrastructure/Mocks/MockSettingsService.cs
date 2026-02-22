@@ -143,6 +143,9 @@ public class MockSettingsService : ISettingsService
 
     #endregion
 
+    /// <inheritdoc />
+    public Task PreloadSecureSettingsAsync() => Task.CompletedTask;
+
     #region Clear Methods
 
     public void Clear()

@@ -32,6 +32,7 @@ public class LocalTimelineStorageService : IDisposable
     private readonly ILogger<LocalTimelineStorageService> _logger;
     private bool _isInitialized;
     private bool _disposed;
+    private int _eventsSubscribed; // Interlocked guard for SubscribeToEvents idempotency
 
     /// <summary>
     /// Time window for backfill/reconciliation operations (days).
@@ -340,6 +341,14 @@ public class LocalTimelineStorageService : IDisposable
     /// </summary>
     private void SubscribeToEvents()
     {
+        // Atomic guard: prevent duplicate event subscriptions across concurrent/retry calls.
+        // Duplicate subscriptions would produce duplicate timeline entries per location event.
+        if (Interlocked.CompareExchange(ref _eventsSubscribed, 1, 0) != 0)
+        {
+            _logger.LogDebug("Event subscriptions already active, skipping");
+            return;
+        }
+
         // Subscribe to LocationQueued (not LocationReceived) to ensure we store
         // the same coordinates that will be synced. On Android, these may differ
         // due to best-wake-sample optimization.

@@ -142,6 +142,7 @@ public sealed class QueueDrainService : IDisposable
     private volatile bool _isOnline;
     private volatile bool _isDisposed;
     private volatile bool _isStarted;
+    private int _startGuard; // For thread-safe StartAsync via Interlocked
     private int _disposeGuard; // For thread-safe Dispose via Interlocked
     private int _drainLoopRunning; // For thread-safe drain loop guard via Interlocked
 
@@ -189,7 +190,8 @@ public sealed class QueueDrainService : IDisposable
             return;
         }
 
-        if (_isStarted)
+        // Atomic guard: only one caller can enter startup
+        if (Interlocked.CompareExchange(ref _startGuard, 1, 0) != 0)
         {
             _logger.LogDebug("QueueDrainService already started");
             return;
@@ -230,6 +232,8 @@ public sealed class QueueDrainService : IDisposable
         }
         catch (Exception ex)
         {
+            // Reset guard to allow retry on next bootstrap attempt
+            Interlocked.Exchange(ref _startGuard, 0);
             _logger.LogError(ex, "Failed to start QueueDrainService");
         }
     }
