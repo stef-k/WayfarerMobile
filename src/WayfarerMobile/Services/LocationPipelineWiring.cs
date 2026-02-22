@@ -28,6 +28,14 @@ public static class LocationPipelineWiring
     private static int _bootstrapGuard;
 
     /// <summary>
+    /// Resets the bootstrap guard to allow re-entry. For test use only.
+    /// </summary>
+    internal static void ResetForTesting()
+    {
+        Interlocked.Exchange(ref _bootstrapGuard, 0);
+    }
+
+    /// <summary>
     /// Bootstraps the sync pipeline idempotently. Safe to call from multiple threads.
     /// </summary>
     /// <param name="serviceProvider">
@@ -147,18 +155,36 @@ public static class LocationPipelineWiring
     /// <summary>
     /// Builds and sets the online/offline delegates on the platform LocationTrackingService.
     /// </summary>
+    /// <remarks>
+    /// <para><strong>Online submit delegate return semantics:</strong></para>
+    /// <list type="bullet">
+    ///   <item>Returns serverId (int): Server accepted the location.</item>
+    ///   <item>Returns null: Server explicitly skipped (threshold not met) — don't queue.</item>
+    ///   <item>Throws exception: Network or API failure — triggers offline queue fallback.</item>
+    /// </list>
+    /// <para><strong>Offline queue delegate:</strong> Queues for background sync and adds a
+    /// pending entry to the local timeline (updated when queue drains).</para>
+    /// </remarks>
     private static void WireLocationDelegates(
         IApiClient apiClient,
         ILocationQueueRepository locationQueue,
         LocalTimelineStorageService? timelineStorageService)
     {
         // Online submit delegate: Submit directly to server via log-location endpoint
+        // Return semantics:
+        //   - Returns serverId: Server accepted the location
+        //   - Returns null: Server explicitly skipped (threshold not met) - don't queue
+        //   - Throws exception: Network or API failure - triggers offline queue fallback
         Func<LocationData, Task<int?>> onlineSubmit = async location =>
         {
-            // Early connectivity check
+            // Early connectivity check - avoids timeout delays when completely offline.
+            // Only block on NetworkAccess.None (no network interface at all).
+            // Allow Local/ConstrainedInternet to attempt the call for LAN-only server deployments.
+            // The IsTransient check below handles actual network failures.
             if (Connectivity.Current.NetworkAccess == NetworkAccess.None)
                 throw new HttpRequestException("No network connectivity");
 
+            // Convert to API request model with metadata
             var request = new LocationLogRequest
             {
                 Latitude = location.Latitude,
@@ -169,6 +195,7 @@ public static class LocationPipelineWiring
                 Timestamp = location.Timestamp,
                 Provider = location.Provider,
                 Bearing = location.Bearing,
+                // Metadata fields - captured at submission time
                 Source = "mobile-log",
                 IsUserInvoked = false,
                 AppVersion = DeviceMetadataHelper.GetAppVersion(),
@@ -179,32 +206,47 @@ public static class LocationPipelineWiring
                 IsCharging = DeviceMetadataHelper.GetIsCharging()
             };
 
+            // Call the log-location endpoint (server is authoritative)
             var result = await apiClient.LogLocationAsync(request, idempotencyKey: null);
 
+            // Case 1: Server accepted or skipped - don't queue
+            // Note: log-location API may return just { "success": true } without locationId
             if (result.Success)
             {
+                // Only update local timeline if server returned a locationId (not skipped)
                 if (!result.Skipped && result.LocationId.HasValue && timelineStorageService != null)
                 {
                     await timelineStorageService.AddAcceptedLocationAsync(location, result.LocationId.Value);
                 }
+                // Return locationId if available, null otherwise (either skipped or accepted without ID)
                 return result.LocationId;
             }
 
+            // Case 2: Transient failure - throw to trigger offline queue
+            // Check both IsTransient flag AND status code, since ApiClient may not set
+            // IsTransient for HTTP status failures (they come through with IsTransient=false).
+            // Transient codes: 408 (Request Timeout), 429 (Too Many Requests), 5xx (Server Error).
+            // QueueDrainService handles these appropriately with retry logic.
             var isTransientStatusCode = result.StatusCode.HasValue &&
                 (result.StatusCode == 408 || result.StatusCode == 429 || result.StatusCode >= 500);
 
             if (result.IsTransient || isTransientStatusCode)
                 throw new HttpRequestException($"Transient failure: {result.Message}");
 
-            // Permanent API failure (4xx) - don't queue
+            // Case 3: Permanent API failure (4xx client errors) - return null, don't queue.
+            // These won't succeed on retry (bad request, unauthorized, etc.) and queueing them
+            // creates pending timeline entries that never clear since QueueDrainService's 4xx
+            // handling doesn't emit LocationSkipped events.
             return null;
         };
 
         // Offline queue delegate: Queue for background sync
         Func<LocationData, Task<int>> offlineQueue = async location =>
         {
+            // Queue with isUserInvoked=false (background location)
             var queuedId = await locationQueue.QueueLocationAsync(location, isUserInvoked: false);
 
+            // Add pending entry to local timeline (will be updated when queue drains)
             if (timelineStorageService != null)
             {
                 await timelineStorageService.AddPendingLocationAsync(location, queuedId);
