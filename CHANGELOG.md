@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.3
+
+### 2026-02-22
+- **Fix: Headless sync pipeline not bootstrapping on service restart (#220, PR #221)**
+  - Extracted sync pipeline bootstrap into `LocationPipelineWiring` (static, idempotent, atomic guard)
+  - Added idempotency guards to `QueueDrainService`, `TimelineSyncService`, and `LocalTimelineStorageService` start methods
+  - Triggers bootstrap from `LocationTrackingService` fallback path when delegates are null (headless restart)
+  - Fixes locations sitting in queue indefinitely after Android kills and restarts the sticky service
+- **Chore: Add interactive release script (PR #223)**
+  - `scripts/release.py` — Python 3 stdlib-only script automating version bump, PR, tag, and draft GitHub release
+
 ## 1.0.2
 
 ### 2026-02-21
