@@ -381,7 +381,13 @@ def create_tag(version: str) -> None:
 
 def push_tag(version: str) -> None:
     """Push a single tag to origin."""
-    run(["git", "push", "origin", version])
+    result = run(["git", "push", "origin", f"refs/tags/{version}"], check=False)
+    if result.returncode != 0:
+        fatal(
+            f"Failed to push tag '{version}'.\n"
+            f"  stderr: {result.stderr.strip()}\n"
+            f"  Hint: if a pre-push hook is blocking this, ensure it allows tag pushes while on main."
+        )
 
 
 def create_github_release(version: str) -> str:
