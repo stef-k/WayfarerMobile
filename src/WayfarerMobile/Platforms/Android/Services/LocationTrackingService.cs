@@ -1337,13 +1337,18 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
                 return;
             }
 
-            // FALLBACK: Direct database queue (no delegates wired)
+            // FALLBACK: Direct database queue (no delegates wired — headless restart)
+            // Trigger sync pipeline bootstrap so future locations use wired delegates.
+            // Fire-and-forget: the current location still goes through the bare DB fallback.
+            _ = Task.Run(() => WayfarerMobile.Services.LocationPipelineWiring.EnsureBootstrappedAsync(
+                IPlatformApplication.Current?.Services));
+
             if (_databaseService != null)
             {
                 // Get queue limit from settings (Preferences accessed directly since platform service can't use DI)
                 var maxQueuedLocations = Preferences.Get(SettingsService.QueueLimitMaxLocationsKey, 25000);
                 await _databaseService.QueueLocationAsync(location, maxQueuedLocations);
-                Log.Debug(LogTag, $"Queued via DatabaseService: {location}");
+                Log.Debug(LogTag, $"Queued via DatabaseService (headless fallback): {location}");
 
                 // Notify that location was queued - used by LocalTimelineStorageService
                 // to store with correct coordinates (may differ from broadcast when using best-wake-sample)

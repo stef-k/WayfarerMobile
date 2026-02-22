@@ -1,7 +1,5 @@
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
-using WayfarerMobile.Core.Models;
-using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services;
@@ -171,53 +169,20 @@ public partial class App : Application
 
     /// <summary>
     /// Starts background services for the application.
+    /// Sync pipeline (settings, drain, timeline, delegates) is handled by
+    /// <see cref="LocationPipelineWiring.EnsureBootstrappedAsync"/> which is idempotent
+    /// and also callable from the headless LocationTrackingService after process kill.
     /// </summary>
     private void StartBackgroundServices()
     {
         try
         {
-            // Pre-load secure settings to avoid blocking SecureStorage calls later
-            // This must happen early to prevent deadlocks on Android when API calls access ServerUrl/ApiToken
-            var settings = _serviceProvider.GetService<ISettingsService>() as SettingsService;
-            if (settings != null)
-            {
-                _ = settings.PreloadSecureSettingsAsync();
-                _logger.LogDebug("Secure settings preload started");
-            }
-
-            // Start queue drain service (offline queue sync via check-in endpoint)
-            var queueDrainService = _serviceProvider.GetService<QueueDrainService>();
-            SafeFireAndForget(queueDrainService?.StartAsync(), "QueueDrainService");
-            _logger.LogDebug("Queue drain service started");
-
-            // Start timeline sync service (offline mutation sync)
-            var timelineSyncService = _serviceProvider.GetService<ITimelineSyncService>();
-            SafeFireAndForget(timelineSyncService?.StartAsync(), "TimelineSyncService");
-            _logger.LogDebug("Timeline sync service started");
-
-            // Wire up drain loop starter for background location services
-            // Both services piggyback on location wakeups for background sync
-            if (queueDrainService != null)
-            {
-                Action drainLoopStarter = () =>
-                {
-                    queueDrainService.StartDrainLoop();
-                    timelineSyncService?.StartDrainLoop(); // Piggyback on location wakeups
-                };
-                Func<bool> isRunningChecker = () => queueDrainService.IsDrainLoopRunning;
-
-#if ANDROID
-                WayfarerMobile.Platforms.Android.Services.LocationTrackingService.SetDrainLoopStarter(drainLoopStarter, isRunningChecker);
-#elif IOS
-                WayfarerMobile.Platforms.iOS.Services.LocationTrackingService.SetDrainLoopStarter(drainLoopStarter, isRunningChecker);
-#endif
-                _logger.LogDebug("Drain loop starter wired to location services (includes timeline sync)");
-            }
-
-            // Initialize local timeline storage service (subscribes to location events)
-            var timelineStorageService = _serviceProvider.GetService<LocalTimelineStorageService>();
-            SafeFireAndForget(timelineStorageService?.InitializeAsync(), "LocalTimelineStorageService");
-            _logger.LogDebug("Local timeline storage service initialization started");
+            // Bootstrap the entire sync pipeline (settings preload, drain services,
+            // timeline storage, location delegates) via shared idempotent bootstrapper.
+            // This same method is called from LocationTrackingService on headless restart.
+            SafeFireAndForget(
+                LocationPipelineWiring.EnsureBootstrappedAsync(_serviceProvider),
+                "LocationPipelineWiring");
 
             // Note: Settings sync is handled by SettingsSyncService, triggered opportunistically
             // in AppLifecycleService.OnResumingAsync() with a 6-hour minimum interval
@@ -231,10 +196,6 @@ public partial class App : Application
             SafeFireAndForget(visitNotificationService?.StartAsync(), "VisitNotificationService");
             _logger.LogDebug("Visit notification service initialization started");
 
-            // Wire up location tracking delegates for online/offline path decision
-            WireLocationTrackingDelegates(timelineStorageService);
-            _logger.LogDebug("Location tracking delegates wired");
-
             // Note: Location tracking service start is handled by OnWindowActivatedForServiceStart
             // to ensure deterministic timing after UI is fully initialized.
         }
@@ -242,117 +203,6 @@ public partial class App : Application
         {
             _logger.LogError(ex, "Failed to start background services");
         }
-    }
-
-    /// <summary>
-    /// Wires up the location tracking delegates for online/offline path decision.
-    /// Called early during startup to ensure delegates are set before location service starts.
-    /// </summary>
-    /// <param name="timelineStorageService">The local timeline storage service for updating timeline.</param>
-    private void WireLocationTrackingDelegates(LocalTimelineStorageService? timelineStorageService)
-    {
-        var apiClient = _serviceProvider.GetService<IApiClient>();
-        var locationQueue = _serviceProvider.GetService<ILocationQueueRepository>();
-
-        // Online submit delegate: Submit directly to server via log-location endpoint
-        // Return semantics:
-        //   - Returns serverId: Server accepted the location
-        //   - Returns null: Server explicitly skipped (threshold not met) - don't queue
-        //   - Throws exception: Network or API failure - triggers offline queue fallback
-        Func<LocationData, Task<int?>> onlineSubmit = async location =>
-        {
-            if (apiClient == null)
-                throw new InvalidOperationException("API client not available");
-
-            // Early connectivity check - avoids timeout delays when completely offline
-            // Only block on NetworkAccess.None (no network interface at all).
-            // Allow Local/ConstrainedInternet to attempt the call for LAN-only server deployments.
-            // The IsTransient check below handles actual network failures.
-            if (Connectivity.Current.NetworkAccess == NetworkAccess.None)
-                throw new HttpRequestException("No network connectivity");
-
-            // Convert to API request model with metadata
-            var request = new LocationLogRequest
-            {
-                Latitude = location.Latitude,
-                Longitude = location.Longitude,
-                Accuracy = location.Accuracy,
-                Altitude = location.Altitude,
-                Speed = location.Speed,
-                Timestamp = location.Timestamp,
-                Provider = location.Provider,
-                Bearing = location.Bearing,
-                // Metadata fields - captured at submission time
-                Source = "mobile-log",
-                IsUserInvoked = false,
-                AppVersion = DeviceMetadataHelper.GetAppVersion(),
-                AppBuild = DeviceMetadataHelper.GetAppBuild(),
-                DeviceModel = DeviceMetadataHelper.GetDeviceModel(),
-                OsVersion = DeviceMetadataHelper.GetOsVersion(),
-                BatteryLevel = DeviceMetadataHelper.GetBatteryLevel(),
-                IsCharging = DeviceMetadataHelper.GetIsCharging()
-            };
-
-            // Call the log-location endpoint (server is authoritative)
-            var result = await apiClient.LogLocationAsync(request, idempotencyKey: null);
-
-            // Case 1: Server accepted or skipped - don't queue
-            // Note: log-location API may return just { "success": true } without locationId
-            if (result.Success)
-            {
-                // Only update local timeline if server returned a locationId (not skipped)
-                if (!result.Skipped && result.LocationId.HasValue && timelineStorageService != null)
-                {
-                    await timelineStorageService.AddAcceptedLocationAsync(location, result.LocationId.Value);
-                }
-                // Return locationId if available, null otherwise (either skipped or accepted without ID)
-                return result.LocationId;
-            }
-
-            // Case 2: Transient failure - throw to trigger offline queue
-            // Check both IsTransient flag AND status code, since ApiClient may not set
-            // IsTransient for HTTP status failures (they come through with IsTransient=false)
-            // Transient codes: 408 (Request Timeout), 429 (Too Many Requests), 5xx (Server Error)
-            // QueueDrainService handles these appropriately with retry logic.
-            var isTransientStatusCode = result.StatusCode.HasValue &&
-                (result.StatusCode == 408 || result.StatusCode == 429 || result.StatusCode >= 500);
-
-            if (result.IsTransient || isTransientStatusCode)
-                throw new HttpRequestException($"Transient failure: {result.Message}");
-
-            // Case 3: Permanent API failure (4xx client errors) - return null, don't queue
-            // These won't succeed on retry (bad request, unauthorized, etc.) and queueing them
-            // creates pending timeline entries that never clear since QueueDrainService's 4xx
-            // handling doesn't emit LocationSkipped events.
-            return null;
-        };
-
-        // Offline queue delegate: Queue for background sync
-        Func<LocationData, Task<int>> offlineQueue = async location =>
-        {
-            if (locationQueue == null)
-                throw new InvalidOperationException("Location queue not available");
-
-            // Queue with isUserInvoked=false (background location)
-            var queuedId = await locationQueue.QueueLocationAsync(location, isUserInvoked: false);
-
-            // Add pending entry to local timeline (will be updated when queue drains)
-            if (timelineStorageService != null)
-            {
-                await timelineStorageService.AddPendingLocationAsync(location, queuedId);
-            }
-
-            return queuedId;
-        };
-
-        // Wire up delegates to platform-specific location services
-#if ANDROID
-        WayfarerMobile.Platforms.Android.Services.LocationTrackingService.OnlineSubmitDelegate = onlineSubmit;
-        WayfarerMobile.Platforms.Android.Services.LocationTrackingService.OfflineQueueDelegate = offlineQueue;
-#elif IOS
-        WayfarerMobile.Platforms.iOS.Services.LocationTrackingService.OnlineSubmitDelegate = onlineSubmit;
-        WayfarerMobile.Platforms.iOS.Services.LocationTrackingService.OfflineQueueDelegate = offlineQueue;
-#endif
     }
 
     /// <summary>
