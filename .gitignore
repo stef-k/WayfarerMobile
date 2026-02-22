@@ -36,6 +36,10 @@ nul
 project.lock.json
 project.fragment.lock.json
 
+# Python
+__pycache__/
+*.pyc
+
 # macOS
 .DS_Store
 .AppleDouble
