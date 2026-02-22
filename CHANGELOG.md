@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.3
+## 1.1.0
 
 ### 2026-02-22
 - **Fix: Headless sync pipeline not bootstrapping on service restart (#220, PR #221)**
