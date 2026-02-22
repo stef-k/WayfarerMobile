@@ -92,7 +92,12 @@ public static class LocationPipelineWiring
                     queueDrainService.StartDrainLoop();
                     timelineSyncService?.StartDrainLoop(); // Piggyback on location wakeups
                 };
-                Func<bool> isRunningChecker = () => queueDrainService.IsDrainLoopRunning;
+                // Check both services: skip only if BOTH drain loops are already running.
+                // Each service has its own Interlocked guard, so invoking the starter
+                // when one is idle and the other is running is safe and desired.
+                Func<bool> isRunningChecker = () =>
+                    queueDrainService.IsDrainLoopRunning &&
+                    (timelineSyncService?.IsDrainLoopRunning ?? true);
 
 #if ANDROID
                 Platforms.Android.Services.LocationTrackingService.SetDrainLoopStarter(drainLoopStarter, isRunningChecker);

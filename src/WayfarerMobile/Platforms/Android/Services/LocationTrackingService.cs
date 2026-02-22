@@ -1340,7 +1340,7 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
             // FALLBACK: Direct database queue (no delegates wired — headless restart)
             // Trigger sync pipeline bootstrap so future locations use wired delegates.
             // Fire-and-forget: the current location still goes through the bare DB fallback.
-            _ = Task.Run(() => WayfarerMobile.Services.LocationPipelineWiring.EnsureBootstrappedAsync(
+            _ = Task.Run(async () => await WayfarerMobile.Services.LocationPipelineWiring.EnsureBootstrappedAsync(
                 IPlatformApplication.Current?.Services));
 
             if (_databaseService != null)
