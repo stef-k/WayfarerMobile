@@ -58,7 +58,7 @@ public static class LocationPipelineWiring
         try
         {
             // 1. Resolve DI services
-            var settingsService = serviceProvider.GetService<ISettingsService>() as SettingsService;
+            var settingsService = serviceProvider.GetService<ISettingsService>();
             var queueDrainService = serviceProvider.GetService<QueueDrainService>();
             var timelineSyncService = serviceProvider.GetService<ITimelineSyncService>();
             var apiClient = serviceProvider.GetService<IApiClient>();
@@ -122,6 +122,15 @@ public static class LocationPipelineWiring
             logger?.LogInformation(
                 "LocationPipelineWiring: bootstrap=success delegates={DelegatesWired} drain={DrainStarted}",
                 delegatesWired, drainStarted);
+
+            // If delegates weren't wired (e.g. IApiClient or ILocationQueueRepository resolved to null),
+            // reset the guard so the next location fix can retry bootstrap.
+            if (!delegatesWired)
+            {
+                Interlocked.Exchange(ref _bootstrapGuard, 0);
+                logger?.LogWarning(
+                    "LocationPipelineWiring: incomplete bootstrap (delegates not wired), will retry on next location fix");
+            }
         }
         catch (Exception ex)
         {

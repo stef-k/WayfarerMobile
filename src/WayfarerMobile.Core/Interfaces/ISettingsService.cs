@@ -293,6 +293,12 @@ public interface ISettingsService
     #endregion
 
     /// <summary>
+    /// Pre-loads secure settings from SecureStorage into memory cache.
+    /// Call this at app startup to avoid blocking on first access.
+    /// </summary>
+    Task PreloadSecureSettingsAsync();
+
+    /// <summary>
     /// Clears all settings (for logout/reset).
     /// </summary>
     void Clear();
