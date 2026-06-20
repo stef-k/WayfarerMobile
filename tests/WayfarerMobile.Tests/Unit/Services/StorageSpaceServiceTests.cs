@@ -43,6 +43,7 @@ public class StorageSpaceServiceTests
         var service = CreateService();
 
         service.HasSufficientStorage(CachePath, RequiredBytes).Should().BeFalse();
+        VerifyLogLevel(LogLevel.Information);
     }
 
     [Fact]
@@ -75,6 +76,7 @@ public class StorageSpaceServiceTests
         var service = CreateService();
 
         service.HasSufficientStorage(CachePath, RequiredBytes).Should().BeTrue();
+        VerifyLogLevel(LogLevel.Warning);
     }
 
     [Fact]
@@ -87,10 +89,23 @@ public class StorageSpaceServiceTests
         var service = CreateService();
 
         service.HasSufficientStorage(CachePath, RequiredBytes).Should().BeTrue();
+        VerifyLogLevel(LogLevel.Warning);
     }
 
     private StorageSpaceService CreateService()
     {
         return new StorageSpaceService(_provider.Object, _logger.Object);
+    }
+
+    private void VerifyLogLevel(LogLevel level)
+    {
+        _logger.Verify(
+            logger => logger.Log(
+                level,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((_, _) => true),
+                It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
     }
 }
