@@ -386,13 +386,20 @@ def post_merge_cleanup(branch: str) -> None:
     run(["git", "checkout", "main"])
     _state.step = Step.ON_MAIN
     run(["git", "pull", "origin", "main"])
-    # Delete local branch (may already be deleted by --delete-branch in merge).
-    result = run(["git", "branch", "-d", branch], check=False)
-    if result.returncode != 0:
-        fatal(
-            f"Local branch '{branch}' could not be deleted safely. "
-            "Verify it is fully merged before deleting it."
-        )
+
+    # gh pr merge --delete-branch may already have deleted the local branch.
+    local_ref = f"refs/heads/{branch}"
+    branch_exists = run(
+        ["git", "show-ref", "--verify", "--quiet", local_ref],
+        check=False,
+    )
+    if branch_exists.returncode == 0:
+        result = run(["git", "branch", "-d", branch], check=False)
+        if result.returncode != 0:
+            fatal(
+                f"Local branch '{branch}' could not be deleted safely. "
+                "Verify it is fully merged before deleting it."
+            )
     _state.step = Step.LOCAL_BRANCH_DELETED
 
 
