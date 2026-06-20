@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.2.0
+
+### 2026-06-20
+- **Feature: Search private trips (#228, PR #231)**
+  - Added local, case-insensitive trip-name search to the My Trips tab
+  - Preserved download-status grouping while hiding groups with no matches
+  - Kept download and sync callbacks connected to canonical trip items while filtering
+- **Fix: Correct storage checks for trip downloads (#229, PR #230)**
+  - Android now checks available bytes on the app cache filesystem using `StatFs`
+  - iOS uses filesystem attributes for the supplied cache path
+  - Preserved existing storage thresholds and fail-open behavior
+  - Added release-visible diagnostics with checked path, available bytes, and required bytes
+- **Chore: Harden formal release workflow**
+  - Require the target changelog heading before creating a release tag
+  - Require local `main` to match `origin/main`
+  - Use safe local branch deletion after the version-bump PR is merged
+
 ## 1.1.0
 
 ### 2026-02-22
