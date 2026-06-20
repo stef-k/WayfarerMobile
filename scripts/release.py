@@ -491,7 +491,7 @@ def main() -> None:
             print(f"  {changelog_error}")
             continue
         new_build = build_num + 1
-        branch = f"chore/version-bump-{new_ver}"
+        branch = f"feature/version-bump-{new_ver}"
 
         choice = show_confirmation(display_ver, build_num, new_ver, new_build, branch)
         if choice == "y":

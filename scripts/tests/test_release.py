@@ -41,13 +41,13 @@ class CleanupInstructionsTests(unittest.TestCase):
     def test_local_branch_cleanup_is_non_forcing(self):
         state = release.ReleaseState(
             step=release.Step.BRANCH_CREATED,
-            branch_name="chore/version-bump-1.2.0",
+            branch_name="feature/version-bump-1.2.0",
         )
 
         commands = state.cleanup_instructions()
 
-        self.assertIn("git branch -d chore/version-bump-1.2.0", commands)
-        self.assertNotIn("git branch -D chore/version-bump-1.2.0", commands)
+        self.assertIn("git branch -d feature/version-bump-1.2.0", commands)
+        self.assertNotIn("git branch -D feature/version-bump-1.2.0", commands)
 
 
 if __name__ == "__main__":
