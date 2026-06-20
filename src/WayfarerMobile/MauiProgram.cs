@@ -154,14 +154,17 @@ public static class MauiProgram
         services.AddSingleton<ILocationBridge, WayfarerMobile.Platforms.Android.Services.LocationBridge>();
         services.AddSingleton<IWakeLockService, WayfarerMobile.Platforms.Android.Services.WakeLockService>();
         services.AddSingleton<ILocalNotificationService, WayfarerMobile.Platforms.Android.Services.LocalNotificationService>();
+        services.AddSingleton<IStorageSpaceProvider, WayfarerMobile.Platforms.Android.Services.StorageSpaceProvider>();
 #elif IOS
         services.AddSingleton<ILocationBridge, WayfarerMobile.Platforms.iOS.Services.LocationBridge>();
         services.AddSingleton<IWakeLockService, WayfarerMobile.Platforms.iOS.Services.WakeLockService>();
         services.AddSingleton<ILocalNotificationService, WayfarerMobile.Platforms.iOS.Services.LocalNotificationService>();
+        services.AddSingleton<IStorageSpaceProvider, WayfarerMobile.Platforms.iOS.Services.StorageSpaceProvider>();
 #endif
 
         // Infrastructure Services
         services.AddSingleton<DatabaseService>();
+        services.AddSingleton<IStorageSpaceService, StorageSpaceService>();
 
         // Database connection factory for repositories
         services.AddSingleton<Func<Task<SQLiteAsyncConnection>>>(sp =>

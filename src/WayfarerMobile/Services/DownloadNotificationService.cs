@@ -11,16 +11,19 @@ public class DownloadNotificationService : IDownloadNotificationService
 {
     private readonly ILogger<DownloadNotificationService> _logger;
     private readonly IToastService _toastService;
+    private readonly IStorageSpaceService _storageSpaceService;
 
     /// <summary>
     /// Creates a new instance of DownloadNotificationService.
     /// </summary>
     public DownloadNotificationService(
         ILogger<DownloadNotificationService> logger,
-        IToastService toastService)
+        IToastService toastService,
+        IStorageSpaceService storageSpaceService)
     {
         _logger = logger;
         _toastService = toastService;
+        _storageSpaceService = storageSpaceService;
     }
 
     /// <inheritdoc/>
@@ -89,45 +92,29 @@ public class DownloadNotificationService : IDownloadNotificationService
     /// <inheritdoc/>
     public async Task<bool> CheckStorageBeforeDownloadAsync(double requiredMb)
     {
-        try
+        // Preserve the existing 1 GB buffer used by the pre-download warning.
+        var requiredWithBufferMb = requiredMb + 1024;
+        var requiredBytes = checked((long)Math.Ceiling(requiredWithBufferMb * 1024 * 1024));
+        if (_storageSpaceService.HasSufficientStorage(FileSystem.CacheDirectory, requiredBytes))
         {
-            // Get available space (platform-specific)
-            var cacheDir = FileSystem.CacheDirectory;
-            var driveInfo = new DriveInfo(Path.GetPathRoot(cacheDir) ?? cacheDir);
-            var availableMb = driveInfo.AvailableFreeSpace / (1024.0 * 1024.0);
-
-            // Require at least 1GB buffer
-            var requiredWithBuffer = requiredMb + 1024;
-
-            if (availableMb < requiredWithBuffer)
-            {
-                var page = Application.Current?.Windows.FirstOrDefault()?.Page;
-                if (page != null)
-                {
-                    var availableText = availableMb >= 1000
-                        ? $"{availableMb / 1000:F1} GB"
-                        : $"{availableMb:F0} MB";
-                    var requiredText = requiredMb >= 1000
-                        ? $"{requiredMb / 1000:F1} GB"
-                        : $"{requiredMb:F0} MB";
-
-                    await page.DisplayAlertAsync(
-                        "Insufficient Storage",
-                        $"This download requires approximately {requiredText}, but only {availableText} is available.\n\n" +
-                        "Please free up some space and try again.",
-                        "OK");
-                }
-                return false;
-            }
-
             return true;
         }
-        catch (Exception ex)
+
+        var page = Application.Current?.Windows.FirstOrDefault()?.Page;
+        if (page != null)
         {
-            _logger.LogWarning(ex, "Failed to check storage space");
-            // If we can't check, proceed anyway
-            return true;
+            var requiredText = requiredMb >= 1000
+                ? $"{requiredMb / 1000:F1} GB"
+                : $"{requiredMb:F0} MB";
+
+            await page.DisplayAlertAsync(
+                "Insufficient Storage",
+                $"This download requires approximately {requiredText} plus a 1 GB safety buffer.\n\n" +
+                "Please free up some space and try again.",
+                "OK");
         }
+
+        return false;
     }
 
     /// <inheritdoc/>

@@ -1,4 +1,3 @@
-using System.Security;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
@@ -18,6 +17,7 @@ namespace WayfarerMobile.Services;
 public sealed class TileDownloadService : ITileDownloadService, IDisposable
 {
     private readonly ISettingsService _settingsService;
+    private readonly IStorageSpaceService _storageSpaceService;
     private readonly ILogger<TileDownloadService> _logger;
     private readonly HttpClient _httpClient;
 
@@ -45,9 +45,11 @@ public sealed class TileDownloadService : ITileDownloadService, IDisposable
     /// </summary>
     public TileDownloadService(
         ISettingsService settingsService,
+        IStorageSpaceService storageSpaceService,
         ILogger<TileDownloadService> logger)
     {
         _settingsService = settingsService;
+        _storageSpaceService = storageSpaceService;
         _logger = logger;
 
         // Initialize shared HttpClient with appropriate timeout
@@ -258,37 +260,8 @@ public sealed class TileDownloadService : ITileDownloadService, IDisposable
     /// <inheritdoc/>
     public bool HasSufficientStorage(long requiredMB = 50)
     {
-        try
-        {
-            var cacheDir = FileSystem.CacheDirectory;
-            var pathRoot = Path.GetPathRoot(cacheDir);
-            if (string.IsNullOrEmpty(pathRoot))
-            {
-                _logger.LogWarning("Could not determine path root, assuming sufficient storage");
-                return true;
-            }
-
-            var driveInfo = new DriveInfo(pathRoot);
-            var freeSpaceMB = driveInfo.AvailableFreeSpace / (1024 * 1024);
-
-            _logger.LogDebug("Available storage: {FreeSpace} MB, required: {Required} MB", freeSpaceMB, requiredMB);
-            return freeSpaceMB >= requiredMB;
-        }
-        catch (IOException ex)
-        {
-            _logger.LogWarning(ex, "I/O error checking storage, assuming sufficient");
-            return true;
-        }
-        catch (SecurityException ex)
-        {
-            _logger.LogWarning(ex, "Security error checking storage, assuming sufficient");
-            return true;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Unexpected error checking storage, assuming sufficient");
-            return true;
-        }
+        var requiredBytes = checked(requiredMB * 1024 * 1024);
+        return _storageSpaceService.HasSufficientStorage(FileSystem.CacheDirectory, requiredBytes);
     }
 
     /// <inheritdoc/>
