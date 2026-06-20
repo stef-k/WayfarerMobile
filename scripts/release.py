@@ -29,6 +29,7 @@ from typing import Optional
 # ---------------------------------------------------------------------------
 
 CSPROJ_RELATIVE = os.path.join("src", "WayfarerMobile", "WayfarerMobile.csproj")
+CHANGELOG_RELATIVE = "CHANGELOG.md"
 REPO_NAME = "stef-k/WayfarerMobile"
 CHANGELOG_URL = f"https://github.com/{REPO_NAME}/blob/main/CHANGELOG.md"
 
@@ -88,7 +89,7 @@ class ReleaseState:
 
         if self.step.value >= Step.BRANCH_CREATED.value and self.step.value < Step.LOCAL_BRANCH_DELETED.value:
             cmds.append("git checkout main")
-            cmds.append(f"git branch -D {self.branch_name}")
+            cmds.append(f"git branch -d {self.branch_name}")
 
         if self.step.value >= Step.CSPROJ_MODIFIED.value and self.step.value < Step.MERGED.value:
             cmds.append(f"git checkout main -- {CSPROJ_RELATIVE}")
@@ -187,15 +188,15 @@ def preflight(repo_root: Path) -> Path:
     if not csproj.exists():
         fatal(f".csproj not found at {csproj}")
 
-    # 6. Warn if behind remote
+    # 6. Require local main to match remote main
     run(["git", "fetch", "origin", "main"], check=False)
     behind = run_output(["git", "rev-list", "--count", "HEAD..origin/main"])
     if behind and int(behind) > 0:
-        print(f"Warning: main is {behind} commit(s) behind origin/main.")
-        ans = confirm("Continue anyway? [y/n] ")
-        if ans != "y":
-            print("Aborted.")
-            sys.exit(0)
+        fatal(f"main is {behind} commit(s) behind origin/main. Pull before releasing.")
+
+    ahead = run_output(["git", "rev-list", "--count", "origin/main..HEAD"])
+    if ahead and int(ahead) > 0:
+        fatal(f"main is {ahead} commit(s) ahead of origin/main. Push or reconcile before releasing.")
 
     return csproj
 
@@ -267,6 +268,23 @@ def validate_version(new_ver: str, current_display: str, latest_tag: Optional[st
     existing = run(["git", "tag", "--list", new_ver], check=False)
     if existing.stdout.strip():
         return f"Tag '{new_ver}' already exists."
+
+    return None
+
+
+def validate_changelog_version(repo_root: Path, version: str) -> Optional[str]:
+    """Require the release heading to be committed before tagging."""
+    changelog = repo_root / CHANGELOG_RELATIVE
+    if not changelog.exists():
+        return f"{CHANGELOG_RELATIVE} does not exist."
+
+    content = changelog.read_text(encoding="utf-8")
+    heading = re.compile(rf"^##\s+{re.escape(version)}\s*$", re.MULTILINE)
+    if not heading.search(content):
+        return (
+            f"{CHANGELOG_RELATIVE} must contain a '## {version}' heading "
+            "before running the release."
+        )
 
     return None
 
@@ -369,9 +387,13 @@ def post_merge_cleanup(branch: str) -> None:
     _state.step = Step.ON_MAIN
     run(["git", "pull", "origin", "main"])
     # Delete local branch (may already be deleted by --delete-branch in merge).
-    result = run(["git", "branch", "-D", branch], check=False)
-    if result.returncode == 0:
-        _state.step = Step.LOCAL_BRANCH_DELETED
+    result = run(["git", "branch", "-d", branch], check=False)
+    if result.returncode != 0:
+        fatal(
+            f"Local branch '{branch}' could not be deleted safely. "
+            "Verify it is fully merged before deleting it."
+        )
+    _state.step = Step.LOCAL_BRANCH_DELETED
 
 
 def create_tag(version: str) -> None:
@@ -464,6 +486,10 @@ def main() -> None:
     # --- Version prompt loop ---
     while True:
         new_ver = prompt_version(display_ver, latest_tag)
+        changelog_error = validate_changelog_version(repo_root, new_ver)
+        if changelog_error:
+            print(f"  {changelog_error}")
+            continue
         new_build = build_num + 1
         branch = f"chore/version-bump-{new_ver}"
 
@@ -534,16 +560,17 @@ def main() -> None:
     _state.step = Step.RELEASE_CREATED
 
     # --- Success ---
-    print("\n=== Release Complete ===")
+    print("\n=== Draft Release Created ===")
     print(f"  Version : {new_ver}")
     print(f"  Build   : {new_build}")
     print(f"  Tag     : {new_ver}")
     print(f"  Release : {release_url}")
     print()
     print("Next steps:")
-    print(f"  1. Update CHANGELOG.md with {new_ver} entries")
-    print(f"  2. Review and publish the draft release on GitHub")
-    print(f"  3. Build and attach the APK to the release")
+    print("  1. Build and install the release APK")
+    print("  2. Complete device acceptance testing")
+    print("  3. Attach the APK to the draft release")
+    print("  4. Review and publish the draft release on GitHub")
 
 
 if __name__ == "__main__":
