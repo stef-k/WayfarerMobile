@@ -63,6 +63,7 @@ public class GroupedNameFilterTests
         result.Should().ContainSingle();
         result[0].Name.Should().Be("Downloaded");
         result[0].Items.Select(trip => trip.Name).Should().Equal("Paris Museums");
+        result[0].Items[0].Should().BeSameAs(Groups[0].Items[1]);
     }
 
     private sealed record TestTrip(string Name);

@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using WayfarerMobile.Core.Algorithms;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
@@ -29,6 +30,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     private readonly IDownloadStateService _downloadStateService;
     private readonly ILogger<MyTripsViewModel> _logger;
     private bool _hasRecoveredStuckDownloads;
+    private readonly List<TripGrouping> _allTrips = new();
 
     #region Observable Properties
 
@@ -36,6 +38,12 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     /// Gets the collection of user's trips grouped by status.
     /// </summary>
     public ObservableCollection<TripGrouping> Trips { get; } = new();
+
+    /// <summary>
+    /// Gets or sets the local trip-name search query.
+    /// </summary>
+    [ObservableProperty]
+    private string _searchQuery = string.Empty;
 
     /// <summary>
     /// Gets or sets whether trips are being loaded (used by RefreshView).
@@ -258,9 +266,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
                 .Select(g => new TripGrouping(g.Key, g.ToList()))
                 .ToList();
 
-            Trips.Clear();
-            foreach (var group in groups)
-                Trips.Add(group);
+            ReplaceAllTrips(groups);
 
             _logger.LogDebug("Loaded {Count} trips{Suffix}", items.Count, IsOnline ? "" : " (offline)");
 
@@ -323,9 +329,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
                 .Select(g => new TripGrouping(g.Key, g.ToList()))
                 .ToList();
 
-            Trips.Clear();
-            foreach (var group in groups)
-                Trips.Add(group);
+            ReplaceAllTrips(groups);
 
             _logger.LogInformation("Loaded {Count} trips from local storage (offline fallback)", items.Count);
         }
@@ -372,7 +376,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         _logger.LogInformation("Connectivity changed: {WasOnline} -> {IsOnline}", wasOnline, IsOnline);
 
         // Auto-refresh when coming back online
-        if (!wasOnline && IsOnline && Trips.Count > 0)
+        if (!wasOnline && IsOnline && _allTrips.Count > 0)
         {
             MainThread.BeginInvokeOnMainThread(async () => await LoadTripsAsync());
         }
@@ -497,7 +501,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
             }
 
             // Mark this trip as loaded and clear others BEFORE navigating
-            foreach (var group in Trips)
+            foreach (var group in _allTrips)
             {
                 foreach (var tripItem in group)
                 {
@@ -660,6 +664,34 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
 
     #region Private Methods
 
+    partial void OnSearchQueryChanged(string value)
+    {
+        ApplySearchFilter();
+    }
+
+    private void ReplaceAllTrips(IEnumerable<TripGrouping> groups)
+    {
+        _allTrips.Clear();
+        _allTrips.AddRange(groups);
+        ApplySearchFilter();
+    }
+
+    private void ApplySearchFilter()
+    {
+        var searchableGroups = _allTrips
+            .Select(group => new GroupedItems<TripListItem>(group.Name, group.ToList()));
+        var filteredGroups = GroupedNameFilter.Filter(
+            searchableGroups,
+            SearchQuery,
+            item => item.Name);
+
+        Trips.Clear();
+        foreach (var group in filteredGroups)
+        {
+            Trips.Add(new TripGrouping(group.Name, group.Items));
+        }
+    }
+
     /// <summary>
     /// Moves a trip item to the correct group based on its current GroupName.
     /// Used after download completes to move from "Available on Server" to "Downloaded".
@@ -670,7 +702,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
 
         // Find current group containing the item
         TripGrouping? currentGroup = null;
-        foreach (var group in Trips)
+        foreach (var group in _allTrips)
         {
             if (group.Contains(item))
             {
@@ -697,11 +729,11 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         // Remove empty groups
         if (currentGroup.Count == 0)
         {
-            Trips.Remove(currentGroup);
+            _allTrips.Remove(currentGroup);
         }
 
         // Find or create target group
-        var targetGroup = Trips.FirstOrDefault(g => g.Name == targetGroupName);
+        var targetGroup = _allTrips.FirstOrDefault(g => g.Name == targetGroupName);
         if (targetGroup == null)
         {
             // Create new group and insert in correct position
@@ -711,11 +743,11 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
             var insertIndex = targetGroupName switch
             {
                 "Downloaded" => 0,
-                "Metadata Only" => Trips.Any(g => g.Name == "Downloaded") ? 1 : 0,
-                _ => Trips.Count
+                "Metadata Only" => _allTrips.Any(g => g.Name == "Downloaded") ? 1 : 0,
+                _ => _allTrips.Count
             };
 
-            Trips.Insert(Math.Min(insertIndex, Trips.Count), targetGroup);
+            _allTrips.Insert(Math.Min(insertIndex, _allTrips.Count), targetGroup);
         }
         else
         {
@@ -723,6 +755,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
             targetGroup.Insert(0, item);
         }
 
+        ApplySearchFilter();
         _logger.LogDebug("Moved trip {Name} from '{From}' to '{To}'", item.Name, currentGroup.Name, targetGroupName);
     }
 
@@ -735,7 +768,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         var loadedTripId = _tripStateManager.CurrentLoadedTripId;
         _logger.LogDebug("RefreshLoadedTripState: CurrentLoadedTripId = {TripId}", loadedTripId);
 
-        foreach (var group in Trips)
+        foreach (var group in _allTrips)
         {
             foreach (var item in group)
             {
@@ -770,7 +803,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
                 foreach (var pausedState in pausedDownloads)
                 {
                     // Find the item in Trips by server ID (more reliable than local ID)
-                    foreach (var group in Trips)
+                    foreach (var group in _allTrips)
                     {
                         var item = group.FirstOrDefault(i => i.ServerId == pausedState.TripServerId);
                         if (item != null)
@@ -829,7 +862,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         }
 
         // Load trips if empty
-        if (Trips.Count == 0)
+        if (_allTrips.Count == 0)
         {
             _logger.LogDebug("OnAppearingAsync: Calling LoadTripsAsync");
             await LoadTripsAsync();
@@ -885,7 +918,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     /// <inheritdoc/>
     TripListItem? ITripDownloadCallbacks.FindItemByServerId(Guid serverId)
     {
-        foreach (var group in Trips)
+        foreach (var group in _allTrips)
         {
             var item = group.FirstOrDefault(i => i.ServerId == serverId);
             if (item != null)
@@ -897,7 +930,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     /// <inheritdoc/>
     void ITripDownloadCallbacks.UpdateItemProgress(Guid serverId, double progress, bool isDownloading)
     {
-        foreach (var group in Trips)
+        foreach (var group in _allTrips)
         {
             foreach (var item in group)
             {
@@ -912,7 +945,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     }
 
     /// <inheritdoc/>
-    IReadOnlyList<TripGrouping> ITripDownloadCallbacks.TripGroups => Trips.ToList().AsReadOnly();
+    IReadOnlyList<TripGrouping> ITripDownloadCallbacks.TripGroups => _allTrips.AsReadOnly();
 
     /// <inheritdoc/>
     async Task ITripDownloadCallbacks.CheckForPausedDownloadsAsync()
@@ -923,7 +956,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     /// <inheritdoc/>
     void ITripDownloadCallbacks.UpdateTripState(Guid serverId, Core.Enums.UnifiedDownloadState newState, bool isMetadataComplete, bool hasTiles)
     {
-        foreach (var group in Trips)
+        foreach (var group in _allTrips)
         {
             var item = group.FirstOrDefault(t => t.ServerId == serverId);
             if (item != null)

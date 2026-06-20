@@ -7,7 +7,7 @@
              x:Name="ThisView"
              x:DataType="viewmodels:MyTripsViewModel">
 
-    <Grid RowDefinitions="Auto,*">
+    <Grid RowDefinitions="Auto,Auto,*">
         <!-- Sync Status Banner (shown when there are pending/failed syncs) -->
         <Border Grid.Row="0"
                 Padding="12,8"
@@ -59,8 +59,14 @@
             </Grid>
         </Border>
 
+        <SearchBar Grid.Row="1"
+                   Placeholder="Search my trips..."
+                   Text="{Binding SearchQuery}"
+                   Margin="15,10"
+                   BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}" />
+
         <!-- RefreshView always visible - never hide it or pull-to-refresh breaks -->
-        <RefreshView Grid.Row="1"
+        <RefreshView Grid.Row="2"
                      Command="{Binding LoadTripsCommand}"
                      IsRefreshing="{Binding IsLoadingTrips, Mode=TwoWay}">
             <CollectionView ItemsSource="{Binding Trips}"
@@ -262,7 +268,7 @@
         </RefreshView>
 
         <!-- Loading overlay - only shown on initial load, not on pull-to-refresh -->
-        <Grid Grid.Row="1"
+        <Grid Grid.Row="2"
               IsVisible="{Binding IsInitialLoad}"
               BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}">
             <ActivityIndicator IsRunning="{Binding IsInitialLoad}"
