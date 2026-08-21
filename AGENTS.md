@@ -10,7 +10,7 @@
 
 ## Git Safety
 
-- Treat `main` as read-only for feature work. Create `feature/<topic>` or `fix/<topic>` before editing.
+- Treat `main` as read-only. All repository changes go through a PR from `feature/<topic>`, `fix/<topic>`, or `chore/<topic>`.
 - Before switching branches, merging, rebasing, or cleanup, verify `git status` and `git log -1 --oneline`.
 - Create an early recoverable checkpoint for meaningful work. Prefer a small commit:
   - `WIP: <description> (checkpoint)`
@@ -28,6 +28,13 @@
 - The related Wayfarer backend repository is `C:\Users\stef\source\repos\Wayfarer`.
 
 Keep portable domain and navigation behavior in `WayfarerMobile.Core`. Keep device APIs, permissions, lifecycle behavior, and platform services in the MAUI or platform-specific projects. Preserve existing MVVM ownership: views render and forward interaction, view models own presentation state, and services own application behavior.
+
+## Reference Repositories and Navigation Contract
+
+- The previous implementation at `C:\Users\stef\source\repos\Wayfarer.Mobile` and the Wayfarer backend are read-only references unless the user explicitly places them in scope.
+- Use the previous app to verify API endpoints, DTOs, persistence shapes, geo/location algorithms, tile caching, navigation, trip display, and QR behavior. Do not copy obsolete architecture merely because it existed there.
+- Preserve the documented navigation priority in `docs/12-Services.md`: user-defined Segment geometry, valid cached routing, online routing, then an honest direct-route fallback.
+- Never fabricate connections between Places to make an incomplete route appear road-aware. Prefer an explicit straight-line distance/bearing fallback when authoritative or externally calculated geometry is unavailable.
 
 ## Build and Test Commands
 
@@ -48,6 +55,9 @@ Keep portable domain and navigation behavior in `WayfarerMobile.Core`. Keep devi
 - Reuse established abstractions only when they already own the behavior; do not create a framework for one change.
 - Use nullable reference types correctly and handle cancellation and platform failures explicitly.
 - Follow existing C# conventions: four spaces, PascalCase public members/types, camelCase locals/parameters, and file names matching their primary type.
+- Use a ViewModel for every page. Keep business logic out of code-behind; code-behind may own only view-specific behavior such as map gestures or animations.
+- Prefer CommunityToolkit.Mvvm generators such as `[ObservableProperty]` and `[RelayCommand]` where they fit the existing ownership boundary.
+- Use Syncfusion controls only where they provide clear current value and reduce custom UI complexity.
 - Document public or non-obvious behavior. Avoid comments that merely repeat the code.
 - Never commit tokens, server credentials, signing material, device identifiers, user location data, build outputs, coverage outputs, or diagnostic logs.
 
