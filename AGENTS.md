@@ -93,6 +93,7 @@ Keep portable domain and navigation behavior in `WayfarerMobile.Core`. Keep devi
 - Keep commits small and imperative. Conventional commit subjects are welcome.
 - PRs must link the issue, summarize product behavior, list exact validation, and note platform-specific or unavailable evidence honestly. Include screenshots only for visible UI changes where they materially help review.
 - Treat the GitHub Actions `test` check on the current PR head as the merge gate. Pending, failed, cancelled, or missing checks are not successful evidence.
+- Documentation-only PRs matching the CI workflow's `paths-ignore` rules intentionally have no test check. Validate their content, references, and `git diff --check` without invoking builds or tests.
 - For a clear infrastructure or unrelated flaky failure, rerun the unchanged workflow at most once. Do not enter repeated repair loops without a current-branch counterexample.
 
 ## Dependency and Release Work
