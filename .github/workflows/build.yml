@@ -1,9 +1,11 @@
 name: Build MAUI App
 
 on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:  # Run only when Android-specific or release evidence is required.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   DOTNET_VERSION: '10.0.x'

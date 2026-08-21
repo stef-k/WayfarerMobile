@@ -47,6 +47,8 @@ Keep portable domain and navigation behavior in `WayfarerMobile.Core`. Keep devi
 - Build Android when the changed seam requires MAUI/platform compilation:
   - `dotnet build src/WayfarerMobile/WayfarerMobile.csproj -f net10.0-android --configuration Release`
 - Build iOS only on a suitable macOS/Xcode host and only when the risk requires it.
+- The GitHub Android build is manual. Invoke it for project/framework/package changes; XAML, MAUI resources, startup or DI changes; Android platform services, permissions, manifests, or lifecycle work; materially MAUI-dependent map/navigation changes; and the final release candidate.
+- Do not invoke the Android workflow for documentation, tests-only maintenance, or Core algorithms/DTO/state transformations already covered by reliable lower-seam tests unless a concrete app-compilation risk is identified.
 
 ## Coding Guidelines
 
@@ -94,6 +96,7 @@ Keep portable domain and navigation behavior in `WayfarerMobile.Core`. Keep devi
 - PRs must link the issue, summarize product behavior, list exact validation, and note platform-specific or unavailable evidence honestly. Include screenshots only for visible UI changes where they materially help review.
 - Treat the GitHub Actions `test` check on the current PR head as the merge gate. Pending, failed, cancelled, or missing checks are not successful evidence.
 - Documentation-only PRs matching the CI workflow's `paths-ignore` rules intentionally have no test check. Validate their content, references, and `git diff --check` without invoking builds or tests.
+- Ordinary code PRs use the focused unit/core workflow. The manual Android build is an additional risk-based or pre-release gate, not a default PR requirement.
 - For a clear infrastructure or unrelated flaky failure, rerun the unchanged workflow at most once. Do not enter repeated repair loops without a current-branch counterexample.
 
 ## Dependency and Release Work
