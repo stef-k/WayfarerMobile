@@ -107,7 +107,7 @@ WayfarerMobile/
 +-- tests/
 |   +-- WayfarerMobile.Tests/    # Unit tests
 +-- docs/                        # Documentation (Docsify)
-+-- CLAUDE.md                    # Project instructions
++-- AGENTS.md                    # Project instructions
 ```
 
 ## Building the Application
