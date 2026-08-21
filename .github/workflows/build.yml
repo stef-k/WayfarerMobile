@@ -1,20 +1,10 @@
 name: Build MAUI App
 
 on:
-  pull_request:
-    branches: [ main ]
-    paths:
-      - 'src/**'
-      - 'WayfarerMobile.sln'
-      - 'Directory.Build.*'
-      - 'Directory.Packages.props'
-      - 'global.json'
-      - 'NuGet.config'
-      - '.github/workflows/build.yml'
-  workflow_dispatch:  # Allow manual builds when an artifact is needed.
+  workflow_dispatch:  # Run only when Android-specific or release evidence is required.
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
