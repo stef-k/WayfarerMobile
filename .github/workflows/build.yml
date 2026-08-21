@@ -1,9 +1,21 @@
 name: Build MAUI App
 
 on:
-  push:
+  pull_request:
     branches: [ main ]
-  workflow_dispatch:  # Allow manual trigger
+    paths:
+      - 'src/**'
+      - 'WayfarerMobile.sln'
+      - 'Directory.Build.*'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:  # Allow manual builds when an artifact is needed.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 env:
   DOTNET_VERSION: '10.0.x'
