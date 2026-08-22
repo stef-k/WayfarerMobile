@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Helpers;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
 using WayfarerMobile.Data.Repositories;
@@ -409,7 +410,9 @@ public class TripContentService : ITripContentService
             DistanceKm = s.DistanceKm,
             DurationMinutes = s.DurationMinutes,
             Notes = s.Notes,
-            Geometry = s.Geometry
+            Geometry = s.Geometry,
+            Waypoints = SegmentWaypointJson.Deserialize(s.WaypointsJson),
+            HasCustomRoute = s.HasCustomRoute
         }).ToList();
 
         // Build trip details
@@ -484,7 +487,9 @@ public class TripContentService : ITripContentService
             DistanceKm = s.DistanceKm,
             DurationMinutes = s.DurationMinutes,
             Notes = s.Notes,
-            Geometry = s.Geometry
+            Geometry = s.Geometry,
+            Waypoints = SegmentWaypointJson.Deserialize(s.WaypointsJson),
+            HasCustomRoute = s.HasCustomRoute
         }).ToList();
     }
 

@@ -72,6 +72,10 @@ public class OfflineSegmentEntity
     /// </summary>
     public string? Geometry { get; set; }
 
+    public string? WaypointsJson { get; set; }
+
+    public bool HasCustomRoute { get; set; }
+
     /// <summary>
     /// Gets or sets the sort order.
     /// </summary>

@@ -24,6 +24,8 @@ public class OfflineSegmentEntity
     public double? DistanceKm { get; set; }
     public int? DurationMinutes { get; set; }
     public string? EncodedPolyline { get; set; }
+    public string? WaypointsJson { get; set; }
+    public bool HasCustomRoute { get; set; }
     public int SortOrder { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

@@ -25,7 +25,7 @@ public class DatabaseService : IAsyncDisposable, ILegacyRasterState
     #region Constants
 
     private const string DatabaseFilename = "wayfarer.db3";
-    private const int CurrentSchemaVersion = 7;
+    private const int CurrentSchemaVersion = 8;
     private const string SchemaVersionKey = "db_schema_version";
 
     private static readonly SQLiteOpenFlags DbFlags =
@@ -152,6 +152,11 @@ public class DatabaseService : IAsyncDisposable, ILegacyRasterState
             await RasterDecommissionMigration.ApplyAsync(this, CancellationToken.None);
         }
 
+        if (currentVersion < 8)
+        {
+            await MigrateToVersion8Async();
+        }
+
         // Update schema version
         await SetSchemaVersionAsync(CurrentSchemaVersion);
         Console.WriteLine($"[DatabaseService] Migration complete. Schema version: {CurrentSchemaVersion}");
@@ -230,6 +235,12 @@ public class DatabaseService : IAsyncDisposable, ILegacyRasterState
         await AddColumnIfMissingAsync("LocalTimelineEntries", "Source", "TEXT");
 
         Console.WriteLine("[DatabaseService] Version 6 migration complete");
+    }
+
+    private async Task MigrateToVersion8Async()
+    {
+        await AddColumnIfMissingAsync("OfflineSegments", "WaypointsJson", "TEXT");
+        await AddColumnIfMissingAsync("OfflineSegments", "HasCustomRoute", "INTEGER NOT NULL DEFAULT 0");
     }
 
     async Task ILegacyRasterState.RemoveTileSchemaAndNormalizeTripDataAsync(CancellationToken cancellationToken)
