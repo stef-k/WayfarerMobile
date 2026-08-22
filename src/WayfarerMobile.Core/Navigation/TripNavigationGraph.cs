@@ -50,6 +50,10 @@ public class TripNavigationGraph
         Edges.Add(edge);
     }
 
+    public IEnumerable<NavigationEdge> GetAllEdges() => Edges;
+
+    public NavigationNode? GetNode(string nodeId) => Nodes.GetValueOrDefault(nodeId);
+
     /// <summary>
     /// Finds the nearest node to a location.
     /// </summary>
@@ -342,6 +346,8 @@ public enum NavigationNodeType
 /// </summary>
 public class NavigationEdge
 {
+    /// <summary>Gets the server Segment that owns this transient edge.</summary>
+    public Guid ParentSegmentId { get; set; }
     /// <summary>
     /// Gets or sets the origin node ID.
     /// </summary>
