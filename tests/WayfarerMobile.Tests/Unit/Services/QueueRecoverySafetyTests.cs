@@ -14,6 +14,79 @@ namespace WayfarerMobile.Tests.Unit.Services;
 
 public sealed class QueueRecoverySafetyTests
 {
+    [Fact]
+    public async Task DirectRecoveryExport_WaitsForClaimAndExportsItsPostDeliveryState()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource<ApiResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var settings = new MockSettingsService();
+        var queued = new QueuedLocation
+        {
+            Id = 7,
+            Timestamp = new DateTime(2026, 8, 22, 10, 11, 12, DateTimeKind.Utc),
+            Latitude = 37.98,
+            Longitude = 23.72,
+            IsUserInvoked = true,
+            SyncStatus = SyncStatus.Pending,
+            IdempotencyKey = Guid.NewGuid().ToString("D")
+        };
+        var queue = new Mock<ILocationQueueRepository>();
+        queue.Setup(x => x.ResetStuckLocationsAsync()).ReturnsAsync(0);
+        queue.SetupSequence(x => x.ClaimNextPendingLocationWithPriorityAsync())
+            .ReturnsAsync(() =>
+            {
+                queued.SyncStatus = SyncStatus.Syncing;
+                return queued;
+            })
+            .ReturnsAsync((QueuedLocation?)null);
+        queue.Setup(x => x.ResetLocationToPendingAsync(queued.Id)).Callback(() => queued.SyncStatus = SyncStatus.Pending).Returns(Task.CompletedTask);
+        queue.Setup(x => x.GetAllQueuedLocationsForExportAsync()).ReturnsAsync(() =>
+            queued.SyncStatus == SyncStatus.Pending && !queued.IsRejected ? [queued] : []);
+        var api = new Mock<IApiClient>();
+        api.SetupGet(x => x.IsConfigured).Returns(true);
+        api.Setup(x => x.CheckInAsync(It.IsAny<LocationLogRequest>(), queued.IdempotencyKey, It.IsAny<CancellationToken>()))
+            .Returns(() =>
+            {
+                entered.TrySetResult();
+                return release.Task;
+            });
+        var connectivity = new Mock<IConnectivity>();
+        connectivity.SetupGet(x => x.NetworkAccess).Returns(NetworkAccess.Internet);
+        using var drainService = new QueueDrainService(
+            api.Object, queue.Object, settings, connectivity.Object, NullLogger<QueueDrainService>.Instance);
+        var activities = new Mock<IActivitySyncService>();
+        activities.Setup(x => x.GetAllActivityTypesAsync()).ReturnsAsync([]);
+        var canonicalExporter = new QueueExportService(queue.Object, activities.Object);
+        string? sharedContent = null;
+        var exportService = new Mock<IQueueExportService>();
+        exportService.Setup(x => x.ShareExportAsync("csv")).Returns(async () =>
+            sharedContent = await canonicalExporter.ExportToCsvAsync());
+        var coordinatorType = typeof(QueueDrainService).Assembly.GetType("WayfarerMobile.Services.RecoveryExportCoordinator");
+        coordinatorType.Should().NotBeNull("direct recovery export needs a production-owned quiescence coordinator");
+        var coordinator = Activator.CreateInstance(coordinatorType!, drainService, exportService.Object);
+        var exportAndShare = coordinatorType!.GetMethod("ExportAndShareAsync");
+        exportAndShare.Should().NotBeNull();
+
+        await drainService.StartAsync();
+        var activeDrain = drainService.TriggerDrainAsync();
+        await entered.Task;
+
+        var directExport = (Task)exportAndShare!.Invoke(coordinator, ["csv", CancellationToken.None])!;
+
+        directExport.IsCompleted.Should().BeFalse();
+        sharedContent.Should().BeNull();
+        settings.QueueDeliverySuspended.Should().BeTrue();
+
+        release.SetResult(ApiResult.Fail("temporary", 503, true));
+        await activeDrain;
+        await directExport;
+
+        settings.QueueDeliverySuspended.Should().BeTrue();
+        queued.SyncStatus.Should().Be(SyncStatus.Pending);
+        sharedContent.Should().Contain(queued.IdempotencyKey);
+        exportService.Verify(x => x.ShareExportAsync("csv"), Times.Once);
+    }
+
     [Theory]
     [InlineData("csv")]
     [InlineData("geojson")]
