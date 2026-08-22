@@ -80,9 +80,10 @@ public static class SegmentChevronPlacer
                 start.X + ((end.X - start.X) * ratio),
                 start.Y + ((end.Y - start.Y) * ratio),
                 Math.Atan2(end.Y - start.Y, end.X - start.X) * 180 / Math.PI);
-            if (results.Count == 0 || Distance(
-                    new ProjectedRoutePoint(results[^1].X, results[^1].Y),
-                    new ProjectedRoutePoint(candidate.X, candidate.Y)) >= MinimumSpacing)
+            var candidatePoint = new ProjectedRoutePoint(candidate.X, candidate.Y);
+            if (results.All(retained => Distance(
+                    new ProjectedRoutePoint(retained.X, retained.Y),
+                    candidatePoint) >= MinimumSpacing))
                 results.Add(candidate);
         }
         return results;

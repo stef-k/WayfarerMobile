@@ -125,8 +125,7 @@ public class TripStateManager : ITripStateManager
             var newName = trip?.Name;
 
             // Check if trip actually changed
-            var tripChanged = !ReferenceEquals(previousTrip, trip) &&
-                              (previousTrip?.Id != trip?.Id);
+            var tripChanged = !ReferenceEquals(previousTrip, trip);
 
             var idChanged = previousId != newId;
 

@@ -574,8 +574,9 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
         // Reset search state when trip changes
         IsPlaceSearchVisible = false;
         PlaceSearchQuery = string.Empty;
-        if (e.NewTrip != null)
-            PrepareSegmentPresentation(e.NewTrip);
+        SelectedTripSegment = e.NewTrip == null
+            ? null
+            : SegmentPresentationProjector.PrepareTripReplacement(e.NewTrip, SelectedTripSegment);
 
         // Notify all dependent properties that LoadedTrip has changed
         OnPropertyChanged(nameof(LoadedTrip));
@@ -586,23 +587,6 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
         OnPropertyChanged(nameof(TripNotesHtml));
         OnPropertyChanged(nameof(TripSheetTitle));
         OnPropertyChanged(nameof(TripSheetSubtitle));
-    }
-
-    private static void PrepareSegmentPresentation(TripDetails trip)
-    {
-        foreach (var segment in trip.Segments)
-        {
-            var origin = trip.AllPlaces.FirstOrDefault(place => place.Id == segment.OriginId);
-            var destination = trip.AllPlaces.FirstOrDefault(place => place.Id == segment.DestinationId);
-            segment.OriginName ??= origin?.Name;
-            segment.DestinationName ??= destination?.Name;
-            if (!segment.HasWaypoints)
-            {
-                segment.AnchorTrail = Array.Empty<string>();
-                continue;
-            }
-            segment.AnchorTrail = CreateSegmentTrail(segment, trip.AllPlaces);
-        }
     }
 
     private static IReadOnlyList<string> CreateSegmentTrail(TripSegment segment, IReadOnlyCollection<TripPlace> places)
