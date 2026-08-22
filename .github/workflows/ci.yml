@@ -33,6 +33,9 @@ jobs:
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
 
+    - name: Restore pinned workload set
+      run: dotnet workload restore tests/WayfarerMobile.Tests/WayfarerMobile.Tests.csproj
+
     - name: Cache NuGet packages
       uses: actions/cache@v6.1.0
       with:
