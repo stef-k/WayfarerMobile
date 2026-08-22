@@ -6,13 +6,13 @@ This guide covers the setup of your development environment for WayfarerMobile.
 
 ### .NET SDK
 
-WayfarerMobile requires .NET 10 SDK. Download and install from:
+WayfarerMobile requires .NET SDK 10.0.400 and workload set 10.0.400.1, as pinned by `global.json`. Download and install from:
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 
 Verify installation:
 ```bash
 dotnet --version
-# Should output: 10.0.x
+# Should output: 10.0.400
 ```
 
 ### IDE Options
@@ -25,9 +25,9 @@ dotnet --version
    - **Mobile development with .NET**
 
 3. Under **Individual Components**, ensure these are selected:
-   - Android SDK setup (API 24+)
+   - Android SDK Platform and Build-Tools API 36
    - Android NDK
-   - Java Development Kit
+   - Temurin/OpenJDK 17
    - .NET MAUI templates
 
 #### Option 2: Visual Studio Code
@@ -40,7 +40,7 @@ dotnet --version
 
 3. Install MAUI workload via terminal:
 ```bash
-dotnet workload install maui
+dotnet workload restore
 ```
 
 #### Option 3: JetBrains Rider
@@ -52,9 +52,10 @@ dotnet workload install maui
 
 ### Android SDK
 
-**Minimum Requirements:**
-- Android SDK Platform API 24 (Android 7.0 Nougat)
-- Android SDK Build-Tools
+**Requirements:**
+- Android SDK Platform and Build-Tools API 36 for compilation
+- Android API 24 (Android 7.0 Nougat) remains the application minimum
+- Temurin/OpenJDK 17
 - Google Play Services (for FusedLocationProvider)
 
 **Installation via Visual Studio:**
@@ -67,18 +68,20 @@ dotnet workload install maui
 1. Download [Android Studio](https://developer.android.com/studio) or [Android Command Line Tools](https://developer.android.com/studio#command-tools)
 2. Use SDK Manager to install:
    ```
-   platforms;android-34
-   build-tools;34.0.0
+   platforms;android-36
+   build-tools;36.0.0
    platform-tools
    extras;google;google_play_services
    ```
 
 ### iOS SDK (macOS only)
 
-**Requirements:**
-- macOS 12.0 or later
-- Xcode 14 or later
-- iOS SDK 15+
+**Requirements for the selected iOS workload line:**
+- macOS 26.2 or later
+- Xcode 26.6
+- iOS 15.0 remains the application minimum
+
+Native iOS compilation and runtime validation require a suitable macOS/Xcode host. The Windows release-preparation validation covers Android only; unavailable native iOS lifecycle evidence remains tracked separately in issue #222.
 
 **Installation:**
 1. Install [Xcode](https://apps.apple.com/app/xcode/id497799835) from the App Store

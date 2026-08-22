@@ -55,11 +55,11 @@ Wayfarer Mobile is a privacy-first companion app for self-hosted Wayfarer server
 
 ### Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- MAUI workload: `dotnet workload install maui`
+- [.NET SDK 10.0.400](https://dotnet.microsoft.com/download/dotnet/10.0) (pinned by `global.json`)
+- MAUI workload set 10.0.400.1: `dotnet workload restore`
 - Platform SDK:
-  - **Android**: Android SDK (API 24+) with emulator or device
-  - **iOS**: Xcode 15+ with iOS 15+ SDK (macOS required)
+  - **Android**: Android SDK API 36 and JDK 17; API 24 remains the minimum
+  - **iOS**: Xcode 26.6 on macOS 26.2 or later; iOS 15.0 remains the minimum
 
 ### Build & Run
 
@@ -132,7 +132,7 @@ WayfarerMobile/
 | Category | Technology |
 |----------|------------|
 | Framework | .NET 10 MAUI |
-| Maps | Mapsui 5.0 with OpenStreetMap tiles |
+| Maps | Mapsui 5.1 with OpenStreetMap tiles |
 | Routing | OSRM (Open Source Routing Machine) |
 | UI Components | Syncfusion MAUI Toolkit (MIT) |
 | MVVM | CommunityToolkit.Mvvm |
