@@ -867,4 +867,3 @@ public partial class DiagnosticsViewModel : BaseViewModel
 
     #endregion
 }
-
