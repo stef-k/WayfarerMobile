@@ -56,7 +56,7 @@
 		<!-- MAUI -->
 		<PackageReference Include="Microsoft.Maui.Controls" Version="10.0.100" />
 		<PackageReference Include="Microsoft.Maui.Essentials" Version="10.0.100" />
-		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.2" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.11" />
 
 		<!-- MVVM -->
 		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
@@ -65,29 +65,26 @@
 		<PackageReference Include="Syncfusion.Maui.Toolkit" Version="1.0.8" />
 
 		<!-- Maps -->
-		<PackageReference Include="Mapsui.Maui" Version="5.0.2" />
+		<PackageReference Include="Mapsui.Maui" Version="5.1.0" />
 
 		<!-- Database -->
 		<PackageReference Include="sqlite-net-pcl" Version="1.11.285" />
 
 		<!-- QR Code -->
-		<PackageReference Include="ZXing.Net.Maui.Controls" Version="0.7.4" />
+		<PackageReference Include="ZXing.Net.Maui.Controls" Version="0.10.4" />
 
 		<!-- HTTP -->
-		<PackageReference Include="Microsoft.Extensions.Http" Version="10.0.2" />
-		<PackageReference Include="Polly" Version="8.6.5" />
+		<PackageReference Include="Microsoft.Extensions.Http" Version="10.0.11" />
+		<PackageReference Include="Polly" Version="8.7.0" />
 
 		<!-- Logging -->
-		<PackageReference Include="Serilog" Version="4.3.0" />
+		<PackageReference Include="Serilog" Version="4.4.0" />
 		<PackageReference Include="Serilog.Extensions.Logging" Version="10.0.0" />
 		<PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
 	</ItemGroup>
 
 	<ItemGroup Condition="'$(TargetFramework)' == 'net10.0-android'">
-	  <PackageReference Include="Xamarin.GooglePlayServices.Location" Version="121.3.0.8" />
-	  <!-- Exclude duplicate JVM packages to resolve D8 compilation conflicts with Android variants -->
-	  <!-- See: https://github.com/dotnet/android-libraries/issues/1341 -->
-	  <PackageReference Include="Xamarin.AndroidX.Compose.Runtime.Annotation.Jvm" Version="1.10.0.1" ExcludeAssets="all" />
+	  <PackageReference Include="Xamarin.GooglePlayServices.Location" Version="121.4.0" />
 	</ItemGroup>
 
 	<!-- Expose internals to test project -->
