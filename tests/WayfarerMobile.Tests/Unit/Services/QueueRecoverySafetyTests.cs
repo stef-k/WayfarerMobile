@@ -19,6 +19,8 @@ public sealed class QueueRecoverySafetyTests
     {
         var exporterEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseExporter = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var deliveryEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDelivery = new TaskCompletionSource<ApiResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         var settings = new MockSettingsService();
         var queued = new QueuedLocation
         {
@@ -37,10 +39,18 @@ public sealed class QueueRecoverySafetyTests
             queued.SyncStatus = SyncStatus.Syncing;
             return queued;
         });
+        queue.Setup(x => x.ResetLocationToPendingAsync(queued.Id)).Callback(() => queued.SyncStatus = SyncStatus.Pending)
+            .Returns(Task.CompletedTask);
         queue.Setup(x => x.GetAllQueuedLocationsForExportAsync()).ReturnsAsync(() =>
             queued.SyncStatus == SyncStatus.Pending ? [queued] : []);
         var api = new Mock<IApiClient>();
         api.SetupGet(x => x.IsConfigured).Returns(true);
+        api.Setup(x => x.CheckInAsync(It.IsAny<LocationLogRequest>(), queued.IdempotencyKey, It.IsAny<CancellationToken>()))
+            .Returns(() =>
+            {
+                deliveryEntered.TrySetResult();
+                return releaseDelivery.Task;
+            });
         var connectivity = new Mock<IConnectivity>();
         connectivity.SetupGet(x => x.NetworkAccess).Returns(NetworkAccess.Internet);
         var recoveryOperations = new QueueRecoveryOperationCoordinator();
@@ -49,13 +59,16 @@ public sealed class QueueRecoverySafetyTests
             recoveryOperations);
         await drainService.StartAsync();
 
-        IReadOnlyList<QueuedLocation>? exportedRows = null;
+        var activities = new Mock<IActivitySyncService>();
+        activities.Setup(x => x.GetAllActivityTypesAsync()).ReturnsAsync([]);
+        var canonicalExporter = new QueueExportService(queue.Object, activities.Object);
+        string? sharedContent = null;
         var exportService = new Mock<IQueueExportService>();
         exportService.Setup(x => x.ShareExportAsync("csv")).Returns(async () =>
         {
             exporterEntered.TrySetResult();
             await releaseExporter.Task;
-            exportedRows = await queue.Object.GetAllQueuedLocationsForExportAsync();
+            sharedContent = await canonicalExporter.ExportToCsvAsync();
         });
         var coordinator = new RecoveryExportCoordinator(drainService, exportService.Object, queue.Object, recoveryOperations);
 
@@ -69,11 +82,16 @@ public sealed class QueueRecoverySafetyTests
 
         releaseExporter.SetResult();
         (await export).Should().BeTrue();
-        exportedRows.Should().ContainSingle(x => x.Id == queued.Id);
-        queued.SyncStatus.Should().Be(SyncStatus.Pending);
+        sharedContent.Should().Contain(queued.IdempotencyKey);
 
+        await deliveryEntered.Task;
+        settings.QueueDeliverySuspended.Should().BeFalse();
+        queued.SyncStatus.Should().Be(SyncStatus.Syncing);
+
+        releaseDelivery.SetResult(ApiResult.Fail("temporary", 503, true));
         await resume;
         settings.QueueDeliverySuspended.Should().BeFalse();
+        queued.SyncStatus.Should().Be(SyncStatus.Pending);
         queue.Verify(x => x.ClaimNextPendingLocationWithPriorityAsync(), Times.AtLeastOnce);
     }
 
