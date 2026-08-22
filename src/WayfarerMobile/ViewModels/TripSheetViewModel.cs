@@ -574,9 +574,13 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
         // Reset search state when trip changes
         IsPlaceSearchVisible = false;
         PlaceSearchQuery = string.Empty;
-        SelectedTripSegment = e.NewTrip == null
+        var previouslySelectedSegment = SelectedTripSegment;
+        var replacementSegment = e.NewTrip == null
             ? null
-            : SegmentPresentationProjector.PrepareTripReplacement(e.NewTrip, SelectedTripSegment);
+            : SegmentPresentationProjector.PrepareTripReplacement(e.NewTrip, previouslySelectedSegment);
+        SelectedTripSegment = replacementSegment;
+        if (previouslySelectedSegment != null && replacementSegment == null)
+            IsShowingSegmentNotes = false;
 
         // Notify all dependent properties that LoadedTrip has changed
         OnPropertyChanged(nameof(LoadedTrip));
