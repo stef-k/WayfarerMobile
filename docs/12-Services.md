@@ -25,15 +25,12 @@ This document provides detailed documentation for the key services in WayfarerMo
 | `TimelineLayerService` | Timeline location markers | Singleton |
 | `DroppedPinLayerService` | Dropped pin marker (map long-press) | Singleton |
 
-### Tile/Download Services
+### Interactive Map Cache Services
 
 | Service | Purpose | Lifetime |
 |---------|---------|----------|
-| `TileDownloadOrchestrator` | Batch tile downloads with pause/resume | Singleton |
-| `DownloadStateService` | Download state transitions and validation | Singleton |
-| `DownloadStateManager` | Pause/resume state, progress tracking | Singleton |
-| `DownloadProgressAggregator` | Centralized download progress events | Singleton |
-| `CacheLimitEnforcer` | Cache size limit enforcement (80%/90%/100%) | Singleton |
+| `WayfarerTileSource` | Maps renderer requests for the canonical OSM layer | Per map |
+| `LiveTileCacheService` | Request-driven HTTP caching and bounded LRU cleanup | Singleton |
 
 ### Trip Services
 
@@ -673,79 +670,9 @@ public class GroupsViewModel : ObservableObject
 
 ## TripDownloadService
 
-**Source**: `src/WayfarerMobile/Services/TripDownloadService.cs`
+Downloads provider-independent Trip metadata, Places, Segments/routes, and Areas/polygons. It does not download raster tiles or guarantee offline basemap coverage.
 
-Manages trip downloads with pause/resume support and cache limit enforcement.
-
-### Features
-
-- **Two download modes**: Metadata-only or full offline maps
-- **Pause/Resume**: Downloads can be paused and resumed, even after app restart
-- **Cache limits**: Automatic pause when trip cache limit is reached
-- **Progress tracking**: Real-time progress with tile counts and bytes
-- **Concurrent downloads**: Parallel tile fetching with configurable concurrency
-
-### Download States
-
-| Status | Description |
-|--------|-------------|
-| `pending` | Queued for download |
-| `downloading` | Actively downloading |
-| `complete` | All tiles downloaded |
-| `metadata_only` | Trip data without tiles |
-| `failed` | Download failed |
-| `cancelled` | User cancelled |
-
-### Events
-
-| Event | When Raised |
-|-------|-------------|
-| `ProgressChanged` | Tile download progress update |
-| `CacheWarning` | Cache usage at 80% |
-| `CacheCritical` | Cache usage at 90% |
-| `CacheLimitReached` | Cache full, download paused |
-| `DownloadCompleted` | Download finished successfully |
-| `DownloadFailed` | Download failed with error |
-| `DownloadPaused` | Download paused (user or limit) |
-
-### Pause Reasons
-
-| Reason | Description | Can Resume |
-|--------|-------------|------------|
-| `UserRequest` | User tapped pause | Yes |
-| `UserCancel` | User cancelled | No |
-| `NetworkLost` | Connection lost | Yes |
-| `StorageLow` | Device storage low | Yes |
-| `CacheLimitReached` | Trip cache full | Yes (after freeing space) |
-
-### Key Methods
-
-```csharp
-// Download trip (metadata + optionally tiles)
-Task<DownloadedTripEntity?> DownloadTripAsync(TripSummary trip, CancellationToken ct);
-
-// Pause/Resume/Cancel
-Task<bool> PauseDownloadAsync(int tripId);
-Task<bool> ResumeDownloadAsync(int tripId, CancellationToken ct);
-Task<bool> CancelDownloadAsync(int tripId, bool cleanup);
-
-// Delete operations
-Task DeleteTripAsync(Guid tripServerId);           // Remove everything
-Task<int> DeleteTripTilesAsync(Guid tripServerId); // Remove tiles only
-
-// Cache management
-Task<CacheLimitCheckResult> CheckTripCacheLimitAsync();
-Task<CacheQuotaCheckResult> CheckCacheQuotaForTripAsync(BoundingBox? bbox);
-```
-
-### Tile Download Configuration
-
-| Setting | Value |
-|---------|-------|
-| Zoom levels | 8-17 |
-| Concurrent downloads | 4 tiles |
-| Checkpoint interval | Every 50 tiles |
-| Estimated tile size | 40 KB (urban areas) |
+Trip deletion and synchronization operate on Trip data independently of the interactive live tile cache.
 
 ---
 
@@ -765,7 +692,6 @@ private async Task EnsureInitializedAsync()
     await _database.CreateTableAsync<QueuedLocation>();
     await _database.CreateTableAsync<AppSetting>();
     await _database.CreateTableAsync<DownloadedTripEntity>();
-    await _database.CreateTableAsync<TripTileEntity>();
     await _database.CreateTableAsync<OfflinePlaceEntity>();
     await _database.CreateTableAsync<OfflineSegmentEntity>();
     await _database.CreateTableAsync<OfflineAreaEntity>();
@@ -851,14 +777,7 @@ Manages application settings using MAUI Preferences and SecureStorage.
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `MapOfflineCacheEnabled` | bool | true | Enable tile caching |
-| `MaxLiveCacheSizeMB` | int | 500 | Live tile cache limit |
-| `MaxTripCacheSizeMB` | int | 2000 | Trip tile cache limit |
-| `TileServerUrl` | string | OSM tiles | User-configurable tile server URL |
-| `MaxConcurrentTileDownloads` | int | 2 | Parallel download limit (1-4) |
-| `MinTileRequestDelayMs` | int | 100 | Rate limiting delay (50-5000) |
-| `LiveCachePrefetchRadius` | int | 5 | Prefetch radius (1-10 tiles from center) |
-| `PrefetchDistanceThresholdMeters` | int | 500 | Min distance before prefetching tiles |
+| `MaxLiveCacheSizeMB` | int | 500 | Bounded cache size for tiles requested by interactive map viewing |
 
 #### Navigation Settings
 
@@ -1212,139 +1131,11 @@ public class CachedRoute
 
 ---
 
-## TileDownloadOrchestrator
+## Interactive OSM Map Cache
 
-**Source**: `src/WayfarerMobile/Services/TileDownloadOrchestrator.cs`
+`WayfarerTileSource` requests the canonical OpenStreetMap layer as the renderer pans and zooms. `LiveTileCacheService` serves fresh entries without HTTP, conditionally revalidates expired entries, and keeps the live cache bounded by least-recently-used cleanup. Distinct visible tiles are not globally serialized.
 
-Orchestrates batch tile downloads with parallel execution, pause/resume support, and cache limit enforcement.
-
-### Interface
-
-```csharp
-public interface ITileDownloadOrchestrator
-{
-    Task<TileDownloadResult> DownloadTilesAsync(
-        BoundingBox bbox, int tripId, IProgress<TileProgress>? progress, CancellationToken ct);
-    IEnumerable<TileIndex> CalculateTilesForBoundingBox(BoundingBox bbox, int maxZoom);
-    int GetRecommendedMaxZoom(BoundingBox bbox);
-    string? GetCachedTilePath(int x, int y, int z, int tripId);
-}
-```
-
-### Features
-
-- **Parallel downloads**: Configurable concurrent tile fetching
-- **Pause/Resume**: Downloads can be paused and resumed via stop requests
-- **Cache limits**: Enforces 80%/90%/100% thresholds with warnings
-- **Rate limiting**: Handles 429 responses with retry-after header
-- **Atomic writes**: Uses temp file pattern for integrity
-- **PNG validation**: Validates downloaded tile signatures
-
-### Tile Download Configuration
-
-| Setting | Value |
-|---------|-------|
-| Zoom levels | 8-17 |
-| Concurrent downloads | Configurable (default 4) |
-| Checkpoint interval | Every 50 tiles |
-| Estimated tile size | 40 KB (urban areas) |
-
----
-
-## DownloadStateService
-
-**Source**: `src/WayfarerMobile/Services/DownloadStateService.cs`
-
-Manages download state transitions with validation and events.
-
-### Download States
-
-| Status | Description |
-|--------|-------------|
-| `ServerOnly` | Trip exists on server, not downloaded |
-| `DownloadingMetadata` | Fetching trip metadata |
-| `DownloadingTiles` | Downloading map tiles |
-| `Complete` | All tiles downloaded |
-| `MetadataOnly` | Trip data without tiles |
-| `PausedUser` | User paused download |
-| `PausedNetwork` | Network lost |
-| `PausedStorage` | Device storage low |
-| `PausedCacheLimit` | Trip cache full |
-| `Failed` | Download failed |
-| `Cancelled` | User cancelled |
-
-### Key Methods
-
-```csharp
-Task<bool> TransitionAsync(int tripId, DownloadStatus newStatus);
-bool IsValidTransition(DownloadStatus from, DownloadStatus to);
-Task<List<DownloadedTripEntity>> GetResumableTripsAsync();
-Task RecoverStuckDownloadsAsync();
-```
-
----
-
-## DownloadStateManager
-
-**Source**: `src/WayfarerMobile/Services/DownloadStateManager.cs`
-
-Manages download pause/resume state, progress tracking, and stop requests.
-
-### Features
-
-- **Thread-safe stop management**: Uses ConcurrentDictionary for stop requests
-- **State persistence**: Saves/restores download checkpoints for resumability
-- **Progress tracking**: Tracks tile completion per trip
-
-### Key Methods
-
-```csharp
-void RequestStop(int tripId, StopReason reason);
-bool TryGetStopReason(int tripId, out StopReason reason);
-void ClearStopRequest(int tripId);
-Task SaveStateAsync(int tripId, DownloadCheckpoint checkpoint);
-Task<DownloadCheckpoint?> GetStateAsync(int tripId);
-```
-
----
-
-## DownloadProgressAggregator
-
-**Source**: `src/WayfarerMobile/Services/DownloadProgressAggregator.cs`
-
-Centralizes download progress events from multiple services.
-
-### Events
-
-| Event | When Raised |
-|-------|-------------|
-| `ProgressChanged` | Tile download progress update |
-| `DownloadCompleted` | Download finished successfully |
-| `DownloadFailed` | Download failed with error |
-| `DownloadPaused` | Download paused (user or limit) |
-
----
-
-## CacheLimitEnforcer
-
-**Source**: `src/WayfarerMobile/Services/CacheLimitEnforcer.cs`
-
-Enforces cache size limits for trip tile downloads.
-
-### Thresholds
-
-| Level | Threshold | Action |
-|-------|-----------|--------|
-| Warning | 80% | Notify user |
-| Critical | 90% | Urgent warning |
-| Limit | 100% | Pause download |
-
-### Key Methods
-
-```csharp
-Task<CacheLimitResult> CheckLimitAsync();
-Task<CacheLimitResult> GetCachedLimitCheckAsync(); // 2-second cache
-```
+This cache contains only tiles requested through ordinary interactive rendering. It does not prefetch locations or download Trip or Area basemaps.
 
 ---
 
