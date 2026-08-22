@@ -11,7 +11,6 @@ public class SegmentWaypointOfflineContractTests
     [Fact]
     public async Task ProductionRepositoryCodecAndReconstruction_RoundTripSegmentWaypoints()
     {
-        SQLitePCL.Batteries_V2.Init();
         var path = Path.Combine(Path.GetTempPath(), $"wayfarer-segment-{Guid.NewGuid():N}.db3");
         var connection = new SQLiteAsyncConnection(path);
         var waypoints = new List<TripSegmentWaypoint>
@@ -64,7 +63,6 @@ public class SegmentWaypointOfflineContractTests
     [Fact]
     public async Task VersionSevenMigration_PreservesRowAndAddsEmptyWaypointContract()
     {
-        SQLitePCL.Batteries_V2.Init();
         var path = Path.Combine(Path.GetTempPath(), $"wayfarer-migration-{Guid.NewGuid():N}.db3");
         var connection = new SQLiteAsyncConnection(path);
         try

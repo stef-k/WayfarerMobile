@@ -22,23 +22,23 @@ WayfarerMobile is a .NET MAUI cross-platform mobile application for location tra
 
 | Category | Technology | Version |
 |----------|------------|---------|
-| Framework | .NET MAUI | 10.0 |
-| Runtime | .NET | 10.0 |
-| Maps | Mapsui | 5.0.0 |
-| UI Components | Syncfusion MAUI Toolkit | 1.0.8 |
-| MVVM | CommunityToolkit.Mvvm | 8.4.0 |
-| Database | SQLite-net-pcl | 1.9.172 |
-| QR Scanning | ZXing.Net.MAUI | 0.4.0 |
-| HTTP | Microsoft.Extensions.Http | 10.0.0 |
-| Resilience | Polly | 8.5.2 |
-| Logging | Serilog | 4.2.0 |
+| Framework | .NET MAUI | 10.0.100 |
+| Runtime | .NET | 10.0.11 |
+| Maps | Mapsui | 5.1.0 |
+| UI Components | Syncfusion MAUI Toolkit | 1.0.10 |
+| MVVM | CommunityToolkit.Mvvm | 8.4.2 |
+| Database | sqlite-net-pcl | 1.11.285 |
+| QR Scanning | ZXing.Net.MAUI | 0.10.4 |
+| HTTP | Microsoft.Extensions.Http | 10.0.11 |
+| Resilience | Polly | 8.7.0 |
+| Logging | Serilog | 4.4.0 |
 
 ## Platform Support
 
 | Platform | Minimum Version | Target Version |
 |----------|----------------|----------------|
-| Android | API 24 (Android 7.0) | Latest |
-| iOS | 15.0 | Latest |
+| Android | API 24 (Android 7.0) | API 36 |
+| iOS | 15.0 | Xcode 26.6 SDK line |
 
 > **Note:** Windows and macOS are not supported. The application is designed specifically for mobile devices with GPS capabilities.
 
