@@ -678,10 +678,10 @@
                                  Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
 
                         <!-- Export Buttons -->
-                        <Label Text="Exports pending and retrying locations for recovery or analysis. Exporting does not mark locations delivered. Files include sensitive coordinates, notes, and device information. Timeline import restores local history only; Wayfarer import enables later reconciliation."
+                        <Label Text="Export never clears the queue. Full recovery imports the file into both Timeline (phone history) and Wayfarer (server history). Resume reconciles by GUID; suspension remains safe across restart."
                                FontSize="12"
                                TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-                        <Button Text="Prepare Wayfarer bulk recovery"
+                        <Button Text="Prepare recovery"
                                 Command="{Binding OfflineQueue.PrepareWayfarerBulkRecoveryCommand}"
                                 Style="{StaticResource DarkButton}"
                                 HeightRequest="44" />

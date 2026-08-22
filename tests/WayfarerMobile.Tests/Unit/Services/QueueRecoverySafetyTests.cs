@@ -8,6 +8,7 @@ using WayfarerMobile.Data.Entities;
 using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Interfaces;
 using WayfarerMobile.Services;
+using WayfarerMobile.Tests.Infrastructure.Mocks;
 
 namespace WayfarerMobile.Tests.Unit.Services;
 
@@ -52,7 +53,7 @@ public sealed class QueueRecoverySafetyTests
         await recreated.StartAsync();
         await recreated.TriggerDrainAsync();
         settings.QueueDeliverySuspended.Should().BeTrue();
-        queue.Verify(x => x.ClaimOldestPendingLocationAsync(It.IsAny<int>()), Times.Never);
+        queue.Verify(x => x.ClaimNextPendingLocationWithPriorityAsync(), Times.Never);
         first.Dispose(); recreated.Dispose();
     }
 
@@ -67,10 +68,36 @@ public sealed class QueueRecoverySafetyTests
         await entered.Task;
         var preparation = service.SuspendAndWaitForQuiescenceAsync();
         preparation.IsCompleted.Should().BeFalse();
-        release.SetResult(ApiResult.Success(123));
+        release.SetResult(new ApiResult { Success = true, LocationId = 123 });
         await drain;
         await preparation;
         service.IsDeliverySuspended.Should().BeTrue();
+        service.Dispose();
+    }
+
+    [Fact]
+    public async Task Resume_UsesOrdinaryDrainAndPreservesFailedRowForRetry()
+    {
+        var settings = new MockSettingsService { QueueDeliverySuspended = true };
+        var service = CreateDrain(settings, out var queue, out _, () => Task.FromResult(ApiResult.Fail("temporary", 503, true)));
+        await service.StartAsync();
+        await service.ResumeAndReconcileAsync();
+        service.Stop();
+        settings.QueueDeliverySuspended.Should().BeFalse();
+        queue.Verify(x => x.ResetLocationToPendingAsync(7), Times.AtLeastOnce);
+        queue.Verify(x => x.ClearAllQueueAsync(), Times.Never);
+        service.Dispose();
+    }
+
+    [Fact]
+    public async Task OrdinaryDrain_ConfirmsExistingServerIdentityAndMarksSynced()
+    {
+        var service = CreateDrain(new MockSettingsService(), out var queue, out _,
+            () => Task.FromResult(new ApiResult { Success = true, LocationId = 321 }));
+        await service.StartAsync();
+        await service.TriggerDrainAsync();
+        queue.Verify(x => x.MarkServerConfirmedAsync(7, 321), Times.Once);
+        queue.Verify(x => x.MarkLocationSyncedAsync(7), Times.Once);
         service.Dispose();
     }
 
@@ -79,10 +106,10 @@ public sealed class QueueRecoverySafetyTests
     {
         queue = new Mock<ILocationQueueRepository>();
         queue.Setup(x => x.ResetStuckLocationsAsync()).ReturnsAsync(0);
-        queue.Setup(x => x.ClaimOldestPendingLocationAsync(It.IsAny<int>())).ReturnsAsync(new QueuedLocation
+        queue.Setup(x => x.ClaimNextPendingLocationWithPriorityAsync()).ReturnsAsync(new QueuedLocation
             { Id = 7, Timestamp = DateTime.UtcNow, Latitude = 1, Longitude = 2, IsUserInvoked = true, IdempotencyKey = Guid.NewGuid().ToString("D") });
         api = new Mock<IApiClient>(); api.SetupGet(x => x.IsConfigured).Returns(true);
-        if (submit != null) api.Setup(x => x.CheckInAsync(It.IsAny<LocationData>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<string?>())).Returns(submit);
+        if (submit != null) api.Setup(x => x.CheckInAsync(It.IsAny<LocationLogRequest>(), It.IsAny<string?>(), It.IsAny<CancellationToken>())).Returns(submit);
         var connectivity = new Mock<IConnectivity>(); connectivity.SetupGet(x => x.NetworkAccess).Returns(NetworkAccess.Internet);
         return new QueueDrainService(api.Object, queue.Object, settings, connectivity.Object, NullLogger<QueueDrainService>.Instance);
     }

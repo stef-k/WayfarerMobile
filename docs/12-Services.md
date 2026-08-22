@@ -289,6 +289,8 @@ public class MainViewModel : ObservableObject
 
 ## QueueDrainService
 
+Recovery suspension is persisted and enforced at the shared claim boundary used by every drain trigger. `SuspendAndWaitForQuiescenceAsync` closes that gate and waits for active delivery; only then is export ready. `ResumeAndReconcileAsync` clears suspension and uses ordinary drain. A matching per-user GUID confirms the existing Wayfarer row; a missing record uploads normally. Export is non-destructive, Timeline import creates history without server ID/queue linkage, legacy keyless files retain timestamp/coordinate compatibility, and direct queue restoration is unsupported.
+
 **Source**: `src/WayfarerMobile/Services/QueueDrainService.cs`
 
 Manages synchronization of queued locations to the server using a continuous drain loop.

@@ -69,13 +69,17 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
     [ObservableProperty] private bool _showStorageWarning;
     [ObservableProperty] private string _storageWarningText = "";
     [ObservableProperty] private bool _isDeliverySuspended;
+    [ObservableProperty] private bool _isPreparingRecovery;
 
     /// <summary>Gets the current recovery delivery status.</summary>
-    public string DeliveryStatus => IsDeliverySuspended
-        ? "Delivery is suspended; location capture continues."
+    public string DeliveryStatus => IsPreparingRecovery
+        ? "Waiting for active delivery to finish…"
+        : IsDeliverySuspended
+        ? "Delivery suspended; export ready and restart-safe."
         : "Delivery is active.";
 
     partial void OnIsDeliverySuspendedChanged(bool value) => OnPropertyChanged(nameof(DeliveryStatus));
+    partial void OnIsPreparingRecoveryChanged(bool value) => OnPropertyChanged(nameof(DeliveryStatus));
 
     #endregion
 
@@ -280,6 +284,7 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
     {
         try
         {
+            IsPreparingRecovery = true;
             await _queueDrainService.SuspendAndWaitForQuiescenceAsync();
             IsDeliverySuspended = true;
             await _toastService.ShowSuccessAsync("Delivery suspended. Export a CSV or GeoJSON recovery copy.");
@@ -289,6 +294,10 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
             _logger.LogError(ex, "Failed to prepare bulk recovery");
             IsDeliverySuspended = _settingsService.QueueDeliverySuspended;
             await _toastService.ShowErrorAsync("Recovery preparation failed; queue data was preserved");
+        }
+        finally
+        {
+            IsPreparingRecovery = false;
         }
     }
 

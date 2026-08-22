@@ -60,6 +60,11 @@
     <Compile Include="..\..\src\WayfarerMobile\Services\QueueDrainService.cs" Link="Production\QueueDrainService.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Data\Repositories\ILocationQueueRepository.cs" Link="Production\ILocationQueueRepository.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Interfaces\IActivitySyncService.cs" Link="Production\IActivitySyncService.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Data\Entities\ActivityType.cs" Link="Production\ActivityType.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Services\LocationSyncCallbacks.cs" Link="Production\LocationSyncCallbacks.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Helpers\NetworkLoggingExtensions.cs" Link="Production\NetworkLoggingExtensions.cs" />
+    <Compile Remove="Infrastructure\Entities\QueuedLocation.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Data\Entities\QueuedLocation.cs" Link="Production\QueuedLocation.cs" />
   </ItemGroup>
 
   <PropertyGroup>

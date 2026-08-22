@@ -1,5 +1,24 @@
 # Architecture
 
+## Queue recovery ownership
+
+```text
+Capture
+  ├─ Queue: delivery state + idempotency GUID
+  └─ Timeline: local history, best-effort linkage
+
+Recovery export
+  ├─ Mobile Timeline import → local history only
+  └─ Wayfarer bulk import → server history
+
+Resume
+  └─ Normal drain + same GUID
+       ├─ already imported → confirm existing server row
+       └─ missing from import → upload normally
+```
+
+The Queue, Timeline, and server own delivery, local history, and confirmed history respectively. Suspension is persisted and checked at the common claim boundary; preparation waits for active delivery to become quiescent. Per-user GUID identity makes import and drain converge, while legacy keyless records retain timestamp/coordinate compatibility. Partial batches converge independently. Counts/proximity cannot authorize deletion, and direct queue restoration is excluded because history import must not manufacture delivery state.
+
 This document describes the system architecture of WayfarerMobile, including project structure, design patterns, and platform-specific implementations.
 
 ## Solution Structure
