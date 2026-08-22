@@ -59,10 +59,10 @@
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.11" />
 
 		<!-- MVVM -->
-		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
 
 		<!-- UI Components -->
-		<PackageReference Include="Syncfusion.Maui.Toolkit" Version="1.0.8" />
+		<PackageReference Include="Syncfusion.Maui.Toolkit" Version="1.0.10" />
 
 		<!-- Maps -->
 		<PackageReference Include="Mapsui.Maui" Version="5.1.0" />
