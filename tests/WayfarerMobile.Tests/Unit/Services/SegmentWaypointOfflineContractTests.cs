@@ -30,6 +30,14 @@ public class SegmentWaypointOfflineContractTests
             [
                 new OfflineSegmentEntity
                 {
+                    ServerId = Guid.NewGuid(), OriginId = Guid.NewGuid(), DestinationId = Guid.NewGuid(),
+                    Geometry = "legacy geometry", WaypointsJson = "[]"
+                }
+            ]);
+            await repository.SaveOfflineSegmentsAsync(42,
+            [
+                new OfflineSegmentEntity
+                {
                     ServerId = segmentId, OriginId = Guid.NewGuid(), DestinationId = Guid.NewGuid(),
                     Geometry = geometry, WaypointsJson = SegmentWaypointJson.Serialize(waypoints), HasCustomRoute = true
                 }

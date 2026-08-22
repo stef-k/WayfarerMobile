@@ -327,8 +327,17 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
     /// </summary>
     public bool IsTripSheetShowingSegment => SelectedTripSegment != null;
 
-    public IReadOnlyList<string> SelectedTripSegmentTrail =>
-        SelectedTripSegment?.AnchorTrail ?? Array.Empty<string>();
+    public IReadOnlyList<string> SelectedTripSegmentTrail
+    {
+        get
+        {
+            var segment = SelectedTripSegment;
+            if (segment == null || !segment.HasWaypoints) return Array.Empty<string>();
+            if (segment.AnchorTrail.Count == 0 && LoadedTrip != null)
+                segment.AnchorTrail = CreateSegmentTrail(segment, LoadedTrip.AllPlaces);
+            return segment.AnchorTrail;
+        }
+    }
 
     /// <summary>
     /// Gets whether the trip sheet is showing any detail view (not overview).
@@ -592,13 +601,17 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
                 segment.AnchorTrail = Array.Empty<string>();
                 continue;
             }
-            var parsed = TripSegmentGeometryParser.Parse(segment.Geometry);
-            IReadOnlyList<SegmentCoordinate>? geometry = parsed.IsSuccess
-                ? parsed.Coordinates.Select(point => new SegmentCoordinate(point.Latitude, point.Longitude)).ToList()
-                : parsed.Failure == SegmentGeometryFailure.Empty ? null : Array.Empty<SegmentCoordinate>();
-            var resolution = SegmentAnchorResolver.Resolve(segment, trip.AllPlaces, geometry);
-            segment.AnchorTrail = resolution.IsValid ? resolution.TextTrail : ["Route details unavailable"];
+            segment.AnchorTrail = CreateSegmentTrail(segment, trip.AllPlaces);
         }
+    }
+
+    private static IReadOnlyList<string> CreateSegmentTrail(TripSegment segment, IReadOnlyCollection<TripPlace> places)
+    {
+        var parsed = TripSegmentGeometryParser.Parse(segment.Geometry);
+        IReadOnlyList<SegmentCoordinate>? geometry = parsed.IsSuccess
+            ? parsed.Coordinates.Select(point => new SegmentCoordinate(point.Latitude, point.Longitude)).ToList()
+            : parsed.Failure == SegmentGeometryFailure.Empty ? null : Array.Empty<SegmentCoordinate>();
+        return SegmentPresentationProjector.CreateTrail(segment, places, geometry);
     }
 
     /// <summary>

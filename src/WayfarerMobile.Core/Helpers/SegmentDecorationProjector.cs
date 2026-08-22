@@ -20,6 +20,25 @@ public static class SegmentDecorationProjector
             .OrderBy(badge => badge.SemanticPosition)
             .ToList();
     }
+
+    public static IReadOnlyList<SegmentBadgeProjection> RetainVisibleBadges(
+        IReadOnlyList<SegmentBadgeProjection> badges,
+        Func<SegmentBadgeProjection, (double X, double Y, double Width, double Height)> measureBounds)
+    {
+        var retained = new List<(SegmentBadgeProjection Badge, double Left, double Top, double Right, double Bottom)>();
+        foreach (var badge in badges.OrderBy(item => item.SemanticPosition))
+        {
+            var bounds = measureBounds(badge);
+            var left = bounds.X - (bounds.Width / 2);
+            var top = bounds.Y - (bounds.Height / 2);
+            var right = left + bounds.Width;
+            var bottom = top + bounds.Height;
+            if (retained.Any(item => left < item.Right && right > item.Left && top < item.Bottom && bottom > item.Top))
+                continue;
+            retained.Add((badge, left, top, right, bottom));
+        }
+        return retained.Select(item => item.Badge).ToList();
+    }
 }
 
 /// <summary>Places bounded decorative direction cues along projected route distance.</summary>
@@ -42,11 +61,13 @@ public static class SegmentChevronPlacer
         if (usable < MinimumSpacing) return Array.Empty<SegmentChevronProjection>();
 
         var count = Math.Min(MaximumCount, Math.Max(1, (int)Math.Floor(usable / MinimumSpacing)));
-        var spacing = usable / (count + 1);
+        var spacing = count == 1 ? 0 : usable / (count - 1);
         var results = new List<SegmentChevronProjection>(count);
         for (var placement = 1; placement <= count; placement++)
         {
-            var target = EndpointClearance + placement * spacing;
+            var target = count == 1
+                ? EndpointClearance + (usable / 2)
+                : EndpointClearance + ((placement - 1) * spacing);
             var segmentIndex = 1;
             while (segmentIndex < cumulative.Length && cumulative[segmentIndex] < target) segmentIndex++;
             if (segmentIndex >= cumulative.Length) break;
@@ -55,10 +76,14 @@ public static class SegmentChevronPlacer
             var length = cumulative[segmentIndex] - cumulative[segmentIndex - 1];
             if (length < 4) continue;
             var ratio = (target - cumulative[segmentIndex - 1]) / length;
-            results.Add(new(
+            var candidate = new SegmentChevronProjection(
                 start.X + ((end.X - start.X) * ratio),
                 start.Y + ((end.Y - start.Y) * ratio),
-                Math.Atan2(end.Y - start.Y, end.X - start.X) * 180 / Math.PI));
+                Math.Atan2(end.Y - start.Y, end.X - start.X) * 180 / Math.PI);
+            if (results.Count == 0 || Distance(
+                    new ProjectedRoutePoint(results[^1].X, results[^1].Y),
+                    new ProjectedRoutePoint(candidate.X, candidate.Y)) >= MinimumSpacing)
+                results.Add(candidate);
         }
         return results;
     }

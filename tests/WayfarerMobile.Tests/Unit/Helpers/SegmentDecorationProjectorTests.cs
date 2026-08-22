@@ -66,4 +66,15 @@ public class SegmentDecorationProjectorTests
                 Math.Sqrt(Math.Pow(right.X - left.X, 2) + Math.Pow(right.Y - left.Y, 2)))
             .Should().OnlyContain(distance => distance + 0.000001 >= SegmentChevronPlacer.MinimumSpacing);
     }
+
+    [Fact]
+    public void ChevronPlacement_FoldedRouteSuppressesScreenSpaceCollision()
+    {
+        var chevrons = SegmentChevronPlacer.Place(
+            [new(0, 0), new(100, 0), new(100, 1), new(0, 1)]);
+
+        chevrons.Zip(chevrons.Skip(1), (left, right) =>
+                Math.Sqrt(Math.Pow(right.X - left.X, 2) + Math.Pow(right.Y - left.Y, 2)))
+            .Should().OnlyContain(distance => distance + 0.000001 >= SegmentChevronPlacer.MinimumSpacing);
+    }
 }
