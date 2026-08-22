@@ -16,6 +16,7 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
     private readonly ISettingsService _settingsService;
     private readonly ILocationQueueRepository _repository;
     private readonly IQueueExportService _exportService;
+    private readonly QueueDrainService _queueDrainService;
     private readonly AppDiagnosticService _diagnosticService;
     private readonly IDialogService _dialogService;
     private readonly IToastService _toastService;
@@ -28,6 +29,7 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
         ISettingsService settingsService,
         ILocationQueueRepository repository,
         IQueueExportService exportService,
+        QueueDrainService queueDrainService,
         AppDiagnosticService diagnosticService,
         IDialogService dialogService,
         IToastService toastService,
@@ -36,6 +38,7 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
         _settingsService = settingsService;
         _repository = repository;
         _exportService = exportService;
+        _queueDrainService = queueDrainService;
         _diagnosticService = diagnosticService;
         _dialogService = dialogService;
         _toastService = toastService;
@@ -43,6 +46,7 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
 
         _queueLimitText = _settingsService.QueueLimitMaxLocations.ToString();
         _queueLimit = _settingsService.QueueLimitMaxLocations;
+        _isDeliverySuspended = _settingsService.QueueDeliverySuspended;
     }
 
     #region Status Properties
@@ -64,6 +68,14 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
     [ObservableProperty] private bool _isRefreshing;
     [ObservableProperty] private bool _showStorageWarning;
     [ObservableProperty] private string _storageWarningText = "";
+    [ObservableProperty] private bool _isDeliverySuspended;
+
+    /// <summary>Gets the current recovery delivery status.</summary>
+    public string DeliveryStatus => IsDeliverySuspended
+        ? "Delivery is suspended; location capture continues."
+        : "Delivery is active.";
+
+    partial void OnIsDeliverySuspendedChanged(bool value) => OnPropertyChanged(nameof(DeliveryStatus));
 
     #endregion
 
@@ -222,7 +234,7 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
     {
         try
         {
-            var count = await _repository.GetTotalCountAsync();
+            var count = (await _repository.GetAllQueuedLocationsForExportAsync()).Count;
             if (count == 0)
             {
                 await _toastService.ShowAsync("Queue is empty - nothing to export");
@@ -246,7 +258,7 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
     {
         try
         {
-            var count = await _repository.GetTotalCountAsync();
+            var count = (await _repository.GetAllQueuedLocationsForExportAsync()).Count;
             if (count == 0)
             {
                 await _toastService.ShowAsync("Queue is empty - nothing to export");
@@ -259,6 +271,42 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
         {
             _logger.LogError(ex, "GeoJSON export failed");
             await _toastService.ShowErrorAsync("Export failed");
+        }
+    }
+
+    /// <summary>Suspends delivery and waits for a safe recovery snapshot boundary.</summary>
+    [RelayCommand]
+    private async Task PrepareWayfarerBulkRecoveryAsync()
+    {
+        try
+        {
+            await _queueDrainService.SuspendAndWaitForQuiescenceAsync();
+            IsDeliverySuspended = true;
+            await _toastService.ShowSuccessAsync("Delivery suspended. Export a CSV or GeoJSON recovery copy.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to prepare bulk recovery");
+            IsDeliverySuspended = _settingsService.QueueDeliverySuspended;
+            await _toastService.ShowErrorAsync("Recovery preparation failed; queue data was preserved");
+        }
+    }
+
+    /// <summary>Clears suspension and reconciles through ordinary delivery.</summary>
+    [RelayCommand]
+    private async Task ResumeAndReconcileAsync()
+    {
+        try
+        {
+            await _queueDrainService.ResumeAndReconcileAsync();
+            IsDeliverySuspended = false;
+            await _toastService.ShowSuccessAsync("Delivery resumed; reconciliation is running");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to resume queue delivery");
+            IsDeliverySuspended = _settingsService.QueueDeliverySuspended;
+            await _toastService.ShowErrorAsync("Resume failed; queue data was preserved");
         }
     }
 

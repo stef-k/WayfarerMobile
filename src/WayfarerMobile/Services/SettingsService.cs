@@ -30,6 +30,7 @@ public class SettingsService : ISettingsService
     private const string KeyLocationDistanceThreshold = "location_distance_threshold";
     private const string KeyLocationAccuracyThreshold = "location_accuracy_threshold";
     private const string KeyQueueLimitMaxLocations = "queue_limit_max_locations";
+    private const string KeyQueueDeliverySuspended = "queue_delivery_suspended";
     private const string KeyLastSyncTime = "last_sync_time";
     private const string KeyThemePreference = "theme_preference";
     private const string KeyLanguagePreference = "language_preference";
@@ -290,6 +291,13 @@ public class SettingsService : ISettingsService
     {
         get => Preferences.Get(KeyQueueLimitMaxLocations, QueueLimitDefault);
         set => Preferences.Set(KeyQueueLimitMaxLocations, Math.Clamp(value, QueueLimitMin, QueueLimitMax));
+    }
+
+    /// <inheritdoc />
+    public bool QueueDeliverySuspended
+    {
+        get => Preferences.Get(KeyQueueDeliverySuspended, false);
+        set => Preferences.Set(KeyQueueDeliverySuspended, value);
     }
 
     /// <summary>

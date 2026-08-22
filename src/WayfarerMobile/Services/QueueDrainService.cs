@@ -300,6 +300,25 @@ public sealed class QueueDrainService : IDisposable
     /// </remarks>
     public bool IsDrainLoopRunning => Volatile.Read(ref _drainLoopRunning) != 0;
 
+    /// <summary>Gets whether queue delivery is persistently suspended.</summary>
+    public bool IsDeliverySuspended => _settings.QueueDeliverySuspended;
+
+    /// <summary>Suspends future claims and waits for active delivery to finish.</summary>
+    public async Task SuspendAndWaitForQuiescenceAsync(CancellationToken cancellationToken = default)
+    {
+        _settings.QueueDeliverySuspended = true;
+        await _drainLock.WaitAsync(cancellationToken);
+        _drainLock.Release();
+    }
+
+    /// <summary>Resumes delivery through the ordinary drain loop.</summary>
+    public async Task ResumeAndReconcileAsync()
+    {
+        _settings.QueueDeliverySuspended = false;
+        await TriggerDrainAsync();
+        StartDrainLoop();
+    }
+
     /// <summary>
     /// Triggers an immediate drain cycle outside the normal timer schedule.
     /// Used by AppLifecycleService to flush pending locations on suspend/resume.
@@ -528,6 +547,9 @@ public sealed class QueueDrainService : IDisposable
         bool verboseLogging)
     {
         // Early exits
+        if (_settings.QueueDeliverySuspended)
+            return DrainAttemptResult.Skipped;
+
         if (!_isOnline)
         {
             if (verboseLogging)
@@ -578,6 +600,9 @@ public sealed class QueueDrainService : IDisposable
 
         try
         {
+            if (_settings.QueueDeliverySuspended)
+                return DrainAttemptResult.Skipped;
+
             // Atomically claim the next pending location, prioritizing user-invoked.
             // User-invoked locations (manual check-ins) sync before background locations.
             location = await _locationQueue.ClaimNextPendingLocationWithPriorityAsync();
@@ -592,8 +617,9 @@ public sealed class QueueDrainService : IDisposable
                 "QueueDrain: Claimed location {Id} from {Timestamp}",
                 location.Id, location.Timestamp);
 
-            // Note: Location is already marked as Syncing by ClaimNextPendingLocationWithPriorityAsync
-            // Rate limit is recorded in ProcessLocationAsync AFTER client-side filter passes
+            // Keep the gate through processing so recovery preparation can await quiescence.
+            await ProcessLocationAsync(location, cancellationToken);
+            return DrainAttemptResult.Processed;
         }
         catch (SQLiteException ex)
         {
@@ -602,27 +628,14 @@ public sealed class QueueDrainService : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error claiming pending location from queue");
+            _logger.LogError(ex, "Unexpected error claiming or processing pending location");
+            if (location != null)
+                await TryResetLocationAsync(location.Id, "Unhandled processing exception");
             return DrainAttemptResult.Failed;
         }
         finally
         {
             _drainLock.Release();
-        }
-
-        // Process location outside lock (network call)
-        try
-        {
-            await ProcessLocationAsync(location, cancellationToken);
-            return DrainAttemptResult.Processed;
-        }
-        catch (Exception ex)
-        {
-            // ProcessLocationAsync handles most exceptions internally,
-            // but if something unexpected escapes, ensure we don't leave location stuck
-            _logger.LogError(ex, "Unhandled exception processing location {Id}", location.Id);
-            await TryResetLocationAsync(location.Id, "Unhandled processing exception");
-            return DrainAttemptResult.Failed;
         }
     }
 
@@ -1040,6 +1053,9 @@ public sealed class QueueDrainService : IDisposable
 
         while (!_isDisposed && _isStarted)
         {
+            if (_settings.QueueDeliverySuspended)
+                break;
+
             try
             {
                 // Check 1: Connectivity

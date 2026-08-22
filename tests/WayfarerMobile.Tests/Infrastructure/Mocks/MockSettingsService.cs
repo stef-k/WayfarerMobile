@@ -8,6 +8,7 @@ namespace WayfarerMobile.Tests.Infrastructure.Mocks;
 /// </summary>
 public class MockSettingsService : ISettingsService
 {
+    public bool QueueDeliverySuspended { get; set; }
     // Reference point state for atomic operations
     private readonly object _syncLock = new();
 
