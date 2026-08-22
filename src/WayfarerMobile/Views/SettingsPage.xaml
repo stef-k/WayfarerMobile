@@ -683,6 +683,7 @@
                                TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                         <Button Text="Prepare recovery"
                                 Command="{Binding OfflineQueue.PrepareWayfarerBulkRecoveryCommand}"
+                                IsEnabled="{Binding OfflineQueue.IsPreparingRecovery, Converter={StaticResource InvertedBoolConverter}}"
                                 Style="{StaticResource DarkButton}"
                                 HeightRequest="44" />
                         <Label Text="{Binding OfflineQueue.DeliveryStatus}"
@@ -692,16 +693,19 @@
                             <Button Grid.Column="0"
                                     Text="Export CSV"
                                     Command="{Binding OfflineQueue.ExportCsvCommand}"
+                                    IsEnabled="{Binding OfflineQueue.IsPreparingRecovery, Converter={StaticResource InvertedBoolConverter}}"
                                     Style="{StaticResource DarkButton}"
                                     HeightRequest="44" />
                             <Button Grid.Column="1"
                                     Text="Export GeoJSON"
                                     Command="{Binding OfflineQueue.ExportGeoJsonCommand}"
+                                    IsEnabled="{Binding OfflineQueue.IsPreparingRecovery, Converter={StaticResource InvertedBoolConverter}}"
                                     Style="{StaticResource DarkButton}"
                                     HeightRequest="44" />
                         </Grid>
                         <Button Text="Resume and reconcile"
                                 Command="{Binding OfflineQueue.ResumeAndReconcileCommand}"
+                                IsEnabled="{Binding OfflineQueue.IsPreparingRecovery, Converter={StaticResource InvertedBoolConverter}}"
                                 Style="{StaticResource DarkButton}"
                                 HeightRequest="44" />
 

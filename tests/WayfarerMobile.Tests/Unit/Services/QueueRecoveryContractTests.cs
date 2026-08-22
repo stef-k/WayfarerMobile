@@ -34,6 +34,22 @@ public class QueueRecoveryContractTests
         Assert.Contains("_recoveryExportCoordinator.ExportAndShareAsync(format)", source, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void RecoveryCommands_UseSharedCoordinationAndDisableCompetingUiWork()
+    {
+        var drainSource = File.ReadAllText(FindRepositoryFile(
+            "src", "WayfarerMobile", "Services", "QueueDrainService.cs"));
+        var exportSource = File.ReadAllText(FindRepositoryFile(
+            "src", "WayfarerMobile", "Services", "RecoveryExportCoordinator.cs"));
+        var xaml = File.ReadAllText(FindRepositoryFile(
+            "src", "WayfarerMobile", "Views", "SettingsPage.xaml"));
+
+        Assert.Contains("_recoveryOperations.AcquireAsync(cancellationToken)", drainSource, StringComparison.Ordinal);
+        Assert.Contains("_recoveryOperations.AcquireAsync()", drainSource, StringComparison.Ordinal);
+        Assert.Contains("_recoveryOperations.AcquireAsync(cancellationToken)", exportSource, StringComparison.Ordinal);
+        Assert.Equal(4, xaml.Split("OfflineQueue.IsPreparingRecovery", StringSplitOptions.None).Length - 1);
+    }
+
     private static string FindRepositoryFile(params string[] parts)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

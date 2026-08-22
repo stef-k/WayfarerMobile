@@ -74,7 +74,7 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
 
     /// <summary>Gets the current recovery delivery status.</summary>
     public string DeliveryStatus => IsPreparingRecovery
-        ? "Waiting for active delivery to finish…"
+        ? "Recovery operation in progress…"
         : IsDeliverySuspended
         ? "Delivery suspended; export ready and restart-safe."
         : "Delivery is active.";
@@ -308,6 +308,7 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
     {
         try
         {
+            IsPreparingRecovery = true;
             await _queueDrainService.ResumeAndReconcileAsync();
             IsDeliverySuspended = false;
             await _toastService.ShowSuccessAsync("Delivery resumed; reconciliation is running");
@@ -317,6 +318,10 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
             _logger.LogError(ex, "Failed to resume queue delivery");
             IsDeliverySuspended = _settingsService.QueueDeliverySuspended;
             await _toastService.ShowErrorAsync("Resume failed; queue data was preserved");
+        }
+        finally
+        {
+            IsPreparingRecovery = false;
         }
     }
 
