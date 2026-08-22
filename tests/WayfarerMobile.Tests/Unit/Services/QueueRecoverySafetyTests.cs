@@ -15,6 +15,69 @@ namespace WayfarerMobile.Tests.Unit.Services;
 public sealed class QueueRecoverySafetyTests
 {
     [Fact]
+    public async Task RecoveryExport_BlocksResumeUntilSuspensionProtectedSnapshotCompletes()
+    {
+        var exporterEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseExporter = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var settings = new MockSettingsService();
+        var queued = new QueuedLocation
+        {
+            Id = 8,
+            Timestamp = new DateTime(2026, 8, 22, 10, 11, 12, DateTimeKind.Utc),
+            Latitude = 37.98,
+            Longitude = 23.72,
+            IsUserInvoked = true,
+            SyncStatus = SyncStatus.Pending,
+            IdempotencyKey = Guid.NewGuid().ToString("D")
+        };
+        var queue = new Mock<ILocationQueueRepository>();
+        queue.Setup(x => x.ResetStuckLocationsAsync()).ReturnsAsync(0);
+        queue.Setup(x => x.ClaimNextPendingLocationWithPriorityAsync()).ReturnsAsync(() =>
+        {
+            queued.SyncStatus = SyncStatus.Syncing;
+            return queued;
+        });
+        queue.Setup(x => x.GetAllQueuedLocationsForExportAsync()).ReturnsAsync(() =>
+            queued.SyncStatus == SyncStatus.Pending ? [queued] : []);
+        var api = new Mock<IApiClient>();
+        api.SetupGet(x => x.IsConfigured).Returns(true);
+        var connectivity = new Mock<IConnectivity>();
+        connectivity.SetupGet(x => x.NetworkAccess).Returns(NetworkAccess.Internet);
+        var recoveryOperations = new QueueRecoveryOperationCoordinator();
+        using var drainService = new QueueDrainService(
+            api.Object, queue.Object, settings, connectivity.Object, NullLogger<QueueDrainService>.Instance,
+            recoveryOperations);
+        await drainService.StartAsync();
+
+        IReadOnlyList<QueuedLocation>? exportedRows = null;
+        var exportService = new Mock<IQueueExportService>();
+        exportService.Setup(x => x.ShareExportAsync("csv")).Returns(async () =>
+        {
+            exporterEntered.TrySetResult();
+            await releaseExporter.Task;
+            exportedRows = await queue.Object.GetAllQueuedLocationsForExportAsync();
+        });
+        var coordinator = new RecoveryExportCoordinator(drainService, exportService.Object, queue.Object, recoveryOperations);
+
+        var export = coordinator.ExportAndShareAsync("csv");
+        await exporterEntered.Task;
+        var resume = drainService.ResumeAndReconcileAsync();
+
+        resume.IsCompleted.Should().BeFalse();
+        settings.QueueDeliverySuspended.Should().BeTrue();
+        queue.Verify(x => x.ClaimNextPendingLocationWithPriorityAsync(), Times.Never);
+
+        releaseExporter.SetResult();
+        (await export).Should().BeTrue();
+        exportedRows.Should().ContainSingle(x => x.Id == queued.Id);
+        queued.SyncStatus.Should().Be(SyncStatus.Pending);
+
+        await resume;
+        settings.QueueDeliverySuspended.Should().BeFalse();
+        queue.Verify(x => x.ClaimNextPendingLocationWithPriorityAsync(), Times.AtLeastOnce);
+    }
+
+    [Fact]
     public async Task DirectRecoveryExport_WaitsForClaimAndExportsItsPostDeliveryState()
     {
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
