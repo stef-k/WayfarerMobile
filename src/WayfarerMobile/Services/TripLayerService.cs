@@ -1,11 +1,13 @@
 using System.Collections.Concurrent;
 using Mapsui;
+using Mapsui.Extensions;
 using Mapsui.Layers;
 using Mapsui.Nts;
 using Mapsui.Projections;
 using Mapsui.Styles;
 using Microsoft.Extensions.Logging;
 using NetTopologySuite.Geometries;
+using SkiaSharp;
 using WayfarerMobile.Core.Helpers;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
@@ -32,6 +34,8 @@ namespace WayfarerMobile.Services;
 /// </remarks>
 public class TripLayerService : ITripLayerService
 {
+    private const double SegmentBadgeFontSize = 16;
+    private const double SegmentBadgeRendererEnvelope = 6;
     private readonly ILogger<TripLayerService> _logger;
 
     /// <summary>
@@ -61,6 +65,8 @@ public class TripLayerService : ITripLayerService
 
     /// <inheritdoc />
     public string PlaceSelectionLayerName => "PlaceSelection";
+    public string SegmentBadgesLayerName => "SelectedSegmentBadges";
+    public string SegmentChevronsLayerName => "SelectedSegmentChevrons";
 
     /// <inheritdoc />
     public async Task<List<MPoint>> UpdateTripPlacesAsync(WritableLayer layer, IEnumerable<TripPlace> places)
@@ -267,6 +273,111 @@ public class TripLayerService : ITripLayerService
         layer.Clear();
         layer.DataHasChanged();
     }
+
+    /// <inheritdoc />
+    public void UpdateSelectedSegmentDecorations(
+        WritableLayer badgeLayer,
+        WritableLayer chevronLayer,
+        TripSegment? segment,
+        IReadOnlyCollection<TripPlace> places,
+        Viewport viewport,
+        bool navigationActive)
+    {
+        badgeLayer.Clear();
+        chevronLayer.Clear();
+        if (segment == null || navigationActive)
+        {
+            badgeLayer.DataHasChanged();
+            chevronLayer.DataHasChanged();
+            return;
+        }
+
+        var parsed = TripSegmentGeometryParser.Parse(segment.Geometry);
+        if (!parsed.IsSuccess && parsed.Failure != SegmentGeometryFailure.Empty)
+        {
+            badgeLayer.DataHasChanged();
+            chevronLayer.DataHasChanged();
+            return;
+        }
+        var geometry = parsed.IsSuccess
+            ? parsed.Coordinates.Select(point => new SegmentCoordinate(point.Latitude, point.Longitude)).ToList()
+            : null;
+        var resolution = SegmentAnchorResolver.Resolve(segment, places, geometry);
+        if (!resolution.IsValid)
+        {
+            _logger.LogWarning("Skipping Segment decorations for {SegmentId}: {Failure}", segment.Id, resolution.Failure);
+            badgeLayer.DataHasChanged();
+            chevronLayer.DataHasChanged();
+            return;
+        }
+
+        var badges = SegmentDecorationProjector.CreateBadges(resolution);
+        var screenPositions = badges.ToDictionary(badge => badge.PlaceId, badge =>
+        {
+            var world = SphericalMercator.FromLonLat(badge.Longitude, badge.Latitude);
+            var screen = viewport.WorldToScreen(world.x, world.y);
+            return (X: screen.X, Y: screen.Y - 34);
+        });
+        using var badgeFont = new SKFont(SKTypeface.Default, (float)SegmentBadgeFontSize);
+        using var badgePaint = new SKPaint();
+        var visibleBadges = SegmentDecorationProjector.RetainVisibleBadges(badges, badge =>
+        {
+            var screen = screenPositions[badge.PlaceId];
+            badgeFont.MeasureText(badge.Label, out var textBounds, badgePaint);
+            return (
+                screen.X,
+                screen.Y,
+                textBounds.Width + SegmentBadgeRendererEnvelope,
+                textBounds.Height + SegmentBadgeRendererEnvelope);
+        });
+        foreach (var badge in visibleBadges)
+        {
+            var (x, y) = SphericalMercator.FromLonLat(badge.Longitude, badge.Latitude);
+            var feature = new GeometryFeature(new Point(x, y))
+            {
+                Styles = [CreateSegmentBadgeStyle(badge.Label)]
+            };
+            badgeLayer.Add(feature);
+        }
+
+        var projected = resolution.Geometry.Select(point =>
+        {
+            var world = SphericalMercator.FromLonLat(point.Longitude, point.Latitude);
+            var screen = viewport.WorldToScreen(world.x, world.y);
+            return new ProjectedRoutePoint(screen.X, screen.Y);
+        }).ToList();
+        foreach (var chevron in SegmentChevronPlacer.Place(projected))
+        {
+            var world = viewport.ScreenToWorld(chevron.X, chevron.Y);
+            chevronLayer.Add(new GeometryFeature(new Point(world.X, world.Y))
+            {
+                Styles = [new SymbolStyle
+                {
+                    SymbolType = SymbolType.Triangle,
+                    SymbolScale = 0.45,
+                    SymbolRotation = chevron.AngleDegrees + 90,
+                    RotateWithMap = false,
+                    Fill = new Brush(Color.White),
+                    Outline = new Pen(Color.Black, 2)
+                }]
+            });
+        }
+        badgeLayer.DataHasChanged();
+        chevronLayer.DataHasChanged();
+    }
+
+    private static LabelStyle CreateSegmentBadgeStyle(string label) => new()
+    {
+        Text = label,
+        Font = new Mapsui.Styles.Font { Size = SegmentBadgeFontSize },
+        ForeColor = Color.White,
+        BackColor = new Brush(Color.FromArgb(235, 30, 60, 90)),
+        BorderColor = Color.White,
+        BorderThickness = 2,
+        CornerRounding = 8,
+        CollisionDetection = false,
+        Offset = new Offset(0, -34)
+    };
 
     #region Priority Icons Validation
 

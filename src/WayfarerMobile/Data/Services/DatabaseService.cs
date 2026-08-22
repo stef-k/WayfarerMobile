@@ -20,12 +20,12 @@ namespace WayfarerMobile.Data.Services;
 ///   <item><see cref="WayfarerMobile.Data.Repositories.ILiveTileCacheRepository"/> - Live tile cache</item>
 /// </list>
 /// </summary>
-public class DatabaseService : IAsyncDisposable, ILegacyRasterState
+public class DatabaseService : IAsyncDisposable, ILegacyRasterState, ISegmentWaypointMigrationState
 {
     #region Constants
 
     private const string DatabaseFilename = "wayfarer.db3";
-    private const int CurrentSchemaVersion = 7;
+    private const int CurrentSchemaVersion = 8;
     private const string SchemaVersionKey = "db_schema_version";
 
     private static readonly SQLiteOpenFlags DbFlags =
@@ -150,6 +150,11 @@ public class DatabaseService : IAsyncDisposable, ILegacyRasterState
         if (currentVersion < 7)
         {
             await RasterDecommissionMigration.ApplyAsync(this, CancellationToken.None);
+        }
+
+        if (currentVersion < 8)
+        {
+            await SegmentWaypointMigration.ApplyAsync(this, CancellationToken.None);
         }
 
         // Update schema version
@@ -318,6 +323,19 @@ public class DatabaseService : IAsyncDisposable, ILegacyRasterState
     }
 
     Task ILegacyRasterState.RecordSchemaVersionAsync(int version, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return SetSchemaVersionAsync(version);
+    }
+
+    async Task ISegmentWaypointMigrationState.EnsureColumnAsync(
+        string table, string column, string definition, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await AddColumnIfMissingAsync(table, column, definition);
+    }
+
+    Task ISegmentWaypointMigrationState.RecordSchemaVersionAsync(int version, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         return SetSchemaVersionAsync(version);

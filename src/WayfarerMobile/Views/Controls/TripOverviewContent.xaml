@@ -447,6 +447,15 @@
                                                     </FormattedString>
                                                 </Label.FormattedText>
                                             </Label>
+                                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding AnchorTrail}"
+                                                                 IsVisible="{Binding HasWaypoints}" Spacing="1">
+                                                <BindableLayout.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Label Text="{Binding .}" FontSize="11" LineBreakMode="WordWrap"
+                                                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
+                                                    </DataTemplate>
+                                                </BindableLayout.ItemTemplate>
+                                            </VerticalStackLayout>
                                         </VerticalStackLayout>
                                     </Grid>
                                 </Border>
@@ -513,16 +522,24 @@
                                TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
                                IsVisible="{Binding TripSheet.SelectedTripSegment.DurationMinutes, Converter={StaticResource IsNotNullConverter}}" />
                     </HorizontalStackLayout>
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding TripSheet.SelectedTripSegmentTrail}"
+                                         IsVisible="{Binding TripSheet.SelectedTripSegment.HasWaypoints}" Spacing="6">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate>
+                                <Label Text="{Binding .}" FontSize="15" LineBreakMode="WordWrap" />
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
                     <!-- From -->
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8"
-                          IsVisible="{Binding TripSheet.SelectedTripSegment.OriginName, Converter={StaticResource IsNotNullConverter}}">
+                          IsVisible="{Binding TripSheet.SelectedTripSegment.HasWaypoints, Converter={StaticResource InvertedBoolConverter}}">
                         <Label Grid.Column="0" Text="From:" FontSize="15" FontAttributes="Bold"
                                TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
                         <Label Grid.Column="1" Text="{Binding TripSheet.SelectedTripSegment.OriginName}" FontSize="15" LineBreakMode="WordWrap" />
                     </Grid>
                     <!-- To -->
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8"
-                          IsVisible="{Binding TripSheet.SelectedTripSegment.DestinationName, Converter={StaticResource IsNotNullConverter}}">
+                          IsVisible="{Binding TripSheet.SelectedTripSegment.HasWaypoints, Converter={StaticResource InvertedBoolConverter}}">
                         <Label Grid.Column="0" Text="To:" FontSize="15" FontAttributes="Bold"
                                TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
                         <Label Grid.Column="1" Text="{Binding TripSheet.SelectedTripSegment.DestinationName}" FontSize="15" LineBreakMode="WordWrap" />

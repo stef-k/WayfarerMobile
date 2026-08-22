@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Helpers;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
 using WayfarerMobile.Data.Repositories;
@@ -398,18 +399,17 @@ public class TripContentService : ITripContentService
         }
 
         // Build segments
-        var segments = segmentEntities.Select(s => new TripSegment
+        var segments = segmentEntities.Select(s =>
         {
-            Id = s.ServerId,
-            OriginId = s.OriginId,
-            OriginName = s.OriginName,
-            DestinationId = s.DestinationId,
-            DestinationName = s.DestinationName,
-            TransportMode = s.TransportMode,
-            DistanceKm = s.DistanceKm,
-            DurationMinutes = s.DurationMinutes,
-            Notes = s.Notes,
-            Geometry = s.Geometry
+            var segment = OfflineSegmentWaypointMapper.Reconstruct(
+                s.ServerId, s.OriginId, s.DestinationId, s.Geometry, s.WaypointsJson, s.HasCustomRoute);
+            segment.OriginName = s.OriginName;
+            segment.DestinationName = s.DestinationName;
+            segment.TransportMode = s.TransportMode;
+            segment.DistanceKm = s.DistanceKm;
+            segment.DurationMinutes = s.DurationMinutes;
+            segment.Notes = s.Notes;
+            return segment;
         }).ToList();
 
         // Build trip details
@@ -473,18 +473,17 @@ public class TripContentService : ITripContentService
             return new List<TripSegment>();
 
         var entities = await _segmentRepository.GetOfflineSegmentsAsync(trip.Id);
-        return entities.Select(s => new TripSegment
+        return entities.Select(s =>
         {
-            Id = s.ServerId,
-            OriginId = s.OriginId,
-            OriginName = s.OriginName,
-            DestinationId = s.DestinationId,
-            DestinationName = s.DestinationName,
-            TransportMode = s.TransportMode,
-            DistanceKm = s.DistanceKm,
-            DurationMinutes = s.DurationMinutes,
-            Notes = s.Notes,
-            Geometry = s.Geometry
+            var segment = OfflineSegmentWaypointMapper.Reconstruct(
+                s.ServerId, s.OriginId, s.DestinationId, s.Geometry, s.WaypointsJson, s.HasCustomRoute);
+            segment.OriginName = s.OriginName;
+            segment.DestinationName = s.DestinationName;
+            segment.TransportMode = s.TransportMode;
+            segment.DistanceKm = s.DistanceKm;
+            segment.DurationMinutes = s.DurationMinutes;
+            segment.Notes = s.Notes;
+            return segment;
         }).ToList();
     }
 

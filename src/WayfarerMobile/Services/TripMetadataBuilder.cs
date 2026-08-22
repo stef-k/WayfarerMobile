@@ -1,3 +1,4 @@
+using WayfarerMobile.Core.Helpers;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
 using WayfarerMobile.Interfaces;
@@ -80,6 +81,8 @@ public class TripMetadataBuilder : ITripMetadataBuilder
             DurationMinutes = (int?)s.DurationMinutes,
             Notes = s.Notes,
             Geometry = s.Geometry,
+            WaypointsJson = SegmentWaypointJson.Serialize(s.Waypoints),
+            HasCustomRoute = s.HasCustomRoute,
             SortOrder = index
         }).ToList();
     }

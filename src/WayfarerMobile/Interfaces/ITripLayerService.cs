@@ -22,6 +22,10 @@ public interface ITripLayerService
     /// <summary>Layer name for place selection ring.</summary>
     string PlaceSelectionLayerName { get; }
 
+    string SegmentBadgesLayerName { get; }
+
+    string SegmentChevronsLayerName { get; }
+
     /// <summary>
     /// Updates the trip place markers on the specified layer.
     /// </summary>
@@ -63,6 +67,14 @@ public interface ITripLayerService
     /// </summary>
     /// <param name="layer">The layer to clear.</param>
     void ClearTripSegments(WritableLayer layer);
+
+    void UpdateSelectedSegmentDecorations(
+        WritableLayer badgeLayer,
+        WritableLayer chevronLayer,
+        TripSegment? segment,
+        IReadOnlyCollection<TripPlace> places,
+        Viewport viewport,
+        bool navigationActive);
 
     /// <summary>
     /// Gets priority icons that have been validated to exist in app resources.

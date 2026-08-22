@@ -935,6 +935,25 @@ public class TripSegment
     [JsonPropertyName("routeJson")]
     public string? Geometry { get; set; }
 
+    /// <summary>Gets or sets ordered intermediate saved Places from the public trip contract.</summary>
+    [JsonPropertyName("waypoints")]
+    public List<TripSegmentWaypoint> Waypoints
+    {
+        get => _waypoints;
+        set => _waypoints = value ?? new();
+    }
+    private List<TripSegmentWaypoint> _waypoints = new();
+
+    /// <summary>Gets or sets whether the effective geometry is a user-authored custom route.</summary>
+    [JsonPropertyName("hasCustomRoute")]
+    public bool HasCustomRoute { get; set; }
+
+    [JsonIgnore]
+    public IReadOnlyList<string> AnchorTrail { get; set; } = Array.Empty<string>();
+
+    [JsonIgnore]
+    public bool HasWaypoints => Waypoints.Count > 0;
+
     /// <summary>
     /// Gets whether this segment has meaningful notes content.
     /// Filters out empty HTML like Quill.js default.
@@ -950,6 +969,19 @@ public class TripSegment
             return !string.IsNullOrWhiteSpace(stripped);
         }
     }
+}
+
+/// <summary>Identifies one ordered intermediate Place and its optional route vertex.</summary>
+public sealed class TripSegmentWaypoint
+{
+    [JsonPropertyName("placeId")]
+    public Guid PlaceId { get; set; }
+
+    [JsonPropertyName("position")]
+    public int Position { get; set; }
+
+    [JsonPropertyName("routeVertexIndex")]
+    public int? RouteVertexIndex { get; set; }
 }
 
 /// <summary>

@@ -47,6 +47,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
     private bool _isAppearingComplete;
     private TaskCompletionSource _pageReadyTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private CancellationTokenSource _pageReadyCts = new();
+    private CancellationTokenSource _viewportRefreshCts = new();
 
     /// <summary>
     /// Creates a new instance of MainPage.
@@ -158,7 +159,9 @@ public partial class MainPage : ContentPage, IQueryAttributable
         if (map == null)
             return;
 
-        var mapInfo = e.GetMapInfo(map.Layers);
+        var interactiveLayers = map.Layers.Where(layer =>
+            layer.Name != "SelectedSegmentBadges" && layer.Name != "SelectedSegmentChevrons");
+        var mapInfo = e.GetMapInfo(interactiveLayers);
 
         // Check if we have a valid world position
         if (mapInfo?.WorldPosition == null)
@@ -588,13 +591,37 @@ public partial class MainPage : ContentPage, IQueryAttributable
     {
         var now = DateTime.UtcNow;
         if ((now - _lastViewportUpdate).TotalMilliseconds < ViewportUpdateThrottleMs)
+        {
+            ScheduleTrailingViewportRefresh();
             return;
+        }
 
         _lastViewportUpdate = now;
+        RefreshViewportState();
+    }
 
+    private void RefreshViewportState()
+    {
         var bounds = _viewModel.MapDisplay.GetViewportBounds();
         if (bounds.HasValue)
             _viewModel.UpdateZoomLevel(bounds.Value.ZoomLevel);
+        _viewModel.MapDisplay.RefreshSelectedSegmentDecorations();
+    }
+
+    private async void ScheduleTrailingViewportRefresh()
+    {
+        _viewportRefreshCts.Cancel();
+        _viewportRefreshCts.Dispose();
+        _viewportRefreshCts = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(ViewportUpdateThrottleMs, _viewportRefreshCts.Token);
+            RefreshViewportState();
+            _lastViewportUpdate = DateTime.UtcNow;
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 
     /// <summary>
@@ -603,6 +630,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// </summary>
     private void UnsubscribeFromViewportChanges()
     {
+        _viewportRefreshCts.Cancel();
         if (_subscribedNavigator != null)
         {
             _subscribedNavigator.ViewportChanged -= OnViewportChanged;
