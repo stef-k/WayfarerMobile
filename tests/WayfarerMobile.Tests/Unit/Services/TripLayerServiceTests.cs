@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using WayfarerMobile.Core.Helpers;
 
 namespace WayfarerMobile.Tests.Unit.Services;
 
@@ -231,6 +232,20 @@ public class TripLayerServiceTests
         _service.UpdateTripSegments(_segmentsLayer, segments);
 
         _segmentsLayer.Features.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void ProductionUpdateTripSegments_UsesSharedParserAndSkipsFailures()
+    {
+        var sourcePath = Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..", "..",
+            "src", "WayfarerMobile", "Services", "TripLayerService.cs");
+        var source = File.ReadAllText(Path.GetFullPath(sourcePath));
+
+        source.Should().Contain("TripSegmentGeometryParser.Parse(segment.Geometry)");
+        source.Should().Contain("if (!parseResult.IsSuccess)");
+        source.Should().NotContain("ParseGeoJsonLineString");
     }
 
     [Fact]
