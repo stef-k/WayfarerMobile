@@ -145,6 +145,7 @@ public sealed class QueueDrainService : IDisposable
     private int _startGuard; // For thread-safe StartAsync via Interlocked
     private int _disposeGuard; // For thread-safe Dispose via Interlocked
     private int _drainLoopRunning; // For thread-safe drain loop guard via Interlocked
+    private readonly QueueRecoveryOperationCoordinator _recoveryOperations;
 
     #endregion
 
@@ -164,12 +165,25 @@ public sealed class QueueDrainService : IDisposable
         ISettingsService settings,
         IConnectivity connectivity,
         ILogger<QueueDrainService> logger)
+        : this(apiClient, locationQueue, settings, connectivity, logger, new QueueRecoveryOperationCoordinator())
+    {
+    }
+
+    /// <summary>Creates a queue drain service using the shared recovery-operation owner.</summary>
+    public QueueDrainService(
+        IApiClient apiClient,
+        ILocationQueueRepository locationQueue,
+        ISettingsService settings,
+        IConnectivity connectivity,
+        ILogger<QueueDrainService> logger,
+        QueueRecoveryOperationCoordinator recoveryOperations)
     {
         _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
         _locationQueue = locationQueue ?? throw new ArgumentNullException(nameof(locationQueue));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _connectivity = connectivity ?? throw new ArgumentNullException(nameof(connectivity));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _recoveryOperations = recoveryOperations ?? throw new ArgumentNullException(nameof(recoveryOperations));
 
         _isOnline = _connectivity.NetworkAccess == NetworkAccess.Internet;
     }
@@ -306,6 +320,12 @@ public sealed class QueueDrainService : IDisposable
     /// <summary>Suspends future claims and waits for active delivery to finish.</summary>
     public async Task SuspendAndWaitForQuiescenceAsync(CancellationToken cancellationToken = default)
     {
+        using var recoveryOperation = await _recoveryOperations.AcquireAsync(cancellationToken);
+        await SuspendAndWaitForQuiescenceCoreAsync(cancellationToken);
+    }
+
+    internal async Task SuspendAndWaitForQuiescenceCoreAsync(CancellationToken cancellationToken = default)
+    {
         _settings.QueueDeliverySuspended = true;
         await _drainLock.WaitAsync(cancellationToken);
         _drainLock.Release();
@@ -314,10 +334,13 @@ public sealed class QueueDrainService : IDisposable
     /// <summary>Resumes delivery through the ordinary drain loop.</summary>
     public async Task ResumeAndReconcileAsync()
     {
+        using var recoveryOperation = await _recoveryOperations.AcquireAsync();
         _settings.QueueDeliverySuspended = false;
         await TriggerDrainAsync();
         StartDrainLoop();
     }
+
+    internal QueueRecoveryOperationCoordinator RecoveryOperations => _recoveryOperations;
 
     /// <summary>
     /// Triggers an immediate drain cycle outside the normal timer schedule.

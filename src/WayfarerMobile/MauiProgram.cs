@@ -222,6 +222,7 @@ public static class MauiProgram
 
         // Queue Export Service (for offline queue management in Settings)
         services.AddSingleton<IQueueExportService, QueueExportService>();
+        services.AddSingleton<QueueRecoveryOperationCoordinator>();
         services.AddSingleton<RecoveryExportCoordinator>();
 
         // Tile Cache Services (depends on TripDownloadService, ILocationBridge)
