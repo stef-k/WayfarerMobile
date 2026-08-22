@@ -7,7 +7,7 @@ This document covers the testing approach, frameworks, and practices for Wayfare
 | Tool | Purpose | Version |
 |------|---------|---------|
 | xUnit | Test framework | 2.9.3 |
-| xunit.runner.visualstudio | VSTest adapter | 3.1.5 |
+| xunit.runner.visualstudio | VSTest adapter | 4.0.0 |
 | FluentAssertions | Assertion library | 8.10.0 |
 | Moq | Mocking framework | 4.20.72 |
 | Coverlet MSBuild | Code coverage | 10.0.1 |
