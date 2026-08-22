@@ -329,7 +329,7 @@ Location data is stored locally in SQLite:
 
 Downloaded trips are stored locally:
 - Trip metadata in SQLite
-- Map tiles in SQLite (blob storage)
+- Places, Segments/routes, Areas/polygons, and navigation data in SQLite
 - Encrypted by platform filesystem encryption
 
 ### Log Files

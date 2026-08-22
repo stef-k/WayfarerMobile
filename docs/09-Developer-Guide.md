@@ -45,7 +45,7 @@ WayfarerMobile is a .NET MAUI cross-platform mobile application for location tra
 ## Key Features
 
 - **Background Location Tracking**: 24/7 location tracking using platform-native foreground services
-- **Offline Maps**: Download trip areas for offline use with SQLite tile caching
+- **Offline Trip Content**: Store Trip metadata, Places, routes, Areas, and navigation data in SQLite
 - **Turn-by-Turn Navigation**: OSRM-based routing with audio announcements
 - **Group Location Sharing**: Real-time location sharing via Server-Sent Events (SSE)
 - **PIN Security**: Optional app lock with salted SHA256 PIN hashing

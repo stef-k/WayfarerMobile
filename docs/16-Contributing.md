@@ -184,7 +184,7 @@ public partial class MainPage : ContentPage
 
 | Type | Pattern | Example |
 |------|---------|---------|
-| Feature | `feature/description` | `feature/offline-maps` |
+| Feature | `feature/description` | `feature/trip-notes` |
 | Bug Fix | `fix/description` | `fix/sync-crash` |
 | Refactor | `refactor/description` | `refactor/location-service` |
 | Documentation | `docs/description` | `docs/api-guide` |
@@ -214,11 +214,11 @@ Include context that helps reviewers understand the change.
 
 **Examples**:
 ```
-feat: add offline map download for trips
+feat: add Trip note editing
 
-Implemented tile caching for trip areas allowing offline navigation.
-Uses SQLite MBTiles format for storage.
-Includes progress tracking and download cancellation.
+Implemented note editing for downloaded Trips.
+Preserves pending edits for ordinary synchronization.
+Includes focused validation and cancellation handling.
 
 fix: resolve crash when GPS unavailable
 

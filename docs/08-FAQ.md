@@ -10,7 +10,7 @@ Quick answers to common questions about Wayfarer Mobile.
 
 Wayfarer Mobile is a location tracking and trip planning companion app for the Wayfarer server. It allows you to:
 - Build a personal timeline of your location history
-- Navigate planned trips with offline maps
+- Navigate using downloaded Trip content and route geometry
 - Share your location with groups
 - Check in at memorable places
 
@@ -127,7 +127,7 @@ It does NOT collect:
 
 ---
 
-## Maps and Offline
+## Maps and Offline Content
 
 ### What map does the app use?
 
@@ -136,7 +136,7 @@ The app uses OpenStreetMap tiles via the Mapsui library. Maps are rendered from 
 ### Can I use the app offline?
 
 Partially. Offline capabilities include:
-- Viewing downloaded trip maps
+- Viewing downloaded Trip metadata, Places, routes, Areas, and navigation data
 - GPS location (always works)
 - Queuing locations for later sync
 - Basic navigation with downloaded trips
@@ -147,24 +147,13 @@ Requires internet:
 - Group location sharing
 - Downloading new trips
 
-### How do I download maps for offline use?
+### How does map caching work?
 
-Maps are downloaded automatically when you download a trip:
+OpenStreetMap tiles are cached when the interactive renderer requests them during ordinary pan and zoom. Previously viewed tiles may remain available while cached, but downloading a Trip does not download or guarantee a complete offline basemap area.
 
-1. Go to Trips tab
-2. Tap Download on a trip
-3. Wait for download to complete
+### How much storage does the map cache use?
 
-This caches all map tiles for the trip area at multiple zoom levels.
-
-### How much storage do offline maps use?
-
-Depends on the trip size:
-- Small city trip: 50-200 MB
-- Large city: 200-500 MB
-- Multi-city trip: 500+ MB
-
-You can configure cache limits in Settings.
+The bounded live-cache size is configurable in Settings. It is independent of downloaded Trip content.
 
 ---
 

@@ -2,7 +2,7 @@
 
 > Your personal location timeline and trip companion
 
-Wayfarer Mobile is a cross-platform mobile application for Android and iOS that helps you track your location history, plan trips with offline map support, and share your location with groups.
+Wayfarer Mobile is a cross-platform mobile application for Android and iOS that helps you track your location history, retain Trip content for offline use, and share your location with groups.
 
 ## Quick Links
 
@@ -21,10 +21,10 @@ Wayfarer Mobile is a cross-platform mobile application for Android and iOS that 
 ## Key Features
 
 - **Timeline Tracking** - Automatically log your location history with privacy controls
-- **Trip Planning** - Create trips with places, routes, and downloadable offline maps
+- **Trip Planning** - Create Trips with Places, routes, and provider-independent offline content
 - **Turn-by-Turn Navigation** - Navigate between trip places with voice guidance
 - **Group Sharing** - Share your live location with family and friends
-- **Offline Support** - Download maps for use without internet connection
+- **Offline Support** - Retain Trip metadata, Places, routes, Areas, and navigation data
 - **Privacy First** - Your data stays on your device until you choose to sync
 
 ## Getting Started
@@ -45,7 +45,7 @@ Wayfarer Mobile is a cross-platform mobile application for Android and iOS that 
 Built with modern cross-platform technology:
 
 - **.NET MAUI** - Cross-platform framework for Android and iOS
-- **Mapsui** - Fast, offline-capable mapping
+- **Mapsui** - Interactive OpenStreetMap rendering with request-driven live caching
 - **Syncfusion** - Professional UI components
 - **SQLite** - Local data storage
 

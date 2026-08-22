@@ -101,7 +101,7 @@ This document provides detailed documentation for the key services in WayfarerMo
 | `TimelineExportService` | CSV/GeoJSON export | Date range filter |
 | `TimelineImportService` | CSV/GeoJSON import | Duplicate detection |
 | `GroupsService` | SSE live location sharing | Real-time updates |
-| `TripDownloadService` | Trip download with pause/resume | Zoom 8-17, cache limits |
+| `TripDownloadService` | Provider-independent Trip content download | Metadata, Places, routes, Areas, navigation data |
 
 ---
 

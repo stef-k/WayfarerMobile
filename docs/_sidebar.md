@@ -3,7 +3,7 @@
   - [Getting Started](01-Getting-Started.md)
   - [Installation](02-Installation.md)
   - [Features](03-Features.md)
-  - [Trips & Offline Maps](04-Trips-and-Offline.md)
+  - [Trips & Offline Content](04-Trips-and-Offline.md)
   - [Location Tracking](05-Location-Tracking.md)
   - [Groups & Sharing](06-Groups-and-Sharing.md)
   - [Troubleshooting](07-Troubleshooting.md)

@@ -204,28 +204,15 @@ The Trips page has two tabs:
 | 2. Save Regions | 25-30% | Store regions and areas locally |
 | 3. Save Places | 30-40% | Store places with coordinates |
 | 4. Save Segments | 40-50% | Store route segments with geometry |
-| 5. Download Tiles | 55-95% | Fetch map tiles for offline use |
-| 6. Complete | 100% | Finalize and verify |
+| 5. Complete | 100% | Finalize and verify |
 
 **What gets downloaded**:
 - Trip metadata (name, notes, cover image)
 - Regions and areas with polygon zones
 - Places with coordinates, icons, and notes
 - Segments with polyline geometry
-- Map tiles for zoom levels 8-17
 
-**Tile Download Features**:
-- **Atomic writes**: Temp file then move (prevents corruption)
-- **Rate limiting**: Respects tile server policies
-- **Resume support**: Skips already-downloaded tiles
-- **Adaptive zoom**: Smaller areas get higher detail (up to z17)
-
-**Estimated Storage**:
-| Area Size | Tiles | Storage |
-|-----------|-------|---------|
-| City neighborhood | ~500 | ~20 MB |
-| City area | ~2,000 | ~80 MB |
-| State/province | ~10,000 | ~400 MB |
+Trip downloads do not include a raster basemap package. The interactive OpenStreetMap layer caches tiles requested while viewing the map; previously viewed tiles may remain usable while cached, but complete offline-area coverage is not guaranteed.
 
 ### Viewing Trip Details
 
@@ -614,10 +601,9 @@ When the queue reaches its limit, automatic cleanup runs:
 
 ### Map Cache
 
-- **Enable offline caching**: Store tiles for offline use
-- **Live cache size**: Maximum storage for current area tiles
-- **Trip cache size**: Maximum storage for downloaded trips
-- **Clear cache**: Free up storage
+- **Live cache size**: Maximum storage for tiles requested during interactive map viewing
+- **Cache usage**: View current live-cache storage
+- **Clear live cache**: Free map-cache storage without removing downloaded Trip content
 
 ### Navigation
 
@@ -677,6 +663,6 @@ For troubleshooting, access detailed diagnostics:
 ## Next Steps
 
 Learn more about specific features:
-- [Trips and Offline Maps](04-Trips-and-Offline.md)
+- [Trips and Offline Content](04-Trips-and-Offline.md)
 - [Location Tracking Details](05-Location-Tracking.md)
 - [Groups and Sharing](06-Groups-and-Sharing.md)
