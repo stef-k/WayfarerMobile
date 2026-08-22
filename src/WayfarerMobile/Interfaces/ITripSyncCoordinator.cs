@@ -6,7 +6,7 @@ namespace WayfarerMobile.Interfaces;
 
 /// <summary>
 /// Coordinates synchronization of downloaded trips with the server.
-/// Handles checking for updates, syncing metadata, and re-downloading tiles when needed.
+/// Handles checking for updates and synchronizing provider-independent Trip content.
 /// </summary>
 public interface ITripSyncCoordinator
 {
@@ -27,8 +27,7 @@ public interface ITripSyncCoordinator
     Task<bool> CheckTripUpdateNeededAsync(Guid tripServerId);
 
     /// <summary>
-    /// Syncs a downloaded trip with the server (updates places, segments, areas
-    /// and re-downloads tiles if bounding box changed).
+    /// Syncs downloaded Trip metadata, places, segments, areas, and polygons.
     /// </summary>
     /// <param name="tripServerId">The server-side trip ID.</param>
     /// <param name="forceSync">If true, sync regardless of version.</param>

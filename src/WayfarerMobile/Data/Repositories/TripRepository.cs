@@ -1,5 +1,4 @@
 using SQLite;
-using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Data.Entities;
 
 namespace WayfarerMobile.Data.Repositories;
@@ -69,9 +68,6 @@ public class TripRepository : RepositoryBase, ITripRepository
         // Use transaction to ensure atomic cascade delete - partial failure leaves no orphaned data
         await db.RunInTransactionAsync(conn =>
         {
-            // Delete associated tiles
-            conn.Execute("DELETE FROM TripTiles WHERE TripId = ?", tripId);
-
             // Delete associated places
             conn.Execute("DELETE FROM OfflinePlaces WHERE TripId = ?", tripId);
 
@@ -84,22 +80,9 @@ public class TripRepository : RepositoryBase, ITripRepository
             // Delete associated polygons
             conn.Execute("DELETE FROM OfflinePolygons WHERE TripId = ?", tripId);
 
-            // Delete associated download state (1:1 relationship)
-            conn.Execute("DELETE FROM TripDownloadStates WHERE TripId = ?", tripId);
-
             // Delete the trip
             conn.Execute("DELETE FROM DownloadedTrips WHERE Id = ?", tripId);
         });
     }
 
-    /// <inheritdoc />
-    public async Task<long> GetTotalTripCacheSizeAsync()
-    {
-        var db = await GetConnectionAsync();
-        // Use UnifiedStateValue (single source of truth) for cache size calculation
-        var result = await db.ExecuteScalarAsync<long>(
-            "SELECT COALESCE(SUM(TotalSizeBytes), 0) FROM DownloadedTrips WHERE UnifiedStateValue = ?",
-            (int)UnifiedDownloadState.Complete);
-        return result;
-    }
 }

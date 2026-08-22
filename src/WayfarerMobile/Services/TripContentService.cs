@@ -92,7 +92,7 @@ public class TripContentService : ITripContentService
         var downloadedTrips = await _tripRepository.GetDownloadedTripsAsync();
 
         foreach (var trip in downloadedTrips.Where(t =>
-            t.UnifiedState == UnifiedDownloadState.Complete || t.UnifiedState == UnifiedDownloadState.MetadataOnly))
+            t.UnifiedState == UnifiedDownloadState.Downloaded))
         {
             try
             {
@@ -232,7 +232,7 @@ public class TripContentService : ITripContentService
 
         var downloadedTrips = await _tripRepository.GetDownloadedTripsAsync();
         var completedTrips = downloadedTrips.Where(t =>
-            t.UnifiedState == UnifiedDownloadState.Complete || t.UnifiedState == UnifiedDownloadState.MetadataOnly).ToList();
+            t.UnifiedState == UnifiedDownloadState.Downloaded).ToList();
 
         if (completedTrips.Count == 0)
         {

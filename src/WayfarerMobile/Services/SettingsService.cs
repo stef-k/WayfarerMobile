@@ -34,14 +34,7 @@ public class SettingsService : ISettingsService
     private const string KeyThemePreference = "theme_preference";
     private const string KeyLanguagePreference = "language_preference";
     private const string KeyKeepScreenOn = "keep_screen_on";
-    private const string KeyMapOfflineCacheEnabled = "map_offline_cache_enabled";
-    private const string KeyMaxConcurrentTileDownloads = "max_concurrent_tile_downloads";
-    private const string KeyMinTileRequestDelayMs = "min_tile_request_delay_ms";
     private const string KeyMaxLiveCacheSizeMB = "max_live_cache_size_mb";
-    private const string KeyMaxTripCacheSizeMB = "max_trip_cache_size_mb";
-    private const string KeyTileServerUrl = "tile_server_url";
-    private const string KeyLiveCachePrefetchRadius = "live_cache_prefetch_radius";
-    private const string KeyPrefetchDistanceThreshold = "prefetch_distance_threshold";
 
     // Navigation settings
     private const string KeyNavigationAudioEnabled = "navigation_audio_enabled";
@@ -355,33 +348,6 @@ public class SettingsService : ISettingsService
     }
 
     /// <summary>
-    /// Gets or sets whether offline map caching is enabled.
-    /// </summary>
-    public bool MapOfflineCacheEnabled
-    {
-        get => Preferences.Get(KeyMapOfflineCacheEnabled, true);
-        set => Preferences.Set(KeyMapOfflineCacheEnabled, value);
-    }
-
-    /// <summary>
-    /// Gets or sets the maximum concurrent tile downloads (1-4, default 2).
-    /// </summary>
-    public int MaxConcurrentTileDownloads
-    {
-        get => Preferences.Get(KeyMaxConcurrentTileDownloads, 2);
-        set => Preferences.Set(KeyMaxConcurrentTileDownloads, Math.Clamp(value, 1, 4));
-    }
-
-    /// <summary>
-    /// Gets or sets the minimum delay between tile requests in milliseconds (50-5000, default 100).
-    /// </summary>
-    public int MinTileRequestDelayMs
-    {
-        get => Preferences.Get(KeyMinTileRequestDelayMs, 100);
-        set => Preferences.Set(KeyMinTileRequestDelayMs, Math.Clamp(value, 50, 5000));
-    }
-
-    /// <summary>
     /// Gets or sets the maximum size of the live tile cache in megabytes (100-2000, default 500).
     /// Live cache stores tiles from normal map browsing.
     /// </summary>
@@ -389,74 +355,6 @@ public class SettingsService : ISettingsService
     {
         get => Preferences.Get(KeyMaxLiveCacheSizeMB, 500);
         set => Preferences.Set(KeyMaxLiveCacheSizeMB, Math.Clamp(value, 100, 2000));
-    }
-
-    /// <summary>
-    /// Gets or sets the maximum size of the trip tile cache in megabytes (500-5000, default 2000).
-    /// Trip cache stores tiles downloaded for offline trip use.
-    /// </summary>
-    public int MaxTripCacheSizeMB
-    {
-        get => Preferences.Get(KeyMaxTripCacheSizeMB, 2000);
-        set => Preferences.Set(KeyMaxTripCacheSizeMB, Math.Clamp(value, 500, 5000));
-    }
-
-    /// <summary>
-    /// Default tile server URL (OpenStreetMap).
-    /// </summary>
-    public const string DefaultTileServerUrl = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-
-    /// <summary>
-    /// Gets or sets the custom tile server URL.
-    /// Must contain {z}, {x}, {y} placeholders.
-    /// Default: OpenStreetMap tile server.
-    /// </summary>
-    public string TileServerUrl
-    {
-        get => Preferences.Get(KeyTileServerUrl, DefaultTileServerUrl);
-        set => Preferences.Set(KeyTileServerUrl, ValidateTileServerUrl(value));
-    }
-
-    /// <summary>
-    /// Validates a tile server URL, returning the default if invalid.
-    /// </summary>
-    private static string ValidateTileServerUrl(string? url)
-    {
-        if (string.IsNullOrWhiteSpace(url))
-            return DefaultTileServerUrl;
-
-        // Must contain required placeholders
-        if (!url.Contains("{z}") || !url.Contains("{x}") || !url.Contains("{y}"))
-            return DefaultTileServerUrl;
-
-        // Must be a valid URL (basic check)
-        if (!url.StartsWith("http://") && !url.StartsWith("https://"))
-            return DefaultTileServerUrl;
-
-        return url;
-    }
-
-    /// <summary>
-    /// Prefetch radius in tiles for live cache around user location.
-    /// Radius of N means (2N+1)x(2N+1) grid of tiles per zoom level.
-    /// Default: 5 (11x11 grid). Range: 1-10 tiles.
-    /// </summary>
-    public int LiveCachePrefetchRadius
-    {
-        get => Preferences.Get(KeyLiveCachePrefetchRadius, 5);
-        set => Preferences.Set(KeyLiveCachePrefetchRadius, Math.Clamp(value, 1, 10));
-    }
-
-    /// <summary>
-    /// Independent distance threshold for tile prefetching (in meters).
-    /// This is separate from location logging threshold.
-    /// Default: 500 meters - only prefetch when user has moved significantly.
-    /// Range: 100-2000 meters.
-    /// </summary>
-    public int PrefetchDistanceThresholdMeters
-    {
-        get => Preferences.Get(KeyPrefetchDistanceThreshold, 500);
-        set => Preferences.Set(KeyPrefetchDistanceThreshold, Math.Clamp(value, 100, 2000));
     }
 
     #endregion

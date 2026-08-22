@@ -180,59 +180,11 @@
                                                 Padding="10,0"
                                                 CornerRadius="16" />
 
-                                        <!-- Pause button (visible when downloading) -->
-                                        <Button Text="Pause"
-                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MyTripsViewModel}}, Path=Download.PauseDownloadForItemCommand}"
-                                                CommandParameter="{Binding .}"
-                                                IsVisible="{Binding CanPause}"
-                                                BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                                                TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
-                                                FontSize="12"
-                                                HeightRequest="32"
-                                                Padding="10,0"
-                                                CornerRadius="16" />
-
-                                        <!-- Resume button (visible when paused) -->
-                                        <Button Text="Resume"
-                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MyTripsViewModel}}, Path=Download.ResumeDownloadForItemCommand}"
-                                                CommandParameter="{Binding .}"
-                                                IsVisible="{Binding CanResume}"
-                                                BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                                                TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
-                                                FontSize="12"
-                                                HeightRequest="32"
-                                                Padding="10,0"
-                                                CornerRadius="16" />
-
                                         <!-- Download (Metadata only) -->
                                         <Button Text="Download"
                                                 Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MyTripsViewModel}}, Path=Download.QuickDownloadCommand}"
                                                 CommandParameter="{Binding .}"
                                                 IsVisible="{Binding CanQuickDownload}"
-                                                BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                                                TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
-                                                FontSize="12"
-                                                HeightRequest="32"
-                                                Padding="10,0"
-                                                CornerRadius="16" />
-
-                                        <!-- Download + Offline Maps (With Tiles) -->
-                                        <Button Text="+Offline Maps"
-                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MyTripsViewModel}}, Path=Download.FullDownloadCommand}"
-                                                CommandParameter="{Binding .}"
-                                                IsVisible="{Binding CanFullDownload}"
-                                                BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                                                TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
-                                                FontSize="12"
-                                                HeightRequest="32"
-                                                Padding="10,0"
-                                                CornerRadius="16" />
-
-                                        <!-- Remove Offline Maps Only - keeps trip data -->
-                                        <Button Text="Remove Maps"
-                                                Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MyTripsViewModel}}, Path=Download.DeleteTilesOnlyCommand}"
-                                                CommandParameter="{Binding .}"
-                                                IsVisible="{Binding CanDeleteTilesOnly}"
                                                 BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
                                                 TextColor="{AppThemeBinding Light={StaticResource TextPrimary}, Dark={StaticResource TextPrimaryDark}}"
                                                 FontSize="12"
@@ -254,7 +206,7 @@
                                     </HorizontalStackLayout>
 
                                     <!-- Hint for server-only trips -->
-                                    <Label Text="Download to load on map. Add offline maps for use without internet."
+                                    <Label Text="Download Trip data to use places, routes, and areas offline."
                                            FontSize="11"
                                            TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
                                            IsVisible="{Binding CanQuickDownload}"

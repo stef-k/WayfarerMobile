@@ -37,14 +37,9 @@ public interface ITripRepository
 
     /// <summary>
     /// Deletes a downloaded trip and all associated data.
-    /// Performs cascade delete of tiles, places, segments, and areas.
+    /// Performs cascade delete of provider-independent Trip content.
     /// </summary>
     /// <param name="tripId">The local trip ID.</param>
     Task DeleteDownloadedTripAsync(int tripId);
 
-    /// <summary>
-    /// Gets the total size of all completed downloaded trips.
-    /// </summary>
-    /// <returns>Total size in bytes.</returns>
-    Task<long> GetTotalTripCacheSizeAsync();
 }

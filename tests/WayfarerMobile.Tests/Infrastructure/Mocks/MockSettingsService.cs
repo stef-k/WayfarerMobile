@@ -30,13 +30,8 @@ public class MockSettingsService : ISettingsService
 
     #region Tile Cache Settings
 
-    public int MaxConcurrentTileDownloads { get; set; } = 2;
-    public int MinTileRequestDelayMs { get; set; } = 100;
     public int MaxLiveCacheSizeMB { get; set; } = 500;
-    public int MaxTripCacheSizeMB { get; set; } = 2000;
     public string TileServerUrl { get; set; } = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-    public int LiveCachePrefetchRadius { get; set; } = 5;
-    public int PrefetchDistanceThresholdMeters { get; set; } = 500;
 
     #endregion
 
@@ -65,7 +60,6 @@ public class MockSettingsService : ISettingsService
     public string ThemePreference { get; set; } = "System";
     public bool KeepScreenOn { get; set; } = false;
     public string LanguagePreference { get; set; } = "System";
-    public bool MapOfflineCacheEnabled { get; set; } = true;
 
     #endregion
 
@@ -177,13 +171,8 @@ public class MockSettingsService : ISettingsService
         LocationDistanceThresholdMeters = 100;
         LocationAccuracyThresholdMeters = 50;
         QueueLimitMaxLocations = 25000;
-        MaxConcurrentTileDownloads = 2;
-        MinTileRequestDelayMs = 100;
         MaxLiveCacheSizeMB = 500;
-        MaxTripCacheSizeMB = 2000;
         TileServerUrl = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-        LiveCachePrefetchRadius = 5;
-        PrefetchDistanceThresholdMeters = 500;
         NavigationAudioEnabled = true;
         NavigationVolume = 0.8f;
         NavigationLanguage = string.Empty;
@@ -197,7 +186,6 @@ public class MockSettingsService : ISettingsService
         ThemePreference = "System";
         KeepScreenOn = false;
         LanguagePreference = "System";
-        MapOfflineCacheEnabled = true;
         ShowBatteryWarnings = true;
         AutoPauseTrackingOnCriticalBattery = true;
         VisitNotificationsEnabled = false;

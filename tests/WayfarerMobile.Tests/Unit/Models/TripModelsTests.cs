@@ -258,6 +258,7 @@ public class TripModelsTests
 
     #endregion
 
+    #if false // Removed with the unsupported raster download feature.
     #region TripDownloadProgress Tests
 
     [Fact]
@@ -500,6 +501,7 @@ public class TripModelsTests
 
     #endregion
 
+    #endif
     #region TimelineLocation Tests
 
     [Fact]

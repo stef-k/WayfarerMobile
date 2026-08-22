@@ -63,7 +63,7 @@
                                        VerticalOptions="Center"
                                        TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
                             </HorizontalStackLayout>
-                            <!-- Row 2: Accuracy, Heading, Altitude, Cache Health -->
+                            <!-- Row 2: Accuracy, Heading, Altitude -->
                             <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
                                 <Label Text="{Binding AccuracyText}"
                                        FontSize="11"
@@ -85,22 +85,6 @@
                                        IsVisible="{Binding HasZoomLevel}"
                                        VerticalOptions="Center"
                                        TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
-                                <!-- Cache health indicator (tappable, larger hit area) -->
-                                <Border Padding="4,0" StrokeThickness="0" BackgroundColor="Transparent" VerticalOptions="Center">
-                                    <Border.GestureRecognizers>
-                                        <TapGestureRecognizer Command="{Binding MapDisplay.ShowCacheStatusCommand}" />
-                                    </Border.GestureRecognizers>
-                                    <HorizontalStackLayout Spacing="4" VerticalOptions="Center">
-                                        <Ellipse WidthRequest="10"
-                                                 HeightRequest="10"
-                                                 Fill="{Binding MapDisplay.CacheHealthColor}"
-                                                 VerticalOptions="Center" />
-                                        <Label Text="{Binding MapDisplay.CacheHealthTooltip}"
-                                               FontSize="11"
-                                               TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}"
-                                               VerticalOptions="Center" />
-                                    </HorizontalStackLayout>
-                                </Border>
                             </HorizontalStackLayout>
                         </VerticalStackLayout>
                     </Frame>

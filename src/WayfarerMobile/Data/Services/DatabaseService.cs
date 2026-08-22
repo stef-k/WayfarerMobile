@@ -1,6 +1,7 @@
 using SQLite;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Models;
+using WayfarerMobile.Core.Migrations;
 using WayfarerMobile.Data.Entities;
 using WayfarerMobile.Helpers;
 
@@ -16,17 +17,15 @@ namespace WayfarerMobile.Data.Services;
 ///   <item><see cref="WayfarerMobile.Data.Repositories.IPlaceRepository"/> - Offline places</item>
 ///   <item><see cref="WayfarerMobile.Data.Repositories.ISegmentRepository"/> - Offline segments</item>
 ///   <item><see cref="WayfarerMobile.Data.Repositories.IAreaRepository"/> - Offline areas and polygons</item>
-///   <item><see cref="WayfarerMobile.Data.Repositories.ITripTileRepository"/> - Trip tiles</item>
 ///   <item><see cref="WayfarerMobile.Data.Repositories.ILiveTileCacheRepository"/> - Live tile cache</item>
-///   <item><see cref="WayfarerMobile.Data.Repositories.IDownloadStateRepository"/> - Download state</item>
 /// </list>
 /// </summary>
-public class DatabaseService : IAsyncDisposable
+public class DatabaseService : IAsyncDisposable, ILegacyRasterState
 {
     #region Constants
 
     private const string DatabaseFilename = "wayfarer.db3";
-    private const int CurrentSchemaVersion = 6; // Increment when schema changes
+    private const int CurrentSchemaVersion = 7;
     private const string SchemaVersionKey = "db_schema_version";
 
     private static readonly SQLiteOpenFlags DbFlags =
@@ -86,7 +85,6 @@ public class DatabaseService : IAsyncDisposable
             await _database.CreateTableAsync<QueuedLocation>();
             await _database.CreateTableAsync<AppSetting>();
             await _database.CreateTableAsync<DownloadedTripEntity>();
-            await _database.CreateTableAsync<TripTileEntity>();
             await _database.CreateTableAsync<OfflinePlaceEntity>();
             await _database.CreateTableAsync<OfflineSegmentEntity>();
             await _database.CreateTableAsync<OfflineAreaEntity>();
@@ -94,7 +92,6 @@ public class DatabaseService : IAsyncDisposable
             await _database.CreateTableAsync<LiveTileEntity>();
             await _database.CreateTableAsync<ActivityType>();
             await _database.CreateTableAsync<LocalTimelineEntry>();
-            await _database.CreateTableAsync<TripDownloadStateEntity>();
 
             // Run migrations
             await RunMigrationsAsync();
@@ -148,6 +145,11 @@ public class DatabaseService : IAsyncDisposable
         if (currentVersion < 6)
         {
             await MigrateToVersion6Async();
+        }
+
+        if (currentVersion < 7)
+        {
+            await RasterDecommissionMigration.ApplyAsync(this, CancellationToken.None);
         }
 
         // Update schema version
@@ -229,6 +231,100 @@ public class DatabaseService : IAsyncDisposable
 
         Console.WriteLine("[DatabaseService] Version 6 migration complete");
     }
+
+    async Task ILegacyRasterState.RemoveTileSchemaAndNormalizeTripDataAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (await TableExistsAsync("DownloadedTrips"))
+        {
+            await _database!.RunInTransactionAsync(connection =>
+            {
+                connection.Execute("ALTER TABLE DownloadedTrips RENAME TO DownloadedTrips_legacy_raster");
+                connection.Execute(@"CREATE TABLE DownloadedTrips (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ServerId VARCHAR,
+                    Name VARCHAR NOT NULL,
+                    BoundingBoxNorth REAL NOT NULL,
+                    BoundingBoxSouth REAL NOT NULL,
+                    BoundingBoxEast REAL NOT NULL,
+                    BoundingBoxWest REAL NOT NULL,
+                    DownloadedAt BIGINT NOT NULL,
+                    UnifiedStateValue INTEGER NOT NULL,
+                    StateChangedAt BIGINT NOT NULL,
+                    PlaceCount INTEGER NOT NULL,
+                    RegionCount INTEGER NOT NULL,
+                    SegmentCount INTEGER NOT NULL,
+                    AreaCount INTEGER NOT NULL,
+                    UpdatedAt BIGINT NOT NULL,
+                    Version INTEGER NOT NULL,
+                    ServerUpdatedAt BIGINT,
+                    Notes VARCHAR,
+                    CoverImageUrl VARCHAR)");
+                connection.Execute(@"INSERT INTO DownloadedTrips (
+                    Id, ServerId, Name, BoundingBoxNorth, BoundingBoxSouth, BoundingBoxEast, BoundingBoxWest,
+                    DownloadedAt, UnifiedStateValue, StateChangedAt, PlaceCount, RegionCount, SegmentCount,
+                    AreaCount, UpdatedAt, Version, ServerUpdatedAt, Notes, CoverImageUrl)
+                    SELECT Id, ServerId, Name, BoundingBoxNorth, BoundingBoxSouth, BoundingBoxEast, BoundingBoxWest,
+                    DownloadedAt,
+                    CASE
+                        WHEN UnifiedStateValue IN (30, 40) THEN 30
+                        WHEN UnifiedStateValue IN (2, 10, 11, 12, 13, 20, 21)
+                             AND (PlaceCount > 0 OR RegionCount > 0 OR SegmentCount > 0 OR AreaCount > 0) THEN 30
+                        WHEN UnifiedStateValue = 1 THEN 1
+                        ELSE 0
+                    END,
+                    StateChangedAt, PlaceCount, RegionCount, SegmentCount, AreaCount, UpdatedAt, Version,
+                    ServerUpdatedAt, Notes, CoverImageUrl
+                    FROM DownloadedTrips_legacy_raster");
+                connection.Execute("DROP TABLE DownloadedTrips_legacy_raster");
+                connection.Execute("CREATE INDEX IF NOT EXISTS DownloadedTrips_ServerId ON DownloadedTrips(ServerId)");
+                connection.Execute("CREATE INDEX IF NOT EXISTS DownloadedTrips_UnifiedStateValue ON DownloadedTrips(UnifiedStateValue)");
+                connection.Execute("DROP TABLE IF EXISTS TripTiles");
+                connection.Execute("DROP TABLE IF EXISTS TripDownloadStates");
+                connection.Execute("DROP INDEX IF EXISTS IX_TripTiles_TripId");
+                connection.Execute("DROP INDEX IF EXISTS IX_TripDownloadStates_TripId");
+            });
+        }
+        else
+        {
+            await _database!.ExecuteAsync("DROP TABLE IF EXISTS TripTiles");
+            await _database.ExecuteAsync("DROP TABLE IF EXISTS TripDownloadStates");
+        }
+    }
+
+    Task ILegacyRasterState.RemovePreferencesAsync(IReadOnlyCollection<string> keys, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        foreach (var key in keys) Preferences.Remove(key);
+        return Task.CompletedTask;
+    }
+
+    Task ILegacyRasterState.RemoveOwnedTripRasterFilesAsync(CancellationToken cancellationToken)
+    {
+        var tilesRoot = Path.Combine(FileSystem.CacheDirectory, "tiles");
+        if (!Directory.Exists(tilesRoot)) return Task.CompletedTask;
+        foreach (var directory in Directory.EnumerateDirectories(tilesRoot, "trip_*", SearchOption.TopDirectoryOnly))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var name = Path.GetFileName(directory);
+            if (int.TryParse(name.AsSpan("trip_".Length), out _)) Directory.Delete(directory, recursive: true);
+        }
+        foreach (var file in Directory.EnumerateFiles(tilesRoot, "trip_*.tmp", SearchOption.TopDirectoryOnly))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Delete(file);
+        }
+        return Task.CompletedTask;
+    }
+
+    Task ILegacyRasterState.RecordSchemaVersionAsync(int version, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return SetSchemaVersionAsync(version);
+    }
+
+    private async Task<bool> TableExistsAsync(string tableName) =>
+        await _database!.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?", tableName) > 0;
 
     private async Task AddColumnIfMissingAsync(string tableName, string columnName, string columnType)
     {

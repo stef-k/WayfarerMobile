@@ -25,7 +25,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     private readonly ITripStateManager _tripStateManager;
     private readonly IToastService _toastService;
     private readonly CheckInViewModel _checkInViewModel;
-    private readonly UnifiedTileCacheService _tileCacheService;
     private readonly ILogger<MainViewModel> _logger;
 
     /// <summary>
@@ -407,14 +406,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     /// Gets the cache health indicator color.
     /// Forwards to MapDisplayViewModel.
     /// </summary>
-    public Color CacheHealthColor => MapDisplay.CacheHealthColor;
-
-    /// <summary>
-    /// Gets the cache health tooltip text.
-    /// Forwards to MapDisplayViewModel.
-    /// </summary>
-    public string CacheHealthTooltip => MapDisplay.CacheHealthTooltip;
-
 
     /// <summary>
     /// Gets or sets whether any bottom sheet is open (check-in or trip).
@@ -514,7 +505,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     /// <param name="trackingCoordinatorViewModel">The tracking coordinator view model.</param>
     /// <param name="toastService">The toast notification service.</param>
     /// <param name="checkInViewModel">The check-in view model.</param>
-    /// <param name="tileCacheService">The tile cache service.</param>
     /// <param name="mapDisplayViewModel">The map display view model.</param>
     /// <param name="logger">The logger instance.</param>
     public MainViewModel(
@@ -528,7 +518,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         TrackingCoordinatorViewModel trackingCoordinatorViewModel,
         IToastService toastService,
         CheckInViewModel checkInViewModel,
-        UnifiedTileCacheService tileCacheService,
         MapDisplayViewModel mapDisplayViewModel,
         ILogger<MainViewModel> logger)
     {
@@ -542,7 +531,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         Tracking = trackingCoordinatorViewModel;
         _toastService = toastService;
         _checkInViewModel = checkInViewModel;
-        _tileCacheService = tileCacheService;
         MapDisplay = mapDisplayViewModel;
         _logger = logger;
         Title = "WayfarerMobile";
@@ -1315,8 +1303,6 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
 
         // Refresh map to fix any layout issues (e.g., after bottom sheet closes)
         MapDisplay.RefreshMap();
-
-        // Cache health is updated by CacheStatusService when location changes - NOT here on startup
 
         // Request high performance mode - applied when tracking becomes Active
         await Tracking.RequestPerformanceModeAsync(PerformanceMode.HighPerformance);

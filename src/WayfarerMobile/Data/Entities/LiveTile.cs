@@ -9,6 +9,9 @@ namespace WayfarerMobile.Data.Entities;
 [Table("LiveTiles")]
 public class LiveTileEntity
 {
+    [Indexed]
+    public string ProviderId { get; set; } = "osm-standard";
+
     /// <summary>
     /// Gets or sets the unique tile identifier (z/x/y format).
     /// </summary>
@@ -62,4 +65,10 @@ public class LiveTileEntity
     /// Gets or sets the access count (for usage tracking).
     /// </summary>
     public int AccessCount { get; set; } = 1;
+
+    public DateTime FreshUntilUtc { get; set; }
+    public string? CacheControl { get; set; }
+    public DateTime? ExpiresUtc { get; set; }
+    public string? ETag { get; set; }
+    public DateTime? LastModifiedUtc { get; set; }
 }

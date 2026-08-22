@@ -30,7 +30,7 @@
                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}"
                    BorderColor="Transparent"
                    CornerRadius="8">
-                <Label Text="A location tracking app for timeline recording and trip navigation. Track your adventures, navigate with offline maps, and share your location with groups."
+                <Label Text="A location tracking app for timeline recording and trip navigation. Track your adventures, keep Trip content available offline, and share your location with groups."
                        FontSize="14"
                        LineHeight="1.4" />
             </Frame>

@@ -19,8 +19,6 @@ public class AppDiagnosticService
     private readonly ILocationBridge _locationBridge;
     private readonly ISettingsService _settingsService;
     private readonly ILocationQueueRepository _locationQueueRepository;
-    private readonly ITripRepository _tripRepository;
-    private readonly ITripTileRepository _tripTileRepository;
     private readonly LiveTileCacheService _liveTileCache;
     private readonly IPermissionsService _permissionsService;
     private readonly RouteCacheService _routeCacheService;
@@ -33,8 +31,6 @@ public class AppDiagnosticService
         ILocationBridge locationBridge,
         ISettingsService settingsService,
         ILocationQueueRepository locationQueueRepository,
-        ITripRepository tripRepository,
-        ITripTileRepository tripTileRepository,
         LiveTileCacheService liveTileCache,
         IPermissionsService permissionsService,
         RouteCacheService routeCacheService)
@@ -43,8 +39,6 @@ public class AppDiagnosticService
         _locationBridge = locationBridge;
         _settingsService = settingsService;
         _locationQueueRepository = locationQueueRepository;
-        _tripRepository = tripRepository;
-        _tripTileRepository = tripTileRepository;
         _liveTileCache = liveTileCache;
         _permissionsService = permissionsService;
         _routeCacheService = routeCacheService;
@@ -148,11 +142,6 @@ public class AppDiagnosticService
             var liveTileCount = await _liveTileCache.GetTotalCachedFilesAsync();
             var liveCacheSize = await _liveTileCache.GetTotalCacheSizeBytesAsync();
 
-            // Get trip tile cache info from repository
-            var tripTileCount = await _tripTileRepository.GetTotalTripTileCountAsync();
-            var tripCacheSize = await _tripTileRepository.GetTripCacheSizeAsync();
-            var downloadedTrips = await _tripRepository.GetDownloadedTripsAsync();
-
             return new TileCacheDiagnostics
             {
                 LiveCacheTileCount = liveTileCount,
@@ -162,19 +151,6 @@ public class AppDiagnosticService
                 LiveCacheUsagePercent = _settingsService.MaxLiveCacheSizeMB > 0
                     ? (liveCacheSize / (1024.0 * 1024.0)) / _settingsService.MaxLiveCacheSizeMB * 100
                     : 0,
-                TripCacheTileCount = tripTileCount,
-                TripCacheSizeBytes = tripCacheSize,
-                TripCacheSizeMB = tripCacheSize / (1024.0 * 1024.0),
-                TripCacheMaxSizeMB = _settingsService.MaxTripCacheSizeMB,
-                DownloadedTripCount = downloadedTrips.Count,
-                DownloadedTrips = downloadedTrips.Select(t => new TripCacheInfo
-                {
-                    TripId = t.ServerId.ToString(),
-                    Name = t.Name,
-                    Status = t.UnifiedState.GetStatusText(),
-                    DownloadedAt = t.DownloadedAt
-                }).ToList(),
-                TotalCacheSizeMB = (liveCacheSize + tripCacheSize) / (1024.0 * 1024.0),
                 CacheHealthStatus = CalculateCacheHealth(
                     liveCacheSize / (1024.0 * 1024.0),
                     _settingsService.MaxLiveCacheSizeMB)
@@ -195,93 +171,6 @@ public class AppDiagnosticService
             _logger.LogError(ex, "Error getting tile cache diagnostics");
             return new TileCacheDiagnostics { CacheHealthStatus = "Error" };
         }
-    }
-
-    /// <summary>
-    /// Gets cache coverage status for current location.
-    /// </summary>
-    public async Task<CacheCoverageInfo> GetCacheCoverageAsync(double latitude, double longitude)
-    {
-        try
-        {
-            var zoomLevels = TileCacheConstants.AllZoomLevels;
-            var coverageByZoom = new Dictionary<int, DiagnosticZoomCoverage>();
-
-            foreach (var zoom in zoomLevels)
-            {
-                var coverage = await CalculateZoomLevelCoverageAsync(latitude, longitude, zoom);
-                coverageByZoom[zoom] = coverage;
-            }
-
-            var totalTiles = coverageByZoom.Values.Sum(c => c.TotalTiles);
-            var cachedTiles = coverageByZoom.Values.Sum(c => c.CachedTiles);
-            var overallCoverage = totalTiles > 0 ? (double)cachedTiles / totalTiles : 0;
-
-            return new CacheCoverageInfo
-            {
-                Latitude = latitude,
-                Longitude = longitude,
-                CoverageByZoom = coverageByZoom,
-                OverallCoveragePercent = overallCoverage * 100,
-                TotalTilesNeeded = totalTiles,
-                TotalTilesCached = cachedTiles,
-                CoverageStatus = overallCoverage >= 0.9 ? "Excellent"
-                    : overallCoverage >= 0.5 ? "Good"
-                    : overallCoverage >= 0.2 ? "Partial"
-                    : "Poor"
-            };
-        }
-        catch (IOException ex)
-        {
-            _logger.LogError(ex, "File I/O error getting cache coverage");
-            return new CacheCoverageInfo { CoverageStatus = "File Error" };
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting cache coverage");
-            return new CacheCoverageInfo { CoverageStatus = "Error" };
-        }
-    }
-
-    private async Task<DiagnosticZoomCoverage> CalculateZoomLevelCoverageAsync(double lat, double lon, int zoom)
-    {
-        var (centerX, centerY) = LatLonToTile(lat, lon, zoom);
-        const int radius = 3; // Check 7x7 grid
-
-        int totalTiles = 0;
-        int cachedTiles = 0;
-
-        for (int dx = -radius; dx <= radius; dx++)
-        {
-            for (int dy = -radius; dy <= radius; dy++)
-            {
-                int x = centerX + dx;
-                int y = centerY + dy;
-
-                if (x < 0 || y < 0 || y >= (1 << zoom))
-                    continue;
-
-                totalTiles++;
-                var tile = await _liveTileCache.GetCachedTileAsync(zoom, x, y);
-                if (tile != null)
-                    cachedTiles++;
-            }
-        }
-
-        return new DiagnosticZoomCoverage
-        {
-            ZoomLevel = zoom,
-            TotalTiles = totalTiles,
-            CachedTiles = cachedTiles,
-            CoveragePercent = totalTiles > 0 ? (double)cachedTiles / totalTiles * 100 : 0
-        };
-    }
-
-    private static (int x, int y) LatLonToTile(double lat, double lon, int zoom)
-    {
-        int x = (int)Math.Floor((lon + 180.0) / 360.0 * (1 << zoom));
-        int y = (int)Math.Floor((1.0 - Math.Log(Math.Tan(lat * Math.PI / 180.0) + 1.0 / Math.Cos(lat * Math.PI / 180.0)) / Math.PI) / 2.0 * (1 << zoom));
-        return (x, y);
     }
 
     private static string CalculateCacheHealth(double currentSizeMB, int maxSizeMB)
@@ -417,10 +306,6 @@ public class AppDiagnosticService
         report.AppendLine("\nTILE CACHE:");
         report.AppendLine($"  Status: {cacheDiag.CacheHealthStatus}");
         report.AppendLine($"  Live Cache: {cacheDiag.LiveCacheTileCount} tiles ({cacheDiag.LiveCacheSizeMB:F1} MB / {cacheDiag.LiveCacheMaxSizeMB} MB)");
-        report.AppendLine($"  Trip Cache: {cacheDiag.TripCacheTileCount} tiles ({cacheDiag.TripCacheSizeMB:F1} MB)");
-        report.AppendLine($"  Downloaded Trips: {cacheDiag.DownloadedTripCount}");
-        foreach (var trip in cacheDiag.DownloadedTrips.Take(5))
-            report.AppendLine($"    - {trip.Name} ({trip.Status})");
 
         // Tracking
         var trackingDiag = await GetTrackingDiagnosticsAsync();
@@ -486,50 +371,7 @@ public class TileCacheDiagnostics
     public double LiveCacheSizeMB { get; set; }
     public int LiveCacheMaxSizeMB { get; set; }
     public double LiveCacheUsagePercent { get; set; }
-    public int TripCacheTileCount { get; set; }
-    public long TripCacheSizeBytes { get; set; }
-    public double TripCacheSizeMB { get; set; }
-    public int TripCacheMaxSizeMB { get; set; }
-    public int DownloadedTripCount { get; set; }
-    public List<TripCacheInfo> DownloadedTrips { get; set; } = new();
-    public double TotalCacheSizeMB { get; set; }
     public string CacheHealthStatus { get; set; } = "Unknown";
-}
-
-/// <summary>
-/// Trip cache information.
-/// </summary>
-public class TripCacheInfo
-{
-    public string TripId { get; set; } = string.Empty;
-    public string Name { get; set; } = string.Empty;
-    public string Status { get; set; } = string.Empty;
-    public DateTime DownloadedAt { get; set; }
-}
-
-/// <summary>
-/// Cache coverage information for a location.
-/// </summary>
-public class CacheCoverageInfo
-{
-    public double Latitude { get; set; }
-    public double Longitude { get; set; }
-    public Dictionary<int, DiagnosticZoomCoverage> CoverageByZoom { get; set; } = new();
-    public double OverallCoveragePercent { get; set; }
-    public int TotalTilesNeeded { get; set; }
-    public int TotalTilesCached { get; set; }
-    public string CoverageStatus { get; set; } = "Unknown";
-}
-
-/// <summary>
-/// Zoom level coverage information for diagnostics.
-/// </summary>
-public class DiagnosticZoomCoverage
-{
-    public int ZoomLevel { get; set; }
-    public int TotalTiles { get; set; }
-    public int CachedTiles { get; set; }
-    public double CoveragePercent { get; set; }
 }
 
 /// <summary>

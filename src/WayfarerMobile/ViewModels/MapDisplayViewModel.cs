@@ -26,7 +26,6 @@ public partial class MapDisplayViewModel : BaseViewModel
     private readonly ILocationLayerService _locationLayerService;
     private readonly ITripLayerService _tripLayerService;
     private readonly IDroppedPinLayerService _droppedPinLayerService;
-    private readonly ICacheVisualizationService _cacheService;
     private readonly LocationIndicatorService _indicatorService;
     private readonly IToastService _toastService;
     private readonly ILogger<MapDisplayViewModel> _logger;
@@ -63,36 +62,6 @@ public partial class MapDisplayViewModel : BaseViewModel
     private bool _isFollowingLocation = true;
 
     /// <summary>
-    /// Gets or sets the cache health status.
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CacheHealthColor))]
-    [NotifyPropertyChangedFor(nameof(CacheHealthTooltip))]
-    private CacheHealthStatus _cacheHealth = CacheHealthStatus.Unknown;
-
-    /// <summary>
-    /// Gets the cache health indicator color.
-    /// </summary>
-    public Color CacheHealthColor => CacheHealth switch
-    {
-        CacheHealthStatus.Good => Colors.LimeGreen,
-        CacheHealthStatus.Warning => Colors.Orange,
-        CacheHealthStatus.Poor => Colors.Red,
-        _ => Colors.Gray
-    };
-
-    /// <summary>
-    /// Gets the cache health tooltip text.
-    /// </summary>
-    public string CacheHealthTooltip => CacheHealth switch
-    {
-        CacheHealthStatus.Good => "Cache healthy",
-        CacheHealthStatus.Warning => "Cache partial",
-        CacheHealthStatus.Poor => "Cache issues",
-        _ => "Cache status unknown"
-    };
-
-    /// <summary>
     /// Checks if navigation route is currently displayed.
     /// </summary>
     public bool HasNavigationRoute =>
@@ -121,7 +90,6 @@ public partial class MapDisplayViewModel : BaseViewModel
         ILocationLayerService locationLayerService,
         ITripLayerService tripLayerService,
         IDroppedPinLayerService droppedPinLayerService,
-        ICacheVisualizationService cacheService,
         LocationIndicatorService indicatorService,
         IToastService toastService,
         ILogger<MapDisplayViewModel> logger)
@@ -131,13 +99,10 @@ public partial class MapDisplayViewModel : BaseViewModel
         _locationLayerService = locationLayerService;
         _tripLayerService = tripLayerService;
         _droppedPinLayerService = droppedPinLayerService;
-        _cacheService = cacheService;
         _indicatorService = indicatorService;
         _toastService = toastService;
         _logger = logger;
 
-        // Subscribe to cache status updates
-        _cacheService.StatusChanged += OnCacheStatusChanged;
     }
 
     #endregion
@@ -267,47 +232,6 @@ public partial class MapDisplayViewModel : BaseViewModel
     private void ResetNorth()
     {
         _map?.Navigator.RotateTo(0);
-    }
-
-    /// <summary>
-    /// Shows cache status details in a dialog with option to show/hide overlay on map.
-    /// </summary>
-    [RelayCommand]
-    private async Task ShowCacheStatusAsync()
-    {
-        try
-        {
-            var info = await _cacheService.GetDetailedCacheInfoAsync();
-            var message = _cacheService.FormatStatusMessage(info);
-
-            var page = Application.Current?.Windows.FirstOrDefault()?.Page;
-            if (page == null) return;
-
-            // Button text depends on whether overlay is currently visible
-            var buttonText = _cacheService.IsOverlayVisible ? "Hide Overlay" : "Show on Map";
-
-            var toggleOverlay = await page.DisplayAlertAsync(
-                "Cache Status",
-                message,
-                buttonText,
-                "Close");
-
-            var location = _callbacks?.CurrentLocation;
-            if (toggleOverlay && location != null)
-            {
-                await _cacheService.ToggleOverlayAsync(
-                    Map, location.Latitude, location.Longitude);
-            }
-            else if (toggleOverlay)
-            {
-                await _toastService.ShowWarningAsync("No location available for overlay");
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Error showing cache status");
-            await _toastService.ShowErrorAsync("Could not load cache status");
-        }
     }
 
     #endregion
@@ -529,30 +453,11 @@ public partial class MapDisplayViewModel : BaseViewModel
 
     #endregion
 
-    #region Event Handlers
-
-    /// <summary>
-    /// Handles cache status changes from CacheVisualizationService.
-    /// </summary>
-    private void OnCacheStatusChanged(object? sender, string status)
-    {
-        CacheHealth = status switch
-        {
-            "green" => CacheHealthStatus.Good,
-            "yellow" => CacheHealthStatus.Warning,
-            "red" => CacheHealthStatus.Poor,
-            _ => CacheHealthStatus.Unknown
-        };
-    }
-
-    #endregion
-
     #region Cleanup
 
     /// <inheritdoc/>
     protected override void Cleanup()
     {
-        _cacheService.StatusChanged -= OnCacheStatusChanged;
         _locationLayerService.StopAnimation();
         base.Cleanup();
     }
