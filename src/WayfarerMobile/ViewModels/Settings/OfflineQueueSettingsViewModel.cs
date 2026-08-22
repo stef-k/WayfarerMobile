@@ -15,12 +15,13 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
 {
     private readonly ISettingsService _settingsService;
     private readonly ILocationQueueRepository _repository;
-    private readonly IQueueExportService _exportService;
     private readonly QueueDrainService _queueDrainService;
+    private readonly RecoveryExportCoordinator _recoveryExportCoordinator;
     private readonly AppDiagnosticService _diagnosticService;
     private readonly IDialogService _dialogService;
     private readonly IToastService _toastService;
     private readonly ILogger<OfflineQueueSettingsViewModel> _logger;
+    private int _recoveryExportInProgress;
 
     /// <summary>
     /// Creates a new instance of OfflineQueueSettingsViewModel.
@@ -28,8 +29,8 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
     public OfflineQueueSettingsViewModel(
         ISettingsService settingsService,
         ILocationQueueRepository repository,
-        IQueueExportService exportService,
         QueueDrainService queueDrainService,
+        RecoveryExportCoordinator recoveryExportCoordinator,
         AppDiagnosticService diagnosticService,
         IDialogService dialogService,
         IToastService toastService,
@@ -37,8 +38,8 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
     {
         _settingsService = settingsService;
         _repository = repository;
-        _exportService = exportService;
         _queueDrainService = queueDrainService;
+        _recoveryExportCoordinator = recoveryExportCoordinator;
         _diagnosticService = diagnosticService;
         _dialogService = dialogService;
         _toastService = toastService;
@@ -236,22 +237,7 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task ExportCsvAsync()
     {
-        try
-        {
-            var count = (await _repository.GetAllQueuedLocationsForExportAsync()).Count;
-            if (count == 0)
-            {
-                await _toastService.ShowAsync("Queue is empty - nothing to export");
-                return;
-            }
-            await _exportService.ShareExportAsync("csv");
-            await _toastService.ShowSuccessAsync("Export ready to share");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "CSV export failed");
-            await _toastService.ShowErrorAsync("Export failed");
-        }
+        await ExportRecoveryAsync("csv", "CSV");
     }
 
     /// <summary>
@@ -260,21 +246,36 @@ public partial class OfflineQueueSettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task ExportGeoJsonAsync()
     {
+        await ExportRecoveryAsync("geojson", "GeoJSON");
+    }
+
+    private async Task ExportRecoveryAsync(string format, string displayFormat)
+    {
+        if (Interlocked.CompareExchange(ref _recoveryExportInProgress, 1, 0) != 0)
+            return;
+
         try
         {
-            var count = (await _repository.GetAllQueuedLocationsForExportAsync()).Count;
-            if (count == 0)
+            IsPreparingRecovery = true;
+            IsDeliverySuspended = true;
+            if (!await _recoveryExportCoordinator.ExportAndShareAsync(format))
             {
                 await _toastService.ShowAsync("Queue is empty - nothing to export");
                 return;
             }
-            await _exportService.ShareExportAsync("geojson");
+
             await _toastService.ShowSuccessAsync("Export ready to share");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "GeoJSON export failed");
+            _logger.LogError(ex, "{Format} recovery export failed", displayFormat);
+            IsDeliverySuspended = _settingsService.QueueDeliverySuspended;
             await _toastService.ShowErrorAsync("Export failed");
+        }
+        finally
+        {
+            IsPreparingRecovery = false;
+            Interlocked.Exchange(ref _recoveryExportInProgress, 0);
         }
     }
 

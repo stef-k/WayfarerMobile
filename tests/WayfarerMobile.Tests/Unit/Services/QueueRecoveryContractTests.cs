@@ -23,6 +23,17 @@ public class QueueRecoveryContractTests
         Assert.Contains("ResumeAndReconcileAsync", source, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void BothRecoveryFormatCommands_DelegateToTheSharedWorkflow()
+    {
+        var source = File.ReadAllText(FindRepositoryFile(
+            "src", "WayfarerMobile", "ViewModels", "Settings", "OfflineQueueSettingsViewModel.cs"));
+
+        Assert.Contains("ExportRecoveryAsync(\"csv\", \"CSV\")", source, StringComparison.Ordinal);
+        Assert.Contains("ExportRecoveryAsync(\"geojson\", \"GeoJSON\")", source, StringComparison.Ordinal);
+        Assert.Contains("_recoveryExportCoordinator.ExportAndShareAsync(format)", source, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryFile(params string[] parts)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

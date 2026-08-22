@@ -58,6 +58,7 @@
     <Compile Include="..\..\src\WayfarerMobile\Services\TimelineImportService.cs" Link="Production\TimelineImportService.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\QueueExportService.cs" Link="Production\QueueExportService.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\QueueDrainService.cs" Link="Production\QueueDrainService.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Services\RecoveryExportCoordinator.cs" Link="Production\RecoveryExportCoordinator.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Data\Repositories\ILocationQueueRepository.cs" Link="Production\ILocationQueueRepository.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Interfaces\IActivitySyncService.cs" Link="Production\IActivitySyncService.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Data\Entities\ActivityType.cs" Link="Production\ActivityType.cs" />
