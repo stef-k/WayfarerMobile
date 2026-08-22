@@ -82,6 +82,103 @@ public sealed class OsmLiveTileCacheClientTests
     }
 
     [Fact]
+    public async Task NoCacheResponse_IsStoredImmediatelyStale_AndNextRequestRevalidates()
+    {
+        var store = new RecordingTileStore();
+        var requestCount = 0;
+        var handler = new RecordingHandler(request =>
+        {
+            requestCount++;
+            if (requestCount == 1)
+            {
+                var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent([4, 5, 6]) };
+                response.Headers.CacheControl = new CacheControlHeaderValue { NoCache = true };
+                response.Headers.ETag = new EntityTagHeaderValue("\"no-cache-v1\"");
+                return response;
+            }
+
+            request.Headers.IfNoneMatch.Should().ContainSingle(x => x.Tag == "\"no-cache-v1\"");
+            return new HttpResponseMessage(HttpStatusCode.NotModified)
+            {
+                Headers = { CacheControl = new CacheControlHeaderValue { NoCache = true } }
+            };
+        });
+        var client = CreateClient(store, handler);
+
+        await client.GetTileAsync(Key, TileUri, CancellationToken.None);
+        var second = await client.GetTileAsync(Key, TileUri, CancellationToken.None);
+
+        second.Should().Equal(4, 5, 6);
+        handler.Requests.Should().HaveCount(2);
+        store.Current!.FreshUntil.Should().Be(Now);
+        store.Current.ETag.Should().Be("\"no-cache-v1\"");
+    }
+
+    [Fact]
+    public async Task NoCacheRevalidationTransportFailure_PreservesEntryWithoutServingIt()
+    {
+        var cached = new CachedTile(Key, [4, 5, 6], Now, "\"no-cache-v1\"", Now.AddDays(-1), "no-cache", null);
+        var store = new RecordingTileStore(cached);
+        var handler = new RecordingHandler(_ => throw new HttpRequestException("offline"));
+
+        var action = () => CreateClient(store, handler).GetTileAsync(Key, TileUri, CancellationToken.None);
+
+        await action.Should().ThrowAsync<HttpRequestException>();
+        store.GetStored(Key).Should().Be(cached);
+        store.AtomicWrites.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task NoStoreResponse_ReturnsBytes_RemovesOnlyExactPreviousEntry_AndDoesNotPersistResponse()
+    {
+        var unrelatedKey = new TileCacheKey("osm-standard", 12, 2049, 1362);
+        var exact = new CachedTile(Key, [1], Now.AddMinutes(-1), "\"old\"", null, null, null);
+        var unrelated = new CachedTile(unrelatedKey, [8], Now.AddDays(1), null, null, null, null);
+        var store = new RecordingTileStore(exact, unrelated);
+        var handler = new RecordingHandler(_ =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent([9, 8, 7]) };
+            response.Headers.CacheControl = new CacheControlHeaderValue { NoStore = true };
+            return response;
+        });
+
+        var bytes = await CreateClient(store, handler).GetTileAsync(Key, TileUri, CancellationToken.None);
+
+        bytes.Should().Equal(9, 8, 7);
+        store.GetStored(Key).Should().BeNull();
+        store.GetStored(unrelatedKey).Should().Be(unrelated);
+        store.AtomicWrites.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ExpiredOrdinaryEntry_TransportFailure_ReturnsUnchangedStaleBytes()
+    {
+        var cached = new CachedTile(Key, [2, 3, 4], Now.AddMinutes(-1), "\"v1\"", null, "max-age=60", null);
+        var store = new RecordingTileStore(cached);
+        var handler = new RecordingHandler(_ => throw new HttpRequestException("offline"));
+
+        var bytes = await CreateClient(store, handler).GetTileAsync(Key, TileUri, CancellationToken.None);
+
+        bytes.Should().Equal(cached.Bytes);
+        store.GetStored(Key).Should().Be(cached);
+        store.AtomicWrites.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task MustRevalidateTransportFailure_PreservesEntryWithoutServingIt()
+    {
+        var cached = new CachedTile(Key, [4, 5, 6], Now, "\"must-v1\"", null, "must-revalidate", null);
+        var store = new RecordingTileStore(cached);
+        var handler = new RecordingHandler(_ => throw new HttpRequestException("offline"));
+
+        var action = () => CreateClient(store, handler).GetTileAsync(Key, TileUri, CancellationToken.None);
+
+        await action.Should().ThrowAsync<HttpRequestException>();
+        store.GetStored(Key).Should().Be(cached);
+        store.AtomicWrites.Should().Be(0);
+    }
+
+    [Fact]
     public async Task ConcurrentSameTileRequests_CoalesceToOneHttpRequest()
     {
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -147,14 +244,17 @@ public sealed class OsmLiveTileCacheClientTests
         public override DateTimeOffset GetUtcNow() => now;
     }
 
-    private sealed class RecordingTileStore(CachedTile? current = null) : ILiveTileStore
+    private sealed class RecordingTileStore(params CachedTile[] entries) : ILiveTileStore
     {
-        public CachedTile? Current { get; private set; } = current;
+        private readonly Dictionary<TileCacheKey, CachedTile> _entries = entries.ToDictionary(x => x.Key);
+        public CachedTile? Current { get; private set; } = entries.LastOrDefault();
         public int AtomicWrites { get; private set; }
-        public Task<CachedTile?> GetAsync(TileCacheKey key, CancellationToken cancellationToken) => Task.FromResult(Current);
+        public CachedTile? GetStored(TileCacheKey key) => _entries.GetValueOrDefault(key);
+        public Task<CachedTile?> GetAsync(TileCacheKey key, CancellationToken cancellationToken) => Task.FromResult(GetStored(key));
         public Task WriteAtomicallyAsync(CachedTile tile, CancellationToken cancellationToken)
         {
             Current = tile;
+            _entries[tile.Key] = tile;
             AtomicWrites++;
             return Task.CompletedTask;
         }
