@@ -54,8 +54,8 @@
 
 	<ItemGroup>
 		<!-- MAUI -->
-		<PackageReference Include="Microsoft.Maui.Controls" Version="10.0.30" />
-		<PackageReference Include="Microsoft.Maui.Essentials" Version="10.0.30" />
+		<PackageReference Include="Microsoft.Maui.Controls" Version="10.0.100" />
+		<PackageReference Include="Microsoft.Maui.Essentials" Version="10.0.100" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.2" />
 
 		<!-- MVVM -->
