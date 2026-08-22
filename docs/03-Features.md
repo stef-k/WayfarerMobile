@@ -519,7 +519,7 @@ The app works offline with downloaded content.
 
 | Feature | Offline | Notes |
 |---------|---------|-------|
-| View map (cached areas) | Yes | Downloaded tiles only |
+| View map (previously viewed tiles) | Partial | Request-driven interactive OSM tiles may remain available while retained in the live cache; no offline basemap area is downloaded or guaranteed |
 | GPS location | Yes | Shows on map |
 | Trip navigation | Yes | With downloaded trip |
 | Timeline viewing | Partial | Cached entries only |

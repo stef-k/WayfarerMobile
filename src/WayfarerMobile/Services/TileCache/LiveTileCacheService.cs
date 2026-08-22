@@ -85,24 +85,45 @@ public sealed class LiveTileCacheService : ILiveTileStore
     {
         var path = GetPath(tile.Key);
         var temporaryPath = path + $".{Guid.NewGuid():N}.tmp";
+        var backupPath = path + $".{Guid.NewGuid():N}.bak";
+        var hadPreviousFile = File.Exists(path);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         try
         {
             await File.WriteAllBytesAsync(temporaryPath, tile.Bytes, cancellationToken);
+            if (hadPreviousFile) File.Copy(path, backupPath);
             File.Move(temporaryPath, path, overwrite: true);
-            await _repository.SaveLiveTileAsync(new LiveTileEntity
+            try
             {
-                Id = GetId(tile.Key), ProviderId = tile.Key.ProviderId, Zoom = tile.Key.Zoom, X = tile.Key.X, Y = tile.Key.Y,
-                TileSource = "osm", FilePath = path, FileSizeBytes = tile.Bytes.Length, CachedAt = DateTime.UtcNow,
-                LastAccessedAt = DateTime.UtcNow, FreshUntilUtc = tile.FreshUntil.UtcDateTime, ETag = tile.ETag,
-                LastModifiedUtc = tile.LastModified?.UtcDateTime, CacheControl = tile.CacheControl, ExpiresUtc = tile.Expires?.UtcDateTime
-            });
+                await _repository.SaveLiveTileAsync(new LiveTileEntity
+                {
+                    Id = GetId(tile.Key), ProviderId = tile.Key.ProviderId, Zoom = tile.Key.Zoom, X = tile.Key.X, Y = tile.Key.Y,
+                    TileSource = "osm", FilePath = path, FileSizeBytes = tile.Bytes.Length, CachedAt = DateTime.UtcNow,
+                    LastAccessedAt = DateTime.UtcNow, FreshUntilUtc = tile.FreshUntil.UtcDateTime, ETag = tile.ETag,
+                    LastModifiedUtc = tile.LastModified?.UtcDateTime, CacheControl = tile.CacheControl, ExpiresUtc = tile.Expires?.UtcDateTime
+                });
+            }
+            catch
+            {
+                if (hadPreviousFile) File.Move(backupPath, path, overwrite: true);
+                else if (File.Exists(path)) File.Delete(path);
+                throw;
+            }
             _ = EvictLruTilesAsync();
         }
         finally
         {
             if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+            if (File.Exists(backupPath)) File.Delete(backupPath);
         }
+    }
+
+    async Task ILiveTileStore.RemoveAsync(TileCacheKey key, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await _repository.DeleteLiveTileAsync(GetId(key));
+        var path = GetPath(key);
+        if (File.Exists(path)) File.Delete(path);
     }
 
     private async Task<LiveTileEntity?> AdoptCanonicalLegacyEntryAsync(TileCacheKey key, CancellationToken cancellationToken)

@@ -1177,7 +1177,7 @@ Task<SyncResult> SyncTripAsync(Guid serverId, CancellationToken ct);
 
 - Prevents concurrent syncs of same trip
 - Compares server vs local versions
-- Re-downloads tiles if bounding box changed
+- Updates provider-independent Trip content without reacquiring raster tiles
 
 ---
 

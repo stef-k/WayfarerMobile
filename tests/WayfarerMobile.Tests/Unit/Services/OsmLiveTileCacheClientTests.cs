@@ -258,6 +258,12 @@ public sealed class OsmLiveTileCacheClientTests
             AtomicWrites++;
             return Task.CompletedTask;
         }
+        public Task RemoveAsync(TileCacheKey key, CancellationToken cancellationToken)
+        {
+            _entries.Remove(key);
+            if (Current?.Key == key) Current = null;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class RecordingHandler : HttpMessageHandler

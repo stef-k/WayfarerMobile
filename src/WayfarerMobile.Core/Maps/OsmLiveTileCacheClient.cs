@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Net.Http.Headers;
 
 namespace WayfarerMobile.Core.Maps;
 
@@ -18,6 +19,7 @@ public interface ILiveTileStore
 {
     Task<CachedTile?> GetAsync(TileCacheKey key, CancellationToken cancellationToken);
     Task WriteAtomicallyAsync(CachedTile tile, CancellationToken cancellationToken);
+    Task RemoveAsync(TileCacheKey key, CancellationToken cancellationToken);
 }
 
 /// <summary>Applies HTTP caching semantics to renderer-requested OSM Standard tiles.</summary>
@@ -67,46 +69,80 @@ public sealed class OsmLiveTileCacheClient
         if (cached?.LastModified is not null)
             request.Headers.IfModifiedSince = cached.LastModified;
 
-        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
-        var now = _timeProvider.GetUtcNow();
-        var freshUntil = ResolveFreshUntil(response, now);
-
-        if (response.StatusCode == HttpStatusCode.NotModified && cached is not null)
+        HttpResponseMessage response;
+        try
         {
-            var refreshed = cached with
-            {
-                FreshUntil = freshUntil,
-                ETag = response.Headers.ETag?.Tag ?? cached.ETag,
-                LastModified = response.Content?.Headers.LastModified ?? cached.LastModified,
-                CacheControl = response.Headers.CacheControl?.ToString() ?? cached.CacheControl,
-                Expires = response.Content?.Headers.Expires ?? cached.Expires
-            };
-            await _store.WriteAtomicallyAsync(refreshed, CancellationToken.None).ConfigureAwait(false);
-            return refreshed.Bytes;
+            response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            if (cached is not null && !RequiresSuccessfulValidation(cached.CacheControl)) return cached.Bytes;
+            throw;
         }
 
-        if (!response.IsSuccessStatusCode)
-            return cached?.Bytes;
+        using (response)
+        {
+            var now = _timeProvider.GetUtcNow();
+            var freshUntil = ResolveFreshUntil(response, now,
+                response.StatusCode == HttpStatusCode.NotModified ? cached?.CacheControl : null);
 
-        var bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-        if (bytes.Length == 0)
-            return cached?.Bytes;
+            if (response.StatusCode == HttpStatusCode.NotModified && cached is not null)
+            {
+                var refreshed = cached with
+                {
+                    FreshUntil = freshUntil,
+                    ETag = response.Headers.ETag?.Tag ?? cached.ETag,
+                    LastModified = response.Content?.Headers.LastModified ?? cached.LastModified,
+                    CacheControl = response.Headers.CacheControl?.ToString() ?? cached.CacheControl,
+                    Expires = response.Content?.Headers.Expires ?? cached.Expires
+                };
+                await _store.WriteAtomicallyAsync(refreshed, CancellationToken.None).ConfigureAwait(false);
+                return refreshed.Bytes;
+            }
 
-        var replacement = new CachedTile(
-            key,
-            bytes,
-            freshUntil,
-            response.Headers.ETag?.Tag,
-            response.Content.Headers.LastModified,
-            response.Headers.CacheControl?.ToString(),
-            response.Content.Headers.Expires);
-        await _store.WriteAtomicallyAsync(replacement, CancellationToken.None).ConfigureAwait(false);
-        return bytes;
+            if (!response.IsSuccessStatusCode)
+                return cached is not null && !RequiresSuccessfulValidation(cached.CacheControl) ? cached.Bytes : null;
+
+            var bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+            if (bytes.Length == 0)
+                return cached is not null
+                    && !RequiresSuccessfulValidation(cached.CacheControl)
+                    && response.Headers.CacheControl?.NoStore != true
+                    ? cached.Bytes
+                    : null;
+
+            if (response.Headers.CacheControl?.NoStore == true)
+            {
+                await _store.RemoveAsync(key, CancellationToken.None).ConfigureAwait(false);
+                return bytes;
+            }
+
+            var replacement = new CachedTile(
+                key,
+                bytes,
+                freshUntil,
+                response.Headers.ETag?.Tag,
+                response.Content.Headers.LastModified,
+                response.Headers.CacheControl?.ToString(),
+                response.Content.Headers.Expires);
+            await _store.WriteAtomicallyAsync(replacement, CancellationToken.None).ConfigureAwait(false);
+            return bytes;
+        }
     }
 
-    private static DateTimeOffset ResolveFreshUntil(HttpResponseMessage response, DateTimeOffset now)
+    private static DateTimeOffset ResolveFreshUntil(
+        HttpResponseMessage response,
+        DateTimeOffset now,
+        string? inheritedCacheControl)
     {
-        var maxAge = response.Headers.CacheControl?.SharedMaxAge ?? response.Headers.CacheControl?.MaxAge;
+        var cacheControl = response.Headers.CacheControl;
+        if (cacheControl is null && !string.IsNullOrWhiteSpace(inheritedCacheControl))
+            CacheControlHeaderValue.TryParse(inheritedCacheControl, out cacheControl);
+
+        if (cacheControl?.NoCache == true || cacheControl?.NoStore == true || cacheControl?.MustRevalidate == true)
+            return now;
+
+        var maxAge = cacheControl?.SharedMaxAge ?? cacheControl?.MaxAge;
         if (maxAge is { } age && age >= TimeSpan.Zero)
             return now.Add(age);
 
@@ -116,4 +152,8 @@ public sealed class OsmLiveTileCacheClient
 
         return now.Add(FallbackFreshness);
     }
+
+    private static bool RequiresSuccessfulValidation(string? cacheControl) =>
+        CacheControlHeaderValue.TryParse(cacheControl, out var parsed)
+        && (parsed.NoCache || parsed.NoStore || parsed.MustRevalidate);
 }
