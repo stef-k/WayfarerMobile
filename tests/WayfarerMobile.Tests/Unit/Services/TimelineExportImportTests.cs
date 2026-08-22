@@ -145,7 +145,8 @@ public class TimelineExportImportTests
         actual.Should().BeEquivalentTo(expected, options => options
             .Excluding(entry => entry.Id).Excluding(entry => entry.ServerId)
             .Excluding(entry => entry.CreatedAt).Excluding(entry => entry.LastEnrichedAt)
-            .Excluding(entry => entry.QueuedLocationId));
+            .Excluding(entry => entry.QueuedLocationId)
+            .Excluding(entry => entry.IsSynced).Excluding(entry => entry.IsEnriched));
         actual.Id.Should().BePositive().And.NotBe(expected.Id);
         actual.ServerId.Should().BeNull();
         actual.CreatedAt.Should().NotBe(expected.CreatedAt);

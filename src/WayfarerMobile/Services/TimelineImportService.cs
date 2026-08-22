@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Data.Entities;
@@ -52,27 +53,26 @@ public class TimelineImportService
         try
         {
             using var reader = new StreamReader(fileStream);
-            var headerLine = await reader.ReadLineAsync();
-            if (string.IsNullOrEmpty(headerLine))
+            var content = await reader.ReadToEndAsync();
+            using var records = ReadCsvRecords(content).GetEnumerator();
+            if (!records.MoveNext() || string.IsNullOrEmpty(records.Current.Record))
             {
                 errors.Add("Empty file or missing header");
                 return new ImportResult(imported, updated, skipped, errors);
             }
 
-            var headers = ParseCsvLine(headerLine);
+            var headers = ParseCsvLine(records.Current.Record);
             var columnMap = BuildColumnMap(headers);
 
-            var lineNumber = 1;
-            string? line;
-            while ((line = await reader.ReadLineAsync()) != null)
+            while (records.MoveNext())
             {
-                lineNumber++;
-                if (string.IsNullOrWhiteSpace(line))
+                var (record, lineNumber) = records.Current;
+                if (string.IsNullOrWhiteSpace(record))
                     continue;
 
                 try
                 {
-                    var values = ParseCsvLine(line);
+                    var values = ParseCsvLine(record);
                     var entry = ParseCsvEntry(values, columnMap);
 
                     if (entry == null)
@@ -134,7 +134,7 @@ public class TimelineImportService
             var document = JsonDocument.Parse(json);
             var root = document.RootElement;
 
-            if (!root.TryGetProperty("features", out var features) ||
+            if (!TryGetStructuralProperty(root, "features", "Features", out var features) ||
                 features.ValueKind != JsonValueKind.Array)
             {
                 errors.Add("Invalid GeoJSON: missing features array");
@@ -268,6 +268,63 @@ public class TimelineImportService
 
         values.Add(currentValue.ToString());
         return values;
+    }
+
+    /// <summary>
+    /// Reads complete CSV records while preserving line breaks inside quoted fields.
+    /// </summary>
+    private static IEnumerable<(string Record, int LineNumber)> ReadCsvRecords(string content)
+    {
+        var record = new StringBuilder();
+        var inQuotes = false;
+        var lineNumber = 1;
+        var recordLineNumber = 1;
+
+        for (var i = 0; i < content.Length; i++)
+        {
+            var c = content[i];
+            if (c == '"')
+            {
+                record.Append(c);
+                if (inQuotes && i + 1 < content.Length && content[i + 1] == '"')
+                {
+                    record.Append(content[++i]);
+                }
+                else
+                {
+                    inQuotes = !inQuotes;
+                }
+
+                continue;
+            }
+
+            if (c is '\r' or '\n')
+            {
+                var isCrLf = c == '\r' && i + 1 < content.Length && content[i + 1] == '\n';
+                if (inQuotes)
+                {
+                    record.Append(c);
+                    if (isCrLf)
+                        record.Append(content[++i]);
+                }
+                else
+                {
+                    if (isCrLf)
+                        i++;
+                    yield return (record.ToString(), recordLineNumber);
+                    record.Clear();
+                    recordLineNumber = lineNumber + 1;
+                }
+
+                lineNumber++;
+                continue;
+            }
+
+            record.Append(c);
+        }
+
+        if (record.Length > 0)
+            yield return (record.ToString(), recordLineNumber);
     }
 
     /// <summary>
@@ -433,8 +490,8 @@ public class TimelineImportService
     private static LocalTimelineEntry? ParseGeoJsonFeature(JsonElement feature)
     {
         // Get coordinates from geometry
-        if (!feature.TryGetProperty("geometry", out var geometry) ||
-            !geometry.TryGetProperty("coordinates", out var coordinates) ||
+        if (!TryGetStructuralProperty(feature, "geometry", "Geometry", out var geometry) ||
+            !TryGetStructuralProperty(geometry, "coordinates", "Coordinates", out var coordinates) ||
             coordinates.ValueKind != JsonValueKind.Array)
         {
             return null;
@@ -448,7 +505,7 @@ public class TimelineImportService
         var latitude = coordArray[1].GetDouble();
 
         // Get properties
-        if (!feature.TryGetProperty("properties", out var properties))
+        if (!TryGetStructuralProperty(feature, "properties", "Properties", out var properties))
             return null;
 
         // Required: timestamp - support both "TimestampUtc" (PascalCase) and "timestamp" (camelCase)
@@ -591,6 +648,18 @@ public class TimelineImportService
     }
 
     #region GeoJSON Helper Methods
+
+    private static bool TryGetStructuralProperty(
+        JsonElement element,
+        string standardName,
+        string earlierMobileName,
+        out JsonElement value)
+    {
+        if (element.TryGetProperty(standardName, out value))
+            return true;
+
+        return element.TryGetProperty(earlierMobileName, out value);
+    }
 
     /// <summary>
     /// Gets a string property with alias fallback for GeoJSON.
