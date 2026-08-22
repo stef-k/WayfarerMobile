@@ -339,6 +339,8 @@ public partial class MapDisplayViewModel : BaseViewModel
     /// </summary>
     public async Task<List<MPoint>> ShowTripLayersAsync(TripDetails trip)
     {
+        if (_selectedSegment != null && !trip.Segments.Any(segment => segment.Id == _selectedSegment.Id))
+            _selectedSegment = null;
         _displayedTrip = trip;
         var placePoints = new List<MPoint>();
 
@@ -351,6 +353,7 @@ public partial class MapDisplayViewModel : BaseViewModel
         if (_tripSegmentsLayer != null)
             _tripLayerService.UpdateTripSegments(_tripSegmentsLayer, trip.Segments);
 
+        RefreshSelectedSegmentDecorations();
         return placePoints;
     }
 
@@ -423,6 +426,9 @@ public partial class MapDisplayViewModel : BaseViewModel
     /// </summary>
     public async Task RefreshTripLayersAsync(TripDetails trip)
     {
+        _selectedSegment = _selectedSegment == null
+            ? null
+            : trip.Segments.FirstOrDefault(segment => segment.Id == _selectedSegment.Id);
         _displayedTrip = trip;
         if (_tripPlacesLayer != null)
             await _tripLayerService.UpdateTripPlacesAsync(_tripPlacesLayer, trip.AllPlaces);

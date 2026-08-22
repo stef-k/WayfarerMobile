@@ -62,6 +62,8 @@ public static class SegmentAnchorResolver
 
         if (waypoints.Select(w => w.PlaceId).Distinct().Count() != waypoints.Count)
             return Fail(SegmentAnchorFailure.DuplicateIdentity);
+        if (waypoints.Any(waypoint => waypoint.PlaceId == segment.OriginId || waypoint.PlaceId == segment.DestinationId))
+            return Fail(SegmentAnchorFailure.DuplicateIdentity);
 
         var anchorPlaces = new List<TripPlace>(identities.Count);
         foreach (var identity in identities)
@@ -73,9 +75,11 @@ public static class SegmentAnchorResolver
             anchorPlaces.Add(place);
         }
 
-        var geometry = effectiveGeometry?.ToList() ?? new List<SegmentCoordinate>();
-        if (geometry.Count == 0)
-            geometry.AddRange(anchorPlaces.Select(place => new SegmentCoordinate(place.Latitude, place.Longitude)));
+        if (segment.HasCustomRoute && effectiveGeometry is null)
+            return Fail(SegmentAnchorFailure.MalformedGeometry);
+        var geometry = effectiveGeometry?.ToList();
+        if (geometry is null)
+            geometry = anchorPlaces.Select(place => new SegmentCoordinate(place.Latitude, place.Longitude)).ToList();
         if (geometry.Count < 2 || geometry.Any(point => !IsValidLocation(point.Latitude, point.Longitude)))
             return Fail(SegmentAnchorFailure.MalformedGeometry);
 
