@@ -56,6 +56,17 @@
     <Compile Include="..\..\src\WayfarerMobile\Data\Repositories\ITimelineRepository.cs" Link="Production\ITimelineRepository.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\TimelineExportService.cs" Link="Production\TimelineExportService.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\TimelineImportService.cs" Link="Production\TimelineImportService.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Services\QueueExportService.cs" Link="Production\QueueExportService.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Services\QueueDrainService.cs" Link="Production\QueueDrainService.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Services\QueueRecoveryOperationCoordinator.cs" Link="Production\QueueRecoveryOperationCoordinator.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Services\RecoveryExportCoordinator.cs" Link="Production\RecoveryExportCoordinator.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Data\Repositories\ILocationQueueRepository.cs" Link="Production\ILocationQueueRepository.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Interfaces\IActivitySyncService.cs" Link="Production\IActivitySyncService.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Data\Entities\ActivityType.cs" Link="Production\ActivityType.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Services\LocationSyncCallbacks.cs" Link="Production\LocationSyncCallbacks.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Helpers\NetworkLoggingExtensions.cs" Link="Production\NetworkLoggingExtensions.cs" />
+    <Compile Remove="Infrastructure\Entities\QueuedLocation.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Data\Entities\QueuedLocation.cs" Link="Production\QueuedLocation.cs" />
   </ItemGroup>
 
   <PropertyGroup>

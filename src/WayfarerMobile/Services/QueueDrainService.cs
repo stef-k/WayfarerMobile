@@ -145,6 +145,7 @@ public sealed class QueueDrainService : IDisposable
     private int _startGuard; // For thread-safe StartAsync via Interlocked
     private int _disposeGuard; // For thread-safe Dispose via Interlocked
     private int _drainLoopRunning; // For thread-safe drain loop guard via Interlocked
+    private readonly QueueRecoveryOperationCoordinator _recoveryOperations;
 
     #endregion
 
@@ -164,12 +165,25 @@ public sealed class QueueDrainService : IDisposable
         ISettingsService settings,
         IConnectivity connectivity,
         ILogger<QueueDrainService> logger)
+        : this(apiClient, locationQueue, settings, connectivity, logger, new QueueRecoveryOperationCoordinator())
+    {
+    }
+
+    /// <summary>Creates a queue drain service using the shared recovery-operation owner.</summary>
+    public QueueDrainService(
+        IApiClient apiClient,
+        ILocationQueueRepository locationQueue,
+        ISettingsService settings,
+        IConnectivity connectivity,
+        ILogger<QueueDrainService> logger,
+        QueueRecoveryOperationCoordinator recoveryOperations)
     {
         _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
         _locationQueue = locationQueue ?? throw new ArgumentNullException(nameof(locationQueue));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _connectivity = connectivity ?? throw new ArgumentNullException(nameof(connectivity));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _recoveryOperations = recoveryOperations ?? throw new ArgumentNullException(nameof(recoveryOperations));
 
         _isOnline = _connectivity.NetworkAccess == NetworkAccess.Internet;
     }
@@ -299,6 +313,34 @@ public sealed class QueueDrainService : IDisposable
     /// when the loop is already active.
     /// </remarks>
     public bool IsDrainLoopRunning => Volatile.Read(ref _drainLoopRunning) != 0;
+
+    /// <summary>Gets whether queue delivery is persistently suspended.</summary>
+    public bool IsDeliverySuspended => _settings.QueueDeliverySuspended;
+
+    /// <summary>Suspends future claims and waits for active delivery to finish.</summary>
+    public async Task SuspendAndWaitForQuiescenceAsync(CancellationToken cancellationToken = default)
+    {
+        using var recoveryOperation = await _recoveryOperations.AcquireAsync(cancellationToken);
+        await SuspendAndWaitForQuiescenceCoreAsync(cancellationToken);
+    }
+
+    internal async Task SuspendAndWaitForQuiescenceCoreAsync(CancellationToken cancellationToken = default)
+    {
+        _settings.QueueDeliverySuspended = true;
+        await _drainLock.WaitAsync(cancellationToken);
+        _drainLock.Release();
+    }
+
+    /// <summary>Resumes delivery through the ordinary drain loop.</summary>
+    public async Task ResumeAndReconcileAsync()
+    {
+        using var recoveryOperation = await _recoveryOperations.AcquireAsync();
+        _settings.QueueDeliverySuspended = false;
+        await TriggerDrainAsync();
+        StartDrainLoop();
+    }
+
+    internal QueueRecoveryOperationCoordinator RecoveryOperations => _recoveryOperations;
 
     /// <summary>
     /// Triggers an immediate drain cycle outside the normal timer schedule.
@@ -528,6 +570,9 @@ public sealed class QueueDrainService : IDisposable
         bool verboseLogging)
     {
         // Early exits
+        if (_settings.QueueDeliverySuspended)
+            return DrainAttemptResult.Skipped;
+
         if (!_isOnline)
         {
             if (verboseLogging)
@@ -578,6 +623,9 @@ public sealed class QueueDrainService : IDisposable
 
         try
         {
+            if (_settings.QueueDeliverySuspended)
+                return DrainAttemptResult.Skipped;
+
             // Atomically claim the next pending location, prioritizing user-invoked.
             // User-invoked locations (manual check-ins) sync before background locations.
             location = await _locationQueue.ClaimNextPendingLocationWithPriorityAsync();
@@ -592,8 +640,9 @@ public sealed class QueueDrainService : IDisposable
                 "QueueDrain: Claimed location {Id} from {Timestamp}",
                 location.Id, location.Timestamp);
 
-            // Note: Location is already marked as Syncing by ClaimNextPendingLocationWithPriorityAsync
-            // Rate limit is recorded in ProcessLocationAsync AFTER client-side filter passes
+            // Keep the gate through processing so recovery preparation can await quiescence.
+            await ProcessLocationAsync(location, cancellationToken);
+            return DrainAttemptResult.Processed;
         }
         catch (SQLiteException ex)
         {
@@ -602,27 +651,14 @@ public sealed class QueueDrainService : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error claiming pending location from queue");
+            _logger.LogError(ex, "Unexpected error claiming or processing pending location");
+            if (location != null)
+                await TryResetLocationAsync(location.Id, "Unhandled processing exception");
             return DrainAttemptResult.Failed;
         }
         finally
         {
             _drainLock.Release();
-        }
-
-        // Process location outside lock (network call)
-        try
-        {
-            await ProcessLocationAsync(location, cancellationToken);
-            return DrainAttemptResult.Processed;
-        }
-        catch (Exception ex)
-        {
-            // ProcessLocationAsync handles most exceptions internally,
-            // but if something unexpected escapes, ensure we don't leave location stuck
-            _logger.LogError(ex, "Unhandled exception processing location {Id}", location.Id);
-            await TryResetLocationAsync(location.Id, "Unhandled processing exception");
-            return DrainAttemptResult.Failed;
         }
     }
 
@@ -1040,6 +1076,9 @@ public sealed class QueueDrainService : IDisposable
 
         while (!_isDisposed && _isStarted)
         {
+            if (_settings.QueueDeliverySuspended)
+                break;
+
             try
             {
                 // Check 1: Connectivity

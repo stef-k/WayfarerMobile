@@ -20,3 +20,13 @@ public sealed class ShareFile(string fullPath)
 {
     public string FullPath { get; } = fullPath;
 }
+
+public enum NetworkAccess { None, Internet }
+public sealed class ConnectivityChangedEventArgs(NetworkAccess networkAccess) : EventArgs { public NetworkAccess NetworkAccess { get; } = networkAccess; }
+public interface IConnectivity
+{
+    NetworkAccess NetworkAccess { get; }
+    event EventHandler<ConnectivityChangedEventArgs>? ConnectivityChanged;
+}
+public static class Connectivity { public static IConnectivity Current { get; set; } = new ConnectivityStub(); private sealed class ConnectivityStub : IConnectivity { public NetworkAccess NetworkAccess => NetworkAccess.Internet; public event EventHandler<ConnectivityChangedEventArgs>? ConnectivityChanged; } }
+public static class MainThread { public static void BeginInvokeOnMainThread(Action action) => action(); }

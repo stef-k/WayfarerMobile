@@ -283,6 +283,27 @@ Locations are queued locally before syncing to the server.
 
 ### Managing the Queue
 
+#### Safe recovery
+
+The **Queue** is pending server-delivery state, the **Timeline** is local history, and **Wayfarer** is confirmed server history. A recovery export copies eligible pending/retrying rows and never clears the queue.
+
+Full phone-and-server recovery requires two manual imports:
+
+1. On the original phone export eligible queue records. Export automatically suspends delivery and waits for active work to finish before reading the recovery snapshot. **Prepare recovery** is an optional explicit advance step when you want to suspend earlier.
+2. Share and retain the exported recovery file. A successful or empty export leaves delivery suspended.
+3. Import the file into the replacement phone's Timeline for local history.
+4. Import the same file into Wayfarer for server history.
+5. Verify both destinations independently.
+6. If the original queue remains available, choose **Resume and reconcile**. Resume automatically waits for any active recovery export to complete.
+
+Timeline import does not update Wayfarer, recreate queue delivery state/linkage, or assign a server ID. Wayfarer import does not populate a phone Timeline. Export/import success does not clear queue rows; confirmed rows become synced and follow ordinary retention.
+
+For expedited synchronization, **Prepare recovery** may be used before **Export**, but it is not required. Direct Export performs the same suspension and quiescence preparation. Users do not need to time Export and Resume button presses: recovery operations are serialized, and Resume waits for an active export. Wait for a terminal Wayfarer import result before resume. The GUID makes imported rows reconcile to their existing server identity; missing rows upload normally. After a partial/failed import, retain and retry the file—never clear the queue.
+
+Suspension survives restart. Successful, empty, failed, or cancelled export leaves delivery suspended and queue data intact; resume/drain failure leaves rows eligible for retry. Syncing, synced, and rejected rows are excluded. Keep the file until both destinations are verified.
+
+CSV uses the CSV importer and suits spreadsheets/Python; GeoJSON uses the Wayfarer GeoJSON importer and suits GIS tools. Both carry the portable GUID; editing/removing it can prevent exact reconciliation. Files may contain precise locations/times, Notes, activity/check-in data, device/app/OS/provider/battery metadata, queue diagnostics, and identifiers. Store/transfer them securely and delete unnecessary copies after verified recovery.
+
 Go to **Settings** > **Offline Queue** to manage your location queue:
 
 **Status Display:**

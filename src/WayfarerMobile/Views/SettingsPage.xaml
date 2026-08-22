@@ -678,21 +678,36 @@
                                  Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
 
                         <!-- Export Buttons -->
-                        <Label Text="Export queue for backup or analysis."
+                        <Label Text="Export never clears the queue. Full recovery imports the file into both Timeline (phone history) and Wayfarer (server history). Resume reconciles by GUID; suspension remains safe across restart."
                                FontSize="12"
                                TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        <Button Text="Prepare recovery"
+                                Command="{Binding OfflineQueue.PrepareWayfarerBulkRecoveryCommand}"
+                                IsEnabled="{Binding OfflineQueue.IsPreparingRecovery, Converter={StaticResource InvertedBoolConverter}}"
+                                Style="{StaticResource DarkButton}"
+                                HeightRequest="44" />
+                        <Label Text="{Binding OfflineQueue.DeliveryStatus}"
+                               FontSize="12"
+                               FontAttributes="Bold" />
                         <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
                             <Button Grid.Column="0"
                                     Text="Export CSV"
                                     Command="{Binding OfflineQueue.ExportCsvCommand}"
+                                    IsEnabled="{Binding OfflineQueue.IsPreparingRecovery, Converter={StaticResource InvertedBoolConverter}}"
                                     Style="{StaticResource DarkButton}"
                                     HeightRequest="44" />
                             <Button Grid.Column="1"
                                     Text="Export GeoJSON"
                                     Command="{Binding OfflineQueue.ExportGeoJsonCommand}"
+                                    IsEnabled="{Binding OfflineQueue.IsPreparingRecovery, Converter={StaticResource InvertedBoolConverter}}"
                                     Style="{StaticResource DarkButton}"
                                     HeightRequest="44" />
                         </Grid>
+                        <Button Text="Resume and reconcile"
+                                Command="{Binding OfflineQueue.ResumeAndReconcileCommand}"
+                                IsEnabled="{Binding OfflineQueue.IsPreparingRecovery, Converter={StaticResource InvertedBoolConverter}}"
+                                Style="{StaticResource DarkButton}"
+                                HeightRequest="44" />
 
                         <BoxView HeightRequest="1"
                                  Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />

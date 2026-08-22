@@ -289,6 +289,8 @@ public class MainViewModel : ObservableObject
 
 ## QueueDrainService
 
+Recovery suspension is persisted and enforced at the shared claim boundary used by every drain trigger. Direct Export automatically suspends delivery and waits for active work to become quiescent before reading and sharing the eligible snapshot; **Prepare recovery** is an optional explicit advance step that establishes the same restart-safe suspension boundary. One in-process recovery-operation coordinator serializes Prepare, Export, and Resume, so Resume waits for an active export and callers do not need to time commands manually. Successful or empty export leaves delivery suspended. `ResumeAndReconcileAsync` then clears suspension and uses ordinary drain. A matching per-user GUID confirms the existing Wayfarer row; a missing record uploads normally. Export is non-destructive, Timeline import creates history without server ID/queue linkage, legacy keyless files retain timestamp/coordinate compatibility, and direct queue restoration is unsupported.
+
 **Source**: `src/WayfarerMobile/Services/QueueDrainService.cs`
 
 Manages synchronization of queued locations to the server using a continuous drain loop.

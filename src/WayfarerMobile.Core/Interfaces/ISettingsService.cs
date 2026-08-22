@@ -55,6 +55,9 @@ public interface ISettingsService
     /// </summary>
     int QueueLimitMaxLocations { get; set; }
 
+    /// <summary>Gets or sets whether offline queue delivery is persistently suspended.</summary>
+    bool QueueDeliverySuspended { get; set; }
+
     /// <summary>
     /// Gets whether the app is properly configured (has server URL and token).
     /// </summary>

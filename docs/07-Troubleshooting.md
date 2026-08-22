@@ -1,5 +1,13 @@
 # Troubleshooting
 
+## Queue recovery did not finish
+
+- Export failure leaves the queue intact and suspended; retry or resume.
+- Wait for Wayfarer import to finish. For a partial/failure result, retain and retry the file; never clear the queue as repair.
+- Suspension survives restart. Return to Offline Queue to see **export ready**, or resume if suspension was accidental.
+- Resume/drain failure preserves ordinary retry. Syncing, synced, and rejected rows are excluded from recovery export.
+- Retain the secured file until phone Timeline and Wayfarer history are independently verified.
+
 This guide helps you resolve common issues with Wayfarer Mobile.
 
 ---
