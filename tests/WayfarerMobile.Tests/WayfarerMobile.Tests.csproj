@@ -10,6 +10,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\src\WayfarerMobile\Data\Entities\OfflineSegment.cs" Link="Production\OfflineSegment.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Data\Repositories\RepositoryBase.cs" Link="Production\RepositoryBase.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Data\Repositories\ISegmentRepository.cs" Link="Production\ISegmentRepository.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Data\Repositories\SegmentRepository.cs" Link="Production\SegmentRepository.cs" />
     <!-- Test Framework -->
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.2" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
