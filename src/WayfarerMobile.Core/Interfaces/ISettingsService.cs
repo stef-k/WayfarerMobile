@@ -61,46 +61,10 @@ public interface ISettingsService
     bool IsConfigured { get; }
 
     /// <summary>
-    /// Gets or sets the maximum concurrent tile downloads (1-4, default 2).
-    /// </summary>
-    int MaxConcurrentTileDownloads { get; set; }
-
-    /// <summary>
-    /// Gets or sets the minimum delay between tile requests in milliseconds (50-5000, default 100).
-    /// </summary>
-    int MinTileRequestDelayMs { get; set; }
-
-    /// <summary>
     /// Gets or sets the maximum size of the live tile cache in megabytes (100-2000, default 500).
     /// Live cache stores tiles from normal map browsing.
     /// </summary>
     int MaxLiveCacheSizeMB { get; set; }
-
-    /// <summary>
-    /// Gets or sets the maximum size of the trip tile cache in megabytes (500-5000, default 2000).
-    /// Trip cache stores tiles downloaded for offline trip use.
-    /// </summary>
-    int MaxTripCacheSizeMB { get; set; }
-
-    /// <summary>
-    /// Gets or sets the custom tile server URL.
-    /// Default: OpenStreetMap tile server.
-    /// </summary>
-    string TileServerUrl { get; set; }
-
-    /// <summary>
-    /// Prefetch radius in tiles for live cache around user location.
-    /// Radius of N means (2N+1)x(2N+1) grid of tiles per zoom level.
-    /// Default: 5 (11x11 grid). Range: 1-10 tiles.
-    /// </summary>
-    int LiveCachePrefetchRadius { get; set; }
-
-    /// <summary>
-    /// Independent distance threshold for tile prefetching (in meters).
-    /// This is separate from location logging threshold.
-    /// Default: 500 meters - only prefetch when user has moved significantly.
-    /// </summary>
-    int PrefetchDistanceThresholdMeters { get; set; }
 
     #region Navigation Settings
 
@@ -182,11 +146,6 @@ public interface ISettingsService
     /// Otherwise, a culture code like "en", "fr", "de", etc.
     /// </summary>
     string LanguagePreference { get; set; }
-
-    /// <summary>
-    /// Gets or sets whether offline map caching is enabled.
-    /// </summary>
-    bool MapOfflineCacheEnabled { get; set; }
 
     #endregion
 

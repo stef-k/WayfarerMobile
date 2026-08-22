@@ -12,7 +12,7 @@ This guide covers platform requirements and how to install Wayfarer Mobile on yo
 |-------------|---------|
 | Android Version | 7.0 (Nougat, API 24) |
 | RAM | 2 GB |
-| Storage | 100 MB + space for offline maps |
+| Storage | 100 MB + space for downloaded Trip content and the live map cache |
 | Play Services | Recommended (for best GPS accuracy) |
 
 **Recommended devices:**
@@ -25,7 +25,7 @@ This guide covers platform requirements and how to install Wayfarer Mobile on yo
 |-------------|---------|
 | iOS Version | 15.0 |
 | Device | iPhone 6s or later |
-| Storage | 100 MB + space for offline maps |
+| Storage | 100 MB + space for downloaded Trip content and the live map cache |
 
 ---
 
@@ -75,11 +75,11 @@ The app uses storage for:
 |------|--------------|
 | App installation | 50-80 MB |
 | Live tile cache | Up to 500 MB (configurable) |
-| Downloaded trips | 50-500 MB per trip |
+| Downloaded trips | Depends on provider-independent Trip content |
 | Location database | 1-10 MB |
 | Logs | Up to 70 MB |
 
-**Total recommended**: 500 MB - 2 GB free space, depending on offline map usage.
+**Total recommended**: At least 500 MB free space, depending on live-cache and Trip-content usage.
 
 ### Managing Storage
 
@@ -87,7 +87,7 @@ In **Settings** > **Cache**, you can:
 - View current cache sizes
 - Clear live tile cache
 - Delete individual trip downloads
-- Set maximum cache limits
+- Set the live-cache size limit
 
 ---
 

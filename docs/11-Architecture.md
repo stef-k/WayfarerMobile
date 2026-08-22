@@ -295,7 +295,6 @@ The `DatabaseService` manages all SQLite operations using sqlite-net-pcl:
 | `LocalTimelineEntries` | Cached timeline for offline viewing |
 | `AppSettings` | Key-value app settings |
 | `DownloadedTrips` | Trip metadata and status |
-| `TripTiles` | Cached map tiles for trips |
 | `LiveTiles` | LRU cache for live map browsing |
 | `OfflinePlaces` | Trip places for offline access |
 | `OfflineSegments` | Trip segments for offline navigation |
@@ -381,7 +380,7 @@ public class SettingsService : ISettingsService
 | **Sync** | `QueueDrainService`, `TripSyncCoordinator`, `TimelineSyncService`, `SyncEventBus` |
 | **Maps** | `MapBuilder`, `LocationLayerService`, `TripLayerService`, `GroupLayerService`, `TimelineLayerService`, `DroppedPinLayerService` |
 | **Navigation** | `TripNavigationService`, `OsrmRoutingService`, `RouteCacheService` |
-| **Tiles** | `TileDownloadOrchestrator`, `DownloadStateService`, `DownloadStateManager`, `CacheLimitEnforcer` |
+| **Interactive map cache** | `WayfarerTileSource`, `LiveTileCacheService`, `LiveTileCacheRepository` |
 | **Trip** | `TripStateManager`, `TripContentService`, `TripMetadataBuilder`, `PlaceOperationsHandler`, `RegionOperationsHandler` |
 | **Timeline** | `TimelineDataService`, `LocalTimelineStorageService`, `MutationQueueService` |
 | **Security** | `AppLockService` |

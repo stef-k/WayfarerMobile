@@ -27,9 +27,7 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     private readonly ITripNavigationService _tripNavigationService;
     private readonly ITripSyncService _tripSyncService;
     private readonly ITripStateManager _tripStateManager;
-    private readonly IDownloadStateService _downloadStateService;
     private readonly ILogger<MyTripsViewModel> _logger;
-    private bool _hasRecoveredStuckDownloads;
     private readonly List<TripGrouping> _allTrips = new();
 
     #region Observable Properties
@@ -169,7 +167,6 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         ITripNavigationService tripNavigationService,
         ITripSyncService tripSyncService,
         ITripStateManager tripStateManager,
-        IDownloadStateService downloadStateService,
         TripDownloadViewModel downloadViewModel,
         ILogger<MyTripsViewModel> logger)
     {
@@ -181,7 +178,6 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         _tripNavigationService = tripNavigationService;
         _tripSyncService = tripSyncService;
         _tripStateManager = tripStateManager;
-        _downloadStateService = downloadStateService;
         _logger = logger;
         Title = "My Trips";
 
@@ -783,58 +779,6 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         }
     }
 
-    /// <summary>
-    /// Checks for paused downloads from previous sessions and updates item states.
-    /// </summary>
-    private async Task CheckForPausedDownloadsAsync()
-    {
-        try
-        {
-            // Update the Download ViewModel's count
-            await Download.RefreshPausedDownloadsCountAsync();
-
-            // Also update item states for paused downloads
-            var pausedDownloads = await _downloadService.GetPausedDownloadsAsync();
-            if (pausedDownloads.Count > 0)
-            {
-                _logger.LogInformation("Found {Count} paused download(s) from previous session", pausedDownloads.Count);
-
-                // Update the download state for items that are paused
-                foreach (var pausedState in pausedDownloads)
-                {
-                    // Find the item in Trips by server ID (more reliable than local ID)
-                    foreach (var group in _allTrips)
-                    {
-                        var item = group.FirstOrDefault(i => i.ServerId == pausedState.TripServerId);
-                        if (item != null)
-                        {
-                            // Set proper paused state based on pause reason
-                            item.UnifiedState = pausedState.Status == DownloadStateStatus.LimitReached
-                                ? Core.Enums.UnifiedDownloadState.PausedCacheLimit
-                                : Core.Enums.UnifiedDownloadState.PausedByUser;
-                            // Set proper paused state for UI (not actively downloading, shows paused progress)
-                            item.IsDownloading = false;
-                            item.DownloadProgress = pausedState.TotalTileCount > 0
-                                ? pausedState.CompletedTileCount / (double)pausedState.TotalTileCount
-                                : 0;
-                            _logger.LogDebug("Marked trip {TripName} as paused: {Completed}/{Total} tiles",
-                                item.Name, pausedState.CompletedTileCount, pausedState.TotalTileCount);
-                            break; // Found the item, no need to check other groups
-                        }
-                    }
-                }
-            }
-        }
-        catch (IOException ex)
-        {
-            _logger.LogWarning(ex, "IO error checking for paused downloads");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Unexpected error checking for paused downloads");
-        }
-    }
-
     #endregion
 
     #region Lifecycle
@@ -850,26 +794,12 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
         Connectivity.ConnectivityChanged += OnConnectivityChanged;
         UpdateConnectivityState();
 
-        // Recover stuck downloads once per session (downloads interrupted by app closure)
-        if (!_hasRecoveredStuckDownloads)
-        {
-            _hasRecoveredStuckDownloads = true;
-            var recovered = await _downloadStateService.RecoverStuckDownloadsAsync();
-            if (recovered > 0)
-            {
-                _logger.LogInformation("Recovered {Count} stuck download(s) from previous session", recovered);
-            }
-        }
-
         // Load trips if empty
         if (_allTrips.Count == 0)
         {
             _logger.LogDebug("OnAppearingAsync: Calling LoadTripsAsync");
             await LoadTripsAsync();
         }
-
-        // Check for paused downloads from previous sessions
-        await CheckForPausedDownloadsAsync();
 
         // Always refresh loaded state (even after LoadTripsAsync, in case there's timing issues)
         _logger.LogDebug("OnAppearingAsync: Calling RefreshLoadedTripState");
@@ -913,21 +843,6 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
     Task ITripDownloadCallbacks.RefreshTripsAsync() => LoadTripsAsync();
 
     /// <inheritdoc/>
-    void ITripDownloadCallbacks.MoveItemToCorrectGroup(TripListItem item) => MoveItemToCorrectGroup(item);
-
-    /// <inheritdoc/>
-    TripListItem? ITripDownloadCallbacks.FindItemByServerId(Guid serverId)
-    {
-        foreach (var group in _allTrips)
-        {
-            var item = group.FirstOrDefault(i => i.ServerId == serverId);
-            if (item != null)
-                return item;
-        }
-        return null;
-    }
-
-    /// <inheritdoc/>
     void ITripDownloadCallbacks.UpdateItemProgress(Guid serverId, double progress, bool isDownloading)
     {
         foreach (var group in _allTrips)
@@ -940,30 +855,6 @@ public partial class MyTripsViewModel : BaseViewModel, ITripDownloadCallbacks
                     item.DownloadProgress = progress;
                     return;
                 }
-            }
-        }
-    }
-
-    /// <inheritdoc/>
-    IReadOnlyList<TripGrouping> ITripDownloadCallbacks.TripGroups => _allTrips.AsReadOnly();
-
-    /// <inheritdoc/>
-    async Task ITripDownloadCallbacks.CheckForPausedDownloadsAsync()
-    {
-        await CheckForPausedDownloadsAsync();
-    }
-
-    /// <inheritdoc/>
-    void ITripDownloadCallbacks.UpdateTripState(Guid serverId, Core.Enums.UnifiedDownloadState newState, bool isMetadataComplete, bool hasTiles)
-    {
-        foreach (var group in _allTrips)
-        {
-            var item = group.FirstOrDefault(t => t.ServerId == serverId);
-            if (item != null)
-            {
-                item.UpdateState(newState, isMetadataComplete, hasTiles);
-                MoveItemToCorrectGroup(item);
-                return;
             }
         }
     }

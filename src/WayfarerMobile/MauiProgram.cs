@@ -174,8 +174,6 @@ public static class MauiProgram
         services.AddSingleton<ILocationQueueRepository, LocationQueueRepository>();
         services.AddSingleton<ITimelineRepository, TimelineRepository>();
         services.AddSingleton<ILiveTileCacheRepository, LiveTileCacheRepository>();
-        services.AddSingleton<ITripTileRepository, TripTileRepository>();
-        services.AddSingleton<IDownloadStateRepository, DownloadStateRepository>();
         services.AddSingleton<IPlaceRepository, PlaceRepository>();
         services.AddSingleton<ISegmentRepository, SegmentRepository>();
         services.AddSingleton<IAreaRepository, AreaRepository>();
@@ -183,7 +181,6 @@ public static class MauiProgram
 
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<ITripStateManager, TripStateManager>();
-        services.AddSingleton<IDownloadProgressAggregator, DownloadProgressAggregator>();
         services.AddSingleton<ISyncEventBus, SyncEventBus>();
         services.AddSingleton<IMutationQueueService, MutationQueueService>();
 
@@ -205,16 +202,11 @@ public static class MauiProgram
         services.AddSingleton<IGroupsService, GroupsService>();
         services.AddSingleton<IGroupMemberManager, GroupMemberManager>();
         services.AddSingleton<NavigationService>();
-        services.AddSingleton<ITileDownloadService, TileDownloadService>();
-        services.AddSingleton<IDownloadStateManager, DownloadStateManager>();
-        services.AddSingleton<ICacheLimitEnforcer, CacheLimitEnforcer>();
         services.AddSingleton<ITripMetadataBuilder, TripMetadataBuilder>();
         services.AddSingleton<ITripContentService, TripContentService>();
-        services.AddSingleton<ITileDownloadOrchestrator, TileDownloadOrchestrator>();
         services.AddSingleton<TripDownloadService>();
         // Also register as interface for consumers that prefer interface injection
         services.AddSingleton<ITripDownloadService>(sp => sp.GetRequiredService<TripDownloadService>());
-        services.AddSingleton<IDownloadStateService, DownloadStateService>();
 
         // Trip editing and sync coordination (extracted from TripDownloadService)
         services.AddSingleton<ITripEditingService, TripEditingService>();
@@ -233,13 +225,7 @@ public static class MauiProgram
 
         // Tile Cache Services (depends on TripDownloadService, ILocationBridge)
         services.AddSingleton<LiveTileCacheService>();
-        services.AddSingleton<UnifiedTileCacheService>();
         services.AddSingleton<WayfarerTileSource>();
-        services.AddSingleton<Services.TileCache.CacheOverlayService>();
-        services.AddSingleton<CacheStatusService>(); // Subscribes to LocationBridge for cache health updates
-        services.AddSingleton<Services.TileCache.CacheVisualizationService>();
-        services.AddSingleton<ICacheVisualizationService>(sp =>
-            sp.GetRequiredService<Services.TileCache.CacheVisualizationService>());
 
         // Map Services (depends on tile cache)
         services.AddSingleton<LocationIndicatorService>();
@@ -294,7 +280,6 @@ public static class MauiProgram
         services.AddSingleton<IWikipediaService, WikipediaService>();
 
         // Download Notification Service
-        services.AddSingleton<IDownloadNotificationService, DownloadNotificationService>();
 
         // SSE Client Factory (for real-time updates)
         services.AddSingleton<ISseClientFactory, SseClientFactory>();
@@ -440,7 +425,9 @@ public static class MauiProgram
         services.AddHttpClient("Tiles", client =>
         {
             client.Timeout = TimeSpan.FromSeconds(60);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("WayfarerMobile/1.0");
+            client.DefaultRequestVersion = new Version(2, 0);
+            client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrHigher;
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("WayfarerMobile/1.0 (+https://github.com/stef-k/WayfarerMobile)");
         });
 
         // Osrm - routing service with 30s timeout

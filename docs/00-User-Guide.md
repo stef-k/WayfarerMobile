@@ -9,7 +9,7 @@ Welcome to the Wayfarer Mobile User Guide. This documentation will help you get 
 Wayfarer Mobile is a companion app for the Wayfarer server that lets you:
 
 - **Track your location** automatically in the background to build a personal timeline
-- **Plan and navigate trips** with offline map support
+- **Plan and navigate trips** with downloaded Trip content
 - **Share your location** with groups in real-time
 - **Check in** at memorable places with notes
 
@@ -24,7 +24,7 @@ The app runs on Android (7.0+) and iOS (15+) devices.
 | [Installation](02-Installation.md) | Platform requirements and installation steps |
 | [Getting Started](01-Getting-Started.md) | Initial setup, QR scanning, and permissions |
 | [Features](03-Features.md) | Complete overview of all app features |
-| [Trips and Offline](04-Trips-and-Offline.md) | Trip management and offline map usage |
+| [Trips and Offline](04-Trips-and-Offline.md) | Trip management and provider-independent offline content |
 | [Location Tracking](05-Location-Tracking.md) | Background tracking and privacy controls |
 | [Groups and Sharing](06-Groups-and-Sharing.md) | Group membership and live location sharing |
 | [Troubleshooting](07-Troubleshooting.md) | Solutions to common issues |
@@ -76,7 +76,7 @@ You can disable timeline tracking while still seeing your live position on the m
 
 The app works offline for:
 
-- **Downloaded trips**: Navigate using cached map tiles
+- **Downloaded trips**: Use stored metadata, Places, routes, Areas, and navigation data
 - **Location queue**: Locations are saved locally and synced when online
 - **Basic navigation**: Direct bearing and distance to destinations
 
@@ -84,7 +84,7 @@ Internet is required for:
 
 - Timeline sync to server
 - Group location sharing
-- Downloading new trips or tiles
+- Downloading new Trips or viewing uncached map areas
 
 ---
 

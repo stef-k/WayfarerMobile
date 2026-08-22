@@ -33,7 +33,7 @@ Wayfarer Mobile is a privacy-first companion app for self-hosted Wayfarer server
 | **Timeline Tracking** | Automatic background location logging with sleep/wake battery optimization |
 | **Timeline Export/Import** | Export to CSV or GeoJSON, import with duplicate detection |
 | **Trip Management** | Browse trips, places, segments, and polygon zones from your server |
-| **Offline Maps** | Download map tiles (zoom 8-17) per trip for offline use |
+| **Offline Trip Content** | Retain Trip metadata, Places, routes, Areas, and navigation data |
 | **Turn-by-Turn Navigation** | Voice-guided navigation with multi-tier route fallback |
 | **Group Sharing** | Real-time location sharing via SSE with colored member markers |
 | **Activity Types** | 20 built-in activities with icons, editable per-location, server sync every 6 hours |
@@ -49,7 +49,7 @@ Wayfarer Mobile is a privacy-first companion app for self-hosted Wayfarer server
 - **Dual Navigation Modes**: Trip navigation (user segments → cached → OSRM → direct) and ad-hoc navigation (OSRM → direct)
 - **Queue Resilience**: Configurable queue limit (default 25,000), fast sync (12s/location), export to CSV/GeoJSON
 
-> **Offline Maps Note**: Offline tile downloads can consume significant storage depending on trip area and zoom levels. The app adapts maximum zoom based on trip size and provides cache limits (default 500 MB live, 2 GB trip tiles). Monitor device storage on older devices.
+> **Map cache note**: OpenStreetMap tiles requested during interactive viewing are kept in a bounded live cache. Previously viewed tiles may remain usable while cached, but Trip downloads do not include or guarantee an offline basemap area.
 
 ## Quick Start
 

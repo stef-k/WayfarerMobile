@@ -10,7 +10,7 @@ Quick answers to common questions about Wayfarer Mobile.
 
 Wayfarer Mobile is a location tracking and trip planning companion app for the Wayfarer server. It allows you to:
 - Build a personal timeline of your location history
-- Navigate planned trips with offline maps
+- Navigate using downloaded Trip content and route geometry
 - Share your location with groups
 - Check in at memorable places
 
@@ -127,7 +127,7 @@ It does NOT collect:
 
 ---
 
-## Maps and Offline
+## Maps and Offline Content
 
 ### What map does the app use?
 
@@ -136,7 +136,7 @@ The app uses OpenStreetMap tiles via the Mapsui library. Maps are rendered from 
 ### Can I use the app offline?
 
 Partially. Offline capabilities include:
-- Viewing downloaded trip maps
+- Viewing downloaded Trip metadata, Places, routes, Areas, and navigation data
 - GPS location (always works)
 - Queuing locations for later sync
 - Basic navigation with downloaded trips
@@ -147,24 +147,13 @@ Requires internet:
 - Group location sharing
 - Downloading new trips
 
-### How do I download maps for offline use?
+### How does map caching work?
 
-Maps are downloaded automatically when you download a trip:
+OpenStreetMap tiles are cached when the interactive renderer requests them during ordinary pan and zoom. Previously viewed tiles may remain available while cached, but downloading a Trip does not download or guarantee a complete offline basemap area.
 
-1. Go to Trips tab
-2. Tap Download on a trip
-3. Wait for download to complete
+### How much storage does the map cache use?
 
-This caches all map tiles for the trip area at multiple zoom levels.
-
-### How much storage do offline maps use?
-
-Depends on the trip size:
-- Small city trip: 50-200 MB
-- Large city: 200-500 MB
-- Multi-city trip: 500+ MB
-
-You can configure cache limits in Settings.
+The bounded live-cache size is configurable in Settings. It is independent of downloaded Trip content.
 
 ---
 
@@ -237,10 +226,9 @@ Background location ("Allow all the time") is required for 24/7 timeline trackin
 
 Android requires a persistent notification for any app running a background service. This notification shows tracking status and cannot be dismissed while tracking is active. It's an Android system requirement, not an app design choice.
 
-### What's the difference between live cache and trip cache?
+### What remains available offline after downloading a Trip?
 
-- **Live cache**: Tiles downloaded while browsing the map, automatically managed (LRU eviction)
-- **Trip cache**: Tiles deliberately downloaded for specific trips, permanent until you delete the trip
+Provider-independent downloaded Trip content remains available offline. Map tiles come only from request-driven interactive OpenStreetMap caching, so previously viewed tiles may remain usable while retained, but no Trip-owned tile package or complete offline basemap area is downloaded or guaranteed.
 
 ### Does the app use Google Play Services?
 

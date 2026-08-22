@@ -345,11 +345,11 @@
                 </sfExpander:SfExpander.Content>
             </sfExpander:SfExpander>
 
-            <!-- Offline Map Cache Section -->
+            <!-- Interactive Map Cache Section -->
             <sfExpander:SfExpander IsExpanded="False">
                 <sfExpander:SfExpander.Header>
                     <Grid HeightRequest="48" Padding="10,0">
-                        <Label Text="Offline Map Cache"
+                        <Label Text="Map Cache"
                                FontSize="16"
                                FontAttributes="Bold"
                                VerticalOptions="Center" />
@@ -357,60 +357,6 @@
                 </sfExpander:SfExpander.Header>
                 <sfExpander:SfExpander.Content>
                     <VerticalStackLayout Padding="15" Spacing="15">
-                        <!-- Enable/Disable Toggle -->
-                        <Grid ColumnDefinitions="*,Auto">
-                            <VerticalStackLayout Grid.Column="0">
-                                <Label Text="Enable Offline Cache"
-                                       FontSize="14" />
-                                <Label Text="Cache map tiles for offline use"
-                                       FontSize="12"
-                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-                            </VerticalStackLayout>
-                            <Switch Grid.Column="1"
-                                        IsToggled="{Binding CacheSettings.MapOfflineCacheEnabled}"
-                                        OnColor="{StaticResource Primary}" />
-                        </Grid>
-
-                        <BoxView HeightRequest="1"
-                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
-
-                        <!-- Prefetch Radius Slider -->
-                        <VerticalStackLayout Spacing="8">
-                            <Grid ColumnDefinitions="*,Auto">
-                                <Label Text="Prefetch Radius"
-                                       FontSize="14"
-                                       Grid.Column="0" />
-                                <Label Text="{Binding CacheSettings.PrefetchRadiusGridSize}"
-                                       FontSize="14"
-                                       FontAttributes="Bold"
-                                       Grid.Column="1" />
-                            </Grid>
-                            <Slider Minimum="1"
-                                    Maximum="10"
-                                    Value="{Binding CacheSettings.LiveCachePrefetchRadius}" />
-                            <Grid ColumnDefinitions="Auto,*,Auto">
-                                <Label Text="1"
-                                       FontSize="10"
-                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
-                                       Grid.Column="0" />
-                                <Label Text="{Binding CacheSettings.LiveCachePrefetchRadius}"
-                                       FontSize="14"
-                                       FontAttributes="Bold"
-                                       HorizontalOptions="Center"
-                                       Grid.Column="1" />
-                                <Label Text="10"
-                                       FontSize="10"
-                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
-                                       Grid.Column="2" />
-                            </Grid>
-                            <Label FontSize="11"
-                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
-                                   Text="Controls how many map tiles are downloaded around your location. Higher values give better offline coverage but use more data and storage.&#x0a;&#x0a;• Radius 1: ~10 MB, 3×3 tiles, ~1 km coverage&#x0a;• Radius 5: ~70 MB, 11×11 tiles, ~9 km coverage&#x0a;• Radius 10: ~280 MB, 21×21 tiles, ~17 km coverage&#x0a;&#x0a;Cached tiles are reused (LRU) - moving nearby won't re-download." />
-                        </VerticalStackLayout>
-
-                        <BoxView HeightRequest="1"
-                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
-
                         <!-- Live Cache Size -->
                         <VerticalStackLayout Spacing="8">
                             <Label Text="Live Cache Size"
@@ -432,122 +378,17 @@
                                    TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
                         </VerticalStackLayout>
 
-                        <BoxView HeightRequest="1"
-                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
-
-                        <!-- Trip Cache Size -->
-                        <VerticalStackLayout Spacing="8">
-                            <Label Text="Trip Cache Size"
-                                   FontSize="14" />
-                            <Grid ColumnDefinitions="*,80">
-                                <Slider Minimum="500"
-                                        Maximum="5000"
-                                        Value="{Binding CacheSettings.MaxTripCacheSizeMB}"
-                                        Grid.Column="0" />
-                                <Label Text="{Binding CacheSettings.MaxTripCacheSizeMB, StringFormat='{0} MB'}"
-                                       FontSize="14"
-                                       FontAttributes="Bold"
-                                       HorizontalOptions="End"
-                                       VerticalOptions="Center"
-                                       Grid.Column="1" />
-                            </Grid>
-                            <Label Text="Maximum storage for downloaded trip tiles. These are preserved longer for offline trip navigation."
-                                   FontSize="11"
-                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-                        </VerticalStackLayout>
+                        <Label Text="{Binding CacheSettings.LiveCacheUsage}"
+                               FontSize="12"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                            <Button Text="Refresh Usage" Command="{Binding CacheSettings.RefreshUsageCommand}" />
+                            <Button Grid.Column="1" Text="Clear Cache" Command="{Binding CacheSettings.ClearLiveCacheCommand}" />
+                        </Grid>
 
                         <BoxView HeightRequest="1"
                                  Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
 
-                        <!-- Prefetch Distance -->
-                        <VerticalStackLayout Spacing="8">
-                            <Label Text="Prefetch Distance"
-                                   FontSize="14" />
-                            <Grid ColumnDefinitions="*,80">
-                                <Slider Minimum="100"
-                                        Maximum="2000"
-                                        Value="{Binding CacheSettings.PrefetchDistanceThresholdMeters}"
-                                        Grid.Column="0" />
-                                <Label Text="{Binding CacheSettings.PrefetchDistanceThresholdMeters, StringFormat='{0} m'}"
-                                       FontSize="14"
-                                       FontAttributes="Bold"
-                                       HorizontalOptions="End"
-                                       VerticalOptions="Center"
-                                       Grid.Column="1" />
-                            </Grid>
-                            <Label Text="How far you must move before fetching new tiles. Higher values reduce data usage but may result in gaps."
-                                   FontSize="11"
-                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-                        </VerticalStackLayout>
-
-                        <BoxView HeightRequest="1"
-                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
-
-                        <!-- Parallel Downloads -->
-                        <VerticalStackLayout Spacing="8">
-                            <Label Text="Parallel Downloads"
-                                   FontSize="14" />
-                            <Grid ColumnDefinitions="*,40">
-                                <Slider Minimum="1"
-                                        Maximum="4"
-                                        Value="{Binding CacheSettings.MaxConcurrentTileDownloads}"
-                                        Grid.Column="0" />
-                                <Label Text="{Binding CacheSettings.MaxConcurrentTileDownloads}"
-                                       FontSize="14"
-                                       FontAttributes="Bold"
-                                       HorizontalOptions="End"
-                                       VerticalOptions="Center"
-                                       Grid.Column="1" />
-                            </Grid>
-                            <Label Text="Number of simultaneous tile downloads. Higher values are faster but may be rate-limited by tile servers."
-                                   FontSize="11"
-                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-                        </VerticalStackLayout>
-
-                        <BoxView HeightRequest="1"
-                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
-
-                        <!-- Request Delay -->
-                        <VerticalStackLayout Spacing="8">
-                            <Label Text="Request Delay"
-                                   FontSize="14" />
-                            <Grid ColumnDefinitions="*,80">
-                                <Slider Minimum="50"
-                                        Maximum="1000"
-                                        Value="{Binding CacheSettings.MinTileRequestDelayMs}"
-                                        Grid.Column="0" />
-                                <Label Text="{Binding CacheSettings.MinTileRequestDelayMs, StringFormat='{0} ms'}"
-                                       FontSize="14"
-                                       FontAttributes="Bold"
-                                       HorizontalOptions="End"
-                                       VerticalOptions="Center"
-                                       Grid.Column="1" />
-                            </Grid>
-                            <Label Text="Minimum delay between tile requests. Higher values are more polite to tile servers but slower."
-                                   FontSize="11"
-                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-                        </VerticalStackLayout>
-
-                        <BoxView HeightRequest="1"
-                                 Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}" />
-
-                        <!-- Tile Server URL -->
-                        <VerticalStackLayout Spacing="8">
-                            <Label Text="Tile Server URL"
-                                   FontSize="14" />
-                            <Entry Text="{Binding CacheSettings.TileServerUrl}"
-                                   Placeholder="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-                                   Keyboard="Url"
-                                   FontSize="12" />
-                            <Label Text="Custom tile server URL. Must contain {z}, {x}, {y} placeholders. Leave default for OpenStreetMap."
-                                   FontSize="11"
-                                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
-                            <Button Text="Reset to Default"
-                                    Command="{Binding CacheSettings.ResetTileServerUrlCommand}"
-                                    IsVisible="{Binding CacheSettings.IsDefaultTileServer, Converter={StaticResource InvertedBoolConverter}}"
-                                    Style="{StaticResource DarkButton}"
-                                    HeightRequest="36" />
-                        </VerticalStackLayout>
                     </VerticalStackLayout>
                 </sfExpander:SfExpander.Content>
             </sfExpander:SfExpander>

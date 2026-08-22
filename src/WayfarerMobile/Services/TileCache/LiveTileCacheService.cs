@@ -1,493 +1,151 @@
 using Microsoft.Extensions.Logging;
 using SQLite;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Maps;
 using WayfarerMobile.Data.Entities;
 using WayfarerMobile.Data.Repositories;
 
 namespace WayfarerMobile.Services.TileCache;
 
-/// <summary>
-/// Service for caching map tiles during live browsing with LRU eviction.
-/// </summary>
-public class LiveTileCacheService
+/// <summary>Bounded cache for tiles requested by the interactive OSM map renderer.</summary>
+public sealed class LiveTileCacheService : ILiveTileStore
 {
-    #region Constants
-
-    private const int TileTimeoutMs = TileCacheConstants.TileTimeoutMs;
-
-    #endregion
-
-    #region Fields
-
-    private readonly ILiveTileCacheRepository _liveTileCache;
-    private readonly ISettingsService _settingsService;
+    private static readonly Uri TileBaseUri = new("https://tile.openstreetmap.org/");
+    private readonly ILiveTileCacheRepository _repository;
+    private readonly ISettingsService _settings;
     private readonly ILogger<LiveTileCacheService> _logger;
-    private readonly HttpClient _httpClient;
-    private readonly SemaphoreSlim _downloadLock = new(2);
+    private readonly OsmLiveTileCacheClient _client;
     private readonly string _cacheDirectory;
 
-    #endregion
-
-    #region Events
-
-    /// <summary>
-    /// Event raised periodically during prefetch with progress. Args: (downloaded, total).
-    /// </summary>
-    public event EventHandler<(int Downloaded, int Total)>? PrefetchProgress;
-
-    /// <summary>
-    /// Event raised when prefetch operation completes. Argument is number of tiles downloaded.
-    /// </summary>
-    public event EventHandler<int>? PrefetchCompleted;
-
-    #endregion
-
-    #region Constructor
-
-    /// <summary>
-    /// Creates a new instance of LiveTileCacheService.
-    /// </summary>
-    /// <param name="liveTileCache">Repository for live tile cache operations.</param>
-    /// <param name="settingsService">Settings service.</param>
-    /// <param name="logger">Logger instance.</param>
-    public LiveTileCacheService(
-        ILiveTileCacheRepository liveTileCache,
-        ISettingsService settingsService,
-        ILogger<LiveTileCacheService> logger)
+    public LiveTileCacheService(ILiveTileCacheRepository repository, ISettingsService settings,
+        IHttpClientFactory httpClientFactory, ILogger<LiveTileCacheService> logger)
     {
-        _liveTileCache = liveTileCache;
-        _settingsService = settingsService;
+        _repository = repository;
+        _settings = settings;
         _logger = logger;
-        _cacheDirectory = Path.Combine(FileSystem.CacheDirectory, "tiles", "live");
+        _cacheDirectory = Path.Combine(FileSystem.CacheDirectory, "tiles", "live", OsmLiveTileCacheClient.ProviderId);
         Directory.CreateDirectory(_cacheDirectory);
-
-        _httpClient = new HttpClient { Timeout = TimeSpan.FromMilliseconds(TileTimeoutMs) };
-        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("WayfarerMobile/1.0");
+        _client = new OsmLiveTileCacheClient(httpClientFactory.CreateClient("Tiles"), this);
     }
 
-    #endregion
-
-    #region Public Methods
-
-    /// <summary>
-    /// Gets a cached tile if available.
-    /// </summary>
-    /// <param name="z">Zoom level.</param>
-    /// <param name="x">X coordinate.</param>
-    /// <param name="y">Y coordinate.</param>
-    /// <returns>Tile file info if cached, null otherwise.</returns>
-    public async Task<FileInfo?> GetCachedTileAsync(int z, int x, int y)
+    public Task<byte[]?> GetTileAsync(int zoom, int x, int y, CancellationToken cancellationToken = default)
     {
-        var filePath = GetTileFilePath(z, x, y);
-        if (!File.Exists(filePath))
-            return null;
-
-        // Update access time in database for LRU tracking
-        await UpdateTileAccessAsync(z, x, y);
-
-        return new FileInfo(filePath);
+        var key = new TileCacheKey(OsmLiveTileCacheClient.ProviderId, zoom, x, y);
+        return _client.GetTileAsync(key, new Uri(TileBaseUri, $"{zoom}/{x}/{y}.png"), cancellationToken);
     }
 
-    /// <summary>
-    /// Gets a tile from cache or downloads if not available.
-    /// </summary>
-    /// <param name="z">Zoom level.</param>
-    /// <param name="x">X coordinate.</param>
-    /// <param name="y">Y coordinate.</param>
-    /// <returns>Tile file info if available, null otherwise.</returns>
-    public async Task<FileInfo?> GetOrDownloadTileAsync(int z, int x, int y)
-    {
-        // Check cache first
-        var cached = await GetCachedTileAsync(z, x, y);
-        if (cached != null)
-            return cached;
+    public Task<int> GetTotalCachedFilesAsync() => _repository.GetLiveTileCountAsync();
+    public Task<long> GetTotalCacheSizeBytesAsync() => _repository.GetLiveCacheSizeAsync();
 
-        // Download if online
-        if (Connectivity.Current.NetworkAccess != NetworkAccess.Internet)
-            return null;
-
-        await _downloadLock.WaitAsync();
-        try
-        {
-            // Double-check cache after acquiring lock
-            cached = await GetCachedTileAsync(z, x, y);
-            if (cached != null)
-                return cached;
-
-            return await DownloadTileAsync(z, x, y);
-        }
-        finally
-        {
-            _downloadLock.Release();
-        }
-    }
-
-    /// <summary>
-    /// Prefetches tiles around a location for smooth panning.
-    /// Uses configured prefetch radius and max concurrent downloads from settings.
-    /// Zoom levels are ordered by importance: current view (15), then adjacent (14, 16), then rest.
-    /// </summary>
-    /// <param name="latitude">Center latitude.</param>
-    /// <param name="longitude">Center longitude.</param>
-    public async Task PrefetchAroundLocationAsync(double latitude, double longitude)
-    {
-        // Check if offline caching is enabled
-        if (!_settingsService.MapOfflineCacheEnabled)
-            return;
-
-        if (Connectivity.Current.NetworkAccess != NetworkAccess.Internet)
-            return;
-
-        // Use configured settings
-        int radius = _settingsService.LiveCachePrefetchRadius;
-        int maxConcurrent = _settingsService.MaxConcurrentTileDownloads;
-
-        // Use centralized zoom levels (8-17) ordered by importance
-        int[] zoomLevels = TileCacheConstants.AllZoomLevels;
-
-        // Collect all tile coordinates to download
-        var tilesToFetch = new List<(int zoom, int x, int y)>();
-
-        foreach (var zoom in zoomLevels)
-        {
-            var (centerX, centerY) = LatLonToTile(latitude, longitude, zoom);
-            int maxTiles = 1 << zoom;
-
-            for (int dx = -radius; dx <= radius; dx++)
-            {
-                for (int dy = -radius; dy <= radius; dy++)
-                {
-                    var x = centerX + dx;
-                    var y = centerY + dy;
-
-                    // Validate both X and Y coordinates
-                    if (x < 0 || x >= maxTiles || y < 0 || y >= maxTiles)
-                        continue;
-
-                    // Only add if not already cached (check file exists, no DB hit)
-                    var filePath = GetTileFilePath(zoom, x, y);
-                    if (!File.Exists(filePath))
-                    {
-                        tilesToFetch.Add((zoom, x, y));
-                    }
-                }
-            }
-        }
-
-        if (tilesToFetch.Count == 0)
-        {
-            // No tiles to fetch, but still notify (status might need refresh)
-            PrefetchCompleted?.Invoke(this, 0);
-            return;
-        }
-
-        // Use semaphore to limit concurrent downloads (respects server/battery)
-        // Don't use 'using' - manage lifetime explicitly to avoid race condition
-        var semaphore = new SemaphoreSlim(maxConcurrent);
-        int downloadedCount = 0;
-        int processedCount = 0;
-        int totalToFetch = tilesToFetch.Count;
-        int lastProgressReport = 0;
-        const int progressInterval = 10; // Report every 10 tiles
-
-        try
-        {
-            var tasks = tilesToFetch.Select(async tile =>
-            {
-                var success = await PrefetchTileWithThrottleAsync(semaphore, tile.zoom, tile.x, tile.y);
-                if (success)
-                    Interlocked.Increment(ref downloadedCount);
-
-                var processed = Interlocked.Increment(ref processedCount);
-
-                // Fire progress event every N tiles
-                if (processed - lastProgressReport >= progressInterval)
-                {
-                    lastProgressReport = processed;
-                    PrefetchProgress?.Invoke(this, (downloadedCount, totalToFetch));
-                }
-            }).ToArray();
-
-            await Task.WhenAll(tasks);
-        }
-        finally
-        {
-            semaphore.Dispose();
-        }
-
-        // Notify subscribers that prefetch completed
-        PrefetchCompleted?.Invoke(this, downloadedCount);
-    }
-
-    /// <summary>
-    /// Downloads a tile for prefetch with semaphore throttling and rate limiting.
-    /// Bypasses the class-level _downloadLock to avoid double blocking.
-    /// </summary>
-    /// <returns>True if tile was successfully downloaded, false otherwise.</returns>
-    private async Task<bool> PrefetchTileWithThrottleAsync(SemaphoreSlim semaphore, int zoom, int x, int y)
-    {
-        await semaphore.WaitAsync();
-        try
-        {
-            // Check cache again (another task might have downloaded it)
-            var filePath = GetTileFilePath(zoom, x, y);
-            if (File.Exists(filePath))
-                return false; // Already cached, not a new download
-
-            // Rate limit to respect tile servers (uses same setting as trip downloads)
-            var delayMs = _settingsService.MinTileRequestDelayMs;
-            if (delayMs > 0)
-                await Task.Delay(delayMs);
-
-            // Download directly without going through GetOrDownloadTileAsync
-            // (which has its own _downloadLock causing double blocking)
-            var result = await DownloadTileAsync(zoom, x, y);
-            return result != null;
-        }
-        catch (HttpRequestException ex)
-        {
-            // Network error during prefetch - not critical
-            _logger.LogDebug(ex, "Network error prefetching {Zoom}/{X}/{Y}", zoom, x, y);
-            return false;
-        }
-        catch (IOException ex)
-        {
-            // File I/O error during prefetch - not critical
-            _logger.LogDebug(ex, "IO error prefetching {Zoom}/{X}/{Y}", zoom, x, y);
-            return false;
-        }
-        catch (Exception ex)
-        {
-            // Unexpected error during prefetch - not critical
-            _logger.LogDebug(ex, "Prefetch failed {Zoom}/{X}/{Y}", zoom, x, y);
-            return false;
-        }
-        finally
-        {
-            semaphore.Release();
-        }
-    }
-
-    /// <summary>
-    /// Gets the total number of cached tiles.
-    /// </summary>
-    public async Task<int> GetTotalCachedFilesAsync()
-    {
-        return await _liveTileCache.GetLiveTileCountAsync();
-    }
-
-    /// <summary>
-    /// Gets the total cache size in bytes.
-    /// </summary>
-    public async Task<long> GetTotalCacheSizeBytesAsync()
-    {
-        return await _liveTileCache.GetLiveCacheSizeAsync();
-    }
-
-    /// <summary>
-    /// Clears all live cached tiles.
-    /// </summary>
     public async Task ClearAllAsync()
     {
-        try
-        {
-            // Delete files
-            if (Directory.Exists(_cacheDirectory))
-            {
-                Directory.Delete(_cacheDirectory, recursive: true);
-                Directory.CreateDirectory(_cacheDirectory);
-            }
-
-            // Clear database
-            await _liveTileCache.ClearLiveTilesAsync();
-            _logger.LogDebug("Cache cleared");
-        }
-        catch (IOException ex)
-        {
-            _logger.LogWarning(ex, "IO error clearing cache");
-        }
-        catch (SQLiteException ex)
-        {
-            _logger.LogWarning(ex, "Database error clearing cache");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Unexpected error clearing cache");
-        }
+        if (Directory.Exists(_cacheDirectory)) Directory.Delete(_cacheDirectory, recursive: true);
+        Directory.CreateDirectory(_cacheDirectory);
+        await _repository.ClearLiveTilesAsync();
     }
 
-    /// <summary>
-    /// Evicts least recently used tiles to stay within cache size limit.
-    /// </summary>
     public async Task EvictLruTilesAsync()
     {
-        var maxSizeMB = _settingsService.MaxLiveCacheSizeMB;
-        var maxSizeBytes = (long)maxSizeMB * 1024 * 1024;
+        var maximumBytes = (long)_settings.MaxLiveCacheSizeMB * 1024 * 1024;
+        var currentBytes = await _repository.GetLiveCacheSizeAsync();
+        if (currentBytes <= maximumBytes) return;
 
-        var currentSize = await GetTotalCacheSizeBytesAsync();
-        if (currentSize <= maxSizeBytes)
-            return;
-
-        // Get oldest tiles to evict
-        var tilesToEvict = await _liveTileCache.GetOldestLiveTilesAsync(100);
-        foreach (var tile in tilesToEvict)
+        foreach (var tile in await _repository.GetOldestLiveTilesAsync(100))
         {
             try
             {
-                if (File.Exists(tile.FilePath))
-                    File.Delete(tile.FilePath);
-
-                await _liveTileCache.DeleteLiveTileAsync(tile.Id);
-                currentSize -= tile.FileSizeBytes;
-
-                if (currentSize <= maxSizeBytes * 0.8) // Evict to 80% of max
-                    break;
+                if (File.Exists(tile.FilePath)) File.Delete(tile.FilePath);
+                await _repository.DeleteLiveTileAsync(tile.Id);
+                currentBytes -= tile.FileSizeBytes;
+                if (currentBytes <= maximumBytes * 0.8) break;
             }
-            catch (IOException)
+            catch (Exception ex) when (ex is IOException or SQLiteException)
             {
-                // File deletion failed, continue evicting others
+                _logger.LogDebug(ex, "Could not evict live tile {TileId}", tile.Id);
             }
-            catch (SQLiteException)
+        }
+    }
+
+    async Task<CachedTile?> ILiveTileStore.GetAsync(TileCacheKey key, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var entity = await _repository.GetLiveTileAsync(GetId(key))
+            ?? await AdoptCanonicalLegacyEntryAsync(key, cancellationToken);
+        if (entity is null || !File.Exists(entity.FilePath)) return null;
+
+        var bytes = await File.ReadAllBytesAsync(entity.FilePath, cancellationToken);
+        await _repository.UpdateLiveTileAccessAsync(entity.Id);
+        var fallbackExpiry = new DateTimeOffset(DateTime.SpecifyKind(entity.CachedAt, DateTimeKind.Utc)).AddDays(7);
+        return new CachedTile(key, bytes,
+            entity.FreshUntilUtc == default ? fallbackExpiry : ToDateTimeOffset(entity.FreshUntilUtc)!.Value,
+            entity.ETag, ToDateTimeOffset(entity.LastModifiedUtc), entity.CacheControl, ToDateTimeOffset(entity.ExpiresUtc));
+    }
+
+    async Task ILiveTileStore.WriteAtomicallyAsync(CachedTile tile, CancellationToken cancellationToken)
+    {
+        var path = GetPath(tile.Key);
+        var temporaryPath = path + $".{Guid.NewGuid():N}.tmp";
+        var backupPath = path + $".{Guid.NewGuid():N}.bak";
+        var hadPreviousFile = File.Exists(path);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        try
+        {
+            await File.WriteAllBytesAsync(temporaryPath, tile.Bytes, cancellationToken);
+            if (hadPreviousFile) File.Copy(path, backupPath);
+            File.Move(temporaryPath, path, overwrite: true);
+            try
             {
-                // Database deletion failed, continue evicting others
+                await _repository.SaveLiveTileAsync(new LiveTileEntity
+                {
+                    Id = GetId(tile.Key), ProviderId = tile.Key.ProviderId, Zoom = tile.Key.Zoom, X = tile.Key.X, Y = tile.Key.Y,
+                    TileSource = "osm", FilePath = path, FileSizeBytes = tile.Bytes.Length, CachedAt = DateTime.UtcNow,
+                    LastAccessedAt = DateTime.UtcNow, FreshUntilUtc = tile.FreshUntil.UtcDateTime, ETag = tile.ETag,
+                    LastModifiedUtc = tile.LastModified?.UtcDateTime, CacheControl = tile.CacheControl, ExpiresUtc = tile.Expires?.UtcDateTime
+                });
             }
             catch
             {
-                // Continue evicting others
+                if (hadPreviousFile) File.Move(backupPath, path, overwrite: true);
+                else if (File.Exists(path)) File.Delete(path);
+                throw;
             }
-        }
-
-        _logger.LogDebug("LRU eviction complete, new size: {SizeMB}MB", currentSize / 1024 / 1024);
-    }
-
-    #endregion
-
-    #region Private Methods
-
-    /// <summary>
-    /// Downloads a single tile.
-    /// </summary>
-    private async Task<FileInfo?> DownloadTileAsync(int z, int x, int y)
-    {
-        var filePath = GetTileFilePath(z, x, y);
-        var tempPath = filePath + ".tmp";
-
-        try
-        {
-            var url = _settingsService.TileServerUrl
-                .Replace("{z}", z.ToString())
-                .Replace("{x}", x.ToString())
-                .Replace("{y}", y.ToString());
-
-            var directory = Path.GetDirectoryName(filePath)!;
-            Directory.CreateDirectory(directory);
-
-            var response = await _httpClient.GetAsync(url);
-            if (!response.IsSuccessStatusCode)
-                return null;
-
-            var bytes = await response.Content.ReadAsByteArrayAsync();
-            if (bytes.Length == 0)
-                return null;
-
-            // Atomic write
-            await File.WriteAllBytesAsync(tempPath, bytes);
-            File.Move(tempPath, filePath, overwrite: true);
-
-            // Save to database
-            var tileEntity = new LiveTileEntity
-            {
-                Id = $"{z}/{x}/{y}",
-                Zoom = z,
-                X = x,
-                Y = y,
-                TileSource = "osm",
-                FilePath = filePath,
-                FileSizeBytes = bytes.Length,
-                CachedAt = DateTime.UtcNow,
-                LastAccessedAt = DateTime.UtcNow
-            };
-            await _liveTileCache.SaveLiveTileAsync(tileEntity);
-
-            // Trigger LRU eviction if needed
             _ = EvictLruTilesAsync();
-
-            return new FileInfo(filePath);
         }
-        catch (HttpRequestException ex)
+        finally
         {
-            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
-            _logger.LogDebug(ex, "Network error downloading tile {Z}/{X}/{Y}", z, x, y);
-            return null;
-        }
-        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-        {
-            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
-            _logger.LogDebug(ex, "Timeout downloading tile {Z}/{X}/{Y}", z, x, y);
-            return null;
-        }
-        catch (IOException ex)
-        {
-            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
-            _logger.LogDebug(ex, "IO error downloading tile {Z}/{X}/{Y}", z, x, y);
-            return null;
-        }
-        catch (SQLiteException ex)
-        {
-            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
-            _logger.LogDebug(ex, "Database error downloading tile {Z}/{X}/{Y}", z, x, y);
-            return null;
-        }
-        catch (Exception ex)
-        {
-            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
-            _logger.LogDebug(ex, "Unexpected error downloading tile {Z}/{X}/{Y}", z, x, y);
-            return null;
+            if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+            if (File.Exists(backupPath)) File.Delete(backupPath);
         }
     }
 
-    /// <summary>
-    /// Updates the last access time for a tile (LRU tracking).
-    /// </summary>
-    private async Task UpdateTileAccessAsync(int z, int x, int y)
+    async Task ILiveTileStore.RemoveAsync(TileCacheKey key, CancellationToken cancellationToken)
     {
-        try
-        {
-            await _liveTileCache.UpdateLiveTileAccessAsync($"{z}/{x}/{y}");
-        }
-        catch (SQLiteException)
-        {
-            // Database error - non-critical, ignore
-        }
-        catch
-        {
-            // Unexpected error - non-critical, ignore
-        }
+        cancellationToken.ThrowIfCancellationRequested();
+        await _repository.DeleteLiveTileAsync(GetId(key));
+        var path = GetPath(key);
+        if (File.Exists(path)) File.Delete(path);
     }
 
-    /// <summary>
-    /// Gets the file path for a tile.
-    /// </summary>
-    private string GetTileFilePath(int z, int x, int y)
+    private async Task<LiveTileEntity?> AdoptCanonicalLegacyEntryAsync(TileCacheKey key, CancellationToken cancellationToken)
     {
-        return Path.Combine(_cacheDirectory, z.ToString(), x.ToString(), $"{y}.png");
+        if (key.ProviderId != OsmLiveTileCacheClient.ProviderId) return null;
+        var legacyId = $"{key.Zoom}/{key.X}/{key.Y}";
+        var legacy = await _repository.GetLiveTileAsync(legacyId);
+        if (legacy is null || !string.Equals(legacy.TileSource, "osm", StringComparison.OrdinalIgnoreCase) || !File.Exists(legacy.FilePath)) return null;
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var path = GetPath(key);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.Move(legacy.FilePath, path, overwrite: true);
+        legacy.Id = GetId(key);
+        legacy.ProviderId = key.ProviderId;
+        legacy.FilePath = path;
+        await _repository.SaveLiveTileAsync(legacy);
+        await _repository.DeleteLiveTileAsync(legacyId);
+        return legacy;
     }
 
-    /// <summary>
-    /// Converts lat/lon to tile coordinates.
-    /// </summary>
-    private static (int X, int Y) LatLonToTile(double lat, double lon, int zoom)
-    {
-        var n = Math.Pow(2, zoom);
-        var x = (int)Math.Floor((lon + 180.0) / 360.0 * n);
-        var latRad = lat * Math.PI / 180.0;
-        var y = (int)Math.Floor((1.0 - Math.Log(Math.Tan(latRad) + 1.0 / Math.Cos(latRad)) / Math.PI) / 2.0 * n);
-
-        x = Math.Max(0, Math.Min((int)n - 1, x));
-        y = Math.Max(0, Math.Min((int)n - 1, y));
-
-        return (x, y);
-    }
-
-    #endregion
+    private string GetPath(TileCacheKey key) => Path.Combine(_cacheDirectory, key.Zoom.ToString(), key.X.ToString(), $"{key.Y}.png");
+    private static string GetId(TileCacheKey key) => $"{key.ProviderId}/{key.Zoom}/{key.X}/{key.Y}";
+    private static DateTimeOffset? ToDateTimeOffset(DateTime? value) => value is null ? null : new DateTimeOffset(DateTime.SpecifyKind(value.Value, DateTimeKind.Utc));
 }

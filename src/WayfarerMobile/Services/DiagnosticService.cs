@@ -368,7 +368,6 @@ public class DiagnosticService
         report.AppendLine($"   Timeline Tracking: {(_settingsService.TimelineTrackingEnabled ? "Enabled" : "Disabled")}");
         report.AppendLine($"   Time Threshold: {_settingsService.LocationTimeThresholdMinutes} min");
         report.AppendLine($"   Distance Threshold: {_settingsService.LocationDistanceThresholdMeters} m");
-        report.AppendLine($"   Offline Cache: {(_settingsService.MapOfflineCacheEnabled ? "Enabled" : "Disabled")}");
         report.AppendLine($"   Theme: {_settingsService.ThemePreference}");
         report.AppendLine($"   Language: {_settingsService.LanguagePreference}");
     }
