@@ -6,21 +6,22 @@ namespace WayfarerMobile.Tests.Unit.Services;
 
 /// <summary>
 /// Unit tests for TripLayerService.
-/// Tests place marker creation, segment polyline styling, and layer management.
+/// Tests place marker creation, segment styling, and layer management.
 /// </summary>
 /// <remarks>
 /// TripLayerService manages trip-related map layers including:
 /// - Place markers with custom icons or colored dot fallbacks
 /// - Segment polylines with transport mode styling
 ///
-/// This test file includes test-local implementations since the main
+/// This test file includes test-local implementations for non-geometry behavior since the main
 /// WayfarerMobile project targets MAUI platforms (android/ios) which cannot be directly
 /// referenced from a pure .NET test project. The tests verify the core logic:
 /// - Place marker creation with valid coordinates
 /// - Empty places list handling
 /// - Zero coordinates skipped
 /// - Transport mode styling (walk, drive, bike, transit colors)
-/// - Segment polyline creation
+/// Segment geometry parsing is intentionally not mirrored here; a source contract below verifies
+/// that the production service calls the shared Core parser before Mapsui projection.
 /// - Layer clearing
 /// </remarks>
 public class TripLayerServiceTests

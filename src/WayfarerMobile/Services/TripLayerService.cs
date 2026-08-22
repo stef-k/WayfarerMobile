@@ -210,44 +210,24 @@ public class TripLayerService : ITripLayerService
         var segmentCount = 0;
         foreach (var segment in segmentList)
         {
-            _logger.LogDebug("Processing segment {Id}: Mode={Mode}, Geometry length={Length}",
-                segment.Id, segment.TransportMode ?? "null",
-                segment.Geometry?.Length ?? 0);
-
             if (string.IsNullOrEmpty(segment.Geometry))
             {
                 _logger.LogWarning("Skipping segment {Id}: no geometry", segment.Id);
                 continue;
             }
 
+            var parseResult = TripSegmentGeometryParser.Parse(segment.Geometry);
+            if (!parseResult.IsSuccess)
+            {
+                if (parseResult.Failure != SegmentGeometryFailure.Empty)
+                    _logger.LogWarning("Skipping segment {SegmentId}: geometry failure {Failure}", segment.Id, parseResult.Failure);
+                continue;
+            }
+
             try
             {
-                // Parse geometry - could be GeoJSON LineString or encoded polyline
-                List<(double Latitude, double Longitude)> coordinates;
-
-                if (segment.Geometry.TrimStart().StartsWith("{"))
-                {
-                    // GeoJSON format: {"type":"LineString","coordinates":[[lon,lat],...]}
-                    coordinates = ParseGeoJsonLineString(segment.Geometry);
-                    _logger.LogDebug("Parsed GeoJSON segment {Id}: {PointCount} points", segment.Id, coordinates.Count);
-                }
-                else
-                {
-                    // Encoded polyline format
-                    var points = PolylineDecoder.Decode(segment.Geometry);
-                    coordinates = points.Select(p => (p.Latitude, p.Longitude)).ToList();
-                    _logger.LogDebug("Decoded polyline segment {Id}: {PointCount} points", segment.Id, coordinates.Count);
-                }
-
-                if (coordinates.Count < 2)
-                {
-                    _logger.LogWarning("Skipping segment {Id}: only {Count} points after parsing",
-                        segment.Id, coordinates.Count);
-                    continue;
-                }
-
                 // Convert to map coordinates
-                var mapCoordinates = coordinates
+                var mapCoordinates = parseResult.Coordinates
                     .Select(p =>
                     {
                         var (x, y) = SphericalMercator.FromLonLat(p.Longitude, p.Latitude);
@@ -559,43 +539,4 @@ public class TripLayerService : ITripLayerService
 
     #endregion
 
-    #region GeoJSON Parsing
-
-    /// <summary>
-    /// Parses a GeoJSON LineString into coordinate pairs.
-    /// </summary>
-    /// <param name="geoJson">GeoJSON string with type "LineString".</param>
-    /// <returns>List of (Latitude, Longitude) tuples.</returns>
-    private static List<(double Latitude, double Longitude)> ParseGeoJsonLineString(string geoJson)
-    {
-        var result = new List<(double Latitude, double Longitude)>();
-
-        try
-        {
-            using var doc = System.Text.Json.JsonDocument.Parse(geoJson);
-            var root = doc.RootElement;
-
-            // GeoJSON LineString format: { "type": "LineString", "coordinates": [[lon,lat], [lon,lat], ...] }
-            if (root.TryGetProperty("coordinates", out var coordinates))
-            {
-                foreach (var point in coordinates.EnumerateArray())
-                {
-                    if (point.GetArrayLength() >= 2)
-                    {
-                        var lon = point[0].GetDouble();
-                        var lat = point[1].GetDouble();
-                        result.Add((lat, lon));
-                    }
-                }
-            }
-        }
-        catch
-        {
-            // Invalid GeoJSON, return empty list
-        }
-
-        return result;
-    }
-
-    #endregion
 }

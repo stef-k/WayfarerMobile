@@ -634,53 +634,12 @@ public class TripNavigationService : ITripNavigationService
     /// </summary>
     private TripNavigationGraph BuildNavigationGraph(TripDetails trip)
     {
-        var graph = new TripNavigationGraph { TripId = trip.Id };
-
-        // Add all places as nodes
-        foreach (var region in trip.Regions)
-        {
-            foreach (var place in region.Places)
-            {
-                graph.AddNode(new NavigationNode
-                {
-                    Id = place.Id.ToString(),
-                    Name = place.Name,
-                    Latitude = place.Latitude,
-                    Longitude = place.Longitude,
-                    Type = NavigationNodeType.Place,
-                    SortOrder = place.SortOrder,
-                    Notes = place.Notes,
-                    IconName = place.Icon
-                });
-            }
-        }
-
-        // Add segments as edges
-        foreach (var segment in trip.Segments)
-        {
-            var edge = new NavigationEdge
-            {
-                FromNodeId = (segment.OriginId ?? Guid.Empty).ToString(),
-                ToNodeId = (segment.DestinationId ?? Guid.Empty).ToString(),
-                TransportMode = segment.TransportMode ?? "walking",
-                DistanceKm = segment.DistanceKm ?? 0,
-                DurationMinutes = (int)(segment.DurationMinutes ?? 0),
-                EdgeType = NavigationEdgeType.UserSegment
-            };
-
-            // Decode route geometry if available
-            if (!string.IsNullOrEmpty(segment.Geometry))
-            {
-                edge.RouteGeometry = PolylineDecoder.Decode(segment.Geometry);
-            }
-
-            graph.AddEdge(edge);
-        }
-
-        // No fallback connections - if no segment exists, use direct route
-        // This matches old app behavior: honest navigation with bearing + distance
-
-        return graph;
+        return TripNavigationGraphBuilder.Build(
+            trip,
+            (segmentId, failure) => _logger.LogWarning(
+                "Segment {SegmentId} geometry failure {Failure}",
+                segmentId,
+                failure));
     }
 
     /// <summary>
