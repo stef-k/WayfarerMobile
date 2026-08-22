@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Data.Entities;
 using WayfarerMobile.Data.Repositories;
@@ -70,7 +71,6 @@ public class TimelineExportService
             Features = entries.Select(ToGeoJsonFeature).ToList()
         };
 
-        // Use PascalCase to match Wayfarer backend import parsers (no naming policy)
         return JsonSerializer.Serialize(featureCollection, new JsonSerializerOptions
         {
             WriteIndented = true,
@@ -271,20 +271,31 @@ public class TimelineExportService
 
     private class GeoJsonFeatureCollection
     {
+        [JsonPropertyName("type")]
         public string Type { get; set; } = "FeatureCollection";
+
+        [JsonPropertyName("features")]
         public List<GeoJsonFeature> Features { get; set; } = new();
     }
 
     private class GeoJsonFeature
     {
+        [JsonPropertyName("type")]
         public string Type { get; set; } = "Feature";
+
+        [JsonPropertyName("geometry")]
         public GeoJsonGeometry Geometry { get; set; } = new();
+
+        [JsonPropertyName("properties")]
         public GeoJsonProperties Properties { get; set; } = new();
     }
 
     private class GeoJsonGeometry
     {
+        [JsonPropertyName("type")]
         public string Type { get; set; } = "Point";
+
+        [JsonPropertyName("coordinates")]
         public double[] Coordinates { get; set; } = Array.Empty<double>();
     }
 

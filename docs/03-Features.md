@@ -125,7 +125,7 @@ Timeline entries can have an activity type assigned:
 
 ### Exporting Timeline Data
 
-Export your location history for backup or analysis:
+Export local Timeline entries for transfer to another mobile device or for analysis:
 
 1. Go to **Settings** > **Data** > **Export Timeline**
 2. Choose format:
@@ -165,6 +165,8 @@ Import previously exported data or data from other sources:
 - Are considered duplicates and skipped or merged
 
 > **Note**: Imported entries are local-only and not synced to server.
+
+Timeline export/import is not a complete application backup. Queue contents, credentials, settings, tile caches, Trips, pending mutations, and other application state are excluded.
 
 ---
 
