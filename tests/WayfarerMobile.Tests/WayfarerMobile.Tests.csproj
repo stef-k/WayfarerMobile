@@ -47,6 +47,13 @@
     <ProjectReference Include="..\..\src\WayfarerMobile.Core\WayfarerMobile.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\..\src\WayfarerMobile\Data\Entities\LocalTimelineEntry.cs" Link="Production\LocalTimelineEntry.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Data\Repositories\ITimelineRepository.cs" Link="Production\ITimelineRepository.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Services\TimelineExportService.cs" Link="Production\TimelineExportService.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Services\TimelineImportService.cs" Link="Production\TimelineImportService.cs" />
+  </ItemGroup>
+
   <PropertyGroup>
     <!-- Coverage settings for coverlet.msbuild -->
     <CollectCoverage>true</CollectCoverage>
