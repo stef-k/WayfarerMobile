@@ -45,6 +45,10 @@ public partial class MapDisplayViewModel : BaseViewModel
     private WritableLayer? _tripAreasLayer;
     private WritableLayer? _tripSegmentsLayer;
     private WritableLayer? _placeSelectionLayer;
+    private WritableLayer? _segmentBadgesLayer;
+    private WritableLayer? _segmentChevronsLayer;
+    private TripDetails? _displayedTrip;
+    private TripSegment? _selectedSegment;
 
     #endregion
 
@@ -128,6 +132,8 @@ public partial class MapDisplayViewModel : BaseViewModel
         _tripAreasLayer = _mapBuilder.CreateLayer(_tripLayerService.TripAreasLayerName);
         _tripSegmentsLayer = _mapBuilder.CreateLayer(_tripLayerService.TripSegmentsLayerName);
         _placeSelectionLayer = _mapBuilder.CreateLayer(_tripLayerService.PlaceSelectionLayerName);
+        _segmentBadgesLayer = _mapBuilder.CreateLayer(_tripLayerService.SegmentBadgesLayerName);
+        _segmentChevronsLayer = _mapBuilder.CreateLayer(_tripLayerService.SegmentChevronsLayerName);
         _tripPlacesLayer = _mapBuilder.CreateLayer(_tripLayerService.TripPlacesLayerName);
         _navigationRouteCompletedLayer = _mapBuilder.CreateLayer("NavigationRouteCompleted");
         _navigationRouteLayer = _mapBuilder.CreateLayer("NavigationRoute");
@@ -139,6 +145,8 @@ public partial class MapDisplayViewModel : BaseViewModel
             _tripSegmentsLayer,
             _navigationRouteCompletedLayer,
             _navigationRouteLayer,
+            _segmentChevronsLayer,
+            _segmentBadgesLayer,
             _placeSelectionLayer,
             _tripPlacesLayer,
             _droppedPinLayer,
@@ -331,6 +339,7 @@ public partial class MapDisplayViewModel : BaseViewModel
     /// </summary>
     public async Task<List<MPoint>> ShowTripLayersAsync(TripDetails trip)
     {
+        _displayedTrip = trip;
         var placePoints = new List<MPoint>();
 
         if (_tripPlacesLayer != null)
@@ -345,17 +354,36 @@ public partial class MapDisplayViewModel : BaseViewModel
         return placePoints;
     }
 
+    public void UpdateSelectedSegmentDecorations(TripSegment? segment)
+    {
+        _selectedSegment = segment;
+        if (_segmentBadgesLayer == null || _segmentChevronsLayer == null || _map == null) return;
+        _tripLayerService.UpdateSelectedSegmentDecorations(
+            _segmentBadgesLayer, _segmentChevronsLayer, segment,
+            (IReadOnlyCollection<TripPlace>?)_displayedTrip?.AllPlaces ?? Array.Empty<TripPlace>(),
+            _map.Navigator.Viewport, _callbacks?.IsNavigating ?? false);
+        _map.Refresh();
+    }
+
+    public void RefreshSelectedSegmentDecorations() => UpdateSelectedSegmentDecorations(_selectedSegment);
+
     /// <summary>
     /// Clears trip layers from the map.
     /// </summary>
     public void ClearTripLayers()
     {
+        _displayedTrip = null;
+        _selectedSegment = null;
         _tripPlacesLayer?.Clear();
         _tripPlacesLayer?.DataHasChanged();
         _tripAreasLayer?.Clear();
         _tripAreasLayer?.DataHasChanged();
         _tripSegmentsLayer?.Clear();
         _tripSegmentsLayer?.DataHasChanged();
+        _segmentBadgesLayer?.Clear();
+        _segmentBadgesLayer?.DataHasChanged();
+        _segmentChevronsLayer?.Clear();
+        _segmentChevronsLayer?.DataHasChanged();
         ClearPlaceSelection();
     }
 
@@ -395,6 +423,7 @@ public partial class MapDisplayViewModel : BaseViewModel
     /// </summary>
     public async Task RefreshTripLayersAsync(TripDetails trip)
     {
+        _displayedTrip = trip;
         if (_tripPlacesLayer != null)
             await _tripLayerService.UpdateTripPlacesAsync(_tripPlacesLayer, trip.AllPlaces);
 
@@ -403,6 +432,7 @@ public partial class MapDisplayViewModel : BaseViewModel
 
         if (_tripSegmentsLayer != null)
             _tripLayerService.UpdateTripSegments(_tripSegmentsLayer, trip.Segments);
+        RefreshSelectedSegmentDecorations();
     }
 
     /// <summary>
@@ -459,6 +489,10 @@ public partial class MapDisplayViewModel : BaseViewModel
     protected override void Cleanup()
     {
         _locationLayerService.StopAnimation();
+        _segmentBadgesLayer?.Clear();
+        _segmentChevronsLayer?.Clear();
+        _displayedTrip = null;
+        _selectedSegment = null;
         base.Cleanup();
     }
 

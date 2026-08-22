@@ -2,6 +2,11 @@
 
 Trips are planned journeys containing metadata, Places, Segments or routes, and Areas or polygons. Trips are created in the Wayfarer web app and can be downloaded to the mobile app for provider-independent offline use.
 
+WayfarerMobile versions that include issue #236 preserve Wayfarer v1.9 ordered
+intermediate Segment Places online and offline. Earlier mobile versions retain
+the endpoints and effective route geometry, but do not provide full
+intermediate-Place navigation or Start/Via/End presentation.
+
 ## Downloading a Trip
 
 Tap **Download** on a Trip to store its metadata and geographic content locally. Downloaded content includes:

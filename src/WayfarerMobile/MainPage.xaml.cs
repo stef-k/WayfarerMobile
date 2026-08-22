@@ -158,7 +158,9 @@ public partial class MainPage : ContentPage, IQueryAttributable
         if (map == null)
             return;
 
-        var mapInfo = e.GetMapInfo(map.Layers);
+        var interactiveLayers = map.Layers.Where(layer =>
+            layer.Name != "SelectedSegmentBadges" && layer.Name != "SelectedSegmentChevrons");
+        var mapInfo = e.GetMapInfo(interactiveLayers);
 
         // Check if we have a valid world position
         if (mapInfo?.WorldPosition == null)
@@ -595,6 +597,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
         var bounds = _viewModel.MapDisplay.GetViewportBounds();
         if (bounds.HasValue)
             _viewModel.UpdateZoomLevel(bounds.Value.ZoomLevel);
+        _viewModel.MapDisplay.RefreshSelectedSegmentDecorations();
     }
 
     /// <summary>

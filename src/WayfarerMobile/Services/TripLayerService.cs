@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Mapsui;
+using Mapsui.Extensions;
 using Mapsui.Layers;
 using Mapsui.Nts;
 using Mapsui.Projections;
@@ -61,6 +62,8 @@ public class TripLayerService : ITripLayerService
 
     /// <inheritdoc />
     public string PlaceSelectionLayerName => "PlaceSelection";
+    public string SegmentBadgesLayerName => "SelectedSegmentBadges";
+    public string SegmentChevronsLayerName => "SelectedSegmentChevrons";
 
     /// <inheritdoc />
     public async Task<List<MPoint>> UpdateTripPlacesAsync(WritableLayer layer, IEnumerable<TripPlace> places)
@@ -266,6 +269,89 @@ public class TripLayerService : ITripLayerService
     {
         layer.Clear();
         layer.DataHasChanged();
+    }
+
+    /// <inheritdoc />
+    public void UpdateSelectedSegmentDecorations(
+        WritableLayer badgeLayer,
+        WritableLayer chevronLayer,
+        TripSegment? segment,
+        IReadOnlyCollection<TripPlace> places,
+        Viewport viewport,
+        bool navigationActive)
+    {
+        badgeLayer.Clear();
+        chevronLayer.Clear();
+        if (segment == null || navigationActive)
+        {
+            badgeLayer.DataHasChanged();
+            chevronLayer.DataHasChanged();
+            return;
+        }
+
+        var parsed = TripSegmentGeometryParser.Parse(segment.Geometry);
+        if (!parsed.IsSuccess && parsed.Failure != SegmentGeometryFailure.Empty)
+        {
+            badgeLayer.DataHasChanged();
+            chevronLayer.DataHasChanged();
+            return;
+        }
+        var geometry = parsed.IsSuccess
+            ? parsed.Coordinates.Select(point => new SegmentCoordinate(point.Latitude, point.Longitude)).ToList()
+            : null;
+        var resolution = SegmentAnchorResolver.Resolve(segment, places, geometry);
+        if (!resolution.IsValid)
+        {
+            _logger.LogWarning("Skipping Segment decorations for {SegmentId}: {Failure}", segment.Id, resolution.Failure);
+            badgeLayer.DataHasChanged();
+            chevronLayer.DataHasChanged();
+            return;
+        }
+
+        foreach (var badge in SegmentDecorationProjector.CreateBadges(resolution))
+        {
+            var (x, y) = SphericalMercator.FromLonLat(badge.Longitude, badge.Latitude);
+            var feature = new GeometryFeature(new Point(x, y))
+            {
+                Styles = [new LabelStyle
+                {
+                    Text = badge.Label,
+                    ForeColor = Color.White,
+                    BackColor = new Brush(Color.FromArgb(235, 30, 60, 90)),
+                    BorderColor = Color.White,
+                    BorderThickness = 2,
+                    CornerRounding = 8,
+                    CollisionDetection = true,
+                    Offset = new Offset(0, -34)
+                }]
+            };
+            badgeLayer.Add(feature);
+        }
+
+        var projected = resolution.Geometry.Select(point =>
+        {
+            var world = SphericalMercator.FromLonLat(point.Longitude, point.Latitude);
+            var screen = viewport.WorldToScreen(world.x, world.y);
+            return new ProjectedRoutePoint(screen.X, screen.Y);
+        }).ToList();
+        foreach (var chevron in SegmentChevronPlacer.Place(projected))
+        {
+            var world = viewport.ScreenToWorld(chevron.X, chevron.Y);
+            chevronLayer.Add(new GeometryFeature(new Point(world.X, world.Y))
+            {
+                Styles = [new SymbolStyle
+                {
+                    SymbolType = SymbolType.Triangle,
+                    SymbolScale = 0.45,
+                    SymbolRotation = chevron.AngleDegrees + 90,
+                    RotateWithMap = false,
+                    Fill = new Brush(Color.White),
+                    Outline = new Pen(Color.Black, 2)
+                }]
+            });
+        }
+        badgeLayer.DataHasChanged();
+        chevronLayer.DataHasChanged();
     }
 
     #region Priority Icons Validation

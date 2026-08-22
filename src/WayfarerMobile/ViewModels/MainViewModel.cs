@@ -909,6 +909,7 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         {
             case nameof(NavigationCoordinatorViewModel.IsNavigating):
                 OnPropertyChanged(nameof(IsNavigating));
+                MapDisplay.RefreshSelectedSegmentDecorations();
                 break;
         }
     }
@@ -943,6 +944,10 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
             case nameof(TripSheetViewModel.SelectedTripPlace):
                 OnPropertyChanged(nameof(SelectedTripPlace));
                 OnPropertyChanged(nameof(SelectedPlace));
+                break;
+
+            case nameof(TripSheetViewModel.SelectedTripSegment):
+                MapDisplay.UpdateSelectedSegmentDecorations(TripSheet.SelectedTripSegment);
                 break;
         }
     }

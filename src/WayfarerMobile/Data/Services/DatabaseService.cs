@@ -20,7 +20,7 @@ namespace WayfarerMobile.Data.Services;
 ///   <item><see cref="WayfarerMobile.Data.Repositories.ILiveTileCacheRepository"/> - Live tile cache</item>
 /// </list>
 /// </summary>
-public class DatabaseService : IAsyncDisposable, ILegacyRasterState
+public class DatabaseService : IAsyncDisposable, ILegacyRasterState, ISegmentWaypointMigrationState
 {
     #region Constants
 
@@ -154,7 +154,7 @@ public class DatabaseService : IAsyncDisposable, ILegacyRasterState
 
         if (currentVersion < 8)
         {
-            await MigrateToVersion8Async();
+            await SegmentWaypointMigration.ApplyAsync(this, CancellationToken.None);
         }
 
         // Update schema version
@@ -235,12 +235,6 @@ public class DatabaseService : IAsyncDisposable, ILegacyRasterState
         await AddColumnIfMissingAsync("LocalTimelineEntries", "Source", "TEXT");
 
         Console.WriteLine("[DatabaseService] Version 6 migration complete");
-    }
-
-    private async Task MigrateToVersion8Async()
-    {
-        await AddColumnIfMissingAsync("OfflineSegments", "WaypointsJson", "TEXT");
-        await AddColumnIfMissingAsync("OfflineSegments", "HasCustomRoute", "INTEGER NOT NULL DEFAULT 0");
     }
 
     async Task ILegacyRasterState.RemoveTileSchemaAndNormalizeTripDataAsync(CancellationToken cancellationToken)
@@ -329,6 +323,19 @@ public class DatabaseService : IAsyncDisposable, ILegacyRasterState
     }
 
     Task ILegacyRasterState.RecordSchemaVersionAsync(int version, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return SetSchemaVersionAsync(version);
+    }
+
+    async Task ISegmentWaypointMigrationState.EnsureColumnAsync(
+        string table, string column, string definition, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await AddColumnIfMissingAsync(table, column, definition);
+    }
+
+    Task ISegmentWaypointMigrationState.RecordSchemaVersionAsync(int version, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         return SetSchemaVersionAsync(version);

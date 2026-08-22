@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Helpers;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Helpers;
@@ -113,6 +114,7 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
     [NotifyPropertyChangedFor(nameof(TripSheetTitle))]
     [NotifyPropertyChangedFor(nameof(TripSheetSubtitle))]
     [NotifyPropertyChangedFor(nameof(SelectedTripSegmentNotesHtml))]
+    [NotifyPropertyChangedFor(nameof(SelectedTripSegmentTrail))]
     private TripSegment? _selectedTripSegment;
 
     /// <summary>
@@ -324,6 +326,9 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
     /// Gets whether the trip sheet is showing a segment.
     /// </summary>
     public bool IsTripSheetShowingSegment => SelectedTripSegment != null;
+
+    public IReadOnlyList<string> SelectedTripSegmentTrail =>
+        SelectedTripSegment?.AnchorTrail ?? Array.Empty<string>();
 
     /// <summary>
     /// Gets whether the trip sheet is showing any detail view (not overview).
@@ -560,6 +565,8 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
         // Reset search state when trip changes
         IsPlaceSearchVisible = false;
         PlaceSearchQuery = string.Empty;
+        if (e.NewTrip != null)
+            PrepareSegmentPresentation(e.NewTrip);
 
         // Notify all dependent properties that LoadedTrip has changed
         OnPropertyChanged(nameof(LoadedTrip));
@@ -570,6 +577,28 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
         OnPropertyChanged(nameof(TripNotesHtml));
         OnPropertyChanged(nameof(TripSheetTitle));
         OnPropertyChanged(nameof(TripSheetSubtitle));
+    }
+
+    private static void PrepareSegmentPresentation(TripDetails trip)
+    {
+        foreach (var segment in trip.Segments)
+        {
+            var origin = trip.AllPlaces.FirstOrDefault(place => place.Id == segment.OriginId);
+            var destination = trip.AllPlaces.FirstOrDefault(place => place.Id == segment.DestinationId);
+            segment.OriginName ??= origin?.Name;
+            segment.DestinationName ??= destination?.Name;
+            if (!segment.HasWaypoints)
+            {
+                segment.AnchorTrail = Array.Empty<string>();
+                continue;
+            }
+            var parsed = TripSegmentGeometryParser.Parse(segment.Geometry);
+            IReadOnlyList<SegmentCoordinate>? geometry = parsed.IsSuccess
+                ? parsed.Coordinates.Select(point => new SegmentCoordinate(point.Latitude, point.Longitude)).ToList()
+                : parsed.Failure == SegmentGeometryFailure.Empty ? null : Array.Empty<SegmentCoordinate>();
+            var resolution = SegmentAnchorResolver.Resolve(segment, trip.AllPlaces, geometry);
+            segment.AnchorTrail = resolution.IsValid ? resolution.TextTrail : ["Route details unavailable"];
+        }
     }
 
     /// <summary>
