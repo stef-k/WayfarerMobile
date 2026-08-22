@@ -226,10 +226,9 @@ Background location ("Allow all the time") is required for 24/7 timeline trackin
 
 Android requires a persistent notification for any app running a background service. This notification shows tracking status and cannot be dismissed while tracking is active. It's an Android system requirement, not an app design choice.
 
-### What's the difference between live cache and trip cache?
+### What remains available offline after downloading a Trip?
 
-- **Live cache**: Tiles downloaded while browsing the map, automatically managed (LRU eviction)
-- **Trip cache**: Tiles deliberately downloaded for specific trips, permanent until you delete the trip
+Provider-independent downloaded Trip content remains available offline. Map tiles come only from request-driven interactive OpenStreetMap caching, so previously viewed tiles may remain usable while retained, but no Trip-owned tile package or complete offline basemap area is downloaded or guaranteed.
 
 ### Does the app use Google Play Services?
 

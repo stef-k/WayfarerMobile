@@ -101,21 +101,26 @@ public sealed class OsmLiveTileCacheClient
             }
 
             if (!response.IsSuccessStatusCode)
-                return cached is not null && !RequiresSuccessfulValidation(cached.CacheControl) ? cached.Bytes : null;
+                return cached is not null
+                    && IsTransientFailure(response.StatusCode)
+                    && !RequiresSuccessfulValidation(cached.CacheControl)
+                    ? cached.Bytes
+                    : null;
+
+            var noStore = response.Headers.CacheControl?.NoStore == true;
+            if (noStore)
+                await _store.RemoveAsync(key, CancellationToken.None).ConfigureAwait(false);
 
             var bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
             if (bytes.Length == 0)
                 return cached is not null
                     && !RequiresSuccessfulValidation(cached.CacheControl)
-                    && response.Headers.CacheControl?.NoStore != true
+                    && !noStore
                     ? cached.Bytes
                     : null;
 
-            if (response.Headers.CacheControl?.NoStore == true)
-            {
-                await _store.RemoveAsync(key, CancellationToken.None).ConfigureAwait(false);
+            if (noStore)
                 return bytes;
-            }
 
             var replacement = new CachedTile(
                 key,
@@ -147,8 +152,8 @@ public sealed class OsmLiveTileCacheClient
             return now.Add(age);
 
         var expires = response.Content?.Headers.Expires;
-        if (expires is { } expiry && expiry > now)
-            return expiry;
+        if (expires is { } expiry)
+            return expiry > now ? expiry : now;
 
         return now.Add(FallbackFreshness);
     }
@@ -156,4 +161,12 @@ public sealed class OsmLiveTileCacheClient
     private static bool RequiresSuccessfulValidation(string? cacheControl) =>
         CacheControlHeaderValue.TryParse(cacheControl, out var parsed)
         && (parsed.NoCache || parsed.NoStore || parsed.MustRevalidate);
+
+    private static bool IsTransientFailure(HttpStatusCode statusCode) => statusCode is
+        HttpStatusCode.RequestTimeout or
+        HttpStatusCode.TooManyRequests or
+        HttpStatusCode.InternalServerError or
+        HttpStatusCode.BadGateway or
+        HttpStatusCode.ServiceUnavailable or
+        HttpStatusCode.GatewayTimeout;
 }
