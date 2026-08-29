@@ -27,8 +27,7 @@ public sealed class TripSyncCoordinator : ITripSyncCoordinator
     public async Task<DownloadedTripEntity?> SyncTripAsync(Guid tripServerId, bool forceSync = false, CancellationToken cancellationToken = default)
     {
         var progress = new Progress<DownloadProgressEventArgs>(e => ProgressChanged?.Invoke(this, e));
-        var (trip, _) = await _content.SyncTripMetadataAsync(tripServerId, forceSync, progress, cancellationToken);
-        return trip;
+        return await _content.SyncTripMetadataAsync(tripServerId, forceSync, progress, cancellationToken);
     }
 
     public Task<List<DownloadedTripEntity>> GetTripsNeedingUpdateAsync() => _content.GetTripsNeedingUpdateAsync();

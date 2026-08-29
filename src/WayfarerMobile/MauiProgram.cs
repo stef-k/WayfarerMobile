@@ -423,7 +423,7 @@ public static class MauiProgram
             client.DefaultRequestHeaders.Add("User-Agent", "WayfarerMobile/1.0 (Location tracking app)");
         });
 
-        // Tiles - map tile downloads with 60s timeout
+        // Tiles - request-driven interactive OpenStreetMap transport with 60s timeout
         services.AddHttpClient("Tiles", client =>
         {
             client.Timeout = TimeSpan.FromSeconds(60);

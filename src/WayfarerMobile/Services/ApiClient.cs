@@ -263,51 +263,6 @@ public class ApiClient : IApiClient, IVisitApiClient
         }
     }
 
-    /// <summary>
-    /// Gets trip boundary for tile download calculation.
-    /// </summary>
-    /// <param name="tripId">The trip ID.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Trip boundary response or null if not found.</returns>
-    public async Task<TripBoundaryResponse?> GetTripBoundaryAsync(Guid tripId, CancellationToken cancellationToken = default)
-    {
-        if (!IsConfigured)
-        {
-            _logger.LogWarning("Cannot get trip boundary - API is not configured");
-            return null;
-        }
-
-        try
-        {
-            var response = await ExecuteWithRetryAsync(
-                () => CreateRequest(HttpMethod.Get, $"/api/trips/{tripId}/boundary"),
-                cancellationToken);
-
-            if (response.IsSuccessStatusCode)
-            {
-                return await response.Content.ReadFromJsonAsync<TripBoundaryResponse>(JsonOptions, cancellationToken);
-            }
-
-            _logger.LogWarning("Failed to get trip boundary: {StatusCode}", response.StatusCode);
-            return null;
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogNetworkWarningIfOnline("Network error getting trip boundary for {TripId}: {Message}", tripId, ex.Message);
-            return null;
-        }
-        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-        {
-            _logger.LogError(ex, "Request timed out getting trip boundary for {TripId}", tripId);
-            return null;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error getting trip boundary for {TripId}", tripId);
-            return null;
-        }
-    }
-
     #region Place CRUD
 
     /// <summary>
@@ -1068,11 +1023,6 @@ public class ApiClient : IApiClient, IVisitApiClient
     }
 
     #endregion
-
-    /// <summary>
-    /// Gets the underlying HttpClient for direct tile downloads.
-    /// </summary>
-    public HttpClient HttpClient => HttpClientInstance;
 
     /// <inheritdoc/>
     public async Task<TimelineResponse?> GetTimelineLocationsAsync(

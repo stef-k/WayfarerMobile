@@ -464,13 +464,6 @@ public class MyTripsViewModelTests : IDisposable
     }
 
     [Fact]
-    public void OnAppearingAsync_ChecksForPausedDownloads()
-    {
-        // Document expected behavior:
-        // await CheckForPausedDownloadsAsync();
-    }
-
-    [Fact]
     public void OnAppearingAsync_RefreshesLoadedState()
     {
         // Document expected behavior:

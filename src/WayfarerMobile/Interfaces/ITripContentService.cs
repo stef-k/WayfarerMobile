@@ -24,15 +24,14 @@ public interface ITripContentService
     Task<List<DownloadedTripEntity>> GetTripsNeedingUpdateAsync();
 
     /// <summary>
-    /// Syncs trip metadata with the server (updates places, segments, areas).
-    /// Does not handle tile downloads - returns whether bounding box changed.
+    /// Syncs downloaded Trip metadata with the server, including its bounding box.
     /// </summary>
     /// <param name="tripServerId">The server-side trip ID.</param>
     /// <param name="forceSync">If true, sync regardless of version.</param>
     /// <param name="progress">Optional progress reporter.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Tuple of (updated trip entity or null, whether bounding box changed significantly).</returns>
-    Task<(DownloadedTripEntity? Trip, bool BoundingBoxChanged)> SyncTripMetadataAsync(
+    /// <returns>The updated Trip entity, or null when synchronization cannot complete.</returns>
+    Task<DownloadedTripEntity?> SyncTripMetadataAsync(
         Guid tripServerId,
         bool forceSync = false,
         IProgress<DownloadProgressEventArgs>? progress = null,
@@ -67,11 +66,4 @@ public interface ITripContentService
     /// <returns>List of trip segments.</returns>
     Task<List<TripSegment>> GetOfflineSegmentsAsync(Guid tripServerId);
 
-    /// <summary>
-    /// Checks if bounding box has changed significantly (more than ~1km at equator).
-    /// </summary>
-    /// <param name="trip">The local trip entity.</param>
-    /// <param name="serverBoundingBox">The server bounding box.</param>
-    /// <returns>True if bounding box changed significantly.</returns>
-    bool HasBoundingBoxChangedSignificantly(DownloadedTripEntity trip, BoundingBox serverBoundingBox);
 }
