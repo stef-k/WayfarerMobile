@@ -250,7 +250,7 @@ public class TripNavigationService : ITripNavigationService
     {
         var state = new TripNavigationState();
 
-        if (_activeRoute == null || _currentGraph == null)
+        if (_activeRoute == null)
         {
             state.Status = NavigationStatus.NoRoute;
             return state;
@@ -280,7 +280,8 @@ public class TripNavigationService : ITripNavigationService
 
         // Check if off-route
         var currentEdge = GetCurrentEdge(currentLat, currentLon);
-        if (currentEdge != null && _currentGraph.IsOffRoute(currentLat, currentLon, currentEdge))
+        if (_currentGraph != null && currentEdge != null &&
+            _currentGraph.IsOffRoute(currentLat, currentLon, currentEdge))
         {
             state.Status = NavigationStatus.OffRoute;
             state.Message = "You are off route. Recalculating...";

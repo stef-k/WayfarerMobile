@@ -99,7 +99,8 @@ public class NavigationRouteBuilder : INavigationRouteBuilder
             },
             DestinationName = destination.Name,
             TotalDistanceMeters = distance,
-            EstimatedDuration = TimeSpan.FromSeconds(distance / 1.4)
+            EstimatedDuration = TimeSpan.FromSeconds(distance / 1.4),
+            IsDirectRoute = true
         };
     }
 

@@ -112,6 +112,26 @@ public sealed class TripNavigationRoutingRemovalTests
         route.Waypoints.Should().HaveCount(2);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void TripPlaceNavigation_UnavailableSavedGeometry_FallsBackToExplicitDirectRoute(string? geometry)
+    {
+        var (trip, origin, destination) = CreateTrip(geometry);
+        var state = new Mock<ITripStateManager>();
+        state.SetupGet(service => service.LoadedTrip).Returns(trip);
+        var navigation = CreateNavigation(state.Object);
+
+        navigation.LoadTrip(trip).Should().BeTrue();
+        var route = navigation.CalculateRouteToPlace(
+            origin.Latitude, origin.Longitude, destination.Id.ToString());
+
+        route.Should().NotBeNull();
+        route!.IsDirectRoute.Should().BeTrue();
+        route.Waypoints.Should().HaveCount(2);
+    }
+
     [Fact]
     public void TripPlaceNavigation_WithoutSavedPath_ReturnsExplicitDirectRoute()
     {
