@@ -162,47 +162,6 @@ public class SseClientTests
     }
 
     [Fact]
-    public async Task SubscribeToUserAsync_EmptyUserName_LogsWarningAndReturns()
-    {
-        var client = CreateClient();
-        await client.SubscribeToUserAsync(string.Empty);
-        client.IsConnected.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task SubscribeToUserAsync_NoServerUrl_LogsErrorAndReturns()
-    {
-        _mockSettings.Setup(s => s.ServerUrl).Returns((string?)null);
-        var client = CreateClient();
-        await client.SubscribeToUserAsync("testuser");
-        client.IsConnected.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task SubscribeToUserAsync_ValidUserName_BuildsCorrectUrl()
-    {
-        _mockSettings.Setup(s => s.ServerUrl).Returns("https://api.example.com");
-        string? capturedUrl = null;
-
-        _mockHttpHandler
-            .Protected()
-            .Setup<Task<HttpResponseMessage>>(
-                "SendAsync",
-                ItExpr.IsAny<HttpRequestMessage>(),
-                ItExpr.IsAny<CancellationToken>())
-            .Callback<HttpRequestMessage, CancellationToken>((req, _) => capturedUrl = req.RequestUri?.ToString())
-            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("") });
-
-        var client = CreateClient();
-        using var cts = new CancellationTokenSource(100);
-        try { await client.SubscribeToUserAsync("testuser", cts.Token); }
-        catch (OperationCanceledException) { }
-        catch (HttpRequestException) { }
-
-        capturedUrl.Should().Be("https://api.example.com/api/mobile/sse/location-update/testuser");
-    }
-
-    [Fact]
     public async Task SubscribeToGroupAsync_EmptyGroupId_LogsWarningAndReturns()
     {
         var client = CreateClient();
@@ -252,7 +211,7 @@ public class SseClientTests
 
         var client = CreateClient();
         using var cts = new CancellationTokenSource(100);
-        try { await client.SubscribeToUserAsync("testuser", cts.Token); }
+        try { await client.SubscribeToGroupAsync("group-abc-123", cts.Token); }
         catch (OperationCanceledException) { }
         catch (HttpRequestException) { }
 
@@ -277,7 +236,7 @@ public class SseClientTests
 
         var client = CreateClient();
         using var cts = new CancellationTokenSource(100);
-        try { await client.SubscribeToUserAsync("testuser", cts.Token); }
+        try { await client.SubscribeToGroupAsync("group-abc-123", cts.Token); }
         catch (OperationCanceledException) { }
         catch (HttpRequestException) { }
 
@@ -533,15 +492,6 @@ public sealed class TestSseClient : WayfarerMobile.Core.Interfaces.ISseClient
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
-    }
-
-    public Task SubscribeToUserAsync(string userName, CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(userName)) { _logger.LogWarning("userName is empty"); return Task.CompletedTask; }
-        var serverUrl = _settings.ServerUrl;
-        if (string.IsNullOrWhiteSpace(serverUrl)) { _logger.LogError("Server URL not configured"); return Task.CompletedTask; }
-        var url = serverUrl.TrimEnd((char)47) + "/api/mobile/sse/location-update/" + Uri.EscapeDataString(userName);
-        return SubscribeAsync(url, "user:" + userName, cancellationToken);
     }
 
     public Task SubscribeToGroupAsync(string groupId, CancellationToken cancellationToken = default)
