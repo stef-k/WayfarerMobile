@@ -112,7 +112,7 @@ public class TripContentService : ITripContentService
     }
 
     /// <inheritdoc/>
-    public async Task<(DownloadedTripEntity? Trip, bool BoundingBoxChanged)> SyncTripMetadataAsync(
+    public async Task<DownloadedTripEntity?> SyncTripMetadataAsync(
         Guid tripServerId,
         bool forceSync = false,
         IProgress<DownloadProgressEventArgs>? progress = null,
@@ -124,13 +124,13 @@ public class TripContentService : ITripContentService
             if (localTrip == null)
             {
                 _logger.LogWarning("Cannot sync trip {TripId} - not downloaded", tripServerId);
-                return (null, false);
+                return null;
             }
 
             if (!IsNetworkAvailable())
             {
                 _logger.LogWarning("Cannot sync trip - no network connection");
-                return (null, false);
+                return null;
             }
 
             _logger.LogInformation("Starting metadata sync for trip: {TripName}", localTrip.Name);
@@ -141,14 +141,14 @@ public class TripContentService : ITripContentService
             if (serverTrip == null)
             {
                 _logger.LogWarning("Failed to fetch trip details for sync: {TripId}", tripServerId);
-                return (null, false);
+                return null;
             }
 
             // Check if update is needed (unless force sync)
             if (!forceSync && serverTrip.Version <= localTrip.Version)
             {
                 _logger.LogInformation("Trip {TripName} is already up to date (v{Version})", localTrip.Name, localTrip.Version);
-                return (localTrip, false);
+                return localTrip;
             }
 
             RaiseProgress(progress, localTrip.Id, 15, "Updating regions...");
@@ -179,21 +179,12 @@ public class TripContentService : ITripContentService
             await _areaRepository.SaveOfflinePolygonsAsync(localTrip.Id, polygons);
             localTrip.AreaCount = polygons.Count;
 
-            RaiseProgress(progress, localTrip.Id, 75, "Checking map coverage...");
-
-            // Check if bounding box changed significantly (caller will handle tile re-download)
-            var boundingBoxChanged = serverTrip.BoundingBox != null &&
-                HasBoundingBoxChangedSignificantly(localTrip, serverTrip.BoundingBox);
-
-            if (boundingBoxChanged && serverTrip.BoundingBox != null)
+            if (serverTrip.BoundingBox != null)
             {
-                // Update bounding box metadata from server
                 localTrip.BoundingBoxNorth = serverTrip.BoundingBox.North;
                 localTrip.BoundingBoxSouth = serverTrip.BoundingBox.South;
                 localTrip.BoundingBoxEast = serverTrip.BoundingBox.East;
                 localTrip.BoundingBoxWest = serverTrip.BoundingBox.West;
-
-                _logger.LogInformation("Bounding box changed for trip {TripName}", localTrip.Name);
             }
 
             // Update version and timestamps
@@ -208,7 +199,7 @@ public class TripContentService : ITripContentService
             _logger.LogInformation("Trip metadata synced: {TripName} (v{Version}, {PlaceCount} places, {SegmentCount} segments)",
                 localTrip.Name, localTrip.Version, places.Count, segments.Count);
 
-            return (localTrip, boundingBoxChanged);
+            return localTrip;
         }
         catch (OperationCanceledException)
         {
@@ -218,7 +209,7 @@ public class TripContentService : ITripContentService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to sync trip metadata: {TripId}", tripServerId);
-            return (null, false);
+            return null;
         }
     }
 
@@ -250,7 +241,7 @@ public class TripContentService : ITripContentService
 
             try
             {
-                var (result, _) = await SyncTripMetadataAsync(trip.ServerId, forceSync: false, cancellationToken: cancellationToken);
+                var result = await SyncTripMetadataAsync(trip.ServerId, forceSync: false, cancellationToken: cancellationToken);
                 if (result != null)
                 {
                     syncedCount++;
@@ -485,17 +476,6 @@ public class TripContentService : ITripContentService
             segment.Notes = s.Notes;
             return segment;
         }).ToList();
-    }
-
-    /// <inheritdoc/>
-    public bool HasBoundingBoxChangedSignificantly(DownloadedTripEntity trip, BoundingBox serverBoundingBox)
-    {
-        const double threshold = 0.01; // ~1km at equator
-
-        return Math.Abs(trip.BoundingBoxNorth - serverBoundingBox.North) > threshold ||
-               Math.Abs(trip.BoundingBoxSouth - serverBoundingBox.South) > threshold ||
-               Math.Abs(trip.BoundingBoxEast - serverBoundingBox.East) > threshold ||
-               Math.Abs(trip.BoundingBoxWest - serverBoundingBox.West) > threshold;
     }
 
     /// <summary>

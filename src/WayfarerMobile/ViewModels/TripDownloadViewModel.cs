@@ -98,8 +98,6 @@ public partial class TripDownloadViewModel : ObservableObject, IDisposable
         if (_serverId is { } id) _callbacks?.UpdateItemProgress(id, DownloadProgress, e.ProgressPercent < 100);
     }
 
-    public Task RefreshPausedDownloadsCountAsync() => Task.CompletedTask;
-
     public void Dispose()
     {
         _downloads.ProgressChanged -= OnProgressChanged;

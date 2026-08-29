@@ -723,7 +723,7 @@ await _databaseService.MarkLocationServerRejectedAsync(id, "threshold");
 int deleted = await _databaseService.PurgeSyncedLocationsAsync(daysOld: 7);
 ```
 
-### Trip Cache Operations
+### Downloaded Trip Data Operations
 
 ```csharp
 // Get downloaded trips
