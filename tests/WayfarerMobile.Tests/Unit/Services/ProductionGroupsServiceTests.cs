@@ -32,15 +32,16 @@ public class ProductionGroupsServiceTests
                 "SendAsync",
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>())
-            .Callback<HttpRequestMessage, CancellationToken>(async (request, token) =>
+            .Returns<HttpRequestMessage, CancellationToken>(async (request, token) =>
             {
                 contactCount++;
                 capturedMethod = request.Method;
                 capturedUri = request.RequestUri;
                 capturedAuthorization = request.Headers.Authorization?.ToString();
                 capturedContent = await request.Content!.ReadAsStringAsync(token);
-            })
-            .ReturnsAsync(new HttpResponseMessage(statusCode));
+
+                return new HttpResponseMessage(statusCode);
+            });
 
         using var httpClient = new HttpClient(handler.Object);
         var httpClientFactory = new Mock<IHttpClientFactory>();
