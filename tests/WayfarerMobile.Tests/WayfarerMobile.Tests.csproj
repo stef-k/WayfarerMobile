@@ -25,6 +25,7 @@
     <Compile Include="..\..\src\WayfarerMobile\Data\Repositories\SegmentRepository.cs" Link="Production\SegmentRepository.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Interfaces\ITripContentService.cs" Link="Production\ITripContentService.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Interfaces\ITripMetadataBuilder.cs" Link="Production\ITripMetadataBuilder.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Services\GroupsService.cs" Link="Production\GroupsService.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\TripContentService.cs" Link="Production\TripContentService.cs" />
     <!-- Test Framework -->
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.11" />

@@ -135,7 +135,7 @@ public class GroupLocationResult
 
 /// <summary>
 /// Request to update peer visibility.
-/// PATCH /api/mobile/groups/{groupId}/peer-visibility
+/// POST /api/mobile/groups/{groupId}/peer-visibility
 /// </summary>
 public class PeerVisibilityUpdateRequest
 {
