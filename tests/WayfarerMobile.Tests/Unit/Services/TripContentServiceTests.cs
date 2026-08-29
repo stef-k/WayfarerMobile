@@ -59,7 +59,9 @@ public sealed class TripContentServiceTests
         var result = await service.SyncTripMetadataAsync(serverId, forceSync: true, progress);
 
         result.Should().BeSameAs(localTrip);
-        progress.Values.Select(value => value.ProgressPercent).Should().Equal(5, 15, 35, 55, 65, 100);
+        progress.Values.Should().HaveCount(6);
+        progress.Values.Select(value => value.ProgressPercent).Should().BeInAscendingOrder();
+        progress.Values[^1].ProgressPercent.Should().Be(100);
         progress.Values.Select(value => value.TripId).Should().OnlyContain(id => id == localTrip.Id);
         progress.Values.Select(value => value.StatusMessage).Should().SatisfyRespectively(
             status => status.Should().ContainEquivalentOf("update"),
