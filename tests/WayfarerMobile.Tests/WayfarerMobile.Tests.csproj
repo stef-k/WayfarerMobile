@@ -10,10 +10,22 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Infrastructure\Entities\DownloadedTripEntity.cs" />
+    <Compile Remove="Infrastructure\Entities\OfflinePlaceEntity.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Data\Entities\OfflineSegment.cs" Link="Production\OfflineSegment.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Data\Entities\DownloadedTrip.cs" Link="Production\DownloadedTrip.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Data\Entities\OfflineArea.cs" Link="Production\OfflineArea.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Data\Entities\OfflinePlace.cs" Link="Production\OfflinePlace.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Data\Entities\OfflinePolygon.cs" Link="Production\OfflinePolygon.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Data\Repositories\IAreaRepository.cs" Link="Production\IAreaRepository.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Data\Repositories\IPlaceRepository.cs" Link="Production\IPlaceRepository.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Data\Repositories\RepositoryBase.cs" Link="Production\RepositoryBase.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Data\Repositories\ISegmentRepository.cs" Link="Production\ISegmentRepository.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Data\Repositories\ITripRepository.cs" Link="Production\ITripRepository.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Data\Repositories\SegmentRepository.cs" Link="Production\SegmentRepository.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Interfaces\ITripContentService.cs" Link="Production\ITripContentService.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Interfaces\ITripMetadataBuilder.cs" Link="Production\ITripMetadataBuilder.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Services\TripContentService.cs" Link="Production\TripContentService.cs" />
     <!-- Test Framework -->
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.11" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />

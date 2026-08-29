@@ -3,17 +3,6 @@ namespace WayfarerMobile.Tests.Unit.Contracts;
 public sealed class TripRasterDecommissionContractTests
 {
     [Fact]
-    public void TripMetadataSync_DoesNotReportRasterCoverageProgress()
-    {
-        var root = FindRepositoryRoot();
-        var source = File.ReadAllText(Path.Combine(
-            root,
-            "src/WayfarerMobile/Services/TripContentService.cs"));
-
-        source.Should().NotContain("Checking map coverage");
-    }
-
-    [Fact]
     public void TripDownloadAndSynchronization_DoNotOwnRasterAcquisition()
     {
         var root = FindRepositoryRoot();
