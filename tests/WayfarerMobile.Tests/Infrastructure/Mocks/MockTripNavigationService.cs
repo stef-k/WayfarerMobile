@@ -121,7 +121,7 @@ public class MockTripNavigationService : ITripNavigationService
 
     /// <inheritdoc/>
     public Task<NavigationRoute?> CalculateRouteToPlaceAsync(double currentLat, double currentLon,
-        string destinationPlaceId, bool fetchFromOsrm = true)
+        string destinationPlaceId)
     {
         _activeRoute = _nextRouteToReturn;
         return Task.FromResult(_activeRoute);

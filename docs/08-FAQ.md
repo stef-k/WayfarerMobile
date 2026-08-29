@@ -183,8 +183,9 @@ Full trip creation (defining regions, creating route segments, detailed planning
 
 Navigation only shows detailed routes if:
 - The trip has segments defined (created on web)
-- Or OSRM can calculate a route (requires internet)
-- Without either, you get direct bearing/distance guidance
+- Without valid saved Segment geometry, you get Direct bearing/distance guidance
+
+Direct guidance is a straight line, not road-aware turn-by-turn routing. Mobile does not contact a public routing provider.
 
 ### What's the 50-meter rule?
 

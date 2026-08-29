@@ -242,8 +242,6 @@ public static class MauiProgram
         services.AddSingleton<ITimelineLayerService, TimelineLayerService>(); // Stateless rendering
 
         // Routing Services
-        services.AddSingleton<OsrmRoutingService>();
-        services.AddSingleton<RouteCacheService>();
         services.AddSingleton<INavigationRouteBuilder, NavigationRouteBuilder>();
         services.AddSingleton<TripNavigationService>();
         services.AddSingleton<ITripNavigationService>(sp => sp.GetRequiredService<TripNavigationService>());
@@ -430,13 +428,6 @@ public static class MauiProgram
             client.DefaultRequestVersion = new Version(2, 0);
             client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrHigher;
             client.DefaultRequestHeaders.UserAgent.ParseAdd("WayfarerMobile/1.0 (+https://github.com/stef-k/WayfarerMobile)");
-        });
-
-        // Osrm - routing service with 30s timeout
-        services.AddHttpClient("Osrm", client =>
-        {
-            client.Timeout = TimeSpan.FromSeconds(30);
-            client.DefaultRequestHeaders.Add("User-Agent", "WayfarerMobile/1.0");
         });
 
         // SSE - Server-Sent Events with isolated connection pool and long timeout

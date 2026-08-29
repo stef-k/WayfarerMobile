@@ -299,9 +299,9 @@ From the main map, you can add your current location to the loaded trip as a new
 
 ---
 
-## Turn-by-Turn Navigation
+## Navigation
 
-Navigate to destinations with intelligent routing that adapts to context.
+Navigate with saved Trip Segment geometry or honest straight-line Direct guidance. Mobile does not contact a public routing provider.
 
 ### Navigation Contexts
 
@@ -310,8 +310,8 @@ The app supports navigation in different contexts:
 | Context | Started From | Features |
 |---------|--------------|----------|
 | **Trip Navigation** | Trip sidebar → place | Uses trip segments, full route priority |
-| **Group Navigation** | Groups → member | OSRM routing to member location |
-| **Map Navigation** | Long-press on map | OSRM routing to any point |
+| **Group Navigation** | Groups → member | Direct guidance to member location |
+| **Map Navigation** | Long-press on map | Direct guidance to any point |
 
 ### Starting Trip Navigation
 
@@ -343,31 +343,23 @@ Route calculation differs based on navigation context:
 | Priority | Source | When Used |
 |----------|--------|-----------|
 | 1 | **User Segments** | Trip has pre-defined route geometry |
-| 2 | **Cached OSRM** | Valid cache exists (same dest, <50m origin, <5 min old) |
-| 3 | **OSRM Fetch** | Online and no cache available |
-| 4 | **Direct Route** | Offline fallback (straight-line with bearing) |
+| 2 | **Direct Route** | Saved geometry is unavailable or invalid |
 
 **Ad-Hoc Navigation** (groups, map locations):
 | Priority | Source | When Used |
 |----------|--------|-----------|
-| 1 | **OSRM Fetch** | Online route calculation |
-| 2 | **Direct Route** | Offline fallback (straight-line with bearing) |
+| 1 | **Direct Route** | Always; ad-hoc targets have no saved Segment geometry |
 
-> **Note**: Ad-hoc navigation doesn't have user segments or route caching since there's no trip context.
+> **Note**: Ad-hoc navigation does not have saved Segment geometry because there is no Trip context.
 
 **User Segments**: Routes you defined when planning the trip. These include the exact polyline geometry and are always preferred over calculated routes.
 
-**Cached OSRM**: Previously fetched routes are cached and reused if:
-- Same destination
-- Origin within 50 meters of cached origin
-- Less than 5 minutes old
-
-**OSRM Fetch**: Online route calculation from OSRM (Open Source Routing Machine). Supports walking, driving, and cycling profiles. Rate limited to 1 request per second.
-
-**Direct Route**: When offline and no cached route exists, shows straight-line navigation with:
+**Direct Route**: When saved Segment geometry is unavailable or invalid, shows straight-line navigation with:
 - Cardinal direction (N, NE, E, etc.)
 - Distance to destination
 - Bearing-based heading
+
+Direct is not road-aware or hosted turn-by-turn routing. Authenticated Wayfarer-hosted routing is planned separately and is not implemented yet.
 
 ### External Maps Integration
 
@@ -657,7 +649,6 @@ For troubleshooting, access detailed diagnostics:
    - **Location Queue**: Pending sync items
    - **Tile Cache**: Cache statistics
    - **Tracking**: Service status
-   - **Navigation**: Route cache info
 3. Export diagnostic report for support
 
 ---

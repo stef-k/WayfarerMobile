@@ -21,7 +21,6 @@ public class AppDiagnosticService
     private readonly ILocationQueueRepository _locationQueueRepository;
     private readonly LiveTileCacheService _liveTileCache;
     private readonly IPermissionsService _permissionsService;
-    private readonly RouteCacheService _routeCacheService;
 
     /// <summary>
     /// Initializes a new instance of the AppDiagnosticService class.
@@ -32,8 +31,7 @@ public class AppDiagnosticService
         ISettingsService settingsService,
         ILocationQueueRepository locationQueueRepository,
         LiveTileCacheService liveTileCache,
-        IPermissionsService permissionsService,
-        RouteCacheService routeCacheService)
+        IPermissionsService permissionsService)
     {
         _logger = logger;
         _locationBridge = locationBridge;
@@ -41,7 +39,6 @@ public class AppDiagnosticService
         _locationQueueRepository = locationQueueRepository;
         _liveTileCache = liveTileCache;
         _permissionsService = permissionsService;
-        _routeCacheService = routeCacheService;
     }
 
     #region Location Queue Diagnostics
@@ -236,45 +233,6 @@ public class AppDiagnosticService
 
     #endregion
 
-    #region Navigation Diagnostics
-
-    /// <summary>
-    /// Gets navigation and route cache diagnostics.
-    /// Note: Route cache doesn't expose raw cached route - only validates on retrieval.
-    /// </summary>
-    public Task<NavigationDiagnostics> GetNavigationDiagnosticsAsync()
-    {
-        try
-        {
-            // Note: RouteCacheService only validates and returns routes via GetValidRoute()
-            // which requires current location and destination. For diagnostics we just
-            // report that route caching is available.
-            return Task.FromResult(new NavigationDiagnostics
-            {
-                HasCachedRoute = false, // Cannot determine without location context
-                CachedRouteDestination = null,
-                CachedRouteWaypointCount = 0,
-                CachedRouteDistance = null,
-                CachedRouteDuration = null,
-                CachedRouteTimestamp = null,
-                CacheAgeSeconds = 0,
-                IsCacheValid = false
-            });
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "Invalid state getting navigation diagnostics");
-            return Task.FromResult(new NavigationDiagnostics());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting navigation diagnostics");
-            return Task.FromResult(new NavigationDiagnostics());
-        }
-    }
-
-    #endregion
-
     #region Full Report
 
     /// <summary>
@@ -320,19 +278,6 @@ public class AppDiagnosticService
             report.AppendLine($"  Last Location: {trackingDiag.LastLocationLatitude:F6}, {trackingDiag.LastLocationLongitude:F6}");
             report.AppendLine($"  Last Location Time: {trackingDiag.LastLocationTimestamp:HH:mm:ss}");
             report.AppendLine($"  Accuracy: {trackingDiag.LastLocationAccuracy:F1}m");
-        }
-
-        // Navigation
-        var navDiag = await GetNavigationDiagnosticsAsync();
-        report.AppendLine("\nNAVIGATION:");
-        report.AppendLine($"  Has Cached Route: {navDiag.HasCachedRoute}");
-        if (navDiag.HasCachedRoute)
-        {
-            report.AppendLine($"  Destination: {navDiag.CachedRouteDestination}");
-            report.AppendLine($"  Waypoints: {navDiag.CachedRouteWaypointCount}");
-            report.AppendLine($"  Distance: {navDiag.CachedRouteDistance:F0}m");
-            report.AppendLine($"  Cache Age: {navDiag.CacheAgeSeconds:F0}s");
-            report.AppendLine($"  Cache Valid: {navDiag.IsCacheValid}");
         }
 
         report.AppendLine(new string('=', 60));
@@ -392,21 +337,6 @@ public class TrackingDiagnostics
     public int DistanceThresholdMeters { get; set; }
     public int AccuracyThresholdMeters { get; set; }
     public string TrackingHealthStatus { get; set; } = "Unknown";
-}
-
-/// <summary>
-/// Navigation diagnostic information.
-/// </summary>
-public class NavigationDiagnostics
-{
-    public bool HasCachedRoute { get; set; }
-    public string? CachedRouteDestination { get; set; }
-    public int CachedRouteWaypointCount { get; set; }
-    public double? CachedRouteDistance { get; set; }
-    public double? CachedRouteDuration { get; set; }
-    public DateTime? CachedRouteTimestamp { get; set; }
-    public double CacheAgeSeconds { get; set; }
-    public bool IsCacheValid { get; set; }
 }
 
 #endregion

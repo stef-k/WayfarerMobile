@@ -11,20 +11,16 @@ namespace WayfarerMobile.Services;
 
 /// <summary>
 /// Service for trip-based navigation using the local routing graph.
-/// Provides route calculation, progress tracking, and rerouting.
+/// Provides saved-geometry and Direct route calculation, progress tracking, and rerouting.
 /// </summary>
 /// <remarks>
 /// Navigation priority:
 /// 1. User-defined segments (from trip data)
-/// 2. Cached OSRM route (if still valid - same destination, within 50m of origin, &lt; 5 min old)
-/// 3. Fetched routes (from OSRM when online)
-/// 4. Direct route (straight line with bearing/distance)
+/// 2. Direct route (straight line with bearing/distance)
 /// </remarks>
 public class TripNavigationService : ITripNavigationService
 {
     private readonly ILogger<TripNavigationService> _logger;
-    private readonly OsrmRoutingService _osrmService;
-    private readonly RouteCacheService _routeCacheService;
     private readonly INavigationAudioService _audioService;
     private readonly INavigationRouteBuilder _routeBuilder;
     private readonly ITripStateManager _tripStateManager;
@@ -76,29 +72,21 @@ public class TripNavigationService : ITripNavigationService
     /// Creates a new instance of TripNavigationService.
     /// </summary>
     /// <param name="logger">The logger.</param>
-    /// <param name="osrmService">The OSRM routing service.</param>
-    /// <param name="routeCacheService">The route cache service.</param>
     /// <param name="audioService">The navigation audio service.</param>
     /// <param name="routeBuilder">The navigation route builder.</param>
     /// <param name="tripStateManager">The trip state manager for fresh place data.</param>
     public TripNavigationService(
         ILogger<TripNavigationService> logger,
-        OsrmRoutingService osrmService,
-        RouteCacheService routeCacheService,
         INavigationAudioService audioService,
         INavigationRouteBuilder routeBuilder,
         ITripStateManager tripStateManager)
     {
         ArgumentNullException.ThrowIfNull(logger);
-        ArgumentNullException.ThrowIfNull(osrmService);
-        ArgumentNullException.ThrowIfNull(routeCacheService);
         ArgumentNullException.ThrowIfNull(audioService);
         ArgumentNullException.ThrowIfNull(routeBuilder);
         ArgumentNullException.ThrowIfNull(tripStateManager);
 
         _logger = logger;
-        _osrmService = osrmService;
-        _routeCacheService = routeCacheService;
         _audioService = audioService;
         _routeBuilder = routeBuilder;
         _tripStateManager = tripStateManager;
@@ -142,8 +130,7 @@ public class TripNavigationService : ITripNavigationService
     }
 
     /// <summary>
-    /// Calculates a route to a specific place (synchronous, no OSRM fetch).
-    /// Use <see cref="CalculateRouteToPlaceAsync"/> for full routing with OSRM support.
+    /// Calculates a route to a specific place using saved Segment geometry or Direct guidance.
     /// </summary>
     /// <param name="currentLat">Current latitude.</param>
     /// <param name="currentLon">Current longitude.</param>
@@ -185,118 +172,32 @@ public class TripNavigationService : ITripNavigationService
             }
         }
 
-        // Priority 3: Direct navigation (bearing + distance)
+        // Priority 2: Direct navigation (bearing + distance)
         _activeRoute = _routeBuilder.BuildDirectRoute(currentLat, currentLon, destination);
         _logger.LogDebug("Using direct route to {Destination}", destination.Name);
         return _activeRoute;
     }
 
     /// <summary>
-    /// Calculates a route to a specific place with OSRM fetching support.
+    /// Calculates a route to a specific place using saved Segment geometry or Direct guidance.
     /// </summary>
     /// <param name="currentLat">Current latitude.</param>
     /// <param name="currentLon">Current longitude.</param>
     /// <param name="destinationPlaceId">Destination place ID.</param>
-    /// <param name="fetchFromOsrm">Whether to fetch route from OSRM if no segment exists.</param>
     /// <returns>The calculated route or null if no route found.</returns>
     /// <remarks>
     /// Navigation priority:
     /// 1. User-defined segments (always preferred)
-    /// 2. Cached OSRM route (if still valid)
-    /// 3. OSRM-fetched routes (if online and fetchFromOsrm is true)
-    /// 4. Direct route (straight line fallback)
+    /// 2. Direct route (straight-line fallback)
     /// </remarks>
-    public async Task<NavigationRoute?> CalculateRouteToPlaceAsync(
+    public Task<NavigationRoute?> CalculateRouteToPlaceAsync(
         double currentLat, double currentLon,
-        string destinationPlaceId,
-        bool fetchFromOsrm = true)
-    {
-        if (_currentGraph == null)
-        {
-            _logger.LogWarning("No trip loaded for navigation");
-            return null;
-        }
-
-        // Issue #191: Get fresh place data from TripStateManager to ensure we use
-        // current coordinates/name after edits, not stale cached graph data
-        var destination = GetFreshPlaceAsNode(destinationPlaceId);
-        if (destination == null)
-        {
-            _logger.LogWarning("Destination place {PlaceId} not found in trip", destinationPlaceId);
-            return null;
-        }
-
-        _destinationPlaceId = destinationPlaceId;
-        _announcedStepKeys.Clear(); // Reset announcements for new route
-
-        // Priority 1: Check for user-defined segment route
-        if (_currentGraph.IsWithinSegmentRoutingRange(currentLat, currentLon))
-        {
-            var nearestNode = _currentGraph.FindNearestNode(currentLat, currentLon);
-            if (nearestNode != null)
-            {
-                var path = _currentGraph.FindPath(nearestNode.Id, destinationPlaceId);
-                if (path.Count > 0)
-                {
-                    _activeRoute = _routeBuilder.BuildFromSegmentPath(path, currentLat, currentLon, _currentGraph);
-                    _logger.LogDebug("Using segment route with {WaypointCount} waypoints", _activeRoute?.Waypoints.Count);
-                    return _activeRoute;
-                }
-            }
-        }
-
-        // Priority 2: Check for valid cached route
-        var cachedRoute = _routeCacheService.GetValidRoute(currentLat, currentLon, destinationPlaceId);
-        if (cachedRoute != null)
-        {
-            _activeRoute = _routeBuilder.BuildFromCachedRoute(cachedRoute, currentLat, currentLon, destination);
-            _logger.LogInformation(
-                "Using cached route to {Destination}: {Distance:F1}km",
-                destination.Name, cachedRoute.DistanceMeters / 1000);
-            return _activeRoute;
-        }
-
-        // Priority 3: Try OSRM if enabled
-        if (fetchFromOsrm)
-        {
-            var osrmRoute = await _osrmService.GetRouteAsync(
-                currentLat, currentLon,
-                destination.Latitude, destination.Longitude,
-                "foot"); // Default to walking
-
-            if (osrmRoute != null)
-            {
-                // Cache the fetched route
-                _routeCacheService.SaveRoute(new CachedRoute
-                {
-                    DestinationPlaceId = destinationPlaceId,
-                    DestinationName = destination.Name,
-                    OriginLatitude = currentLat,
-                    OriginLongitude = currentLon,
-                    Geometry = osrmRoute.Geometry,
-                    DistanceMeters = osrmRoute.DistanceMeters,
-                    DurationSeconds = osrmRoute.DurationSeconds,
-                    Source = osrmRoute.Source,
-                    FetchedAtUtc = DateTime.UtcNow
-                });
-
-                _activeRoute = _routeBuilder.BuildFromOsrmResponse(osrmRoute, currentLat, currentLon, destination);
-                _logger.LogInformation(
-                    "Using OSRM route to {Destination}: {Distance:F1}km",
-                    destination.Name, osrmRoute.DistanceMeters / 1000);
-                return _activeRoute;
-            }
-        }
-
-        // Priority 4: Direct navigation (bearing + distance)
-        _activeRoute = _routeBuilder.BuildDirectRoute(currentLat, currentLon, destination);
-        _logger.LogDebug("Using direct route to {Destination}", destination.Name);
-        return _activeRoute;
-    }
+        string destinationPlaceId)
+        => Task.FromResult(CalculateRouteToPlace(currentLat, currentLon, destinationPlaceId));
 
     /// <summary>
     /// Calculates a route to arbitrary coordinates (not requiring a loaded trip).
-    /// Uses OSRM for routing when online, falls back to straight line when offline.
+    /// Direct guidance is a straight line with distance, bearing, and profile-aware ETA.
     /// </summary>
     /// <param name="currentLat">Current latitude.</param>
     /// <param name="currentLon">Current longitude.</param>
@@ -304,42 +205,21 @@ public class TripNavigationService : ITripNavigationService
     /// <param name="destLon">Destination longitude.</param>
     /// <param name="destName">Destination name for display.</param>
     /// <param name="profile">Routing profile (foot, car, bike). Default is foot.</param>
-    /// <returns>The calculated route (OSRM or direct).</returns>
-    public async Task<NavigationRoute> CalculateRouteToCoordinatesAsync(
+    /// <returns>The Direct route.</returns>
+    public Task<NavigationRoute> CalculateRouteToCoordinatesAsync(
         double currentLat, double currentLon,
         double destLat, double destLon,
         string destName,
         string profile = "foot")
     {
-        _logger.LogInformation("Calculating route to {Name} at {Lat},{Lon}", destName, destLat, destLon);
+        _logger.LogInformation("Calculating Direct guidance to {Name}", destName);
         _announcedStepKeys.Clear(); // Reset announcements for new route
 
-        // Try OSRM first
-        try
-        {
-            var osrmRoute = await _osrmService.GetRouteAsync(
-                currentLat, currentLon,
-                destLat, destLon,
-                profile);
-
-            if (osrmRoute != null)
-            {
-                var route = _routeBuilder.BuildFromOsrmCoordinates(osrmRoute, currentLat, currentLon, destLat, destLon, destName);
-                _logger.LogInformation("Using OSRM route to {Name}: {Distance:F1}km", destName, osrmRoute.DistanceMeters / 1000);
-                _activeRoute = route;
-                return route;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "OSRM routing failed, falling back to direct route");
-        }
-
-        // Fallback to direct route (straight line) with profile-aware ETA
+        // Direct route (straight line) with profile-aware ETA
         _logger.LogInformation("Using direct route to {Name} with profile {Profile}", destName, profile);
         var directRoute = _routeBuilder.BuildDirectRouteToCoordinates(currentLat, currentLon, destLat, destLon, destName, profile);
         _activeRoute = directRoute;
-        return directRoute;
+        return Task.FromResult(directRoute);
     }
 
     /// <summary>
@@ -451,13 +331,6 @@ public class TripNavigationService : ITripNavigationService
         if (timeSinceLastAnnouncement.TotalSeconds < MinAnnouncementIntervalSeconds)
             return;
 
-        // For routes with OSRM steps, use step-based announcements
-        if (_activeRoute.Steps.Count > 0 && !_activeRoute.IsDirectRoute)
-        {
-            CheckForStepAnnouncement(lat, lon);
-            return;
-        }
-
         // For direct routes or routes without steps, use waypoint-based announcements
         // Find next waypoint with a name (places, not route points)
         var nextWaypoint = _activeRoute.Waypoints
@@ -479,37 +352,6 @@ public class TripNavigationService : ITripNavigationService
                 var announcement = BuildTurnAnnouncement(nextWaypoint, state.DistanceToNextWaypointMeters, transportMode);
 
                 AnnounceInstruction(announcement, state.DistanceToNextWaypointMeters);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Checks for step-based turn announcements (OSRM routes).
-    /// </summary>
-    private void CheckForStepAnnouncement(double lat, double lon)
-    {
-        if (_activeRoute?.Steps == null || _activeRoute.Steps.Count == 0)
-            return;
-
-        // Find the next step that we're approaching
-        foreach (var step in _activeRoute.Steps)
-        {
-            // Skip "arrive" steps - those are announced differently
-            if (step.ManeuverType == "arrive")
-                continue;
-
-            var distance = GeoMath.CalculateDistance(lat, lon, step.Latitude, step.Longitude);
-
-            // Announce when within announcement range but not too close
-            if (distance > 20 && distance <= TurnAnnouncementDistanceMeters)
-            {
-                var stepKey = $"{step.ManeuverType}:{step.Latitude:F5},{step.Longitude:F5}";
-                // Only announce each step once per navigation session
-                if (_announcedStepKeys.Add(stepKey))
-                {
-                    AnnounceInstruction(step.Instruction, distance);
-                    return;
-                }
             }
         }
     }
@@ -781,7 +623,7 @@ public class TripNavigationService : ITripNavigationService
             return _activeRoute.Steps.FirstOrDefault();
         }
 
-        // For OSRM routes, find the nearest step we haven't passed yet
+        // Find the nearest step we haven't passed yet.
         NavigationStep? currentStep = null;
         double minDistance = double.MaxValue;
 

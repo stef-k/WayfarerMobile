@@ -46,7 +46,7 @@ Wayfarer Mobile is a privacy-first companion app for self-hosted Wayfarer server
 
 - **Offline-First Architecture**: Local SQLite storage with background sync, works without internet
 - **Smart Battery Usage**: Three-phase sleep/wake optimization for background tracking (~1-3% per hour)
-- **Dual Navigation Modes**: Trip navigation (user segments → cached → OSRM → direct) and ad-hoc navigation (OSRM → direct)
+- **Truthful Navigation**: Saved Trip Segment geometry when available, otherwise straight-line Direct guidance
 - **Queue Resilience**: Configurable queue limit (default 25,000), fast sync (12s/location), export to CSV/GeoJSON
 
 > **Map cache note**: OpenStreetMap tiles requested during interactive viewing are kept in a bounded live cache. Previously viewed tiles may remain usable while cached, but Trip downloads do not include or guarantee an offline basemap area.
@@ -133,7 +133,7 @@ WayfarerMobile/
 |----------|------------|
 | Framework | .NET 10 MAUI |
 | Maps | Mapsui 5.1 with OpenStreetMap tiles |
-| Routing | OSRM (Open Source Routing Machine) |
+| Navigation | Saved Segment geometry and Direct guidance |
 | UI Components | Syncfusion MAUI Toolkit (MIT) |
 | MVVM | CommunityToolkit.Mvvm |
 | Database | SQLite-net-pcl |

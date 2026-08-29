@@ -89,9 +89,8 @@ This document provides detailed documentation for the key services in WayfarerMo
 
 | Service | Purpose | Rate Limit |
 |---------|---------|------------|
-| `TripNavigationService` | Route calculation, turn-by-turn | N/A |
-| `OsrmRoutingService` | OSRM API client | 1 req/second |
-| `RouteCacheService` | Single-route session cache | N/A |
+| `TripNavigationService` | Saved-geometry and Direct route calculation | N/A |
+| `NavigationRouteBuilder` | Saved Segment and Direct route construction | N/A |
 | `NavigationAudioService` | Voice announcements | N/A |
 
 ### Data Services
@@ -489,7 +488,7 @@ Manages the dropped pin marker for map long-press interactions. Stateless render
 
 **Source**: `src/WayfarerMobile/Services/TripNavigationService.cs`
 
-Provides navigation with route calculation and progress tracking. Supports two modes:
+Provides navigation with route calculation and progress tracking. Mobile makes no direct routing-provider request.
 
 ### Navigation Modes
 
@@ -497,24 +496,21 @@ Provides navigation with route calculation and progress tracking. Supports two m
 - Used when navigating to a trip place
 - Has access to user-defined segments and trip context
 - Route priority:
-  1. User Segments (trip-defined routes)
-  2. Cached OSRM (valid cache)
-  3. OSRM Fetch (online)
-  4. Direct Route (offline fallback)
+  1. Valid saved Segment geometry (trip-defined routes)
+  2. Direct Route (straight-line fallback)
 
 **Ad-Hoc Navigation** (`CalculateRouteToCoordinatesAsync`):
 - Used for groups, map locations, any coordinates
 - No trip context available
 - Route priority:
-  1. OSRM Fetch (online)
-  2. Direct Route (offline fallback)
+  1. Direct Route
 
 ```csharp
 // Trip navigation - uses full route priority chain
 var route = await _tripNavigationService.CalculateRouteToPlaceAsync(
     currentLat, currentLon, destinationPlaceId);
 
-// Ad-hoc navigation - OSRM or direct only
+// Ad-hoc navigation - Direct straight-line guidance
 var route = await _tripNavigationService.CalculateRouteToCoordinatesAsync(
     currentLat, currentLon, destLat, destLon, destName, profile: "foot");
 ```
@@ -535,10 +531,9 @@ public class TripNavigationGraph
 ### Route Calculation
 
 ```csharp
-public async Task<NavigationRoute?> CalculateRouteToPlaceAsync(
+public NavigationRoute? CalculateRouteToPlace(
     double currentLat, double currentLon,
-    string destinationPlaceId,
-    bool fetchFromOsrm = true)
+    string destinationPlaceId)
 {
     // Priority 1: User-defined segment
     if (_currentGraph.IsWithinSegmentRoutingRange(currentLat, currentLon))
@@ -548,26 +543,12 @@ public async Task<NavigationRoute?> CalculateRouteToPlaceAsync(
             return BuildRouteFromPath(path, currentLat, currentLon);
     }
 
-    // Priority 2: Cached OSRM route
-    var cachedRoute = _routeCacheService.GetValidRoute(currentLat, currentLon, destinationPlaceId);
-    if (cachedRoute != null)
-        return BuildRouteFromCache(cachedRoute, ...);
-
-    // Priority 3: OSRM fetch
-    if (fetchFromOsrm)
-    {
-        var osrmRoute = await _osrmService.GetRouteAsync(...);
-        if (osrmRoute != null)
-        {
-            _routeCacheService.SaveRoute(...);
-            return BuildRouteFromOsrm(osrmRoute, ...);
-        }
-    }
-
-    // Priority 4: Direct route
+    // Priority 2: Direct route
     return BuildDirectRoute(currentLat, currentLon, destination);
 }
 ```
+
+Direct guidance is not road-aware or hosted turn-by-turn routing. Authenticated Wayfarer-hosted routing remains future work.
 
 ### Navigation State
 
@@ -1054,82 +1035,6 @@ Manages activity types with server sync and local caching.
 - **Sync interval**: Every 6 hours
 - **Priority**: Server activities (positive IDs) > default activities (negative IDs)
 - **Icon mapping**: Automatically suggests icons based on activity name
-
----
-
-## OsrmRoutingService
-
-**Source**: `src/WayfarerMobile/Services/OsrmRoutingService.cs`
-
-OSRM (Open Source Routing Machine) API client for route calculation.
-
-### Configuration
-
-| Setting | Value |
-|---------|-------|
-| Base URL | `https://router.project-osrm.org` |
-| Rate limit | 1 request/second |
-| Timeout | 10 seconds |
-| Profiles | foot, car, bike |
-
-### Rate Limiting
-
-```csharp
-private static readonly TimeSpan MinRequestInterval = TimeSpan.FromSeconds(1.1);
-
-private static async Task EnforceRateLimitAsync()
-{
-    var timeSinceLastRequest = DateTime.UtcNow - _lastRequestTime;
-    if (timeSinceLastRequest < MinRequestInterval)
-    {
-        await Task.Delay(MinRequestInterval - timeSinceLastRequest);
-    }
-    _lastRequestTime = DateTime.UtcNow;
-}
-```
-
-### Response
-
-```csharp
-public class OsrmRouteResult
-{
-    public string Geometry { get; set; }        // Encoded polyline
-    public double DistanceMeters { get; set; }
-    public double DurationSeconds { get; set; }
-    public List<OsrmStepResult> Steps { get; set; }  // Turn instructions
-}
-```
-
----
-
-## RouteCacheService
-
-**Source**: `src/WayfarerMobile/Services/RouteCacheService.cs`
-
-Single-route session cache stored in Preferences. Survives app restart.
-
-### Cache Validity
-
-A cached route is valid if:
-- Same destination place ID
-- Origin within **50 meters** of cached origin
-- Less than **5 minutes** old
-
-### Storage
-
-```csharp
-public class CachedRoute
-{
-    public string DestinationPlaceId { get; set; }
-    public string DestinationName { get; set; }
-    public double OriginLatitude { get; set; }
-    public double OriginLongitude { get; set; }
-    public string Geometry { get; set; }  // Encoded polyline
-    public double DistanceMeters { get; set; }
-    public double DurationSeconds { get; set; }
-    public DateTime FetchedAtUtc { get; set; }
-}
-```
 
 ---
 

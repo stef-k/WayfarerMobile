@@ -20,12 +20,12 @@ namespace WayfarerMobile.Data.Services;
 ///   <item><see cref="WayfarerMobile.Data.Repositories.ILiveTileCacheRepository"/> - Live tile cache</item>
 /// </list>
 /// </summary>
-public class DatabaseService : IAsyncDisposable, ILegacyRasterState, ISegmentWaypointMigrationState
+public class DatabaseService : IAsyncDisposable, ILegacyRasterState, ISegmentWaypointMigrationState, ILegacyOsrmPreferenceState
 {
     #region Constants
 
     private const string DatabaseFilename = "wayfarer.db3";
-    private const int CurrentSchemaVersion = 8;
+    private const int CurrentSchemaVersion = 9;
     private const string SchemaVersionKey = "db_schema_version";
 
     private static readonly SQLiteOpenFlags DbFlags =
@@ -155,6 +155,11 @@ public class DatabaseService : IAsyncDisposable, ILegacyRasterState, ISegmentWay
         if (currentVersion < 8)
         {
             await SegmentWaypointMigration.ApplyAsync(this, CancellationToken.None);
+        }
+
+        if (currentVersion < 9)
+        {
+            await OsrmRoutingDecommissionMigration.ApplyAsync(this, CancellationToken.None);
         }
 
         // Update schema version
@@ -336,6 +341,21 @@ public class DatabaseService : IAsyncDisposable, ILegacyRasterState, ISegmentWay
     }
 
     Task ISegmentWaypointMigrationState.RecordSchemaVersionAsync(int version, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return SetSchemaVersionAsync(version);
+    }
+
+    Task ILegacyOsrmPreferenceState.RemovePreferencesAsync(
+        IReadOnlyCollection<string> keys,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        foreach (var key in keys) Preferences.Remove(key);
+        return Task.CompletedTask;
+    }
+
+    Task ILegacyOsrmPreferenceState.RecordSchemaVersionAsync(int version, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         return SetSchemaVersionAsync(version);

@@ -9,9 +9,7 @@ namespace WayfarerMobile.Core.Interfaces;
 /// <remarks>
 /// Navigation priority:
 /// 1. User-defined segments (from trip data)
-/// 2. Cached OSRM route (if still valid - same destination, within 50m of origin, less than 5 min old)
-/// 3. Fetched routes (from OSRM when online)
-/// 4. Direct route (straight line with bearing/distance)
+/// 2. Direct route (straight line with bearing/distance)
 /// </remarks>
 public interface ITripNavigationService
 {
@@ -58,8 +56,7 @@ public interface ITripNavigationService
     void UnloadTrip();
 
     /// <summary>
-    /// Calculates a route to a specific place (synchronous, no OSRM fetch).
-    /// Use <see cref="CalculateRouteToPlaceAsync"/> for full routing with OSRM support.
+    /// Calculates a route to a specific place using saved Segment geometry or Direct guidance.
     /// </summary>
     /// <param name="currentLat">Current latitude.</param>
     /// <param name="currentLon">Current longitude.</param>
@@ -68,28 +65,24 @@ public interface ITripNavigationService
     NavigationRoute? CalculateRouteToPlace(double currentLat, double currentLon, string destinationPlaceId);
 
     /// <summary>
-    /// Calculates a route to a specific place with OSRM fetching support.
+    /// Calculates a route to a specific place using saved Segment geometry or Direct guidance.
     /// </summary>
     /// <param name="currentLat">Current latitude.</param>
     /// <param name="currentLon">Current longitude.</param>
     /// <param name="destinationPlaceId">Destination place ID.</param>
-    /// <param name="fetchFromOsrm">Whether to fetch route from OSRM if no segment exists.</param>
     /// <returns>The calculated route or null if no route found.</returns>
     /// <remarks>
     /// Navigation priority:
     /// 1. User-defined segments (always preferred)
-    /// 2. Cached OSRM route (if still valid)
-    /// 3. OSRM-fetched routes (if online and fetchFromOsrm is true)
-    /// 4. Direct route (straight line fallback)
+    /// 2. Direct route (straight-line fallback)
     /// </remarks>
     Task<NavigationRoute?> CalculateRouteToPlaceAsync(
         double currentLat, double currentLon,
-        string destinationPlaceId,
-        bool fetchFromOsrm = true);
+        string destinationPlaceId);
 
     /// <summary>
     /// Calculates a route to arbitrary coordinates (not requiring a loaded trip).
-    /// Uses OSRM for routing when online, falls back to straight line when offline.
+    /// Builds Direct straight-line guidance without contacting a routing provider.
     /// </summary>
     /// <param name="currentLat">Current latitude.</param>
     /// <param name="currentLon">Current longitude.</param>
@@ -97,7 +90,7 @@ public interface ITripNavigationService
     /// <param name="destLon">Destination longitude.</param>
     /// <param name="destName">Destination name for display.</param>
     /// <param name="profile">Routing profile (foot, car, bike). Default is foot.</param>
-    /// <returns>The calculated route (OSRM or direct).</returns>
+    /// <returns>The Direct route.</returns>
     Task<NavigationRoute> CalculateRouteToCoordinatesAsync(
         double currentLat, double currentLon,
         double destLat, double destLon,

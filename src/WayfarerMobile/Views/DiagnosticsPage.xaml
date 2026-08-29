@@ -158,20 +158,6 @@
                     </sfExpander:SfExpander.Content>
                 </sfExpander:SfExpander>
 
-                <!-- Navigation Section -->
-                <sfExpander:SfExpander IsExpanded="False">
-                    <sfExpander:SfExpander.Header>
-                        <Grid HeightRequest="48" Padding="10,0">
-                            <Label Text="Navigation" FontSize="16" FontAttributes="Bold" VerticalOptions="Center" />
-                        </Grid>
-                    </sfExpander:SfExpander.Header>
-                    <sfExpander:SfExpander.Content>
-                        <VerticalStackLayout Padding="15" Spacing="8">
-                            <Label Text="{Binding CachedRouteInfo}" FontSize="12" />
-                        </VerticalStackLayout>
-                    </sfExpander:SfExpander.Content>
-                </sfExpander:SfExpander>
-
                 <!-- System Information -->
                 <sfExpander:SfExpander IsExpanded="False">
                     <sfExpander:SfExpander.Header>

@@ -259,18 +259,6 @@ https://opendatacommons.org/licenses/odbl/
 Note: This application uses a local tile cache to respect OpenStreetMap's
 fair use policy. See https://operations.osmfoundation.org/policies/tiles/
 
---------------------------------------------------------------------------------
-
-OSRM (Open Source Routing Machine)
-----------------------------------
-https://project-osrm.org/
-https://github.com/Project-OSRM/osrm-backend
-Copyright (c) Project OSRM contributors
-
-Licensed under the BSD 2-Clause License.
-
-Note: Routing can be provided by an OSRM-compatible endpoint (demo or self-hosted).
-
 ================================================================================
 
                           LICENSE TEXTS
