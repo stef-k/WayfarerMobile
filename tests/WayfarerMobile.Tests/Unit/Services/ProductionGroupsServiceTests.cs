@@ -11,17 +11,19 @@ namespace WayfarerMobile.Tests.Unit.Services;
 /// </summary>
 public class ProductionGroupsServiceTests
 {
-    [Fact]
-    public async Task UpdatePeerVisibilityAsync_SendsAuthenticatedPostWithDisabledState()
+    [Theory]
+    [InlineData(true, HttpStatusCode.OK, true)]
+    [InlineData(false, HttpStatusCode.Forbidden, false)]
+    public async Task UpdatePeerVisibilityAsync_SendsOneAuthenticatedPostAndReturnsStatusResult(
+        bool disabled,
+        HttpStatusCode statusCode,
+        bool expectedResult)
     {
         var groupId = Guid.Parse("11111111-2222-3333-4444-555555555555");
-        using var cancellationSource = new CancellationTokenSource();
-        var cancellationToken = cancellationSource.Token;
         HttpMethod? capturedMethod = null;
         Uri? capturedUri = null;
         string? capturedAuthorization = null;
         string? capturedContent = null;
-        CancellationToken capturedCancellationToken = default;
         var contactCount = 0;
         var handler = new Mock<HttpMessageHandler>();
         handler
@@ -37,9 +39,8 @@ public class ProductionGroupsServiceTests
                 capturedUri = request.RequestUri;
                 capturedAuthorization = request.Headers.Authorization?.ToString();
                 capturedContent = await request.Content!.ReadAsStringAsync(token);
-                capturedCancellationToken = token;
             })
-            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK));
+            .ReturnsAsync(new HttpResponseMessage(statusCode));
 
         using var httpClient = new HttpClient(handler.Object);
         var httpClientFactory = new Mock<IHttpClientFactory>();
@@ -53,15 +54,54 @@ public class ProductionGroupsServiceTests
             Mock.Of<ILogger<GroupsService>>(),
             httpClientFactory.Object);
 
-        var result = await service.UpdatePeerVisibilityAsync(groupId, disabled: true, cancellationToken);
+        var result = await service.UpdatePeerVisibilityAsync(groupId, disabled);
 
-        result.Should().BeTrue();
+        result.Should().Be(expectedResult);
         contactCount.Should().Be(1);
         capturedMethod.Should().Be(HttpMethod.Post);
         capturedUri.Should().Be(new Uri($"https://api.example.com/api/mobile/groups/{groupId}/peer-visibility"));
         capturedAuthorization.Should().Be("Bearer test-token-123");
-        capturedCancellationToken.Should().Be(cancellationToken);
         using var content = JsonDocument.Parse(capturedContent!);
-        content.RootElement.GetProperty("disabled").GetBoolean().Should().BeTrue();
+        content.RootElement.GetProperty("disabled").GetBoolean().Should().Be(disabled);
+    }
+
+    [Fact]
+    public async Task UpdatePeerVisibilityAsync_ForwardsCancellationToSendAsync()
+    {
+        var sendStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handlerCancellationObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new Mock<HttpMessageHandler>();
+        handler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Returns<HttpRequestMessage, CancellationToken>(async (_, token) =>
+            {
+                using var registration = token.Register(() => handlerCancellationObserved.TrySetResult());
+                sendStarted.SetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, token);
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            });
+
+        using var httpClient = new HttpClient(handler.Object);
+        var httpClientFactory = new Mock<IHttpClientFactory>();
+        httpClientFactory.Setup(factory => factory.CreateClient("WayfarerApi")).Returns(httpClient);
+        var settings = new Mock<ISettingsService>();
+        settings.Setup(value => value.IsConfigured).Returns(true);
+        settings.Setup(value => value.ServerUrl).Returns("https://api.example.com");
+        var service = new GroupsService(
+            settings.Object,
+            Mock.Of<ILogger<GroupsService>>(),
+            httpClientFactory.Object);
+        using var cancellationSource = new CancellationTokenSource();
+
+        var resultTask = service.UpdatePeerVisibilityAsync(Guid.NewGuid(), disabled: true, cancellationSource.Token);
+        await sendStarted.Task;
+        cancellationSource.Cancel();
+
+        await handlerCancellationObserved.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        (await resultTask).Should().BeFalse();
     }
 }

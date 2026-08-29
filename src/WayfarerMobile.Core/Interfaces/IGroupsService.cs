@@ -49,7 +49,7 @@ public interface IGroupsService
 
     /// <summary>
     /// Updates the current user's peer visibility setting.
-    /// PATCH /api/mobile/groups/{groupId}/peer-visibility
+    /// POST /api/mobile/groups/{groupId}/peer-visibility
     /// </summary>
     /// <param name="groupId">The group ID.</param>
     /// <param name="disabled">Whether peer visibility should be disabled.</param>

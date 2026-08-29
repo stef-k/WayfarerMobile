@@ -287,7 +287,7 @@ public class GroupsService : IGroupsService
 
         try
         {
-            var request = CreateRequest(new HttpMethod("PATCH"), $"/api/mobile/groups/{groupId}/peer-visibility");
+            var request = CreateRequest(HttpMethod.Post, $"/api/mobile/groups/{groupId}/peer-visibility");
             request.Content = JsonContent.Create(new PeerVisibilityUpdateRequest { Disabled = disabled }, options: JsonOptions);
 
             var response = await HttpClientInstance.SendAsync(request, cancellationToken);
