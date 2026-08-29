@@ -70,7 +70,9 @@ public class ProductionGroupsServiceTests
     public async Task UpdatePeerVisibilityAsync_ForwardsCancellationToSendAsync()
     {
         var sendStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var handlerCancellationObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sendCompletion = new TaskCompletionSource<HttpResponseMessage>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var capturedCancellationToken = CancellationToken.None;
         var handler = new Mock<HttpMessageHandler>();
         handler
             .Protected()
@@ -78,12 +80,11 @@ public class ProductionGroupsServiceTests
                 "SendAsync",
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>())
-            .Returns<HttpRequestMessage, CancellationToken>(async (_, token) =>
+            .Returns<HttpRequestMessage, CancellationToken>((_, token) =>
             {
-                using var registration = token.Register(() => handlerCancellationObserved.TrySetResult());
+                capturedCancellationToken = token;
                 sendStarted.SetResult();
-                await Task.Delay(Timeout.InfiniteTimeSpan, token);
-                return new HttpResponseMessage(HttpStatusCode.OK);
+                return sendCompletion.Task;
             });
 
         using var httpClient = new HttpClient(handler.Object);
@@ -102,7 +103,8 @@ public class ProductionGroupsServiceTests
         await sendStarted.Task;
         cancellationSource.Cancel();
 
-        await handlerCancellationObserved.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        capturedCancellationToken.IsCancellationRequested.Should().BeTrue();
+        sendCompletion.SetCanceled(capturedCancellationToken);
         (await resultTask).Should().BeFalse();
     }
 }
