@@ -126,26 +126,6 @@ public class SseClient : ISseClient
     #region Public Methods
 
     /// <inheritdoc />
-    public async Task SubscribeToUserAsync(string userName, CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(userName))
-        {
-            _logger.LogWarning("Cannot subscribe to SSE: userName is empty");
-            return;
-        }
-
-        string? serverUrl = _settings.ServerUrl;
-        if (string.IsNullOrWhiteSpace(serverUrl))
-        {
-            _logger.LogError("Server URL not configured for SSE subscription");
-            return;
-        }
-
-        string url = $"{serverUrl.TrimEnd('/')}/api/mobile/sse/location-update/{Uri.EscapeDataString(userName)}";
-        await SubscribeAsync(url, $"user:{userName}", cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
     public async Task SubscribeToGroupAsync(string groupId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(groupId))

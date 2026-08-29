@@ -72,14 +72,6 @@ public interface ISseClient : IDisposable
     #region Methods
 
     /// <summary>
-    /// Subscribe to per-user SSE channel for location updates.
-    /// </summary>
-    /// <param name="userName">Username to subscribe to.</param>
-    /// <param name="cancellationToken">Token to cancel the subscription.</param>
-    /// <returns>Task that completes when subscription ends.</returns>
-    Task SubscribeToUserAsync(string userName, CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Subscribe to consolidated group SSE channel for location and membership updates.
     /// All event types (location, visibility-changed, member-left, etc.) come through this single stream.
     /// </summary>

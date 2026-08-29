@@ -2,7 +2,7 @@ namespace WayfarerMobile.Core.Models;
 
 /// <summary>
 /// SSE event for location updates.
-/// Received from channels: location-update-{userName} or group-{groupId} (consolidated)
+/// Received from the consolidated group-{groupId} channel.
 /// </summary>
 public class SseLocationEvent
 {
