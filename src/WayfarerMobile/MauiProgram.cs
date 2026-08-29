@@ -83,11 +83,12 @@ public static class MauiProgram
         var logPath = Path.Combine(logDirectory, "wayfarer-app-.log");
 
         // Configure Serilog
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Information()
+        var loggerConfiguration = new LoggerConfiguration()
+            .MinimumLevel.Information();
 #if DEBUG
-            .MinimumLevel.Debug()
+        loggerConfiguration.MinimumLevel.Debug();
 #endif
+        Log.Logger = loggerConfiguration
             .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
             .MinimumLevel.Override("System", LogEventLevel.Warning)
             .MinimumLevel.Override("Microsoft.Maui.Controls.Element", LogEventLevel.Error) // Suppress Syncfusion binding warnings
