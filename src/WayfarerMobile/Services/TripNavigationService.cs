@@ -136,6 +136,7 @@ public class TripNavigationService : ITripNavigationService
         _lastAnnouncementTime = DateTime.MinValue;
     }
 
+
     /// <summary>
     /// Calculates a route to a specific place using saved Segment geometry or Direct guidance.
     /// </summary>

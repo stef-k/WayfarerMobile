@@ -477,7 +477,16 @@ public async Task<ApiResult<T>> SendAsync<T>(HttpRequestMessage request)
 
 ## Mobile Routing Boundary
 
-Mobile does not contact a public or commercial routing provider. Valid downloaded Trip Segment geometry remains available offline; otherwise navigation uses Direct straight-line distance and bearing guidance. Direct is not hosted turn-by-turn routing. Authenticated provider-neutral Wayfarer routing is future work and is not implemented yet.
+Mobile never contacts a public or commercial routing provider. It discovers eligible profiles with authenticated
+`GET /api/mobile/routing/profiles`, confirms a selected profile with
+`GET /api/mobile/routing/capability/{transportProfileId}`, and requests a transient route with
+`POST /api/mobile/routing/route`. The discovery catalog identity scopes only pre-capability selection; the selected
+profile authority identity fences route execution and publication. Bearer credentials remain bound to the configured
+Wayfarer server, provider credentials stay server-side, and returned attribution is displayed as supplied.
+
+Valid downloaded Trip Segment geometry remains higher authority. Hosted failures, old-server 404 responses, disabled
+providers, cancellation, and stale results fall back to Direct straight-line guidance without changing the general
+session. Hosted route output and profile choices are never persisted; offline hosted-route retention belongs to #261.
 
 ## JSON Serialization
 

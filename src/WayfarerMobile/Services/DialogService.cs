@@ -78,6 +78,13 @@ public class DialogService : IDialogService
         }
     }
 
+    /// <inheritdoc />
+    public async Task<string?> SelectAsync(string title, IReadOnlyList<string> choices, string cancel = "Cancel")
+    {
+        var page = GetCurrentPage();
+        return page == null ? null : await page.DisplayActionSheetAsync(title, cancel, null, choices.ToArray());
+    }
+
     private static Page? GetCurrentPage()
     {
         if (Application.Current?.Windows.Count > 0)

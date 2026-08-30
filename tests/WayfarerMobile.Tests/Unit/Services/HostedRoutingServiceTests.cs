@@ -95,6 +95,83 @@ public sealed class HostedRoutingServiceTests
         result.Route.Should().BeNull();
     }
 
+    [Fact]
+    public async Task RequestRouteAsync_ACompletesLast_OnlyBCanPublishOrClearLoading()
+    {
+        var aCompletion = new TaskCompletionSource<HostedRouteResponse>();
+        var aStarted = new TaskCompletionSource();
+        var api = SuccessfulApi(WalkingProfile, "v1.catalog-a", "v1.selected-a");
+        api.SetupSequence(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(), It.IsAny<CancellationToken>()))
+            .Returns(() => { aStarted.SetResult(); return aCompletion.Task; })
+            .ReturnsAsync(HostedRouteResponse.ValidForTest(WalkingProfile, "v1.selected-a"));
+        var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
+        var a = service.RequestRouteAsync(HostedRouteRequestContext.ForTest(WalkingProfile) with { Generation = 1 });
+        await aStarted.Task;
+        var b = service.RequestRouteAsync(HostedRouteRequestContext.ForTest(WalkingProfile) with { Generation = 2 });
+
+        (await b).Outcome.Should().Be(HostedRoutingOutcome.Success);
+        service.IsLoading.Should().BeFalse();
+        aCompletion.SetResult(HostedRouteResponse.ValidForTest(WalkingProfile, "v1.selected-a"));
+        (await a).Outcome.Should().Be(HostedRoutingOutcome.Stale);
+        service.IsLoading.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SelectDirect_WhileHostedRequestIsInFlight_DiscardsHostedResponse()
+    {
+        var completion = new TaskCompletionSource<HostedRouteResponse>();
+        var started = new TaskCompletionSource();
+        var api = SuccessfulApi(WalkingProfile, "v1.catalog-a", "v1.selected-a");
+        api.Setup(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(), It.IsAny<CancellationToken>()))
+            .Returns(() => { started.SetResult(); return completion.Task; });
+        var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
+        var pending = service.RequestRouteAsync(HostedRouteRequestContext.ForTest(WalkingProfile));
+        await started.Task;
+
+        service.SelectDirect(2);
+        completion.SetResult(HostedRouteResponse.ValidForTest(WalkingProfile, "v1.selected-a"));
+
+        (await pending).Outcome.Should().Be(HostedRoutingOutcome.Stale);
+        service.IsLoading.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("unavailable")]
+    [InlineData("routing-disabled")]
+    [InlineData("no-authority")]
+    public async Task DiscoveryUnavailable_RemainsLocalAndMakesNoCapabilityOrRouteRequest(string outcome)
+    {
+        var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
+        api.Setup(client => client.DiscoverAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HostedRoutingCatalog(null, outcome, []));
+        var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
+
+        var result = await service.RequestRouteAsync(HostedRouteRequestContext.ForTest(WalkingProfile));
+
+        result.Outcome.Should().Be(HostedRoutingOutcome.Unavailable);
+        api.Verify(client => client.GetCapabilityAsync(It.IsAny<Guid>(), It.IsAny<string>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+        api.Verify(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public void Canonicalize_UsesLongitudeLatitudeAwayFromZeroAndPreservesDuplicates()
+    {
+        var result = HostedRouteIdentity.Canonicalize([
+            new(1.234565, -0.000005), new(1.234565, -0.000005), new(-0.0, 90)]);
+
+        result.Should().Equal(123457, -1, 123457, -1, 0, 9000000);
+    }
+
+    [Fact]
+    public void Canonicalize_RejectsInvalidWgs84Coordinates()
+    {
+        var act = () => HostedRouteIdentity.Canonicalize([new(0, 90.00001)]);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
     private static HostedRoutingCatalog Catalog(params HostedRoutingProfile[] profiles) =>
         new("v1.catalog-a", "available", profiles);
 

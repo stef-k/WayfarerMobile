@@ -59,7 +59,7 @@ public sealed class HostedRoutingApiClient : IHostedRoutingApiClient
     {
         if (!settings.IsConfigured || !Uri.TryCreate(settings.ServerUrl, UriKind.Absolute, out var server)
             || server.Scheme is not ("https" or "http")) throw new HttpRequestException("Wayfarer is unavailable.");
-        using var request = new HttpRequestMessage(method, new Uri(server, endpoint));
+        using var request = new HttpRequestMessage(method, $"{settings.ServerUrl!.TrimEnd('/')}{endpoint}");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.ApiToken);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         if (body != null) request.Content = JsonContent.Create(body, options: JsonOptions);

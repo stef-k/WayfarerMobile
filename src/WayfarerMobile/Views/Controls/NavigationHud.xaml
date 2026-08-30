@@ -2,7 +2,9 @@
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:WayfarerMobile.ViewModels"
+             xmlns:models="clr-namespace:WayfarerMobile.Core.Models;assembly=WayfarerMobile.Core"
              x:Class="WayfarerMobile.Views.Controls.NavigationHud"
+             x:Name="NavigationHudRoot"
              x:DataType="vm:NavigationHudViewModel"
              IsVisible="{Binding IsNavigating}"
              VerticalOptions="End"
@@ -124,6 +126,18 @@
                            LineBreakMode="TailTruncation"
                            MaxLines="2" />
                 </Frame>
+
+                <HorizontalStackLayout BindableLayout.ItemsSource="{Binding Attribution}"
+                                       HorizontalOptions="Center" Spacing="4">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="models:HostedRouteAttribution">
+                            <Button Text="{Binding Text}"
+                                    Command="{Binding Source={x:Reference NavigationHudRoot}, Path=BindingContext.OpenAttributionCommand}"
+                                    CommandParameter="{Binding .}"
+                                    FontSize="10" Padding="4,0" BackgroundColor="Transparent" />
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </HorizontalStackLayout>
 
                 <!-- Progress bar -->
                 <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto">

@@ -488,7 +488,8 @@ Manages the dropped pin marker for map long-press interactions. Stateless render
 
 **Source**: `src/WayfarerMobile/Services/TripNavigationService.cs`
 
-Provides navigation with route calculation and progress tracking. Mobile makes no direct routing-provider request.
+Provides navigation installation and progress tracking. A separate hosted-routing owner uses the authenticated
+Wayfarer server; Mobile never contacts a routing provider directly.
 
 ### Navigation Modes
 
@@ -497,13 +498,15 @@ Provides navigation with route calculation and progress tracking. Mobile makes n
 - Has access to user-defined segments and trip context
 - Route priority:
   1. Valid saved Segment geometry (trip-defined routes)
-  2. Direct Route (straight-line fallback)
+  2. A freshly requested, transient Wayfarer-hosted route
+  3. Direct Route (straight-line fallback)
 
 **Ad-Hoc Navigation** (`CalculateRouteToCoordinatesAsync`):
 - Used for groups, map locations, any coordinates
 - No trip context available
 - Route priority:
-  1. Direct Route
+  1. A freshly requested, transient Wayfarer-hosted route
+  2. Direct Route
 
 ```csharp
 // Trip navigation - uses full route priority chain
@@ -548,7 +551,12 @@ public NavigationRoute? CalculateRouteToPlace(
 }
 ```
 
-Direct guidance is not road-aware or hosted turn-by-turn routing. Authenticated Wayfarer-hosted routing remains future work.
+Hosted routes are authenticated, provider-neutral, session-only results. Provider credentials and provider selection
+remain on Wayfarer. The active HUD displays the linked attribution returned by Wayfarer and clears it on replacement
+or stop. Old servers, disabled routing, rejected requests, cancellation, malformed/stale responses, and provider
+unavailability remain routing-local and retain Direct guidance without affecting authentication or synchronization.
+Valid saved Segment geometry is never replaced automatically. Mobile does not persist generated geometry, selection,
+attribution, or authority identities; offline retention of hosted routes belongs to #261.
 
 ### Navigation State
 

@@ -11,6 +11,9 @@ public sealed class HostedRoutingService
     private readonly IHostedRoutingApiClient api;
     private readonly ILogger<HostedRoutingService> logger;
     private readonly HostedRoutingState? currentState;
+    private readonly object stateLock = new();
+    private HostedRoutingState? activeState;
+    public bool IsLoading { get; private set; }
 
     public HostedRoutingService(IHostedRoutingApiClient api, ILogger<HostedRoutingService> logger,
         HostedRoutingState? currentState = null)
@@ -23,6 +26,7 @@ public sealed class HostedRoutingService
     public async Task<HostedRoutingResult> RequestRouteAsync(HostedRouteRequestContext context,
         HostedRoutingProfile? explicitChoice = null, CancellationToken cancellationToken = default)
     {
+        Begin(context);
         try
         {
             var catalog = await api.DiscoverAsync(cancellationToken);
@@ -37,11 +41,14 @@ public sealed class HostedRoutingService
                     HostedProfileSelector.Confirm(explicitChoice, catalog), catalog.Profiles);
             if (selection.Profile == null)
                 return new(HostedRoutingOutcome.RequiresChoice, Choices: selection.Choices);
+            UpdateSelection(context.Generation, selection.Profile.TransportProfileId, null);
 
             var capability = await api.GetCapabilityAsync(selection.Profile.TransportProfileId,
                 catalog.DiscoveryCatalogIdentity!, cancellationToken);
             if (!ValidCapability(capability, selection.Profile.TransportProfileId, catalog.DiscoveryCatalogIdentity!))
                 return new(capability.Outcome == "catalog-changed" ? HostedRoutingOutcome.Stale : HostedRoutingOutcome.Unavailable);
+            UpdateSelection(context.Generation, selection.Profile.TransportProfileId,
+                capability.SelectedProfileAuthorityIdentity);
 
             var request = new HostedRouteRequest(selection.Profile.TransportProfileId, context.Origin,
                 context.Destination, context.Anchors, capability.SelectedProfileAuthorityIdentity!);
@@ -60,20 +67,60 @@ public sealed class HostedRoutingService
             logger.LogWarning(ex, "Hosted routing failed locally");
             return new(HostedRoutingOutcome.Unavailable);
         }
+        finally
+        {
+            lock (stateLock)
+                if ((currentState ?? activeState)?.Generation == context.Generation) IsLoading = false;
+        }
+    }
+
+    public void SelectDirect(long generation)
+    {
+        lock (stateLock)
+        {
+            activeState = activeState is { } state
+                ? state with { Generation = generation, NavigationChoice = "direct", SelectedProfileId = null,
+                    SelectedAuthorityIdentity = null }
+                : null;
+            IsLoading = false;
+        }
     }
 
     private bool Current(HostedRouteRequestContext context, Guid profileId, string authority)
     {
-        if (currentState == null) return true;
+        HostedRoutingState? state;
+        lock (stateLock) state = currentState ?? activeState;
+        if (state == null) return true;
         var points = new[] { context.Origin }.Concat(context.Anchors).Append(context.Destination);
-        return currentState.Generation == context.Generation
-            && currentState.SessionAuthority == context.SessionAuthority
-            && currentState.NormalizedServer == context.NormalizedServer
-            && currentState.SelectedProfileId == profileId
-            && (currentState.SelectedAuthorityIdentity == null || currentState.SelectedAuthorityIdentity == authority)
-            && currentState.TargetAssociation == context.TargetAssociation
-            && currentState.NavigationChoice == context.NavigationChoice
-            && currentState.CanonicalCoordinates.SequenceEqual(HostedRouteIdentity.Canonicalize(points));
+        return state.Generation == context.Generation
+            && state.SessionAuthority == context.SessionAuthority
+            && state.NormalizedServer == context.NormalizedServer
+            && state.SelectedProfileId == profileId
+            && state.SelectedAuthorityIdentity == authority
+            && state.TargetAssociation == context.TargetAssociation
+            && state.NavigationChoice == context.NavigationChoice
+            && state.CanonicalCoordinates.SequenceEqual(HostedRouteIdentity.Canonicalize(points));
+    }
+
+    private void Begin(HostedRouteRequestContext context)
+    {
+        if (currentState != null) return;
+        var points = new[] { context.Origin }.Concat(context.Anchors).Append(context.Destination);
+        lock (stateLock)
+        {
+            activeState = new(context.Generation, context.SessionAuthority, context.NormalizedServer, null, null,
+                context.TargetAssociation, context.NavigationChoice, HostedRouteIdentity.Canonicalize(points));
+            IsLoading = true;
+        }
+    }
+
+    private void UpdateSelection(long generation, Guid profileId, string? authority)
+    {
+        if (currentState != null) return;
+        lock (stateLock)
+            if (activeState?.Generation == generation)
+                activeState = activeState with { SelectedProfileId = profileId,
+                    SelectedAuthorityIdentity = authority ?? activeState.SelectedAuthorityIdentity };
     }
 
     private static bool AvailableCatalog(HostedRoutingCatalog value) => value.Outcome == "available"

@@ -313,6 +313,7 @@ public partial class MemberDetailsViewModel : ObservableObject
 
         var travelProfile = navMethod switch
         {
+            NavigationMethod.Direct => "direct",
             NavigationMethod.Walk => "foot",
             NavigationMethod.Drive => "car",
             NavigationMethod.Bike => "bike",

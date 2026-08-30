@@ -212,6 +212,7 @@ public partial class ContextMenuViewModel : BaseViewModel
 
         var travelProfile = navMethod switch
         {
+            NavigationMethod.Direct => "direct",
             NavigationMethod.Walk => "foot",
             NavigationMethod.Drive => "car",
             NavigationMethod.Bike => "bike",

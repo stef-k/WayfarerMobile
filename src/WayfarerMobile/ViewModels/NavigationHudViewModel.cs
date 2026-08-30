@@ -77,6 +77,10 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _instructionText = string.Empty;
 
+    /// <summary>Gets linked attribution for the active hosted route.</summary>
+    [ObservableProperty]
+    private IReadOnlyList<HostedRouteAttribution> _attribution = [];
+
     /// <summary>
     /// Gets or sets the bearing to destination in degrees.
     /// </summary>
@@ -194,6 +198,13 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
         IsMuted = !IsMuted;
     }
 
+    [RelayCommand]
+    private static async Task OpenAttributionAsync(HostedRouteAttribution attribution)
+    {
+        if (Uri.TryCreate(attribution.Url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps)
+            await Launcher.Default.OpenAsync(uri);
+    }
+
     #endregion
 
     #region Public Methods
@@ -213,6 +224,7 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
         StatusColor = "#4285F4"; // Blue
         IsOffRoute = false;
         ProgressPercent = 0;
+        Attribution = route.Attribution;
 
         // Reset audio tracking state for fresh navigation
         _lastAnnouncedStatus = NavigationStatus.NoRoute;
@@ -243,6 +255,7 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
         StatusColor = "#4285F4";
         IsOffRoute = false;
         ProgressPercent = 0;
+        Attribution = [];
 
         // Reset audio tracking state
         _lastAnnouncedStatus = NavigationStatus.NoRoute;
