@@ -6,6 +6,35 @@ namespace WayfarerMobile.Tests.Unit.Services;
 public sealed class CommittedAuthenticationAuthorityTests
 {
     [Fact]
+    public async Task CredentialBearingServer_CannotBecomeCommittedAuthority()
+    {
+        var storage = new MemoryProtectedStore();
+        var authority = Create(storage);
+
+        var action = () => authority.CommitAsync(
+            "https://user:password@wayfarer.example", "secret-token");
+
+        await action.Should().ThrowAsync<ArgumentException>();
+        authority.Current.ServerUrl.Should().BeNull();
+        authority.Current.ApiToken.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task CredentialBearingProtectedEnvelope_FailsClosed()
+    {
+        var storage = new MemoryProtectedStore();
+        storage.Values[CommittedAuthenticationAuthority.EnvelopeKey] =
+            """{"ServerUrl":"https://user:password@wayfarer.example","ApiToken":"secret-token","RoutingPartition":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}""";
+        var authority = Create(storage);
+
+        await authority.PreloadAsync();
+
+        authority.Current.ServerUrl.Should().BeNull();
+        authority.Current.ApiToken.Should().BeNull();
+        authority.Current.RoutingPartition.Should().NotBe(Guid.Empty);
+    }
+
+    [Fact]
     public async Task Commit_RoundTripsStablePartitionAcrossOwnerRecreation()
     {
         var storage = new MemoryProtectedStore();
@@ -56,6 +85,25 @@ public sealed class CommittedAuthenticationAuthorityTests
         await action.Should().ThrowAsync<InvalidOperationException>();
         authority.Current.Should().Be(before);
         authority.Revision.Should().Be(revision);
+    }
+
+    [Fact]
+    public async Task ProtectedWriteFailure_DuringClearStillInvalidatesCurrentProcessAuthority()
+    {
+        var storage = new MemoryProtectedStore();
+        var authority = Create(storage);
+        await authority.CommitAsync("https://wayfarer.test", "first-token");
+        var before = authority.Current;
+        var revision = authority.Revision;
+        storage.FailNextWrite = true;
+
+        var action = () => authority.ClearAsync();
+
+        await action.Should().ThrowAsync<InvalidOperationException>();
+        authority.Current.ServerUrl.Should().BeNull();
+        authority.Current.ApiToken.Should().BeNull();
+        authority.Current.RoutingPartition.Should().NotBe(before.RoutingPartition);
+        authority.Revision.Should().Be(revision + 1);
     }
 
     private static CommittedAuthenticationAuthority Create(IProtectedAuthenticationStore storage) =>

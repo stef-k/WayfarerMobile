@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using SQLite;
+using System.Text.Json;
 using WayfarerMobile.Data.Entities;
 using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Data.Services;
@@ -65,6 +66,29 @@ public sealed class RetainedWayfarerRouteRepositoryTests : IAsyncLifetime
 
         var retained = await owner.Repository.SelectAsync(Context(), PartitionA, receipt.AddMinutes(3), () => true);
         retained!.Route.Waypoints.Should().ContainSingle(point => point.Longitude == 23.007);
+    }
+
+    [Fact]
+    public async Task CredentialBearingServerOrAttribution_IsNeverPersisted()
+    {
+        var receipt = new DateTimeOffset(2026, 8, 31, 9, 30, 0, TimeSpan.Zero);
+        await using var owner = await CreateOwnerAsync();
+        var credentialServer = Candidate("server") with
+        {
+            Context = Context() with
+            {
+                NormalizedServer = "https://user:password@wayfarer.example"
+            }
+        };
+        var credentialAttribution = Candidate("attribution");
+        credentialAttribution.Route.Attribution =
+            [new("Unsafe", "https://user:password@example.test/attribution")];
+
+        (await owner.Repository.SaveAsync(credentialServer, PartitionA, receipt, () => true))
+            .Should().Be(RetainedRouteSaveResult.Rejected);
+        (await owner.Repository.SaveAsync(credentialAttribution, PartitionA, receipt, () => true))
+            .Should().Be(RetainedRouteSaveResult.Rejected);
+        (await owner.Connection.Table<RetainedWayfarerRouteEntity>().CountAsync()).Should().Be(0);
     }
 
     [Fact]
@@ -149,6 +173,41 @@ public sealed class RetainedWayfarerRouteRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ClearWinningBeforeOlderSaveGate_PreventsResurrection()
+    {
+        var receipt = new DateTimeOffset(2026, 8, 31, 11, 30, 0, TimeSpan.Zero);
+        var connection = new SQLiteAsyncConnection(databasePath);
+        await RetainedWayfarerRouteMigration.ApplyAsync(connection, CancellationToken.None);
+        try
+        {
+            var olderFactoryEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var releaseOlderFactory = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var calls = 0;
+            var repository = new RetainedWayfarerRouteRepository(async () =>
+            {
+                if (Interlocked.Increment(ref calls) == 1)
+                {
+                    olderFactoryEntered.SetResult();
+                    await releaseOlderFactory.Task;
+                }
+                return connection;
+            });
+
+            var olderSave = repository.SaveAsync(Candidate("older"), PartitionA, receipt, () => true);
+            await olderFactoryEntered.Task;
+            await repository.ClearAsync();
+            releaseOlderFactory.SetResult();
+
+            (await olderSave).Should().Be(RetainedRouteSaveResult.Superseded);
+            (await connection.Table<RetainedWayfarerRouteEntity>().CountAsync()).Should().Be(0);
+        }
+        finally
+        {
+            await connection.CloseAsync();
+        }
+    }
+
+    [Fact]
     public async Task MatchRejectsEveryAuthorityEndpointAndAnchorMismatch()
     {
         var receipt = new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero);
@@ -204,6 +263,53 @@ public sealed class RetainedWayfarerRouteRepositoryTests : IAsyncLifetime
             .Should().BeNull();
         (await owner.Repository.SelectAsync(UniqueContext(1), PartitionB, receipt.AddYears(10), () => true))
             .Should().NotBeNull("retained routes do not expire by age");
+
+        var malformedTimestamp = rows[^1];
+        malformedTimestamp.StoredAtUnixMilliseconds = long.MaxValue;
+        malformedTimestamp.LastUsedAtUnixMilliseconds = long.MaxValue;
+        await owner.Connection.UpdateAsync(malformedTimestamp);
+        await owner.Repository.SaveAsync(Candidate("after-corruption", context: UniqueContext(500)),
+            PartitionA, receipt.AddMinutes(1), () => true);
+
+        (await owner.Connection.FindAsync<RetainedWayfarerRouteEntity>(malformedTimestamp.Id))
+            .Should().BeNull("invalid timestamps must not become immortal in the global LRU");
+    }
+
+    [Fact]
+    public async Task InstalledRows_WithRepresentativeContractCorruption_FailClosedWithoutRecencyUpdate()
+    {
+        var receipt = new DateTimeOffset(2026, 8, 31, 13, 30, 0, TimeSpan.Zero);
+        await using var owner = await CreateOwnerAsync();
+        var corruptions = new (string Name, Action<RetainedWayfarerRouteEntity> Apply)[]
+        {
+            ("identity", row => row.SelectedProfileAuthorityIdentity = "malformed"),
+            ("url", row => row.AttributionJson = JsonSerializer.Serialize(
+                new[] { new HostedRouteAttribution("Unsafe", "https://user:password@example.test") })),
+            ("timestamp", row => row.LastUsedAtUnixMilliseconds = row.StoredAtUnixMilliseconds - 1),
+            ("bounds", row => row.InstructionsJson = new string(' ', 600_001) + "[]")
+        };
+
+        for (var index = 0; index < corruptions.Length; index++)
+        {
+            var context = UniqueContext(600 + index);
+            (await owner.Repository.SaveAsync(Candidate(corruptions[index].Name, context: context),
+                PartitionA, receipt, () => true)).Should().Be(RetainedRouteSaveResult.Saved);
+            var destinationLongitude = HostedRouteIdentity.Canonicalize(
+                new[] { context.Destination })[0];
+            var row = (await owner.Connection.Table<RetainedWayfarerRouteEntity>()
+                .Where(item => item.DestinationLongitude == destinationLongitude)
+                .ToListAsync()).Single();
+            corruptions[index].Apply(row);
+            await owner.Connection.UpdateAsync(row);
+            var priorLastUsed = row.LastUsedAtUnixMilliseconds;
+
+            var selected = await owner.Repository.SelectAsync(context, PartitionA,
+                receipt.AddMinutes(1), () => true);
+
+            selected.Should().BeNull(corruptions[index].Name);
+            (await owner.Connection.FindAsync<RetainedWayfarerRouteEntity>(row.Id))!
+                .LastUsedAtUnixMilliseconds.Should().Be(priorLastUsed, corruptions[index].Name);
+        }
     }
 
     [Fact]
