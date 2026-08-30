@@ -29,4 +29,16 @@ public interface IConnectivity
     event EventHandler<ConnectivityChangedEventArgs>? ConnectivityChanged;
 }
 public static class Connectivity { public static IConnectivity Current { get; set; } = new ConnectivityStub(); private sealed class ConnectivityStub : IConnectivity { public NetworkAccess NetworkAccess => NetworkAccess.Internet; public event EventHandler<ConnectivityChangedEventArgs>? ConnectivityChanged; } }
-public static class MainThread { public static void BeginInvokeOnMainThread(Action action) => action(); }
+namespace Microsoft.Maui.ApplicationModel
+{
+    public static class MainThread
+    {
+        public static void BeginInvokeOnMainThread(Action action) => action();
+
+        public static Task InvokeOnMainThreadAsync(Action action)
+        {
+            action();
+            return Task.CompletedTask;
+        }
+    }
+}

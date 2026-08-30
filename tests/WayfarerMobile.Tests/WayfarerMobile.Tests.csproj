@@ -49,6 +49,7 @@
     <!-- Shared dependencies for testing -->
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
 
     <!-- Database for DatabaseService tests -->
     <PackageReference Include="sqlite-net-pcl" Version="1.11.285" />
@@ -80,6 +81,9 @@
     <Compile Include="..\..\src\WayfarerMobile\Services\HostedRoutingService.cs" Link="Production\HostedRoutingService.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\HostedRoutingApiClient.cs" Link="Production\HostedRoutingApiClient.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\HostedSegmentProfileIdentity.cs" Link="Production\HostedSegmentProfileIdentity.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\ViewModels\BaseViewModel.cs" Link="Production\BaseViewModel.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\ViewModels\INavigationCallbacks.cs" Link="Production\INavigationCallbacks.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\ViewModels\NavigationCoordinatorViewModel.cs" Link="Production\NavigationCoordinatorViewModel.cs" />
     <Compile Remove="Infrastructure\Entities\QueuedLocation.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Data\Entities\QueuedLocation.cs" Link="Production\QueuedLocation.cs" />
   </ItemGroup>

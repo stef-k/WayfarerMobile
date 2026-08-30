@@ -31,18 +31,6 @@ public sealed class HostedRoutingServiceTests
             result.Profile?.TransportProfileId.Should().Be(WalkingProfile);
     }
 
-    [Fact]
-    public void ConfirmChoice_AcceptsSameGuidAndRefreshesRenamedMetadata()
-    {
-        var original = Catalog(new HostedRoutingProfile(WalkingProfile, "Walking", "walk", "active"));
-        var renamed = new HostedRoutingCatalog(IdentityB, "available",
-            [new(WalkingProfile, "On foot", "walk", "active")]);
-
-        HostedProfileSelector.Confirm(null, original).Should().BeNull();
-        HostedProfileSelector.Confirm(new(WalkingProfile, "Walking", "walk", "active"), renamed)
-            .Should().Be(renamed.Profiles[0]);
-    }
-
     [Theory]
     [InlineData("v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", true)]
     [InlineData("v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", false)]

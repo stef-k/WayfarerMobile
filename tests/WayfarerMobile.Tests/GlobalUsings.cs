@@ -1,6 +1,7 @@
 global using Xunit;
 global using FluentAssertions;
 global using Moq;
+global using Microsoft.Maui.ApplicationModel;
 global using WayfarerMobile.Core.Algorithms;
 global using WayfarerMobile.Core.Enums;
 global using WayfarerMobile.Core.Helpers;
