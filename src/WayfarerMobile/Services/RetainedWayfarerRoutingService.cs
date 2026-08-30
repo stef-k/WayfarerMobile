@@ -37,9 +37,21 @@ public sealed class RetainedWayfarerRoutingService
         }
     }
 
-    public Task<RetainedRouteSaveResult> SaveAsync(HostedRouteCandidate candidate, Guid accountPartition,
-        DateTimeOffset receiptTimeUtc, Func<bool> isCurrent, CancellationToken cancellationToken = default) =>
-        repository.SaveAsync(candidate, accountPartition, receiptTimeUtc, isCurrent, cancellationToken);
+    public async Task<RetainedRouteSaveResult> SaveAsync(HostedRouteCandidate candidate, Guid accountPartition,
+        DateTimeOffset receiptTimeUtc, Func<bool> isCurrent, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await repository.SaveAsync(candidate, accountPartition, receiptTimeUtc,
+                isCurrent, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            logger.LogWarning("Retained Wayfarer route save failed locally: {FailureType}",
+                exception.GetType().Name);
+            return RetainedRouteSaveResult.Failed;
+        }
+    }
 
     public Task ClearAsync(CancellationToken cancellationToken = default) => repository.ClearAsync(cancellationToken);
 }

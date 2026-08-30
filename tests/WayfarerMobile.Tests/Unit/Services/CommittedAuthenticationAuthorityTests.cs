@@ -27,9 +27,11 @@ public sealed class CommittedAuthenticationAuthorityTests
         var authority = Create(storage);
         await authority.CommitAsync("https://wayfarer.test", "same-token");
         var first = authority.Current.RoutingPartition;
+        var firstRevision = authority.Revision;
 
         await authority.CommitAsync("https://wayfarer.test", "same-token");
         var second = authority.Current.RoutingPartition;
+        authority.Revision.Should().Be(firstRevision + 1);
         await authority.ClearAsync();
 
         second.Should().NotBe(first);
@@ -39,16 +41,39 @@ public sealed class CommittedAuthenticationAuthorityTests
         storage.Values.Keys.Should().ContainSingle(key => key == CommittedAuthenticationAuthority.EnvelopeKey);
     }
 
+    [Fact]
+    public async Task ProtectedWriteFailure_DoesNotExposePartialCommittedAuthority()
+    {
+        var storage = new MemoryProtectedStore();
+        var authority = Create(storage);
+        await authority.CommitAsync("https://wayfarer.test", "first-token");
+        var before = authority.Current;
+        var revision = authority.Revision;
+        storage.FailNextWrite = true;
+
+        var action = () => authority.CommitAsync("https://other.test", "replacement-token");
+
+        await action.Should().ThrowAsync<InvalidOperationException>();
+        authority.Current.Should().Be(before);
+        authority.Revision.Should().Be(revision);
+    }
+
     private static CommittedAuthenticationAuthority Create(IProtectedAuthenticationStore storage) =>
         new(storage, NullLogger<CommittedAuthenticationAuthority>.Instance);
 
     private sealed class MemoryProtectedStore : IProtectedAuthenticationStore
     {
         public Dictionary<string, string> Values { get; } = new(StringComparer.Ordinal);
+        public bool FailNextWrite { get; set; }
         public Task<string?> GetAsync(string key) =>
             Task.FromResult(Values.TryGetValue(key, out var value) ? value : null);
         public Task SetAsync(string key, string value)
         {
+            if (FailNextWrite)
+            {
+                FailNextWrite = false;
+                throw new InvalidOperationException("injected protected-store failure");
+            }
             Values[key] = value;
             return Task.CompletedTask;
         }

@@ -483,19 +483,21 @@ Mobile never contacts a public or commercial routing provider. It discovers elig
 `POST /api/mobile/routing/route`. The discovery catalog identity scopes only pre-capability selection; the selected
 profile authority identity fences route execution and publication. Bearer credentials remain bound to the configured
 Wayfarer server, provider credentials stay server-side, and returned attribution is displayed as supplied. Mobile
-uses only a non-secret process-local authentication revision plus the normalized server for in-flight publication
-identity; it never copies or hashes the bearer token into routing state.
+uses a protected random local account partition, a non-secret authentication revision, and the normalized server for
+routing identity; it never derives, copies, hashes, compares, logs, or stores the bearer token as routing identity.
 
 A chooser selection carries the discovery identity of the catalog the user actually saw into capability. A
 `catalog-changed` response causes one bounded rediscovery and refreshed presentation; cancellation retains Direct and
 no route request is sent. Catalog drift after successful capability is outside chooser authority and does not by
 itself invalidate the confirmed selected profile.
 
-Valid downloaded Trip Segment geometry remains higher authority. Hosted failures, old-server 404 responses, disabled
-providers, cancellation, and stale results fall back to Direct straight-line guidance without changing the general
-session. Hosted route output and profile choices are never persisted; offline hosted-route retention belongs to #261.
-Safe provider/profile provenance remains attached only to a successfully published active route and clears on normal
-replacement or stop.
+Valid downloaded Trip Segment geometry remains higher authority. Before contacting Wayfarer, Mobile may select a
+retained route only for the exact current partition/server/provider/configuration/mapping/profile and canonical
+endpoint/ordered-anchor identity. Such offline selection sends no discovery, capability, or route request. Hosted
+failures, old-server 404 responses, disabled providers, cancellation, and stale results fall back to Direct guidance
+without changing the general session. Only a fully validated response with storage mode exactly `persistent` is stored;
+unknown modes are transient. Safe attribution and hosted provenance round-trip, while provider request URLs and raw
+responses never enter SQLite.
 
 ## JSON Serialization
 

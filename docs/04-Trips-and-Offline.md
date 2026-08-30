@@ -27,7 +27,16 @@ The live cache can be inspected and cleared from **Settings** > **Map Cache**. C
 
 ## Using Trip Content Offline
 
-Without a network connection, downloaded Places, Segments, Areas, and Trip metadata remain available. Valid planned Segment geometry is preferred for navigation; otherwise navigation provides honest Direct distance and bearing guidance. Direct is straight-line guidance, not road-aware turn-by-turn routing.
+Without a network connection, downloaded Places, Segments, Areas, and Trip metadata remain available. Valid planned
+Segment geometry remains the highest navigation authority. When it is unavailable, Mobile can reuse an exact retained
+Wayfarer route previously authorized by the backend with storage mode `persistent`; otherwise it provides honest
+Direct distance and bearing guidance. Retained navigation performs no discovery, capability, or route request.
+Direct is straight-line guidance, not road-aware turn-by-turn routing.
+
+Retained Wayfarer routes are a separate bounded SQLite data set, not part of downloaded Trip geometry or the OSM live
+tile cache. At most 200 are kept across all servers and local account partitions. Successful use refreshes local LRU
+recency; routes do not expire merely because they are old. Clearing retained routes is idempotent and does not change
+Trips, Places, Segments, saved geometry, Timeline data or queues, credentials/settings, or OSM tiles.
 
 Timeline data, queued locations, pending mutations, authentication state, and ordinary synchronization are independent of Trip downloads and the interactive map cache.
 
@@ -39,7 +48,7 @@ Deleting downloaded Trip data removes the locally stored Trip and its provider-i
 
 - If Trip content is missing, reconnect and download or synchronize the Trip again.
 - If the basemap is blank while offline, reconnect so the interactive renderer can request the required OpenStreetMap tiles.
-- If navigation cannot obtain an online route, use stored Segment geometry or the displayed direct distance and bearing fallback.
+- If navigation cannot obtain an online route, an exact retained route may be labeled **Wayfarer offline** with its age and attribution; otherwise use stored Segment geometry or Direct.
 
 ## Next Steps
 

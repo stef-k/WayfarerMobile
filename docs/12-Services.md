@@ -498,15 +498,17 @@ Wayfarer server; Mobile never contacts a routing provider directly.
 - Has access to user-defined segments and trip context
 - Route priority:
   1. Valid saved Segment geometry (trip-defined routes)
-  2. A freshly requested, transient Wayfarer-hosted route
-  3. Direct Route (straight-line fallback)
+  2. An exact retained Wayfarer route
+  3. A freshly requested Wayfarer-hosted route
+  4. Direct Route (straight-line fallback)
 
 **Ad-Hoc Navigation** (`CalculateRouteToCoordinatesAsync`):
 - Used for groups, map locations, any coordinates
 - No trip context available
 - Route priority:
-  1. A freshly requested, transient Wayfarer-hosted route
-  2. Direct Route
+  1. An exact retained Wayfarer route
+  2. A freshly requested Wayfarer-hosted route
+  3. Direct Route
 
 ```csharp
 // Trip navigation - uses full route priority chain
@@ -551,15 +553,28 @@ public NavigationRoute? CalculateRouteToPlace(
 }
 ```
 
-Hosted routes are authenticated, provider-neutral, session-only results. Provider credentials and provider selection
-remain on Wayfarer. The active route retains linked attribution plus safe transient provenance: selected transport
+Hosted routes are authenticated, provider-neutral results. Provider credentials and provider selection remain on
+Wayfarer. The active route retains linked attribution plus safe provenance: selected transport
 profile and authority identities, provider and provider-configuration identities, mapping identity, storage mode, and
 the normalized backend generation timestamp. It contains no bearer token, credentials, or provider endpoint and
 clears through normal replacement or stop. Old servers, disabled routing, rejected requests, cancellation,
 malformed/stale responses, and provider
 unavailability remain routing-local and retain Direct guidance without affecting authentication or synchronization.
-Valid saved Segment geometry is never replaced automatically. Mobile does not persist generated geometry, selection,
-attribution, or authority identities; offline retention of hosted routes belongs to #261.
+Valid saved Segment geometry is never replaced automatically. Only a completely validated response whose exact backend
+storage authority is `persistent` can be retained. Transient and unknown modes remain active-route-only.
+
+`RetainedWayfarerRouteRepository` owns the schema-10 route table and a single narrow mutation gate. Lookup plus a
+successful recency update, complete insert/replacement, cap eviction, and explicit clear are transactional. Immediately
+before a write transaction it revalidates #260's live generation/current-state authority; stale work performs no write.
+Storage/eviction failure rolls back the complete replacement, so a displayed fresh route can succeed while the prior
+retained row remains intact. The global 200-row cap evicts by local `LastUsedAtUtc`, then `StoredAtUtc`, then row ID.
+There is no age expiry, and backend `GeneratedAtUtc` is provenance only. More than five minutes in the future is
+rejected; a nearer future time displays age zero until local time catches up.
+
+Match identity is exact: protected account partition, normalized Wayfarer server, provider/configuration/mapping
+identities, selected transport-profile GUID, canonical origin/destination, and the duplicate-preserving ordered anchor
+sequence. Coordinates reuse #260's signed 10^-5-degree integer representation. Offline selection performs no network
+work and displays retained/offline source, clamped age, linked attribution, and safe hosted provenance.
 
 Chooser entries are scoped to the exact discovery catalog displayed. Mobile submits that catalog identity with the
 chosen profile; a `catalog-changed` capability response makes no route request, rediscovers once, and requires a
@@ -689,6 +704,12 @@ Trip deletion and synchronization operate on Trip data independently of the inte
 
 Manages all SQLite database operations.
 
+Schema version 10 adds only `RetainedWayfarerRoutes`; the migration preserves all installed tables and data. Its
+bounded JSON payloads contain validated ordered WGS84 geometry, instructions with valid geometry indices, finite
+non-negative distance/duration, local receipt/use timestamps, backend generation provenance, exact storage authority,
+and safe attribution links. It stores no token/hash, credentials, protected configuration, provider endpoint or raw
+response, member/user name, note, or provider SDK object. Legacy `cached_osrm_route` data remains deletion-only.
+
 ### Initialization
 
 ```csharp
@@ -758,6 +779,11 @@ Manages application settings using MAUI Preferences and SecureStorage.
 |---------|------|-------------|
 | `ServerUrl` | string | Backend API URL |
 | `ApiToken` | string | Authentication token |
+| `RoutingAccountPartition` | GUID | Opaque local routing isolation identity |
+
+These values are owned by one committed authentication envelope. Onboarding and QR connection commit through it;
+logout, clear, and reset rotate the partition coherently. A QR connectivity probe supplies candidate server/token
+directly and never temporarily changes the committed envelope.
 
 ### Regular Settings (Preferences)
 

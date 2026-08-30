@@ -32,12 +32,15 @@ public sealed class RetainedWayfarerRouteRepository
         if (!TryPrepare(candidate, accountPartition, receiptTimeUtc, out var prepared))
             return RetainedRouteSaveResult.Rejected;
 
+        SQLiteAsyncConnection database;
+        try { database = await connectionFactory(); }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception) { return RetainedRouteSaveResult.Failed; }
         await mutationGate.WaitAsync(cancellationToken);
         try
         {
             if (!isCurrent()) return RetainedRouteSaveResult.Superseded;
             cancellationToken.ThrowIfCancellationRequested();
-            var database = await connectionFactory();
             await database.RunInTransactionAsync(connection => SaveTransaction(
                 connection, prepared!, cancellationToken));
             return RetainedRouteSaveResult.Saved;
@@ -61,12 +64,12 @@ public sealed class RetainedWayfarerRouteRepository
         CancellationToken cancellationToken = default)
     {
         if (!TryCreateLookup(context, accountPartition, out var lookup)) return null;
+        var database = await connectionFactory();
         await mutationGate.WaitAsync(cancellationToken);
         try
         {
             if (!isCurrent()) return null;
             cancellationToken.ThrowIfCancellationRequested();
-            var database = await connectionFactory();
             RetainedRouteSelection? result = null;
             await database.RunInTransactionAsync(connection =>
             {
@@ -84,11 +87,11 @@ public sealed class RetainedWayfarerRouteRepository
 
     public async Task ClearAsync(CancellationToken cancellationToken = default)
     {
+        var database = await connectionFactory();
         await mutationGate.WaitAsync(cancellationToken);
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var database = await connectionFactory();
             await database.RunInTransactionAsync(connection =>
             {
                 cancellationToken.ThrowIfCancellationRequested();

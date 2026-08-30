@@ -8,6 +8,7 @@ using WayfarerMobile.ViewModels;
 
 namespace WayfarerMobile.Tests.Unit.ViewModels;
 
+[Collection("SQLite")]
 public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
 {
     private static readonly Guid WalkingProfile = Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -15,12 +16,17 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
     private const string IdentityA = "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
     private const string IdentityB = "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ";
     private readonly List<SQLiteAsyncConnection> retainedConnections = [];
+    private readonly List<string> retainedDatabasePaths = [];
 
     public Task InitializeAsync() => Task.CompletedTask;
 
     public async Task DisposeAsync()
     {
         foreach (var connection in retainedConnections) await connection.CloseAsync();
+        foreach (var path in retainedDatabasePaths)
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
     }
 
     [Fact]
@@ -168,9 +174,139 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         direct.HostedProvenance.Should().BeNull();
     }
 
+    [Fact]
+    public async Task MatchingRetainedAdHocRoute_WinsWithoutDiscoveryCapabilityOrRouteContact()
+    {
+        var connection = new SQLiteAsyncConnection(":memory:");
+        retainedConnections.Add(connection);
+        await RetainedWayfarerRouteMigration.ApplyAsync(connection, CancellationToken.None);
+        var repository = new RetainedWayfarerRouteRepository(connection);
+        var settings = new MockSettingsService();
+        var context = new HostedRouteRequestContext(null, "walk", "walk",
+            new(23, 37), new(23.01, 37.01), [], "Current target", 1,
+            settings.AuthenticationSessionRevision, "https://test.example.com",
+            "ad-hoc-coordinates", "hosted");
+        var route = new NavigationRoute
+        {
+            Waypoints =
+            [
+                new() { Longitude = 23, Latitude = 37 },
+                new() { Longitude = 23.01, Latitude = 37.01 }
+            ],
+            Steps =
+            [
+                new() { Instruction = "Continue", ManeuverType = "continue",
+                    GeometryFromIndex = 0, GeometryToIndex = 1, DistanceMeters = 1500,
+                    DurationSeconds = 900, Longitude = 23, Latitude = 37 }
+            ],
+            DestinationName = "must-not-be-stored", TotalDistanceMeters = 1500,
+            EstimatedDuration = TimeSpan.FromSeconds(900),
+            Attribution = [new("Powered by Wayfarer test", "https://example.test")]
+        };
+        var candidate = new HostedRouteCandidate(route, context, WalkingProfile, IdentityA,
+            new("geoapify", Guid.Parse("22222222-2222-2222-2222-222222222222"),
+                "mapping", "persistent"), DateTimeOffset.UtcNow.AddMinutes(-1));
+        (await repository.SaveAsync(candidate, settings.RoutingAccountPartition,
+            DateTimeOffset.UtcNow, () => true)).Should().Be(RetainedRouteSaveResult.Saved);
+        var retainedService = new RetainedWayfarerRoutingService(repository,
+            NullLogger<RetainedWayfarerRoutingService>.Instance);
+        var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
+        var (coordinator, navigation, _, callbacks) = CreateCoordinator(
+            api.Object, Mock.Of<IDialogService>(), retainedService, settings);
+        callbacks.SetupGet(value => value.CurrentLocation)
+            .Returns(new LocationData { Latitude = 37, Longitude = 23 });
+
+        var selected = await coordinator.CalculateRouteToCoordinatesAsync(
+            37, 23, 37.01, 23.01, "Current target", "foot");
+
+        selected.Should().BeSameAs(navigation.ActiveRoute);
+        selected.IsDirectRoute.Should().BeFalse();
+        selected.HostedProvenance!.IsRetained.Should().BeTrue();
+        api.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task ValidSavedSegmentGeometry_RemainsAheadOfRetainedAndFreshRouting()
+    {
+        var origin = new TripPlace
+        {
+            Id = Guid.NewGuid(), Name = "Origin", Latitude = 37.98, Longitude = 23.72, SortOrder = 0
+        };
+        var destination = new TripPlace
+        {
+            Id = Guid.NewGuid(), Name = "Destination", Latitude = 38, Longitude = 23.74, SortOrder = 1
+        };
+        var trip = new TripDetails
+        {
+            Id = Guid.NewGuid(), Name = "Saved route",
+            Regions = [new TripRegion { Id = Guid.NewGuid(), Name = "Region", Places = [origin, destination] }],
+            Segments =
+            [
+                new TripSegment
+                {
+                    Id = Guid.NewGuid(), OriginId = origin.Id, DestinationId = destination.Id,
+                    TransportMode = "walking",
+                    Geometry = """{"type":"LineString","coordinates":[[23.72,37.98],[23.73,37.99],[23.74,38.00]]}"""
+                }
+            ]
+        };
+        var state = new MockTripStateManager();
+        state.SetLoadedTrip(trip);
+        var navigation = new TripNavigationService(
+            NullLogger<TripNavigationService>.Instance,
+            Mock.Of<INavigationAudioService>(),
+            new NavigationRouteBuilder(NullLogger<NavigationRouteBuilder>.Instance),
+            state);
+        navigation.LoadTrip(trip).Should().BeTrue();
+        var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
+        var coordinator = new NavigationCoordinatorViewModel(
+            navigation, new NavigationHudViewModel(), Mock.Of<IVisitNotificationService>(),
+            new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance),
+            CreateRetainedRoutingService(), new MockSettingsService(), Mock.Of<IDialogService>(),
+            state, NullLogger<NavigationCoordinatorViewModel>.Instance);
+        var callbacks = new Mock<INavigationCallbacks>();
+        callbacks.SetupGet(value => value.CurrentLocation)
+            .Returns(new LocationData { Latitude = origin.Latitude, Longitude = origin.Longitude });
+        coordinator.SetCallbacks(callbacks.Object);
+
+        await coordinator.StartNavigationToPlaceAsync(destination.Id.ToString());
+
+        navigation.ActiveRoute!.IsDirectRoute.Should().BeFalse();
+        navigation.ActiveRoute.Waypoints.Should().HaveCount(4);
+        navigation.ActiveRoute.Waypoints.Should().ContainSingle(waypoint =>
+            waypoint.Type == WaypointType.RoutePoint &&
+            waypoint.Latitude == 37.99 &&
+            waypoint.Longitude == 23.73);
+        navigation.ActiveRoute.HostedProvenance.Should().BeNull();
+        api.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task FreshValidatedRoute_RemainsPublishedWhenLocalPersistenceFails()
+    {
+        var retained = new RetainedWayfarerRoutingService(
+            new RetainedWayfarerRouteRepository(() =>
+                Task.FromException<SQLiteAsyncConnection>(new InvalidOperationException("injected storage failure"))),
+            NullLogger<RetainedWayfarerRoutingService>.Instance);
+        var api = SuccessfulApi();
+        var (coordinator, navigation, _, callbacks) = CreateCoordinator(
+            api.Object, Mock.Of<IDialogService>(), retained);
+        callbacks.SetupGet(value => value.CurrentLocation)
+            .Returns(new LocationData { Latitude = 37, Longitude = 23 });
+
+        var route = await coordinator.CalculateRouteToCoordinatesAsync(
+            37, 23, 37.01, 23.01, "Target", "foot");
+
+        route.Should().BeSameAs(navigation.ActiveRoute);
+        route.IsDirectRoute.Should().BeFalse();
+        route.HostedProvenance.Should().NotBeNull();
+    }
+
     private (NavigationCoordinatorViewModel Coordinator, TripNavigationService Navigation,
         MockSettingsService Settings, Mock<INavigationCallbacks> Callbacks) CreateCoordinator(
-        IHostedRoutingApiClient api, IDialogService dialogs)
+        IHostedRoutingApiClient api, IDialogService dialogs,
+        RetainedWayfarerRoutingService? retainedRouting = null,
+        MockSettingsService? suppliedSettings = null)
     {
         var state = new MockTripStateManager();
         var navigation = new TripNavigationService(
@@ -178,13 +314,13 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
             Mock.Of<INavigationAudioService>(),
             new NavigationRouteBuilder(NullLogger<NavigationRouteBuilder>.Instance),
             state);
-        var settings = new MockSettingsService();
+        var settings = suppliedSettings ?? new MockSettingsService();
         var coordinator = new NavigationCoordinatorViewModel(
             navigation,
             new NavigationHudViewModel(),
             Mock.Of<IVisitNotificationService>(),
             new HostedRoutingService(api, NullLogger<HostedRoutingService>.Instance),
-            CreateRetainedRoutingService(),
+            retainedRouting ?? CreateRetainedRoutingService(),
             settings,
             dialogs,
             state,
@@ -196,8 +332,10 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
 
     private RetainedWayfarerRoutingService CreateRetainedRoutingService()
     {
-        var connection = new SQLiteAsyncConnection(":memory:");
+        var path = Path.Combine(Path.GetTempPath(), $"wayfarer-navigation-route-{Guid.NewGuid():N}.db3");
+        var connection = new SQLiteAsyncConnection(path);
         retainedConnections.Add(connection);
+        retainedDatabasePaths.Add(path);
         RetainedWayfarerRouteMigration.ApplyAsync(connection, CancellationToken.None).GetAwaiter().GetResult();
         return new(new RetainedWayfarerRouteRepository(connection),
             NullLogger<RetainedWayfarerRoutingService>.Instance);
