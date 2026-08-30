@@ -45,6 +45,63 @@ public sealed class TripNavigationRoutingRemovalTests
     }
 
     [Fact]
+    public async Task ReplacingRoute_StartsFreshAnnouncementSession()
+    {
+        var navigation = CreateNavigation();
+        var announcements = new List<string>();
+        navigation.InstructionAnnounced += (_, instruction) => announcements.Add(instruction);
+
+        await navigation.CalculateRouteToCoordinatesAsync(0, 0, 0.001, 0, "Route A");
+        navigation.UpdateLocation(0.0002, 0);
+        await navigation.CalculateRouteToCoordinatesAsync(0, 0, 0, 0.001, "Route B");
+
+        navigation.UpdateLocation(0, 0.0002);
+
+        announcements.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task StopNavigation_ClearsRouteAndPreventsFurtherUpdates()
+    {
+        var navigation = CreateNavigation();
+        var publishedStates = new List<TripNavigationState>();
+        var announcements = new List<string>();
+        navigation.StateChanged += (_, state) => publishedStates.Add(state);
+        navigation.InstructionAnnounced += (_, instruction) => announcements.Add(instruction);
+        await navigation.CalculateRouteToCoordinatesAsync(0, 0, 0.001, 0, "Destination");
+        navigation.UpdateLocation(0.0002, 0);
+        var stateCountAtStop = publishedStates.Count;
+        var announcementCountAtStop = announcements.Count;
+
+        navigation.StopNavigation();
+        var afterStop = navigation.UpdateLocation(0.0003, 0);
+
+        navigation.ActiveRoute.Should().BeNull();
+        afterStop.Status.Should().Be(NavigationStatus.NoRoute);
+        publishedStates.Should().HaveCount(stateCountAtStop);
+        announcements.Should().HaveCount(announcementCountAtStop);
+    }
+
+    [Fact]
+    public async Task Arrival_PublishesCompletionThenClearsRoute()
+    {
+        var navigation = CreateNavigation();
+        var publishedStates = new List<TripNavigationState>();
+        navigation.StateChanged += (_, state) => publishedStates.Add(state);
+        await navigation.CalculateRouteToCoordinatesAsync(0, 0, 0.001, 0, "Destination");
+
+        var arrived = navigation.UpdateLocation(0.001, 0);
+        var stateCountAtArrival = publishedStates.Count;
+        var afterArrival = navigation.UpdateLocation(0.0009, 0);
+
+        arrived.Status.Should().Be(NavigationStatus.Arrived);
+        publishedStates.Should().ContainSingle(state => state.Status == NavigationStatus.Arrived);
+        navigation.ActiveRoute.Should().BeNull();
+        afterArrival.Status.Should().Be(NavigationStatus.NoRoute);
+        publishedStates.Should().HaveCount(stateCountAtArrival);
+    }
+
+    [Fact]
     public async Task MapTargetNavigation_DoesNotContactPublicProvider_AndUsesDirectGuidance()
     {
         var navigation = CreateNavigation();

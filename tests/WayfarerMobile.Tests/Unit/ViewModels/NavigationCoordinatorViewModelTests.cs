@@ -207,13 +207,6 @@ public class NavigationCoordinatorViewModelTests : IDisposable
     }
 
     [Fact]
-    public void StopNavigation_ClearsNavigationRoute()
-    {
-        // Document expected behavior:
-        // _callbacks?.ClearNavigationRoute();
-    }
-
-    [Fact]
     public void StopNavigation_WithSelectedPlace_CentersOnPlace()
     {
         // Document expected behavior:
@@ -250,13 +243,6 @@ public class NavigationCoordinatorViewModelTests : IDisposable
     {
         // Document expected behavior:
         // _callbacks?.UpdateNavigationRouteProgress(route, lat, lon);
-    }
-
-    [Fact]
-    public void UpdateLocation_WhenArrived_StopsNavigation()
-    {
-        // Document expected behavior:
-        // if (state.Status == NavigationStatus.Arrived) StopNavigation();
     }
 
     #endregion
