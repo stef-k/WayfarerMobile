@@ -99,7 +99,7 @@ public static class HostedRouteIdentity
     {
         if (!double.IsFinite(value) || value < -bound || value > bound) throw new ArgumentOutOfRangeException(nameof(value));
         if (value == 0) value = 0;
-        return checked((long)Math.Round(value * 100000d, MidpointRounding.AwayFromZero));
+        return decimal.ToInt64(decimal.Round((decimal)value * 100000m, 0, MidpointRounding.AwayFromZero));
     }
 }
 
