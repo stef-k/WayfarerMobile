@@ -67,6 +67,26 @@ public sealed class HostedRoutingApiClientTests
         catalog.Profiles.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task Discovery_IgnoresUnknownAdditiveResponseMember()
+    {
+        const string identity = "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        var profileId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var json = JsonSerializer.Serialize(new
+        {
+            outcome = "available",
+            discoveryCatalogIdentity = identity,
+            profiles = new[] { new { transportProfileId = profileId, displayName = "Walking", modeKey = "walk", category = "active" } },
+            futureMetadata = new { version = 2 }
+        });
+        var client = Create(new RecordingHandler(_ => Task.FromResult(Json(HttpStatusCode.OK, json))));
+
+        var catalog = await client.DiscoverAsync(default);
+
+        catalog.Outcome.Should().Be("available");
+        catalog.Profiles.Should().ContainSingle();
+    }
+
     private static HostedRoutingApiClient Create(HttpMessageHandler handler)
     {
         var settings = new Mock<ISettingsService>();

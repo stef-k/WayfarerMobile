@@ -30,7 +30,7 @@ public sealed class HostedRoutingServiceTests
     }
 
     [Fact]
-    public void ConfirmChoice_RejectsCancelledAndStaleCatalogChoices()
+    public void ConfirmChoice_AcceptsSameGuidAndRefreshesRenamedMetadata()
     {
         var original = Catalog(new HostedRoutingProfile(WalkingProfile, "Walking", "walk", "active"));
         var renamed = new HostedRoutingCatalog("v1.catalog-b", "available",
@@ -38,7 +38,19 @@ public sealed class HostedRoutingServiceTests
 
         HostedProfileSelector.Confirm(null, original).Should().BeNull();
         HostedProfileSelector.Confirm(new(WalkingProfile, "Walking", "walk", "active"), renamed)
-            .Should().BeNull();
+            .Should().Be(renamed.Profiles[0]);
+    }
+
+    [Theory]
+    [InlineData("v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", true)]
+    [InlineData("v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", false)]
+    [InlineData(" v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", false)]
+    [InlineData("v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", false)]
+    [InlineData("v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB", false)]
+    [InlineData("v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAé", false)]
+    public void OpaqueIdentity_RequiresCanonicalSha256Base64UrlFraming(string value, bool expected)
+    {
+        HostedOpaqueIdentity.IsValid(value).Should().Be(expected);
     }
 
     [Fact]
