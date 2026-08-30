@@ -342,7 +342,9 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
             generation, tripAuthority, targetOwner.Association);
         _hostedRequest = context;
         _hostedTargetOwner = targetOwner;
+        var catalogRediscoveryAvailable = true;
         var result = await _hostedRouting.RequestRouteAsync(context, cancellationToken: _hostedRoutingCancellation.Token);
+        if (result.Outcome == HostedRoutingOutcome.CatalogChanged) catalogRediscoveryAvailable = false;
         var maximumPresentations = result.Outcome switch
         {
             HostedRoutingOutcome.RequiresChoice => 2,
@@ -369,7 +371,9 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
             var choiceContext = context with { ExpectedCatalogIdentity = result.DiscoveryCatalogIdentity };
             _hostedRequest = choiceContext;
             result = await _hostedRouting.RequestRouteAsync(
-                choiceContext, result.Choices[index], _hostedRoutingCancellation.Token);
+                choiceContext, result.Choices[index], _hostedRoutingCancellation.Token,
+                catalogRediscoveryAvailable);
+            if (result.Outcome == HostedRoutingOutcome.CatalogChanged) catalogRediscoveryAvailable = false;
         }
         if (result.Outcome == HostedRoutingOutcome.CatalogChanged)
         {

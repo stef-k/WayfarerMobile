@@ -27,7 +27,8 @@ public sealed class HostedRoutingService
     }
 
     public async Task<HostedRoutingResult> RequestRouteAsync(HostedRouteRequestContext context,
-        HostedRoutingProfile? explicitChoice = null, CancellationToken cancellationToken = default)
+        HostedRoutingProfile? explicitChoice = null, CancellationToken cancellationToken = default,
+        bool allowCatalogRediscovery = true)
     {
         if (!Begin(context)) return new(HostedRoutingOutcome.Stale);
         try
@@ -58,7 +59,9 @@ public sealed class HostedRoutingService
             var capability = await api.GetCapabilityAsync(
                 selectedProfile.TransportProfileId, catalogIdentity, cancellationToken);
             if (capability.Outcome == "catalog-changed")
-                return await RefreshCatalogAsync(cancellationToken);
+                return allowCatalogRediscovery
+                    ? await RefreshCatalogAsync(cancellationToken)
+                    : new(HostedRoutingOutcome.Unavailable);
             if (!ValidCapability(capability, selectedProfile.TransportProfileId, catalogIdentity))
                 return new(HostedRoutingOutcome.Unavailable);
             var request = new HostedRouteRequest(selectedProfile.TransportProfileId, context.Origin,
