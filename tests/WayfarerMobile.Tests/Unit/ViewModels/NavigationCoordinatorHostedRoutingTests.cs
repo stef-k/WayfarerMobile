@@ -1,16 +1,27 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using SQLite;
+using WayfarerMobile.Data.Repositories;
+using WayfarerMobile.Data.Services;
 using WayfarerMobile.Services;
 using WayfarerMobile.Tests.Infrastructure.Mocks;
 using WayfarerMobile.ViewModels;
 
 namespace WayfarerMobile.Tests.Unit.ViewModels;
 
-public sealed class NavigationCoordinatorHostedRoutingTests
+public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
 {
     private static readonly Guid WalkingProfile = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid HikingProfile = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private const string IdentityA = "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
     private const string IdentityB = "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ";
+    private readonly List<SQLiteAsyncConnection> retainedConnections = [];
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public async Task DisposeAsync()
+    {
+        foreach (var connection in retainedConnections) await connection.CloseAsync();
+    }
 
     [Fact]
     public async Task OpenChooser_CatalogChanges_SubmitsDisplayedIdentityThenRefreshesBeforeReselection()
@@ -157,7 +168,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests
         direct.HostedProvenance.Should().BeNull();
     }
 
-    private static (NavigationCoordinatorViewModel Coordinator, TripNavigationService Navigation,
+    private (NavigationCoordinatorViewModel Coordinator, TripNavigationService Navigation,
         MockSettingsService Settings, Mock<INavigationCallbacks> Callbacks) CreateCoordinator(
         IHostedRoutingApiClient api, IDialogService dialogs)
     {
@@ -173,6 +184,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests
             new NavigationHudViewModel(),
             Mock.Of<IVisitNotificationService>(),
             new HostedRoutingService(api, NullLogger<HostedRoutingService>.Instance),
+            CreateRetainedRoutingService(),
             settings,
             dialogs,
             state,
@@ -180,6 +192,15 @@ public sealed class NavigationCoordinatorHostedRoutingTests
         var callbacks = new Mock<INavigationCallbacks>();
         coordinator.SetCallbacks(callbacks.Object);
         return (coordinator, navigation, settings, callbacks);
+    }
+
+    private RetainedWayfarerRoutingService CreateRetainedRoutingService()
+    {
+        var connection = new SQLiteAsyncConnection(":memory:");
+        retainedConnections.Add(connection);
+        RetainedWayfarerRouteMigration.ApplyAsync(connection, CancellationToken.None).GetAwaiter().GetResult();
+        return new(new RetainedWayfarerRouteRepository(connection),
+            NullLogger<RetainedWayfarerRoutingService>.Instance);
     }
 
     private static Mock<IHostedRoutingApiClient> SuccessfulApi()

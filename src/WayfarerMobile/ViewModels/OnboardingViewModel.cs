@@ -379,8 +379,7 @@ public partial class OnboardingViewModel : BaseViewModel
             return;
         }
 
-        _settingsService.ServerUrl = ServerUrl;
-        _settingsService.ApiToken = ApiToken;
+        await _settingsService.CommitAuthenticationAsync(ServerUrl, ApiToken);
         ServerConfigured = true;
 
         // Fetch settings and activities from server in background

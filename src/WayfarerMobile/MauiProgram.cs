@@ -179,7 +179,11 @@ public static class MauiProgram
         services.AddSingleton<ISegmentRepository, SegmentRepository>();
         services.AddSingleton<IAreaRepository, AreaRepository>();
         services.AddSingleton<ITripRepository, TripRepository>();
+        services.AddSingleton(sp => new RetainedWayfarerRouteRepository(
+            () => sp.GetRequiredService<DatabaseService>().GetConnectionAsync()));
 
+        services.AddSingleton<IProtectedAuthenticationStore, MauiProtectedAuthenticationStore>();
+        services.AddSingleton<CommittedAuthenticationAuthority>();
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<ITripStateManager, TripStateManager>();
         services.AddSingleton<ISyncEventBus, SyncEventBus>();
@@ -192,8 +196,10 @@ public static class MauiProgram
         services.AddSingleton<ApiClient>();
         services.AddSingleton<IApiClient>(sp => sp.GetRequiredService<ApiClient>());
         services.AddSingleton<IVisitApiClient>(sp => sp.GetRequiredService<ApiClient>());
+        services.AddSingleton<ICandidateConnectionProbe, CandidateConnectionProbe>();
         services.AddSingleton<IHostedRoutingApiClient, HostedRoutingApiClient>();
         services.AddSingleton<HostedRoutingService>();
+        services.AddSingleton<RetainedWayfarerRoutingService>();
         services.AddSingleton<QueueDrainService>(); // Drains offline queue via check-in endpoint
         services.AddSingleton<IPlaceOperationsHandler, PlaceOperationsHandler>();
         services.AddSingleton<IRegionOperationsHandler, RegionOperationsHandler>();

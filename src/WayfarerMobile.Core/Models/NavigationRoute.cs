@@ -58,13 +58,26 @@ public sealed record HostedRouteProvenance(
     Guid ProviderConfigurationId,
     string MappingIdentity,
     string StorageMode,
-    DateTimeOffset GeneratedAt);
+    DateTimeOffset GeneratedAt)
+{
+    /// <summary>Whether this route was selected from bounded local retained storage.</summary>
+    public bool IsRetained { get; init; }
+
+    /// <summary>Displayed age at selection; future provenance is clamped to zero.</summary>
+    public TimeSpan Age { get; init; }
+}
 
 /// <summary>
 /// A single turn-by-turn instruction in the navigation route.
 /// </summary>
 public class NavigationStep
 {
+    /// <summary>Validated first geometry index owned by the hosted instruction.</summary>
+    public int GeometryFromIndex { get; set; }
+
+    /// <summary>Validated last geometry index owned by the hosted instruction.</summary>
+    public int GeometryToIndex { get; set; }
+
     /// <summary>
     /// Gets or sets the human-readable instruction text.
     /// </summary>

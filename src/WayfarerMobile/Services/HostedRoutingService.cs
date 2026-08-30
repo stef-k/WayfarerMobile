@@ -104,6 +104,16 @@ public sealed class HostedRoutingService
         }
     }
 
+    public void SelectRetained(long generation, Guid profileId, string authorityIdentity)
+    {
+        lock (stateLock)
+        {
+            activeGeneration = generation;
+            currentSelection = new(generation, profileId, authorityIdentity);
+            IsLoading = false;
+        }
+    }
+
     private bool Begin(HostedRouteRequestContext context)
     {
         lock (stateLock)
@@ -186,7 +196,8 @@ public sealed class HostedRoutingService
         {
             Instruction = item.Text, ManeuverType = item.Type, DistanceMeters = item.DistanceMetres,
             DurationSeconds = item.DurationSeconds, Longitude = value.Geometry![item.FromIndex].Longitude,
-            Latitude = value.Geometry![item.FromIndex].Latitude
+            Latitude = value.Geometry![item.FromIndex].Latitude,
+            GeometryFromIndex = item.FromIndex, GeometryToIndex = item.ToIndex
         }).ToList(),
         DestinationName = destinationName,
         TotalDistanceMeters = value.DistanceMetres!.Value,

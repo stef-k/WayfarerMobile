@@ -160,14 +160,25 @@ public sealed record HostedTripTargetAuthority(
 
 public static class HostedRouteIdentity
 {
-    public static IReadOnlyList<long> Canonicalize(IEnumerable<HostedRouteCoordinate> points) => points
+    public static IReadOnlyList<int> Canonicalize(IEnumerable<HostedRouteCoordinate> points) => points
         .SelectMany(point => new[] { Scale(point.Longitude, 180), Scale(point.Latitude, 90) }).ToArray();
 
-    private static long Scale(double value, double bound)
+    private static int Scale(double value, double bound)
     {
         if (!double.IsFinite(value) || value < -bound || value > bound) throw new ArgumentOutOfRangeException(nameof(value));
         if (value == 0) value = 0;
-        return decimal.ToInt64(decimal.Round((decimal)value * 100000m, 0, MidpointRounding.AwayFromZero));
+        return decimal.ToInt32(decimal.Round((decimal)value * 100000m, 0, MidpointRounding.AwayFromZero));
+    }
+}
+
+public static class HostedRouteServerIdentity
+{
+    public static string Normalize(string? value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)) return string.Empty;
+        var authority = uri.GetLeftPart(UriPartial.Authority).ToLowerInvariant();
+        return $"{authority}{uri.AbsolutePath}".TrimEnd('/');
     }
 }
 
@@ -190,6 +201,13 @@ public static class HostedOpaqueIdentity
 
 public static class HostedRoutePublication
 {
+    public static bool TryPublishRetained(NavigationRoute source, NavigationRoute target)
+    {
+        if (source.IsDirectRoute || source.HostedProvenance?.IsRetained != true) return false;
+        CopyRoute(source, target);
+        return true;
+    }
+
     public static bool TryPublish(HostedRouteCandidate candidate, HostedRouteLiveAuthority live,
         NavigationRoute target)
     {
@@ -201,7 +219,13 @@ public static class HostedRoutePublication
     public static bool Current(HostedRouteCandidate candidate, HostedRouteLiveAuthority live)
     {
         var expected = candidate.Context;
-        return live.Generation == expected.Generation
+        return CurrentRequest(expected, live)
+            && live.SelectedTransportProfileId == candidate.SelectedProfileId
+            && live.SelectedProfileAuthorityIdentity == candidate.SelectedProfileAuthorityIdentity;
+    }
+
+    public static bool CurrentRequest(HostedRouteRequestContext expected, HostedRouteLiveAuthority live) =>
+        live.Generation == expected.Generation
             && live.AuthenticationSessionRevision == expected.AuthenticationSessionRevision
             && live.NormalizedServer == expected.NormalizedServer
             && live.TargetAssociation == expected.TargetAssociation
@@ -211,12 +235,9 @@ public static class HostedRoutePublication
             && live.SavedTransportProfileId == expected.SavedTransportProfileId
             && live.ModeKey == expected.ModeKey
             && live.Category == expected.Category
-            && live.SelectedTransportProfileId == candidate.SelectedProfileId
-            && live.SelectedProfileAuthorityIdentity == candidate.SelectedProfileAuthorityIdentity
             && HostedRouteIdentity.Canonicalize(Points(live.Origin, live.Anchors, live.Destination))
                 .SequenceEqual(HostedRouteIdentity.Canonicalize(
                     Points(expected.Origin, expected.Anchors, expected.Destination)));
-    }
 
     private static IEnumerable<HostedRouteCoordinate> Points(HostedRouteCoordinate origin,
         IReadOnlyList<HostedRouteCoordinate> anchors, HostedRouteCoordinate destination) =>
@@ -225,6 +246,19 @@ public static class HostedRoutePublication
     private static void Copy(HostedRouteCandidate candidate, NavigationRoute target)
     {
         var source = candidate.Route;
+        CopyRoute(source, target);
+        var generated = candidate.GeneratedAt.ToUniversalTime();
+        target.HostedProvenance = new(candidate.SelectedProfileId,
+            candidate.SelectedProfileAuthorityIdentity,
+            candidate.Metadata.Provider,
+            candidate.Metadata.ProviderConfigurationId,
+            candidate.Metadata.MappingIdentity,
+            candidate.Metadata.StorageMode,
+            generated);
+    }
+
+    private static void CopyRoute(NavigationRoute source, NavigationRoute target)
+    {
         target.Waypoints = source.Waypoints;
         target.Steps = source.Steps;
         target.DestinationName = source.DestinationName;
@@ -233,13 +267,7 @@ public static class HostedRoutePublication
         target.IsDirectRoute = false;
         target.InitialBearing = 0;
         target.Attribution = source.Attribution;
-        target.HostedProvenance = new(candidate.SelectedProfileId,
-            candidate.SelectedProfileAuthorityIdentity,
-            candidate.Metadata.Provider,
-            candidate.Metadata.ProviderConfigurationId,
-            candidate.Metadata.MappingIdentity,
-            candidate.Metadata.StorageMode,
-            candidate.GeneratedAt.ToUniversalTime());
+        target.HostedProvenance = source.HostedProvenance;
     }
 }
 

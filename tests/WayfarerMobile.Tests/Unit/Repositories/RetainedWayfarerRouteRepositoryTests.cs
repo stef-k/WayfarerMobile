@@ -40,7 +40,7 @@ public sealed class RetainedWayfarerRouteRepositoryTests : IAsyncLifetime
         retained.Should().NotBeNull();
         retained!.Route.Waypoints.Should().ContainSingle(point => point.Longitude == 23.005);
         retained.Route.HostedProvenance!.IsRetained.Should().BeTrue();
-        retained.Route.HostedProvenance.Age.Should().Be(TimeSpan.FromDays(30));
+        retained.Route.HostedProvenance.Age.Should().Be(TimeSpan.FromDays(30) + TimeSpan.FromMinutes(5));
         otherAccount.Should().BeNull();
     }
 
@@ -71,15 +71,13 @@ public sealed class RetainedWayfarerRouteRepositoryTests : IAsyncLifetime
         var receipt = new DateTimeOffset(2026, 8, 31, 10, 0, 0, TimeSpan.Zero);
         await using var owner = await CreateOwnerAsync();
         await owner.Repository.SaveAsync(Candidate("offline"), PartitionA, receipt, () => true);
-        var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
-        var service = new RetainedWayfarerRoutingService(owner.Repository, api.Object,
+        var service = new RetainedWayfarerRoutingService(owner.Repository,
             NullLogger<RetainedWayfarerRoutingService>.Instance);
 
         var route = await service.TrySelectOfflineAsync(Context(), PartitionA, receipt.AddHours(1), () => true);
 
         route.Should().NotBeNull();
         route!.HostedProvenance!.IsRetained.Should().BeTrue();
-        api.VerifyNoOtherCalls();
     }
 
     [Fact]

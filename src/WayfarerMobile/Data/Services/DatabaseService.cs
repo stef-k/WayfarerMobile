@@ -25,7 +25,7 @@ public class DatabaseService : IAsyncDisposable, ILegacyRasterState, ISegmentWay
     #region Constants
 
     private const string DatabaseFilename = "wayfarer.db3";
-    private const int CurrentSchemaVersion = 9;
+    private const int CurrentSchemaVersion = RetainedWayfarerRouteMigration.SchemaVersion;
     private const string SchemaVersionKey = "db_schema_version";
 
     private static readonly SQLiteOpenFlags DbFlags =
@@ -160,6 +160,11 @@ public class DatabaseService : IAsyncDisposable, ILegacyRasterState, ISegmentWay
         if (currentVersion < 9)
         {
             await OsrmRoutingDecommissionMigration.ApplyAsync(this, CancellationToken.None);
+        }
+
+        if (currentVersion < RetainedWayfarerRouteMigration.SchemaVersion)
+        {
+            await RetainedWayfarerRouteMigration.ApplyAsync(_database!, CancellationToken.None);
         }
 
         // Update schema version

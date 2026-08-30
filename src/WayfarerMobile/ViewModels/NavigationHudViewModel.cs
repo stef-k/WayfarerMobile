@@ -81,6 +81,10 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private IReadOnlyList<HostedRouteAttribution> _attribution = [];
 
+    /// <summary>Gets the connected or retained Wayfarer route source and bounded display age.</summary>
+    [ObservableProperty]
+    private string _hostedRouteSourceText = string.Empty;
+
     /// <summary>
     /// Gets or sets the bearing to destination in degrees.
     /// </summary>
@@ -225,6 +229,7 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
         IsOffRoute = false;
         ProgressPercent = 0;
         Attribution = route.Attribution;
+        HostedRouteSourceText = FormatHostedRouteSource(route.HostedProvenance);
 
         // Reset audio tracking state for fresh navigation
         _lastAnnouncedStatus = NavigationStatus.NoRoute;
@@ -256,6 +261,7 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
         IsOffRoute = false;
         ProgressPercent = 0;
         Attribution = [];
+        HostedRouteSourceText = string.Empty;
 
         // Reset audio tracking state
         _lastAnnouncedStatus = NavigationStatus.NoRoute;
@@ -266,6 +272,19 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
         _wakeLockService.ReleaseWakeLock();
 
         _logger.LogInformation("Navigation HUD stopped");
+    }
+
+    private static string FormatHostedRouteSource(HostedRouteProvenance? provenance)
+    {
+        if (provenance == null) return string.Empty;
+        var measuredAge = provenance.IsRetained
+            ? provenance.Age
+            : DateTimeOffset.UtcNow - provenance.GeneratedAt;
+        var age = measuredAge < TimeSpan.Zero ? TimeSpan.Zero : measuredAge;
+        var ageText = age.TotalDays >= 1 ? $"{Math.Floor(age.TotalDays):F0}d"
+            : age.TotalHours >= 1 ? $"{Math.Floor(age.TotalHours):F0}h"
+            : $"{Math.Floor(age.TotalMinutes):F0}m";
+        return provenance.IsRetained ? $"Wayfarer offline · {ageText} old" : $"Wayfarer online · {ageText} old";
     }
 
     /// <summary>

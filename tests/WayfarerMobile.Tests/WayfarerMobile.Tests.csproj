@@ -81,6 +81,11 @@
     <Compile Include="..\..\src\WayfarerMobile\Services\HostedRoutingService.cs" Link="Production\HostedRoutingService.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\HostedRoutingApiClient.cs" Link="Production\HostedRoutingApiClient.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\HostedSegmentProfileIdentity.cs" Link="Production\HostedSegmentProfileIdentity.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Data\Entities\RetainedWayfarerRouteEntity.cs" Link="Production\RetainedWayfarerRouteEntity.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Data\Services\RetainedWayfarerRouteMigration.cs" Link="Production\RetainedWayfarerRouteMigration.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Data\Repositories\RetainedWayfarerRouteRepository.cs" Link="Production\RetainedWayfarerRouteRepository.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Services\RetainedWayfarerRoutingService.cs" Link="Production\RetainedWayfarerRoutingService.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Services\CommittedAuthenticationAuthority.cs" Link="Production\CommittedAuthenticationAuthority.cs" />
     <Compile Include="..\..\src\WayfarerMobile\ViewModels\BaseViewModel.cs" Link="Production\BaseViewModel.cs" />
     <Compile Include="..\..\src\WayfarerMobile\ViewModels\INavigationCallbacks.cs" Link="Production\INavigationCallbacks.cs" />
     <Compile Include="..\..\src\WayfarerMobile\ViewModels\NavigationCoordinatorViewModel.cs" Link="Production\NavigationCoordinatorViewModel.cs" />
