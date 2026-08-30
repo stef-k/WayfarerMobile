@@ -349,9 +349,9 @@ public partial class MemberDetailsViewModel : ObservableObject
             _logger.LogInformation("Started navigation to {Member}: {Distance:F1}km",
                 destName, route.TotalDistanceMeters / 1000);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            _logger.LogError(ex, "Unexpected error starting navigation");
+            _logger.LogError("Member navigation failed: local-navigation-error");
             await _toastService.ShowErrorAsync("Failed to start navigation");
         }
     }
