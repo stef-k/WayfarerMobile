@@ -48,7 +48,6 @@ public interface ITripNavigationService
     /// </summary>
     void StopNavigation();
 
-
     /// <summary>
     /// Loads a trip for navigation, building the routing graph.
     /// </summary>
