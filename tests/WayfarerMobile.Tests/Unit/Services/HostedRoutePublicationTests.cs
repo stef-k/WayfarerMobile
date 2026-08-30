@@ -52,11 +52,16 @@ public sealed class HostedRoutePublicationTests
 
     private static HostedRouteCandidate Candidate()
     {
-        var context = HostedRouteRequestContext.ForTest(
-            Guid.Parse("11111111-1111-1111-1111-111111111111"));
+        var profileId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var context = HostedRouteRequestContext.ForTest(profileId) with
+        {
+            SelectedTransportProfileId = profileId,
+            SelectedProfileAuthorityIdentity = "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        };
         return new HostedRouteCandidate(RoutedRoute(), context,
-            Guid.Parse("11111111-1111-1111-1111-111111111111"),
-            "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+            profileId,
+            "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            new("geoapify", Guid.Parse("22222222-2222-2222-2222-222222222222"), "mapping", "persistent"));
     }
 
     private static NavigationRoute DirectRoute() => new()

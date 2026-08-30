@@ -558,6 +558,11 @@ unavailability remain routing-local and retain Direct guidance without affecting
 Valid saved Segment geometry is never replaced automatically. Mobile does not persist generated geometry, selection,
 attribution, or authority identities; offline retention of hosted routes belongs to #261.
 
+`TransportProfileId` is the Segment's current planning profile identity. A returned route's selected profile and
+authority metadata are immutable provenance for that transient result; they do not rewrite the Segment and are not a
+durable current-profile setting. The coordinator treats service output as a candidate and performs its final live-state
+comparison immediately beside the synchronous route copy.
+
 ### Navigation State
 
 ```csharp

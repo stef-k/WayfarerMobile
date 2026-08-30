@@ -3,30 +3,27 @@ using WayfarerMobile.Core.Models;
 
 namespace WayfarerMobile.Services;
 
-/// <summary>Owns transient authenticated hosted-route orchestration and final publication validation.</summary>
+/// <summary>Validates transient authenticated hosted-route candidates before coordinator publication.</summary>
 public sealed class HostedRoutingService
 {
     private const int MaximumGeometry = 10000;
     private const int MaximumInstructions = 1000;
     private readonly IHostedRoutingApiClient api;
     private readonly ILogger<HostedRoutingService> logger;
-    private readonly HostedRoutingState? currentState;
     private readonly object stateLock = new();
-    private HostedRoutingState? activeState;
+    private long activeGeneration;
     public bool IsLoading { get; private set; }
 
-    public HostedRoutingService(IHostedRoutingApiClient api, ILogger<HostedRoutingService> logger,
-        HostedRoutingState? currentState = null)
+    public HostedRoutingService(IHostedRoutingApiClient api, ILogger<HostedRoutingService> logger)
     {
         this.api = api;
         this.logger = logger;
-        this.currentState = currentState;
     }
 
     public async Task<HostedRoutingResult> RequestRouteAsync(HostedRouteRequestContext context,
         HostedRoutingProfile? explicitChoice = null, CancellationToken cancellationToken = default)
     {
-        Begin(context);
+        if (!Begin(context)) return new(HostedRoutingOutcome.Stale);
         try
         {
             var catalog = await api.DiscoverAsync(cancellationToken);
@@ -41,36 +38,37 @@ public sealed class HostedRoutingService
                     HostedProfileSelector.Confirm(explicitChoice, catalog), catalog.Profiles);
             if (selection.Profile == null)
                 return new(HostedRoutingOutcome.RequiresChoice, Choices: selection.Choices);
-            UpdateSelection(context.Generation, selection.Profile.TransportProfileId, null);
-
             var capability = await api.GetCapabilityAsync(selection.Profile.TransportProfileId,
                 catalog.DiscoveryCatalogIdentity!, cancellationToken);
             if (!ValidCapability(capability, selection.Profile.TransportProfileId, catalog.DiscoveryCatalogIdentity!))
                 return new(capability.Outcome == "catalog-changed" ? HostedRoutingOutcome.Stale : HostedRoutingOutcome.Unavailable);
-            UpdateSelection(context.Generation, selection.Profile.TransportProfileId,
-                capability.SelectedProfileAuthorityIdentity);
-
             var request = new HostedRouteRequest(selection.Profile.TransportProfileId, context.Origin,
                 context.Destination, context.Anchors, capability.SelectedProfileAuthorityIdentity!);
             var response = await api.GetRouteAsync(request, cancellationToken);
-            if (!ValidResponse(response, request)) return new(HostedRoutingOutcome.InvalidResponse);
-            if (!Current(context, selection.Profile.TransportProfileId, capability.SelectedProfileAuthorityIdentity!))
+            if (!ValidResponse(response, request, capability)) return new(HostedRoutingOutcome.InvalidResponse);
+            if (!CurrentGeneration(context.Generation))
                 return new(HostedRoutingOutcome.Stale);
-            return new(HostedRoutingOutcome.Success, BuildRoute(response, context.DestinationName));
+            var metadata = new HostedRouteCapabilityMetadata(capability.Provider!,
+                capability.ProviderConfigurationId!.Value, capability.MappingIdentity!, capability.StorageMode!);
+            var candidateContext = context with { SelectedTransportProfileId = selection.Profile.TransportProfileId,
+                SelectedProfileAuthorityIdentity = capability.SelectedProfileAuthorityIdentity };
+            var candidate = new HostedRouteCandidate(BuildRoute(response, context.DestinationName), candidateContext,
+                selection.Profile.TransportProfileId, capability.SelectedProfileAuthorityIdentity!, metadata);
+            return new(HostedRoutingOutcome.Success, Candidate: candidate);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             return new(HostedRoutingOutcome.Cancelled);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            logger.LogWarning(ex, "Hosted routing failed locally");
+            logger.LogWarning("Hosted routing failed locally: transport-or-contract-error");
             return new(HostedRoutingOutcome.Unavailable);
         }
         finally
         {
             lock (stateLock)
-                if ((currentState ?? activeState)?.Generation == context.Generation) IsLoading = false;
+                if (activeGeneration == context.Generation) IsLoading = false;
         }
     }
 
@@ -78,67 +76,54 @@ public sealed class HostedRoutingService
     {
         lock (stateLock)
         {
-            activeState = activeState is { } state
-                ? state with { Generation = generation, NavigationChoice = "direct", SelectedProfileId = null,
-                    SelectedAuthorityIdentity = null }
-                : null;
+            activeGeneration = generation;
             IsLoading = false;
         }
     }
 
-    private bool Current(HostedRouteRequestContext context, Guid profileId, string authority)
+    private bool Begin(HostedRouteRequestContext context)
     {
-        HostedRoutingState? state;
-        lock (stateLock) state = currentState ?? activeState;
-        if (state == null) return true;
-        var points = new[] { context.Origin }.Concat(context.Anchors).Append(context.Destination);
-        return state.Generation == context.Generation
-            && state.SessionAuthority == context.SessionAuthority
-            && state.NormalizedServer == context.NormalizedServer
-            && state.SelectedProfileId == profileId
-            && state.SelectedAuthorityIdentity == authority
-            && state.TargetAssociation == context.TargetAssociation
-            && state.NavigationChoice == context.NavigationChoice
-            && state.CanonicalCoordinates.SequenceEqual(HostedRouteIdentity.Canonicalize(points));
-    }
-
-    private void Begin(HostedRouteRequestContext context)
-    {
-        if (currentState != null) return;
-        var points = new[] { context.Origin }.Concat(context.Anchors).Append(context.Destination);
         lock (stateLock)
         {
-            activeState = new(context.Generation, context.SessionAuthority, context.NormalizedServer, null, null,
-                context.TargetAssociation, context.NavigationChoice, HostedRouteIdentity.Canonicalize(points));
+            if (context.Generation < activeGeneration) return false;
+            activeGeneration = context.Generation;
             IsLoading = true;
+            return true;
         }
     }
 
-    private void UpdateSelection(long generation, Guid profileId, string? authority)
+    private bool CurrentGeneration(long generation)
     {
-        if (currentState != null) return;
-        lock (stateLock)
-            if (activeState?.Generation == generation)
-                activeState = activeState with { SelectedProfileId = profileId,
-                    SelectedAuthorityIdentity = authority ?? activeState.SelectedAuthorityIdentity };
+        lock (stateLock) return activeGeneration == generation;
     }
 
     private static bool AvailableCatalog(HostedRoutingCatalog value) => value.Outcome == "available"
-        && ValidIdentity(value.DiscoveryCatalogIdentity) && value.Profiles.Count is > 0 and <= 100
+        && HostedOpaqueIdentity.IsValid(value.DiscoveryCatalogIdentity) && value.Profiles.Count is > 0 and <= 100
         && value.Profiles.Select(item => item.TransportProfileId).Distinct().Count() == value.Profiles.Count
         && value.Profiles.All(item => item.TransportProfileId != Guid.Empty && Bounded(item.DisplayName, 200)
             && Bounded(item.ModeKey, 100) && Bounded(item.Category, 100));
 
     private static bool ValidCapability(HostedRoutingCapability value, Guid profileId, string catalogIdentity) =>
         value.Outcome == "available" && value.TransportProfileId == profileId
-        && value.DiscoveryCatalogIdentity == catalogIdentity && ValidIdentity(value.SelectedProfileAuthorityIdentity)
+        && value.DiscoveryCatalogIdentity == catalogIdentity
+        && HostedOpaqueIdentity.IsValid(value.DiscoveryCatalogIdentity)
+        && HostedOpaqueIdentity.IsValid(value.SelectedProfileAuthorityIdentity)
+        && Bounded(value.Provider, 100) && value.ProviderConfigurationId is { } id && id != Guid.Empty
+        && Bounded(value.MappingIdentity, 200) && Bounded(value.StorageMode, 100)
         && ValidAttribution(value.Attribution);
 
-    private static bool ValidResponse(HostedRouteResponse value, HostedRouteRequest request)
+    private static bool ValidResponse(HostedRouteResponse value, HostedRouteRequest request,
+        HostedRoutingCapability capability)
     {
         if (!value.Succeeded || value.Outcome != "available" || value.TransportProfileId != request.TransportProfileId
             || value.SelectedProfileAuthorityIdentity != request.SelectedProfileAuthorityIdentity
-            || value.GeneratedAt is null || value.Geometry is not { Count: >= 2 and <= MaximumGeometry }
+            || !HostedOpaqueIdentity.IsValid(value.SelectedProfileAuthorityIdentity)
+            || value.Provider != capability.Provider
+            || value.ProviderConfigurationId != capability.ProviderConfigurationId
+            || value.MappingIdentity != capability.MappingIdentity || value.StorageMode != capability.StorageMode
+            || value.GeneratedAt is not { } generatedAt || generatedAt.Offset != TimeSpan.Zero
+            || generatedAt > DateTimeOffset.UtcNow.AddMinutes(5)
+            || value.Geometry is not { Count: >= 2 and <= MaximumGeometry }
             || value.MatchPoints is null || value.DistanceMetres is not double distance || distance < 0 || !double.IsFinite(distance)
             || value.DurationSeconds is not double duration || duration < 0 || !double.IsFinite(duration)
             || value.Instructions is null || value.Instructions.Count > MaximumInstructions
@@ -173,7 +158,6 @@ public sealed class HostedRoutingService
 
     private static bool ValidCoordinate(HostedRouteCoordinate item) => double.IsFinite(item.Longitude)
         && double.IsFinite(item.Latitude) && item.Longitude is >= -180 and <= 180 && item.Latitude is >= -90 and <= 90;
-    private static bool ValidIdentity(string? value) => value is { Length: >= 4 and <= 64 } && value.StartsWith("v1.", StringComparison.Ordinal);
     private static bool ValidAttribution(IReadOnlyList<HostedRouteAttribution>? value) => value is { Count: > 0 and <= 10 }
         && value.All(item => Bounded(item.Text, 200) && Bounded(item.Url, 500)
             && Uri.TryCreate(item.Url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps);

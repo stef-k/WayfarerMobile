@@ -301,7 +301,7 @@ From the main map, you can add your current location to the loaded trip as a new
 
 ## Navigation
 
-Navigate with saved Trip Segment geometry or honest straight-line Direct guidance. Mobile does not contact a public routing provider.
+Navigate with saved Trip Segment geometry, transient authenticated Wayfarer-hosted routing, or honest straight-line Direct guidance. Mobile contacts only the configured Wayfarer server; that server may use its selected routing provider.
 
 ### Navigation Contexts
 
@@ -310,8 +310,8 @@ The app supports navigation in different contexts:
 | Context | Started From | Features |
 |---------|--------------|----------|
 | **Trip Navigation** | Trip sidebar → place | Uses trip segments, full route priority |
-| **Group Navigation** | Groups → member | Direct guidance to member location |
-| **Map Navigation** | Long-press on map | Direct guidance to any point |
+| **Group Navigation** | Groups → member | Hosted routing when available, otherwise Direct |
+| **Map Navigation** | Long-press on map | Hosted routing when available, otherwise Direct |
 
 ### Starting Trip Navigation
 
@@ -343,12 +343,14 @@ Route calculation differs based on navigation context:
 | Priority | Source | When Used |
 |----------|--------|-----------|
 | 1 | **User Segments** | Trip has pre-defined route geometry |
-| 2 | **Direct Route** | Saved geometry is unavailable or invalid |
+| 2 | **Wayfarer hosted route** | Saved geometry is unavailable and authenticated routing is available |
+| 3 | **Direct Route** | Hosted routing is not selected, unavailable, or rejected |
 
 **Ad-Hoc Navigation** (groups, map locations):
 | Priority | Source | When Used |
 |----------|--------|-----------|
-| 1 | **Direct Route** | Always; ad-hoc targets have no saved Segment geometry |
+| 1 | **Wayfarer hosted route** | Authenticated routing is available and selected |
+| 2 | **Direct Route** | Hosted routing is not selected, unavailable, or rejected |
 
 > **Note**: Ad-hoc navigation does not have saved Segment geometry because there is no Trip context.
 
@@ -359,7 +361,7 @@ Route calculation differs based on navigation context:
 - Distance to destination
 - Bearing-based heading
 
-Direct is not road-aware or hosted turn-by-turn routing. Authenticated Wayfarer-hosted routing is planned separately and is not implemented yet.
+Direct is not road-aware. Hosted route geometry, attribution, and the chosen profile are session-only and are not retained for offline use; #261 owns offline retention.
 
 ### External Maps Integration
 

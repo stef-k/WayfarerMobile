@@ -9,12 +9,16 @@ public sealed record HostedRouteInstruction(string Text, string Type, int FromIn
     double DistanceMetres, double DurationSeconds);
 
 public sealed record HostedRoutingCapability(string Outcome, Guid TransportProfileId,
+    string? Provider, Guid? ProviderConfigurationId, string? MappingIdentity, string? StorageMode,
     IReadOnlyList<HostedRouteAttribution>? Attribution, string? DiscoveryCatalogIdentity,
     string? SelectedProfileAuthorityIdentity)
 {
     public static HostedRoutingCapability Available(Guid profileId, string catalogIdentity,
-        string selectedAuthorityIdentity, IReadOnlyList<HostedRouteAttribution> attribution) =>
-        new("available", profileId, attribution, catalogIdentity, selectedAuthorityIdentity);
+        string selectedAuthorityIdentity, IReadOnlyList<HostedRouteAttribution> attribution,
+        string provider = "geoapify", Guid? providerConfigurationId = null,
+        string mappingIdentity = "mapping", string storageMode = "persistent") =>
+        new("available", profileId, provider, providerConfigurationId ?? Guid.Parse("22222222-2222-2222-2222-222222222222"),
+            mappingIdentity, storageMode, attribution, catalogIdentity, selectedAuthorityIdentity);
 }
 
 public sealed record HostedRouteRequest(Guid TransportProfileId, HostedRouteCoordinate Origin,
@@ -23,13 +27,15 @@ public sealed record HostedRouteRequest(Guid TransportProfileId, HostedRouteCoor
 
 public sealed record HostedRouteResponse(bool Succeeded, string Outcome, IReadOnlyList<HostedRouteCoordinate>? Geometry,
     double? DistanceMetres, double? DurationSeconds, IReadOnlyList<HostedRouteInstruction>? Instructions,
-    DateTimeOffset? GeneratedAt, Guid? TransportProfileId, IReadOnlyList<HostedRouteCoordinate>? MatchPoints,
+    DateTimeOffset? GeneratedAt, string? Provider, Guid? ProviderConfigurationId, string? MappingIdentity,
+    Guid? TransportProfileId, IReadOnlyList<HostedRouteCoordinate>? MatchPoints,
     IReadOnlyList<HostedRouteAttribution>? Attribution, string? StorageMode,
     string? SelectedProfileAuthorityIdentity)
 {
     public static HostedRouteResponse ValidForTest(Guid profileId, string selectedAuthorityIdentity) => new(
         true, "available", [new(23, 37), new(23.01, 37.01)], 1500, 900,
-        [new("Continue", "continue", 0, 1, 1500, 900)], DateTimeOffset.UtcNow, profileId,
+        [new("Continue", "continue", 0, 1, 1500, 900)], DateTimeOffset.UtcNow, "geoapify",
+        Guid.Parse("22222222-2222-2222-2222-222222222222"), "mapping", profileId,
         [new(23, 37), new(23.01, 37.01)], [new("Powered by Wayfarer test", "https://example.test")],
         "persistent", selectedAuthorityIdentity);
 }
@@ -57,7 +63,8 @@ public static class HostedProfileSelector
 
     public static HostedRoutingProfile? Confirm(HostedRoutingProfile? choice, HostedRoutingCatalog currentCatalog) =>
         choice != null && currentCatalog.DiscoveryCatalogIdentity != null
-            && currentCatalog.Profiles.Any(item => item == choice) ? choice : null;
+            ? currentCatalog.Profiles.SingleOrDefault(item => item.TransportProfileId == choice.TransportProfileId)
+            : null;
 
     private static bool TextMatches(HostedRoutingProfile item, string? modeKey, string? category) =>
         (!string.IsNullOrWhiteSpace(modeKey) && string.Equals(item.ModeKey, modeKey, StringComparison.OrdinalIgnoreCase))
@@ -66,28 +73,23 @@ public static class HostedProfileSelector
 
 public enum HostedRoutingOutcome { Success, Unavailable, RequiresChoice, InvalidResponse, Stale, Cancelled }
 public sealed record HostedRoutingResult(HostedRoutingOutcome Outcome, NavigationRoute? Route = null,
-    IReadOnlyList<HostedRoutingProfile>? Choices = null);
+    IReadOnlyList<HostedRoutingProfile>? Choices = null, HostedRouteCandidate? Candidate = null);
+
+public sealed record HostedRouteCapabilityMetadata(string Provider, Guid ProviderConfigurationId,
+    string MappingIdentity, string StorageMode);
+
+public sealed record HostedRouteCandidate(NavigationRoute Route, HostedRouteRequestContext Context,
+    Guid SelectedProfileId, string SelectedProfileAuthorityIdentity, HostedRouteCapabilityMetadata Metadata);
 
 public sealed record HostedRouteRequestContext(Guid? SavedTransportProfileId, string? ModeKey, string? Category,
     HostedRouteCoordinate Origin, HostedRouteCoordinate Destination, IReadOnlyList<HostedRouteCoordinate> Anchors,
     string DestinationName, long Generation, string SessionAuthority, string NormalizedServer,
-    string TargetAssociation, string NavigationChoice, string? ExpectedCatalogIdentity = null)
+    string TargetAssociation, string NavigationChoice, string? ExpectedCatalogIdentity = null,
+    Guid? SelectedTransportProfileId = null, string? SelectedProfileAuthorityIdentity = null)
 {
     public static HostedRouteRequestContext ForTest(Guid profileId, string? expectedCatalogIdentity = null) => new(
         profileId, "walk", "active", new(23, 37), new(23.01, 37.01), [], "Target", 1,
         "session", "https://wayfarer.test", "place:test", "hosted", expectedCatalogIdentity);
-}
-
-public sealed record HostedRoutingState(long Generation, string SessionAuthority, string NormalizedServer,
-    Guid? SelectedProfileId, string? SelectedAuthorityIdentity, string TargetAssociation,
-    string NavigationChoice, IReadOnlyList<long> CanonicalCoordinates)
-{
-    public static HostedRoutingState ForTest(string? catalogIdentity = null,
-        string? selectedAuthorityIdentity = null) => new(1, "session", "https://wayfarer.test",
-            WalkingTestProfile, selectedAuthorityIdentity, "place:test", "hosted",
-            HostedRouteIdentity.Canonicalize([new(23, 37), new(23.01, 37.01)]));
-
-    private static readonly Guid WalkingTestProfile = Guid.Parse("11111111-1111-1111-1111-111111111111");
 }
 
 public static class HostedRouteIdentity
@@ -100,6 +102,64 @@ public static class HostedRouteIdentity
         if (!double.IsFinite(value) || value < -bound || value > bound) throw new ArgumentOutOfRangeException(nameof(value));
         if (value == 0) value = 0;
         return decimal.ToInt64(decimal.Round((decimal)value * 100000m, 0, MidpointRounding.AwayFromZero));
+    }
+}
+
+public static class HostedOpaqueIdentity
+{
+    public static bool IsValid(string? value)
+    {
+        if (value is not { Length: 46 } || !value.StartsWith("v1.", StringComparison.Ordinal)
+            || value.Any(character => character > 127)) return false;
+        var payload = value[3..];
+        if (payload.Any(character => !(char.IsAsciiLetterOrDigit(character) || character is '-' or '_')))
+            return false;
+        Span<byte> decoded = stackalloc byte[32];
+        if (!Convert.TryFromBase64String(payload.Replace('-', '+').Replace('_', '/') + "=", decoded, out var written)
+            || written != 32) return false;
+        var canonical = Convert.ToBase64String(decoded).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        return string.Equals(payload, canonical, StringComparison.Ordinal);
+    }
+}
+
+public static class HostedRoutePublication
+{
+    public static bool TryPublish(HostedRouteCandidate candidate, HostedRouteRequestContext live,
+        NavigationRoute target)
+    {
+        if (!Current(candidate, live)) return false;
+        Copy(candidate.Route, target);
+        return true;
+    }
+
+    public static bool Current(HostedRouteCandidate candidate, HostedRouteRequestContext live)
+    {
+        var expected = candidate.Context;
+        return live.Generation == expected.Generation
+            && live.SessionAuthority == expected.SessionAuthority
+            && live.NormalizedServer == expected.NormalizedServer
+            && live.TargetAssociation == expected.TargetAssociation
+            && live.NavigationChoice == expected.NavigationChoice
+            && live.NavigationChoice == "hosted"
+            && live.SavedTransportProfileId == expected.SavedTransportProfileId
+            && live.SelectedTransportProfileId == candidate.SelectedProfileId
+            && live.SelectedProfileAuthorityIdentity == candidate.SelectedProfileAuthorityIdentity
+            && HostedRouteIdentity.Canonicalize(Points(live)).SequenceEqual(HostedRouteIdentity.Canonicalize(Points(expected)));
+    }
+
+    private static IEnumerable<HostedRouteCoordinate> Points(HostedRouteRequestContext context) =>
+        new[] { context.Origin }.Concat(context.Anchors).Append(context.Destination);
+
+    private static void Copy(NavigationRoute source, NavigationRoute target)
+    {
+        target.Waypoints = source.Waypoints;
+        target.Steps = source.Steps;
+        target.DestinationName = source.DestinationName;
+        target.TotalDistanceMeters = source.TotalDistanceMeters;
+        target.EstimatedDuration = source.EstimatedDuration;
+        target.IsDirectRoute = false;
+        target.InitialBearing = 0;
+        target.Attribution = source.Attribution;
     }
 }
 

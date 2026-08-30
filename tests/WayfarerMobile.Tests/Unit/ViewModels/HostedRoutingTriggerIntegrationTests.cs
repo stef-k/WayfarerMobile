@@ -19,6 +19,7 @@ public sealed class HostedRoutingTriggerIntegrationTests
         method = method[..method.IndexOf("/// <summary>", StringComparison.Ordinal)];
 
         method.Should().Contain("TryHostedAsync");
+        method.Should().Contain("route?.IsDirectRoute == true");
     }
 
     private static string ReadSource(string fileName)

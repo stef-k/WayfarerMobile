@@ -98,6 +98,14 @@ The QR code for app configuration contains only:
 - Tokens are not included in crash reports
 - Tokens are cleared on logout
 
+### Hosted Routing Disclosure
+
+When a user requests hosted routing, Mobile sends the selected profile identity and the route's origin, destination,
+and approved ordered anchors to the configured Wayfarer backend. Wayfarer may disclose those coordinates to its
+selected routing provider. Provider credentials, provider endpoints, and native provider modes remain server-side.
+Mobile keeps the returned route and provider-neutral authority metadata only for the current session; #261 owns any
+future offline retention policy.
+
 ## Secure Storage
 
 ### MAUI SecureStorage

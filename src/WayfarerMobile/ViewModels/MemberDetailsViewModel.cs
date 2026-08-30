@@ -20,7 +20,7 @@ public partial class MemberDetailsViewModel : ObservableObject
     #region Fields
 
     private readonly IToastService _toastService;
-    private readonly ITripNavigationService _tripNavigationService;
+    private readonly NavigationCoordinatorViewModel _navigationCoordinator;
     private readonly ILogger<MemberDetailsViewModel> _logger;
     private IMemberDetailsCallbacks? _callbacks;
 
@@ -68,15 +68,15 @@ public partial class MemberDetailsViewModel : ObservableObject
     /// Creates a new instance of MemberDetailsViewModel.
     /// </summary>
     /// <param name="toastService">Toast notification service.</param>
-    /// <param name="tripNavigationService">Navigation service for routing.</param>
+    /// <param name="navigationCoordinator">Shared owner for Direct and hosted routing.</param>
     /// <param name="logger">Logger instance.</param>
     public MemberDetailsViewModel(
         IToastService toastService,
-        ITripNavigationService tripNavigationService,
+        NavigationCoordinatorViewModel navigationCoordinator,
         ILogger<MemberDetailsViewModel> logger)
     {
         _toastService = toastService;
-        _tripNavigationService = tripNavigationService;
+        _navigationCoordinator = navigationCoordinator;
         _logger = logger;
     }
 
@@ -328,13 +328,14 @@ public partial class MemberDetailsViewModel : ObservableObject
 
             _logger.LogInformation("Calculating Direct guidance to member using {Mode}", travelProfile);
 
-            var route = await _tripNavigationService.CalculateRouteToCoordinatesAsync(
+            var route = await _navigationCoordinator.CalculateHostedRouteToCoordinatesAsync(
                 currentLocation.Latitude,
                 currentLocation.Longitude,
                 destLat,
                 destLon,
                 destName,
-                travelProfile);
+                travelProfile,
+                $"group-member:{SelectedMember.UserId}");
 
             // Close bottom sheet before navigating
             IsMemberSheetOpen = false;

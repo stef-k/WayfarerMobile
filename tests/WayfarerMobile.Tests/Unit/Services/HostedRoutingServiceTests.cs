@@ -8,6 +8,8 @@ public sealed class HostedRoutingServiceTests
 {
     private static readonly Guid WalkingProfile = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid CyclingProfile = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    private const string IdentityA = "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    private const string IdentityB = "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ";
 
     [Theory]
     [InlineData(true, "unknown", "unknown", HostedProfileSelectionKind.Selected)]
@@ -33,7 +35,7 @@ public sealed class HostedRoutingServiceTests
     public void ConfirmChoice_AcceptsSameGuidAndRefreshesRenamedMetadata()
     {
         var original = Catalog(new HostedRoutingProfile(WalkingProfile, "Walking", "walk", "active"));
-        var renamed = new HostedRoutingCatalog("v1.catalog-b", "available",
+        var renamed = new HostedRoutingCatalog(IdentityB, "available",
             [new(WalkingProfile, "On foot", "walk", "active")]);
 
         HostedProfileSelector.Confirm(null, original).Should().BeNull();
@@ -62,49 +64,47 @@ public sealed class HostedRoutingServiceTests
         api.Setup(client => client.GetCapabilityAsync(
                 WalkingProfile, catalog.DiscoveryCatalogIdentity!, It.IsAny<CancellationToken>()))
             .ReturnsAsync(HostedRoutingCapability.Available(
-                WalkingProfile, catalog.DiscoveryCatalogIdentity!, "v1.selected-a", Attribution()));
+                WalkingProfile, catalog.DiscoveryCatalogIdentity!, IdentityA, Attribution()));
         api.Setup(client => client.GetRouteAsync(
                 It.Is<HostedRouteRequest>(request => request.TransportProfileId == WalkingProfile
-                    && request.SelectedProfileAuthorityIdentity == "v1.selected-a"),
+                    && request.SelectedProfileAuthorityIdentity == IdentityA),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(HostedRouteResponse.ValidForTest(WalkingProfile, "v1.selected-a"));
+            .ReturnsAsync(HostedRouteResponse.ValidForTest(WalkingProfile, IdentityA));
         var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
 
         var result = await service.RequestRouteAsync(HostedRouteRequestContext.ForTest(
             WalkingProfile, expectedCatalogIdentity: catalog.DiscoveryCatalogIdentity));
 
         result.Outcome.Should().Be(HostedRoutingOutcome.Success);
-        result.Route.Should().NotBeNull();
-        result.Route!.IsDirectRoute.Should().BeFalse();
-        result.Route.Attribution.Should().ContainSingle(item => item.Text == "Powered by Wayfarer test");
+        result.Candidate.Should().NotBeNull();
+        result.Candidate!.Route.IsDirectRoute.Should().BeFalse();
+        result.Candidate.Route.Attribution.Should().ContainSingle(item => item.Text == "Powered by Wayfarer test");
         api.VerifyAll();
     }
 
     [Fact]
     public async Task RequestRouteAsync_UnrelatedCatalogChangeAfterCapability_DoesNotInvalidateSelectedAuthority()
     {
-        var api = SuccessfulApi(WalkingProfile, "v1.catalog-a", "v1.selected-a");
-        var state = HostedRoutingState.ForTest(catalogIdentity: "v1.catalog-b", selectedAuthorityIdentity: "v1.selected-a");
-        var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance, state);
+        var api = SuccessfulApi(WalkingProfile, IdentityA, IdentityA);
+        var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
 
         var result = await service.RequestRouteAsync(HostedRouteRequestContext.ForTest(
-            WalkingProfile, expectedCatalogIdentity: "v1.catalog-a"));
+            WalkingProfile, expectedCatalogIdentity: IdentityA));
 
         result.Outcome.Should().Be(HostedRoutingOutcome.Success);
     }
 
     [Fact]
-    public async Task RequestRouteAsync_SelectedAuthorityChangeBeforePublication_DiscardsResponse()
+    public void Publication_SelectedAuthorityChangeBeforePublication_DiscardsCandidate()
     {
-        var api = SuccessfulApi(WalkingProfile, "v1.catalog-a", "v1.selected-a");
-        var state = HostedRoutingState.ForTest(selectedAuthorityIdentity: "v1.selected-b");
-        var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance, state);
+        var context = HostedRouteRequestContext.ForTest(WalkingProfile) with
+        { SelectedTransportProfileId = WalkingProfile, SelectedProfileAuthorityIdentity = IdentityA };
+        var candidate = new HostedRouteCandidate(new WayfarerMobile.Core.Models.NavigationRoute(),
+            context, WalkingProfile, IdentityA,
+            new("geoapify", CyclingProfile, "mapping", "persistent"));
+        var live = context with { SelectedProfileAuthorityIdentity = IdentityB };
 
-        var result = await service.RequestRouteAsync(HostedRouteRequestContext.ForTest(
-            WalkingProfile, expectedCatalogIdentity: "v1.catalog-a"));
-
-        result.Outcome.Should().Be(HostedRoutingOutcome.Stale);
-        result.Route.Should().BeNull();
+        HostedRoutePublication.Current(candidate, live).Should().BeFalse();
     }
 
     [Fact]
@@ -112,10 +112,10 @@ public sealed class HostedRoutingServiceTests
     {
         var aCompletion = new TaskCompletionSource<HostedRouteResponse>();
         var aStarted = new TaskCompletionSource();
-        var api = SuccessfulApi(WalkingProfile, "v1.catalog-a", "v1.selected-a");
+        var api = SuccessfulApi(WalkingProfile, IdentityA, IdentityA);
         api.SetupSequence(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(), It.IsAny<CancellationToken>()))
             .Returns(() => { aStarted.SetResult(); return aCompletion.Task; })
-            .ReturnsAsync(HostedRouteResponse.ValidForTest(WalkingProfile, "v1.selected-a"));
+            .ReturnsAsync(HostedRouteResponse.ValidForTest(WalkingProfile, IdentityA));
         var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
         var a = service.RequestRouteAsync(HostedRouteRequestContext.ForTest(WalkingProfile) with { Generation = 1 });
         await aStarted.Task;
@@ -123,7 +123,7 @@ public sealed class HostedRoutingServiceTests
 
         (await b).Outcome.Should().Be(HostedRoutingOutcome.Success);
         service.IsLoading.Should().BeFalse();
-        aCompletion.SetResult(HostedRouteResponse.ValidForTest(WalkingProfile, "v1.selected-a"));
+        aCompletion.SetResult(HostedRouteResponse.ValidForTest(WalkingProfile, IdentityA));
         (await a).Outcome.Should().Be(HostedRoutingOutcome.Stale);
         service.IsLoading.Should().BeFalse();
     }
@@ -133,7 +133,7 @@ public sealed class HostedRoutingServiceTests
     {
         var completion = new TaskCompletionSource<HostedRouteResponse>();
         var started = new TaskCompletionSource();
-        var api = SuccessfulApi(WalkingProfile, "v1.catalog-a", "v1.selected-a");
+        var api = SuccessfulApi(WalkingProfile, IdentityA, IdentityA);
         api.Setup(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(), It.IsAny<CancellationToken>()))
             .Returns(() => { started.SetResult(); return completion.Task; });
         var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
@@ -141,10 +141,62 @@ public sealed class HostedRoutingServiceTests
         await started.Task;
 
         service.SelectDirect(2);
-        completion.SetResult(HostedRouteResponse.ValidForTest(WalkingProfile, "v1.selected-a"));
+        completion.SetResult(HostedRouteResponse.ValidForTest(WalkingProfile, IdentityA));
 
         (await pending).Outcome.Should().Be(HostedRoutingOutcome.Stale);
         service.IsLoading.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task CapabilityAndRouteMetadata_MustMatchAndUnknownStorageRemainsTransientlyUsable()
+    {
+        var api = SuccessfulApi(WalkingProfile, IdentityA, IdentityA);
+        api.Setup(client => client.GetCapabilityAsync(WalkingProfile, IdentityA, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(HostedRoutingCapability.Available(WalkingProfile, IdentityA, IdentityA, Attribution(),
+                mappingIdentity: "mapping-v2", storageMode: "future-transient"));
+        api.Setup(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(HostedRouteResponse.ValidForTest(WalkingProfile, IdentityA) with
+            { MappingIdentity = "mapping-v2", StorageMode = "future-transient" });
+        var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
+
+        var result = await service.RequestRouteAsync(HostedRouteRequestContext.ForTest(WalkingProfile));
+
+        result.Outcome.Should().Be(HostedRoutingOutcome.Success);
+        result.Candidate!.Metadata.Should().Be(new HostedRouteCapabilityMetadata("geoapify",
+            Guid.Parse("22222222-2222-2222-2222-222222222222"), "mapping-v2", "future-transient"));
+    }
+
+    [Theory]
+    [InlineData("invalid-request")]
+    [InlineData("catalog-changed")]
+    public async Task TerminalCapabilityOutcome_MakesNoRouteContact(string outcome)
+    {
+        var api = SuccessfulApi(WalkingProfile, IdentityA, IdentityA);
+        api.Setup(client => client.GetCapabilityAsync(WalkingProfile, IdentityA, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HostedRoutingCapability(outcome, WalkingProfile, null, null, null, null,
+                null, outcome == "catalog-changed" ? null : IdentityA, null));
+        var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
+
+        await service.RequestRouteAsync(HostedRouteRequestContext.ForTest(WalkingProfile));
+
+        api.Verify(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("invalid-request")]
+    [InlineData("authority-changed")]
+    public async Task TerminalRouteOutcome_IsNotRetried(string outcome)
+    {
+        var api = SuccessfulApi(WalkingProfile, IdentityA, IdentityA);
+        api.Setup(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(HostedRouteResponse.ValidForTest(WalkingProfile, IdentityA) with
+            { Succeeded = false, Outcome = outcome });
+        var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
+
+        var result = await service.RequestRouteAsync(HostedRouteRequestContext.ForTest(WalkingProfile));
+
+        result.Outcome.Should().Be(HostedRoutingOutcome.InvalidResponse);
+        api.Verify(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]
@@ -168,6 +220,26 @@ public sealed class HostedRoutingServiceTests
     }
 
     [Fact]
+    public async Task HostedFailureLeavesDirectRouteUnchanged()
+    {
+        var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
+        api.Setup(client => client.DiscoverAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HostedRoutingCatalog(null, "routing-disabled", []));
+        var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
+        var direct = new WayfarerMobile.Core.Models.NavigationRoute
+        {
+            IsDirectRoute = true,
+            Waypoints = [new() { Longitude = 23, Latitude = 37 }, new() { Longitude = 23.01, Latitude = 37.01 }]
+        };
+
+        var result = await service.RequestRouteAsync(HostedRouteRequestContext.ForTest(WalkingProfile));
+
+        result.Candidate.Should().BeNull();
+        direct.IsDirectRoute.Should().BeTrue();
+        direct.Attribution.Should().BeEmpty();
+    }
+
+    [Fact]
     public void Canonicalize_UsesLongitudeLatitudeAwayFromZeroAndPreservesDuplicates()
     {
         var result = HostedRouteIdentity.Canonicalize([
@@ -185,7 +257,7 @@ public sealed class HostedRoutingServiceTests
     }
 
     private static HostedRoutingCatalog Catalog(params HostedRoutingProfile[] profiles) =>
-        new("v1.catalog-a", "available", profiles);
+        new(IdentityA, "available", profiles);
 
     private static Mock<IHostedRoutingApiClient> SuccessfulApi(Guid profileId, string catalogIdentity,
         string authorityIdentity)

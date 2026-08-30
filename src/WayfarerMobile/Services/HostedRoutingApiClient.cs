@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Globalization;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 
@@ -12,10 +12,7 @@ namespace WayfarerMobile.Services;
 public sealed class HostedRoutingApiClient : IHostedRoutingApiClient
 {
     private const int MaximumResponseBytes = 2 * 1024 * 1024;
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
-    };
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IHttpClientFactory httpClientFactory;
     private readonly ISettingsService settings;
 
@@ -40,9 +37,9 @@ public sealed class HostedRoutingApiClient : IHostedRoutingApiClient
         var endpoint = $"/api/mobile/routing/capability/{profileId:D}?discoveryCatalogIdentity={Uri.EscapeDataString(discoveryCatalogIdentity)}";
         using var response = await SendAsync(HttpMethod.Get, endpoint, null, cancellationToken);
         if (response.StatusCode == HttpStatusCode.NotFound)
-            return new("unavailable", profileId, null, null, null);
+            return new("unavailable", profileId, null, null, null, null, null, null, null);
         var value = await ParseAsync<CapabilityDto>(response, cancellationToken);
-        return value?.ToModel() ?? new("invalid-response", profileId, null, null, null);
+        return value?.ToModel() ?? new("invalid-response", profileId, null, null, null, null, null, null, null);
     }
 
     public async Task<HostedRouteResponse> GetRouteAsync(HostedRouteRequest request,
@@ -86,28 +83,36 @@ public sealed class HostedRoutingApiClient : IHostedRoutingApiClient
     }
 
     private static HostedRouteResponse Failure(string outcome) =>
-        new(false, outcome, null, null, null, null, null, null, null, null, null, null);
+        new(false, outcome, null, null, null, null, null, null, null, null, null, null, null, null, null);
 
-    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     private sealed record CapabilityDto(string Outcome, Guid TransportProfileId, string? Provider,
         Guid? ProviderConfigurationId, string? MappingIdentity, string? StorageMode,
         IReadOnlyList<HostedRouteAttribution>? Attribution, string? DiscoveryCatalogIdentity,
         string? SelectedProfileAuthorityIdentity)
     {
-        public HostedRoutingCapability ToModel() => new(Outcome, TransportProfileId, Attribution,
-            DiscoveryCatalogIdentity, SelectedProfileAuthorityIdentity);
+        public HostedRoutingCapability ToModel() => new(Outcome, TransportProfileId, Provider,
+            ProviderConfigurationId, MappingIdentity, StorageMode, Attribution, DiscoveryCatalogIdentity,
+            SelectedProfileAuthorityIdentity);
     }
 
-    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     private sealed record RouteResponseDto(bool Succeeded, string Outcome, IReadOnlyList<HostedRouteCoordinate>? Geometry,
         double? DistanceMetres, double? DurationSeconds, IReadOnlyList<HostedRouteInstruction>? Instructions,
-        DateTimeOffset? GeneratedAt, string? Provider, Guid? ProviderConfigurationId, string? MappingIdentity,
+        string? GeneratedAt, string? Provider, Guid? ProviderConfigurationId, string? MappingIdentity,
         Guid? TransportProfileId, IReadOnlyList<HostedRouteCoordinate>? MatchPoints,
         IReadOnlyList<HostedRouteAttribution>? Attribution, string? StorageMode,
         string? SelectedProfileAuthorityIdentity)
     {
         public HostedRouteResponse ToModel() => new(Succeeded, Outcome, Geometry, DistanceMetres, DurationSeconds,
-            Instructions, GeneratedAt, TransportProfileId, MatchPoints, Attribution, StorageMode,
+            Instructions, ParseGeneratedAt(GeneratedAt), Provider, ProviderConfigurationId, MappingIdentity,
+            TransportProfileId, MatchPoints, Attribution, StorageMode,
             SelectedProfileAuthorityIdentity);
+
+        private static DateTimeOffset? ParseGeneratedAt(string? value)
+        {
+            if (value == null || !(value.EndsWith('Z') || value.Length >= 6
+                    && (value[^6] is '+' or '-') && value[^3] == ':')) return null;
+            return DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind,
+                out var parsed) ? parsed.ToUniversalTime() : null;
+        }
     }
 }
