@@ -7,6 +7,7 @@ using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
+using WayfarerMobile.Services;
 using WayfarerMobile.Views.Controls;
 
 namespace WayfarerMobile.ViewModels;
@@ -20,7 +21,7 @@ public partial class MemberDetailsViewModel : ObservableObject
     #region Fields
 
     private readonly IToastService _toastService;
-    private readonly ITripNavigationService _tripNavigationService;
+    private readonly NavigationCoordinatorViewModel _navigationCoordinator;
     private readonly ILogger<MemberDetailsViewModel> _logger;
     private IMemberDetailsCallbacks? _callbacks;
 
@@ -68,15 +69,15 @@ public partial class MemberDetailsViewModel : ObservableObject
     /// Creates a new instance of MemberDetailsViewModel.
     /// </summary>
     /// <param name="toastService">Toast notification service.</param>
-    /// <param name="tripNavigationService">Navigation service for routing.</param>
+    /// <param name="navigationCoordinator">Shared owner for Direct and hosted routing.</param>
     /// <param name="logger">Logger instance.</param>
     public MemberDetailsViewModel(
         IToastService toastService,
-        ITripNavigationService tripNavigationService,
+        NavigationCoordinatorViewModel navigationCoordinator,
         ILogger<MemberDetailsViewModel> logger)
     {
         _toastService = toastService;
-        _tripNavigationService = tripNavigationService;
+        _navigationCoordinator = navigationCoordinator;
         _logger = logger;
     }
 
@@ -313,6 +314,7 @@ public partial class MemberDetailsViewModel : ObservableObject
 
         var travelProfile = navMethod switch
         {
+            NavigationMethod.Direct => "direct",
             NavigationMethod.Walk => "foot",
             NavigationMethod.Drive => "car",
             NavigationMethod.Bike => "bike",
@@ -324,16 +326,19 @@ public partial class MemberDetailsViewModel : ObservableObject
             var destLat = SelectedMember.LastLocation.Latitude;
             var destLon = SelectedMember.LastLocation.Longitude;
             var destName = SelectedMember.DisplayText ?? "Member";
+            var targetUserId = SelectedMember.UserId;
 
             _logger.LogInformation("Calculating Direct guidance to member using {Mode}", travelProfile);
 
-            var route = await _tripNavigationService.CalculateRouteToCoordinatesAsync(
+            var route = await _navigationCoordinator.CalculateHostedRouteToCoordinatesAsync(
                 currentLocation.Latitude,
                 currentLocation.Longitude,
                 destLat,
                 destLon,
                 destName,
-                travelProfile);
+                travelProfile,
+                $"group-member:{targetUserId}",
+                () => ResolveCurrentMemberLocation(targetUserId));
 
             // Close bottom sheet before navigating
             IsMemberSheetOpen = false;
@@ -347,11 +352,18 @@ public partial class MemberDetailsViewModel : ObservableObject
             _logger.LogInformation("Started navigation to {Member}: {Distance:F1}km",
                 destName, route.TotalDistanceMeters / 1000);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            _logger.LogError(ex, "Unexpected error starting navigation");
+            _logger.LogError("Member navigation failed: local-navigation-error");
             await _toastService.ShowErrorAsync("Failed to start navigation");
         }
+    }
+
+    private HostedRouteCoordinate? ResolveCurrentMemberLocation(string userId)
+    {
+        var location = _callbacks?.Members
+            .FirstOrDefault(member => member.UserId == userId)?.LastLocation;
+        return location == null ? null : new(location.Longitude, location.Latitude);
     }
 
     #endregion

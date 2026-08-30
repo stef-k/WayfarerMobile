@@ -2,6 +2,14 @@
 
 ## 1.2.0
 
+### 2026-08-30
+- **Feature: transient authenticated Wayfarer routing (#260)**
+  - Discovers and confirms server-owned routing profiles before requesting provider-neutral routes
+  - Keeps provider credentials server-side and never contacts a routing provider directly
+  - Preserves saved Segment geometry priority with Direct guidance for unavailable, rejected, cancelled, or stale work
+  - Retains safe server-returned attribution and hosted provenance only with the active route
+  - Keeps hosted routes and profile selections session-only; offline retention remains future work in #261
+
 ### 2026-06-20
 - **Feature: Search private trips (#228, PR #231)**
   - Added local, case-insensitive trip-name search to the My Trips tab

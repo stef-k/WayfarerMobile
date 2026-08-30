@@ -33,6 +33,11 @@ public interface ISettingsService
     string? ApiToken { get; set; }
 
     /// <summary>
+    /// Gets the non-secret in-memory revision of the effective authentication authority.
+    /// </summary>
+    long AuthenticationSessionRevision { get; }
+
+    /// <summary>
     /// Gets or sets the minimum time between logged locations (from server).
     /// </summary>
     int LocationTimeThresholdMinutes { get; set; }

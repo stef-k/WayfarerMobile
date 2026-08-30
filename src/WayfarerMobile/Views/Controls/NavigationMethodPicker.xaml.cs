@@ -7,6 +7,7 @@ namespace WayfarerMobile.Views.Controls;
 /// </summary>
 public enum NavigationMethod
 {
+    Direct,
     Walk,
     Drive,
     Bike,
@@ -23,6 +24,7 @@ public partial class NavigationMethodPicker : ContentView
 
     private static readonly List<string> NavigationMethods = new()
     {
+        "🧭  Direct",
         "🚶  Walk",
         "🚗  Drive",
         "🚴  Bike",
@@ -161,11 +163,12 @@ public partial class NavigationMethodPicker : ContentView
         var selectedIndex = _column.SelectedIndex;
         var method = selectedIndex switch
         {
-            0 => NavigationMethod.Walk,
-            1 => NavigationMethod.Drive,
-            2 => NavigationMethod.Bike,
-            3 => NavigationMethod.ExternalMaps,
-            _ => NavigationMethod.Walk
+            0 => NavigationMethod.Direct,
+            1 => NavigationMethod.Walk,
+            2 => NavigationMethod.Drive,
+            3 => NavigationMethod.Bike,
+            4 => NavigationMethod.ExternalMaps,
+            _ => NavigationMethod.Direct
         };
 
         NavPicker.IsOpen = false;

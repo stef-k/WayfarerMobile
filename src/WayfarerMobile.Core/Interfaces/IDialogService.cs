@@ -43,4 +43,7 @@ public interface IDialogService
     /// <param name="message">The error message.</param>
     /// <param name="retryAction">Optional retry action.</param>
     Task ShowErrorWithRetryAsync(string title, string message, Func<Task>? retryAction = null);
+
+    /// <summary>Shows a focused transient choice and returns null when dismissed.</summary>
+    Task<string?> SelectAsync(string title, IReadOnlyList<string> choices, string cancel = "Cancel");
 }

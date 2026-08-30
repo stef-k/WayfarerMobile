@@ -488,7 +488,8 @@ Manages the dropped pin marker for map long-press interactions. Stateless render
 
 **Source**: `src/WayfarerMobile/Services/TripNavigationService.cs`
 
-Provides navigation with route calculation and progress tracking. Mobile makes no direct routing-provider request.
+Provides navigation installation and progress tracking. A separate hosted-routing owner uses the authenticated
+Wayfarer server; Mobile never contacts a routing provider directly.
 
 ### Navigation Modes
 
@@ -497,13 +498,15 @@ Provides navigation with route calculation and progress tracking. Mobile makes n
 - Has access to user-defined segments and trip context
 - Route priority:
   1. Valid saved Segment geometry (trip-defined routes)
-  2. Direct Route (straight-line fallback)
+  2. A freshly requested, transient Wayfarer-hosted route
+  3. Direct Route (straight-line fallback)
 
 **Ad-Hoc Navigation** (`CalculateRouteToCoordinatesAsync`):
 - Used for groups, map locations, any coordinates
 - No trip context available
 - Route priority:
-  1. Direct Route
+  1. A freshly requested, transient Wayfarer-hosted route
+  2. Direct Route
 
 ```csharp
 // Trip navigation - uses full route priority chain
@@ -548,7 +551,28 @@ public NavigationRoute? CalculateRouteToPlace(
 }
 ```
 
-Direct guidance is not road-aware or hosted turn-by-turn routing. Authenticated Wayfarer-hosted routing remains future work.
+Hosted routes are authenticated, provider-neutral, session-only results. Provider credentials and provider selection
+remain on Wayfarer. The active route retains linked attribution plus safe transient provenance: selected transport
+profile and authority identities, provider and provider-configuration identities, mapping identity, storage mode, and
+the normalized backend generation timestamp. It contains no bearer token, credentials, or provider endpoint and
+clears through normal replacement or stop. Old servers, disabled routing, rejected requests, cancellation,
+malformed/stale responses, and provider
+unavailability remain routing-local and retain Direct guidance without affecting authentication or synchronization.
+Valid saved Segment geometry is never replaced automatically. Mobile does not persist generated geometry, selection,
+attribution, or authority identities; offline retention of hosted routes belongs to #261.
+
+Chooser entries are scoped to the exact discovery catalog displayed. Mobile submits that catalog identity with the
+chosen profile; a `catalog-changed` capability response makes no route request, rediscovers once, and requires a
+fresh choice from the refreshed labels or retains Direct when dismissed. Once capability succeeds, unrelated later
+catalog changes do not invalidate the confirmed route.
+
+`TransportProfileId` is the Segment's current planning profile identity. Current hosted selection state remains
+separate from the immutable provenance retained on a successfully published route; neither rewrites the Segment nor
+becomes a durable current-profile setting. The settings owner advances a non-secret, memory-only authentication
+session revision whenever the effective server or token authority changes, including logout/reset, so routing never
+copies or compares the token. At actual publication the coordinator rereads live location, exact Trip Place/Segment
+profile/ordered anchors by stable IDs, or the current member location from its owner. That state is compared beside
+the synchronous route/provenance copy.
 
 ### Navigation State
 

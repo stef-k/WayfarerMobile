@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
@@ -80,6 +82,21 @@ public sealed class TripNavigationRoutingRemovalTests
         afterStop.Status.Should().Be(NavigationStatus.NoRoute);
         publishedStates.Should().HaveCount(stateCountAtStop);
         announcements.Should().HaveCount(announcementCountAtStop);
+    }
+
+    [Fact]
+    public async Task HostedProvenance_ClearsThroughNormalReplacementAndStop()
+    {
+        var navigation = CreateNavigation();
+        var first = await navigation.CalculateRouteToCoordinatesAsync(0, 0, 0.001, 0, "Hosted");
+        first.HostedProvenance = Provenance();
+
+        var replacement = await navigation.CalculateRouteToCoordinatesAsync(0, 0, 0, 0.001, "Direct");
+
+        navigation.ActiveRoute.Should().BeSameAs(replacement);
+        replacement.HostedProvenance.Should().BeNull();
+        navigation.StopNavigation();
+        navigation.ActiveRoute.Should().BeNull();
     }
 
     [Fact]
@@ -205,6 +222,47 @@ public sealed class TripNavigationRoutingRemovalTests
         route!.IsDirectRoute.Should().BeTrue();
     }
 
+    [Fact]
+    public void NextPlace_CoLocatedPlacesResolveExactSelectedPlaceSegmentAndAnchors()
+    {
+        var origin = Place("Origin", 0, 0, 0);
+        var selected = Place("Selected", 0.01, 0.01, 1);
+        var colocated = Place("Co-located", 0.01, 0.01, 2);
+        var selectedAnchor = Place("Selected anchor", 0.005, 0.006, 10);
+        var otherAnchor = Place("Other anchor", 0.007, 0.008, 11);
+        var selectedProfile = Guid.NewGuid();
+        var selectedSegment = Segment(origin.Id, selected.Id, selectedAnchor.Id, selectedProfile);
+        var otherSegment = Segment(origin.Id, colocated.Id, otherAnchor.Id, Guid.NewGuid());
+        var trip = new TripDetails
+        {
+            Id = Guid.NewGuid(),
+            Name = "Co-located targets",
+            Regions = [new TripRegion
+            {
+                Id = Guid.NewGuid(), Name = "Region",
+                Places = [origin, selected, colocated, selectedAnchor, otherAnchor]
+            }],
+            Segments = [selectedSegment, otherSegment]
+        };
+        var state = new Mock<ITripStateManager>();
+        state.SetupGet(service => service.LoadedTrip).Returns(trip);
+        var navigation = CreateNavigation(state.Object);
+        navigation.LoadTrip(trip).Should().BeTrue();
+
+        var route = navigation.CalculateRouteToNextPlace(origin.Latitude, origin.Longitude);
+        var destinationId = Guid.Parse(route!.Waypoints[^1].PlaceId!);
+        var authority = HostedTripTargetAuthority.Resolve(
+            trip, destinationId, origin.Latitude, origin.Longitude);
+
+        destinationId.Should().Be(selected.Id);
+        authority.Should().NotBeNull();
+        authority!.DestinationPlaceId.Should().Be(selected.Id);
+        authority.SegmentId.Should().Be(selectedSegment.Id);
+        authority.SavedTransportProfileId.Should().Be(selectedProfile);
+        authority.Anchors.Should().Equal(new HostedRouteCoordinate(
+            selectedAnchor.Longitude, selectedAnchor.Latitude));
+    }
+
     private static TripNavigationService CreateNavigation(
         ITripStateManager? state = null,
         INavigationAudioService? audio = null) =>
@@ -248,4 +306,28 @@ public sealed class TripNavigationRoutingRemovalTests
 
         return (trip, origin, destination);
     }
+
+    private static CoreTripPlace Place(string name, double latitude, double longitude, int sortOrder) => new()
+    {
+        Id = Guid.NewGuid(), Name = name, Latitude = latitude, Longitude = longitude, SortOrder = sortOrder
+    };
+
+    private static CoreTripSegment Segment(Guid originId, Guid destinationId, Guid anchorId, Guid profileId)
+    {
+        var resolver = new DefaultJsonTypeInfoResolver();
+        resolver.Modifiers.Add(HostedSegmentProfileIdentity.Configure);
+        var segment = JsonSerializer.Deserialize<CoreTripSegment>(
+            $$"""{"id":"{{Guid.NewGuid()}}","fromPlaceId":"{{originId}}","toPlaceId":"{{destinationId}}","mode":"walking","transportProfileId":"{{profileId}}","waypoints":[{"placeId":"{{anchorId}}","position":0}]}""",
+            new JsonSerializerOptions { TypeInfoResolver = resolver });
+        return segment!;
+    }
+
+    private static HostedRouteProvenance Provenance() => new(
+        Guid.NewGuid(),
+        "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "geoapify",
+        Guid.NewGuid(),
+        "mapping",
+        "persistent",
+        DateTimeOffset.UtcNow);
 }

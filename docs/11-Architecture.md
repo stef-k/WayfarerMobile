@@ -428,9 +428,15 @@ services.AddHttpClient("WayfarerApi", client =>
 The `TripNavigationService` calculates routes with the following priority:
 
 1. **Saved Segment geometry**: Trip-defined geometry (always preferred when valid)
-2. **Direct guidance**: Straight line with bearing and distance
+2. **Authenticated Wayfarer route**: Fresh provider-neutral, session-only geometry
+3. **Direct guidance**: Straight line with bearing and distance
 
-Mobile does not contact a public routing provider. Authenticated Wayfarer-hosted routing is future work and is not part of the current architecture.
+Mobile contacts only its configured Wayfarer server. Routing identity uses a non-secret, process-local authentication
+session revision rather than the bearer token. In the final synchronous UI callback, the coordinator rebuilds current
+authority from the settings owner, live device location, current Trip Place/Segment data or member owner, and the
+hosted selection owner. It compares generation, normalized server, target and Segment identity, profile/authority,
+choice, and canonical origin/anchors/destination immediately before installation, with no await or dispatch gap.
+Provider credentials and provider-specific endpoints remain server-side.
 
 ### Navigation Graph
 

@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using Microsoft.Extensions.Logging;
 using Polly;
 using Polly.Retry;
@@ -32,15 +33,22 @@ public class ApiClient : IApiClient, IVisitApiClient
     /// </summary>
     private readonly CircuitBreakerState _circuitBreaker = new(threshold: 3, cooldown: TimeSpan.FromSeconds(30));
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
+
+    private static JsonSerializerOptions CreateJsonOptions()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        // Use relaxed encoding to prevent HTML characters (<, >) from being escaped to \u003C, \u003E
-        // This is needed for notes HTML content to be stored correctly on the server
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-        Converters = { new UtcDateTimeConverter() }
-    };
+        var resolver = new DefaultJsonTypeInfoResolver();
+        resolver.Modifiers.Add(HostedSegmentProfileIdentity.Configure);
+        var options = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            PropertyNameCaseInsensitive = true,
+            TypeInfoResolver = resolver,
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        };
+        options.Converters.Add(new UtcDateTimeConverter());
+        return options;
+    }
 
     /// <summary>
     /// HTTP status codes that are considered transient and should be retried.

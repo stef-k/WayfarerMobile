@@ -17,8 +17,29 @@ public class MockSettingsService : ISettingsService
     public bool IsFirstRun { get; set; } = false;
     public bool TimelineTrackingEnabled { get; set; } = false;
     public bool BackgroundTrackingEnabled { get; set; } = false;
-    public string? ServerUrl { get; set; } = "https://test.example.com";
-    public string? ApiToken { get; set; } = "test-token";
+    private string? _serverUrl = "https://test.example.com";
+    private string? _apiToken = "test-token";
+    public string? ServerUrl
+    {
+        get => _serverUrl;
+        set
+        {
+            if (string.Equals(_serverUrl, value, StringComparison.Ordinal)) return;
+            _serverUrl = value;
+            AuthenticationSessionRevision++;
+        }
+    }
+    public string? ApiToken
+    {
+        get => _apiToken;
+        set
+        {
+            if (string.Equals(_apiToken, value, StringComparison.Ordinal)) return;
+            _apiToken = value;
+            AuthenticationSessionRevision++;
+        }
+    }
+    public long AuthenticationSessionRevision { get; private set; }
     public int LocationTimeThresholdMinutes { get; set; } = 5;
     public int LocationDistanceThresholdMeters { get; set; } = 100;
     public int LocationAccuracyThresholdMeters { get; set; } = 50;
