@@ -22,8 +22,18 @@ public sealed class RetainedWayfarerRouteMigrationTests
                 "CREATE TABLE Sentinel (Id INTEGER PRIMARY KEY, Value TEXT NOT NULL)");
             await connection.ExecuteAsync("INSERT INTO Sentinel (Id, Value) VALUES (1, 'preserve-me')");
 
-            await RetainedWayfarerRouteMigration.ApplyAsync(connection, CancellationToken.None);
-            await RetainedWayfarerRouteMigration.ApplyAsync(connection, CancellationToken.None);
+            async Task InitializeAsync()
+            {
+                var installedVersion = int.Parse(await connection.ExecuteScalarAsync<string>(
+                    "SELECT Value FROM AppSettings WHERE Key = 'db_schema_version'"));
+                await RetainedWayfarerRouteMigration.ApplyApplicationUpgradeAsync(connection,
+                    installedVersion, version => connection.ExecuteAsync(
+                        "UPDATE AppSettings SET Value = ? WHERE Key = 'db_schema_version'",
+                        version.ToString()), CancellationToken.None);
+            }
+
+            await InitializeAsync();
+            await InitializeAsync();
 
             (await connection.ExecuteScalarAsync<int>(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'RetainedWayfarerRoutes'"))
@@ -36,7 +46,7 @@ public sealed class RetainedWayfarerRouteMigrationTests
                 .Should().Be("preserve-me");
             (await connection.ExecuteScalarAsync<string>(
                 "SELECT Value FROM AppSettings WHERE Key = 'db_schema_version'"))
-                .Should().Be("9", "DatabaseService retains schema-version ownership");
+                .Should().Be("10", "the application schema owner records the completed migration");
             await connection.CloseAsync();
         }
         finally

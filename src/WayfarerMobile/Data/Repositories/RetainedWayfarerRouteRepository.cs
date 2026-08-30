@@ -14,8 +14,16 @@ public sealed class RetainedWayfarerRouteRepository
 {
     public const int MaximumRoutes = 200;
     private static readonly TimeSpan MaximumFutureSkew = TimeSpan.FromMinutes(5);
+    private const int MaximumServerLength = 2048;
+    private const int MaximumAnchorsJsonLength = 200;
+    private const int MaximumGeometryJsonLength = 1_000_000;
+    private const int MaximumInstructionsJsonLength = 600_000;
+    private const int MaximumAttributionJsonLength = 10_000;
+    private static readonly long MinimumUnixMilliseconds = DateTimeOffset.MinValue.ToUnixTimeMilliseconds();
+    private static readonly long MaximumUnixMilliseconds = DateTimeOffset.MaxValue.ToUnixTimeMilliseconds();
     private readonly Func<Task<SQLiteAsyncConnection>> connectionFactory;
     private readonly SemaphoreSlim mutationGate = new(1, 1);
+    private long clearEpoch;
 
     public RetainedWayfarerRouteRepository(SQLiteAsyncConnection connection)
         : this(() => Task.FromResult(connection)) { }
@@ -29,6 +37,7 @@ public sealed class RetainedWayfarerRouteRepository
         Guid accountPartition, DateTimeOffset receiptTimeUtc, Func<bool> isCurrent,
         CancellationToken cancellationToken = default)
     {
+        var operationEpoch = Volatile.Read(ref clearEpoch);
         if (!TryPrepare(candidate, accountPartition, receiptTimeUtc, out var prepared))
             return RetainedRouteSaveResult.Rejected;
 
@@ -39,7 +48,8 @@ public sealed class RetainedWayfarerRouteRepository
         await mutationGate.WaitAsync(cancellationToken);
         try
         {
-            if (!isCurrent()) return RetainedRouteSaveResult.Superseded;
+            if (operationEpoch != Volatile.Read(ref clearEpoch) || !isCurrent())
+                return RetainedRouteSaveResult.Superseded;
             cancellationToken.ThrowIfCancellationRequested();
             await database.RunInTransactionAsync(connection => SaveTransaction(
                 connection, prepared!, cancellationToken));
@@ -63,12 +73,13 @@ public sealed class RetainedWayfarerRouteRepository
         Guid accountPartition, DateTimeOffset selectionTimeUtc, Func<bool> isCurrent,
         CancellationToken cancellationToken = default)
     {
+        var operationEpoch = Volatile.Read(ref clearEpoch);
         if (!TryCreateLookup(context, accountPartition, out var lookup)) return null;
         var database = await connectionFactory();
         await mutationGate.WaitAsync(cancellationToken);
         try
         {
-            if (!isCurrent()) return null;
+            if (operationEpoch != Volatile.Read(ref clearEpoch) || !isCurrent()) return null;
             cancellationToken.ThrowIfCancellationRequested();
             RetainedRouteSelection? result = null;
             await database.RunInTransactionAsync(connection =>
@@ -97,6 +108,7 @@ public sealed class RetainedWayfarerRouteRepository
                 cancellationToken.ThrowIfCancellationRequested();
                 connection.DeleteAll<RetainedWayfarerRouteEntity>();
             });
+            Interlocked.Increment(ref clearEpoch);
         }
         finally
         {
@@ -108,6 +120,7 @@ public sealed class RetainedWayfarerRouteRepository
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        RemoveInvalidTimestampRows(connection);
         var existing = FindExisting(connection, prepared.Entity);
         prepared.Entity.Id = existing?.Id ?? 0;
         if (existing == null) connection.Insert(prepared.Entity);
@@ -138,13 +151,42 @@ public sealed class RetainedWayfarerRouteRepository
             "SELECT COUNT(*) FROM RetainedWayfarerRoutes") - MaximumRoutes);
         if (excess > 0)
         {
+            var futureCutoff = prepared.Entity.StoredAtUnixMilliseconds
+                + (long)MaximumFutureSkew.TotalMilliseconds;
             connection.Execute(@"
                 DELETE FROM RetainedWayfarerRoutes WHERE Id IN (
                     SELECT Id FROM RetainedWayfarerRoutes
-                    ORDER BY LastUsedAtUnixMilliseconds, StoredAtUnixMilliseconds, Id
-                    LIMIT ?)", excess);
+                    ORDER BY CASE WHEN
+                        StoredAtUnixMilliseconds < -62135596800000
+                        OR StoredAtUnixMilliseconds > 253402300799999
+                        OR LastUsedAtUnixMilliseconds < -62135596800000
+                        OR LastUsedAtUnixMilliseconds > 253402300799999
+                        OR GeneratedAtUnixMilliseconds < -62135596800000
+                        OR GeneratedAtUnixMilliseconds > 253402300799999
+                        OR LastUsedAtUnixMilliseconds < StoredAtUnixMilliseconds
+                        OR StoredAtUnixMilliseconds > ? OR LastUsedAtUnixMilliseconds > ?
+                        OR GeneratedAtUnixMilliseconds > StoredAtUnixMilliseconds + ?
+                        THEN 0 ELSE 1 END,
+                        LastUsedAtUnixMilliseconds, StoredAtUnixMilliseconds, Id
+                    LIMIT ?)", futureCutoff, futureCutoff,
+                (long)MaximumFutureSkew.TotalMilliseconds, excess);
         }
         cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    private static void RemoveInvalidTimestampRows(SQLiteConnection connection)
+    {
+        connection.Execute(@"
+            DELETE FROM RetainedWayfarerRoutes WHERE
+                StoredAtUnixMilliseconds < -62135596800000
+                OR StoredAtUnixMilliseconds > 253402300799999
+                OR LastUsedAtUnixMilliseconds < -62135596800000
+                OR LastUsedAtUnixMilliseconds > 253402300799999
+                OR GeneratedAtUnixMilliseconds < -62135596800000
+                OR GeneratedAtUnixMilliseconds > 253402300799999
+                OR LastUsedAtUnixMilliseconds < StoredAtUnixMilliseconds
+                OR GeneratedAtUnixMilliseconds > StoredAtUnixMilliseconds + ?",
+            (long)MaximumFutureSkew.TotalMilliseconds);
     }
 
     private static RetainedWayfarerRouteEntity? FindExisting(SQLiteConnection connection,
@@ -163,19 +205,21 @@ public sealed class RetainedWayfarerRouteRepository
         string destinationName, DateTimeOffset selectionTimeUtc, CancellationToken cancellationToken)
     {
         var rows = QueryRows(connection, lookup);
-        if (lookup.TransportProfileId == null
-            && rows.Select(row => row.TransportProfileId).Distinct(StringComparer.Ordinal).Take(2).Count() != 1)
-            return null;
-
+        var valid = new List<(RetainedWayfarerRouteEntity Row, NavigationRoute Route)>();
         foreach (var row in rows)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!TryBuildRoute(row, destinationName, selectionTimeUtc, out var route)) continue;
-            connection.Execute("UPDATE RetainedWayfarerRoutes SET LastUsedAtUnixMilliseconds = ? WHERE Id = ?",
-                selectionTimeUtc.ToUnixTimeMilliseconds(), row.Id);
-            return new(route!, row.Id);
+            valid.Add((row, route!));
         }
-        return null;
+        if (lookup.TransportProfileId == null
+            && valid.Select(item => item.Row.TransportProfileId).Distinct(StringComparer.Ordinal).Take(2).Count() != 1)
+            return null;
+        if (valid.Count == 0) return null;
+        var selected = valid[0];
+        connection.Execute("UPDATE RetainedWayfarerRoutes SET LastUsedAtUnixMilliseconds = ? WHERE Id = ?",
+            selectionTimeUtc.ToUnixTimeMilliseconds(), selected.Row.Id);
+        return new(selected.Route, selected.Row.Id);
     }
 
     private static List<RetainedWayfarerRouteEntity> QueryRows(SQLiteConnection connection, Lookup lookup)
@@ -209,6 +253,7 @@ public sealed class RetainedWayfarerRouteRepository
             || !HostedOpaqueIdentity.IsValid(candidate.SelectedProfileAuthorityIdentity)
             || !Bounded(candidate.Metadata.Provider, 100) || !Bounded(candidate.Metadata.MappingIdentity, 200)
             || !Bounded(candidate.Context.ModeKey, 100) || !Bounded(candidate.Context.Category, 100)
+            || !Bounded(candidate.Context.NormalizedServer, MaximumServerLength)
             || HostedRouteServerIdentity.Normalize(candidate.Context.NormalizedServer) != candidate.Context.NormalizedServer)
             return false;
         var receipt = RequireUtc(receiptTimeUtc);
@@ -250,7 +295,7 @@ public sealed class RetainedWayfarerRouteRepository
         var route = candidate.Route;
         if (route.Waypoints.Count is < 2 or > 10000 || route.Steps.Count > 1000
             || !FiniteNonNegative(route.TotalDistanceMeters)
-            || !FiniteNonNegative(route.EstimatedDuration.TotalSeconds)
+            || !ValidDuration(route.EstimatedDuration.TotalSeconds)
             || route.Waypoints.Any(point => !ValidCoordinate(point.Longitude, point.Latitude))
             || route.Steps.Any(step => !ValidStep(step, route.Waypoints.Count))
             || route.Attribution.Count is < 1 or > 10 || route.Attribution.Any(item => !ValidAttribution(item)))
@@ -261,8 +306,9 @@ public sealed class RetainedWayfarerRouteRepository
             step.DistanceMeters, step.DurationSeconds)).ToArray();
         serialized = new(JsonSerializer.Serialize(geometry), JsonSerializer.Serialize(instructions),
             JsonSerializer.Serialize(route.Attribution));
-        return serialized.Geometry.Length <= 1_000_000 && serialized.Instructions.Length <= 600_000
-            && serialized.Attribution.Length <= 10_000;
+        return serialized.Geometry.Length <= MaximumGeometryJsonLength
+            && serialized.Instructions.Length <= MaximumInstructionsJsonLength
+            && serialized.Attribution.Length <= MaximumAttributionJsonLength;
     }
 
     private static bool TryCreateLookup(HostedRouteRequestContext context, Guid partition, out Lookup? lookup)
@@ -270,6 +316,7 @@ public sealed class RetainedWayfarerRouteRepository
         lookup = null;
         var server = HostedRouteServerIdentity.Normalize(context.NormalizedServer);
         if (partition == Guid.Empty || server != context.NormalizedServer
+            || !Bounded(server, MaximumServerLength)
             || !Bounded(context.ModeKey, 100) || !Bounded(context.Category, 100)) return false;
         try
         {
@@ -287,19 +334,17 @@ public sealed class RetainedWayfarerRouteRepository
         route = null;
         try
         {
+            if (!TryValidateInstalledRow(row, selectionTimeUtc, out var profileId,
+                out var configurationId, out var generated)) return false;
             var geometry = JsonSerializer.Deserialize<StoredCoordinate[]>(row.GeometryJson);
             var instructions = JsonSerializer.Deserialize<StoredInstruction[]>(row.InstructionsJson);
             var attribution = JsonSerializer.Deserialize<HostedRouteAttribution[]>(row.AttributionJson);
             if (geometry is not { Length: >= 2 and <= 10000 } || instructions is not { Length: <= 1000 }
                 || attribution is not { Length: >= 1 and <= 10 }
-                || geometry.Any(point => !ValidCoordinate(point.Longitude, point.Latitude))
-                || instructions.Any(step => !ValidStoredStep(step, geometry.Length))
+                || geometry.Any(point => point == null || !ValidCoordinate(point.Longitude, point.Latitude))
+                || instructions.Any(step => step == null || !ValidStoredStep(step, geometry.Length))
                 || attribution.Any(item => !ValidAttribution(item))
-                || !FiniteNonNegative(row.DistanceMetres) || !FiniteNonNegative(row.DurationSeconds)
-                || row.StorageAuthority != "persistent" || !Guid.TryParse(row.TransportProfileId, out var profileId)
-                || !Guid.TryParse(row.ProviderConfigurationId, out var configurationId)
-                || !HostedOpaqueIdentity.IsValid(row.SelectedProfileAuthorityIdentity)) return false;
-            var generated = DateTimeOffset.FromUnixTimeMilliseconds(row.GeneratedAtUnixMilliseconds);
+                || !FiniteNonNegative(row.DistanceMetres) || !ValidDuration(row.DurationSeconds)) return false;
             var age = selectionTimeUtc <= generated ? TimeSpan.Zero : selectionTimeUtc - generated;
             route = new NavigationRoute
             {
@@ -324,10 +369,64 @@ public sealed class RetainedWayfarerRouteRepository
             };
             return true;
         }
-        catch (Exception exception) when (exception is JsonException or ArgumentOutOfRangeException)
+        catch (Exception exception) when (exception is JsonException or ArgumentOutOfRangeException or OverflowException)
         {
             return false;
         }
+    }
+
+    private static bool TryValidateInstalledRow(RetainedWayfarerRouteEntity row,
+        DateTimeOffset selectionTimeUtc, out Guid profileId, out Guid configurationId,
+        out DateTimeOffset generated)
+    {
+        profileId = Guid.Empty;
+        configurationId = Guid.Empty;
+        generated = default;
+        if (!CanonicalGuid(row.AccountPartition, out _)
+            || !Bounded(row.NormalizedServer, MaximumServerLength)
+            || HostedRouteServerIdentity.Normalize(row.NormalizedServer) != row.NormalizedServer
+            || !Bounded(row.Provider, 100) || !CanonicalGuid(row.ProviderConfigurationId, out configurationId)
+            || !Bounded(row.MappingIdentity, 200) || !CanonicalGuid(row.TransportProfileId, out profileId)
+            || !HostedOpaqueIdentity.IsValid(row.SelectedProfileAuthorityIdentity)
+            || !Bounded(row.ModeKey, 100) || !Bounded(row.Category, 100)
+            || row.StorageAuthority != "persistent" || !row.IsCurrentAuthority
+            || !ValidCanonicalCoordinate(row.OriginLongitude, row.OriginLatitude)
+            || !ValidCanonicalCoordinate(row.DestinationLongitude, row.DestinationLatitude)
+            || !Bounded(row.AnchorsKey, MaximumAnchorsJsonLength)
+            || !Bounded(row.GeometryJson, MaximumGeometryJsonLength)
+            || !Bounded(row.InstructionsJson, MaximumInstructionsJsonLength)
+            || !Bounded(row.AttributionJson, MaximumAttributionJsonLength)
+            || !TryReadTimestamp(row.StoredAtUnixMilliseconds, out var stored)
+            || !TryReadTimestamp(row.LastUsedAtUnixMilliseconds, out var lastUsed)
+            || !TryReadTimestamp(row.GeneratedAtUnixMilliseconds, out generated)
+            || lastUsed < stored || MoreThanFutureSkew(generated, stored)
+            || MoreThanFutureSkew(generated, selectionTimeUtc.ToUniversalTime())
+            || !ValidAnchorsKey(row.AnchorsKey)) return false;
+        return true;
+    }
+
+    private static bool CanonicalGuid(string? value, out Guid parsed) =>
+        Guid.TryParseExact(value, "D", out parsed) && parsed != Guid.Empty
+        && parsed.ToString("D") == value;
+
+    private static bool TryReadTimestamp(long value, out DateTimeOffset timestamp)
+    {
+        timestamp = default;
+        if (value < MinimumUnixMilliseconds || value > MaximumUnixMilliseconds) return false;
+        timestamp = DateTimeOffset.FromUnixTimeMilliseconds(value);
+        return true;
+    }
+
+    private static bool MoreThanFutureSkew(DateTimeOffset value, DateTimeOffset reference) =>
+        value > reference && value - reference > MaximumFutureSkew;
+
+    private static bool ValidAnchorsKey(string value)
+    {
+        var anchors = JsonSerializer.Deserialize<int[]>(value);
+        return anchors is { Length: <= 6 } && anchors.Length % 2 == 0
+            && anchors.Where((_, index) => index % 2 == 0).All(item => item is >= -18_000_000 and <= 18_000_000)
+            && anchors.Where((_, index) => index % 2 == 1).All(item => item is >= -9_000_000 and <= 9_000_000)
+            && JsonSerializer.Serialize(anchors) == value;
     }
 
     private static IEnumerable<HostedRouteCoordinate> RequestPoints(HostedRouteRequestContext context) =>
@@ -337,18 +436,22 @@ public sealed class RetainedWayfarerRouteRepository
     private static DateTimeOffset RequireUtc(DateTimeOffset value) => value.ToUniversalTime();
     private static bool ValidCoordinate(double longitude, double latitude) => double.IsFinite(longitude)
         && double.IsFinite(latitude) && longitude is >= -180 and <= 180 && latitude is >= -90 and <= 90;
+    private static bool ValidCanonicalCoordinate(int longitude, int latitude) =>
+        longitude is >= -18_000_000 and <= 18_000_000 && latitude is >= -9_000_000 and <= 9_000_000;
     private static bool FiniteNonNegative(double value) => double.IsFinite(value) && value >= 0;
+    private static bool ValidDuration(double value) => FiniteNonNegative(value)
+        && value <= TimeSpan.MaxValue.TotalSeconds;
     private static bool ValidStep(NavigationStep value, int geometryCount) => Bounded(value.Instruction, 500)
         && Bounded(value.ManeuverType, 100) && value.GeometryFromIndex >= 0
         && value.GeometryToIndex >= value.GeometryFromIndex && value.GeometryToIndex < geometryCount
-        && FiniteNonNegative(value.DistanceMeters) && FiniteNonNegative(value.DurationSeconds);
+        && FiniteNonNegative(value.DistanceMeters) && ValidDuration(value.DurationSeconds);
     private static bool ValidStoredStep(StoredInstruction value, int geometryCount) => Bounded(value.Text, 500)
         && Bounded(value.Type, 100) && value.FromIndex >= 0 && value.ToIndex >= value.FromIndex
         && value.ToIndex < geometryCount && FiniteNonNegative(value.DistanceMetres)
-        && FiniteNonNegative(value.DurationSeconds);
-    private static bool ValidAttribution(HostedRouteAttribution value) => Bounded(value.Text, 200)
+        && ValidDuration(value.DurationSeconds);
+    private static bool ValidAttribution(HostedRouteAttribution? value) => value is not null && Bounded(value.Text, 200)
         && Bounded(value.Url, 500) && Uri.TryCreate(value.Url, UriKind.Absolute, out var uri)
-        && uri.Scheme == Uri.UriSchemeHttps;
+        && uri.Scheme == Uri.UriSchemeHttps && string.IsNullOrEmpty(uri.UserInfo);
     private static bool Bounded(string? value, int maximum) => value is { Length: > 0 } && value.Length <= maximum;
 
     private sealed record PreparedRoute(RetainedWayfarerRouteEntity Entity);

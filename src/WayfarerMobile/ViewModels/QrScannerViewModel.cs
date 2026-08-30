@@ -100,7 +100,9 @@ public partial class QrScannerViewModel : BaseViewModel
             }
 
             // Validate URL - HTTPS only for security
-            if (!Uri.TryCreate(config.ServerUrl, UriKind.Absolute, out var serverUri))
+            var normalizedServer = HostedRouteServerIdentity.Normalize(config.ServerUrl);
+            if (normalizedServer.Length == 0
+                || !Uri.TryCreate(normalizedServer, UriKind.Absolute, out var serverUri))
             {
                 ShowError("Invalid server URL format.");
                 return;
@@ -115,7 +117,7 @@ public partial class QrScannerViewModel : BaseViewModel
             StatusMessage = "Testing connection...";
 
             // Test the connection
-            var connectionValid = await TestConnectionAsync(config.ServerUrl, config.ApiToken);
+            var connectionValid = await TestConnectionAsync(normalizedServer, config.ApiToken);
             if (!connectionValid)
             {
                 ShowError("Could not connect to server. Please check the QR code and try again.");
@@ -123,7 +125,7 @@ public partial class QrScannerViewModel : BaseViewModel
             }
 
             // Save configuration
-            await _settingsService.CommitAuthenticationAsync(config.ServerUrl, config.ApiToken);
+            await _settingsService.CommitAuthenticationAsync(normalizedServer, config.ApiToken);
 
             _logger.LogInformation("Server configuration saved successfully");
 

@@ -202,11 +202,21 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         api.VerifyNoOtherCalls();
     }
 
-    [Fact]
-    public async Task MatchingRetainedAdHocRoute_ExplicitRefreshContactsHostedAndReplacesRetainedRoute()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task MatchingRetainedAdHocRoute_ExplicitRefreshContactsHostedAndOnlyValidSuccessReplaces(
+        bool freshSucceeds)
     {
         var (repository, retainedService, settings) = await CreateRetainedScenarioAsync();
         var api = SuccessfulApi();
+        if (!freshSucceeds)
+        {
+            api.Setup(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(HostedRouteResponse.ValidForTest(WalkingProfile, IdentityA) with
+                { Succeeded = false, Outcome = "invalid-response" });
+        }
         var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
         dialogs.Setup(service => service.SelectAsync("Wayfarer retained route",
                 It.Is<IReadOnlyList<string>>(options => options.SequenceEqual(
@@ -221,7 +231,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
             37, 23, 37.01, 23.01, "Current target", "foot");
 
         selected.Should().BeSameAs(navigation.ActiveRoute);
-        selected.HostedProvenance!.IsRetained.Should().BeFalse();
+        selected.HostedProvenance!.IsRetained.Should().Be(!freshSucceeds);
         api.Verify(client => client.DiscoverAsync(It.IsAny<CancellationToken>()), Times.Once);
         api.Verify(client => client.GetCapabilityAsync(WalkingProfile, IdentityA,
             It.IsAny<CancellationToken>()), Times.Once);
@@ -232,8 +242,11 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
                 settings.AuthenticationSessionRevision, "https://test.example.com",
                 "ad-hoc-coordinates", "hosted"),
             settings.RoutingAccountPartition, DateTimeOffset.UtcNow, () => true);
-        retained!.Route.HostedProvenance!.GeneratedAt.Should().Be(
-            selected.HostedProvenance.GeneratedAt);
+        retained!.Route.Steps.Should().ContainSingle(step =>
+            step.Instruction == (freshSucceeds ? "Continue" : "Retained"));
+        if (freshSucceeds)
+            retained.Route.HostedProvenance!.GeneratedAt.Should().BeCloseTo(
+                selected.HostedProvenance.GeneratedAt, TimeSpan.FromMilliseconds(1));
     }
 
     [Fact]

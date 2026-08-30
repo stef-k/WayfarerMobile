@@ -571,10 +571,19 @@ retained row remains intact. The global 200-row cap evicts by local `LastUsedAtU
 There is no age expiry, and backend `GeneratedAtUtc` is provenance only. More than five minutes in the future is
 rejected; a nearer future time displays age zero until local time catches up.
 
+Save and selection capture the repository clear generation before connection acquisition and compare it after taking
+the mutation gate. A successful clear advances that generation before releasing the gate, so older work cannot insert,
+replace, update recency, or return a selection afterward. Failed clear does not advance it. Installed rows are fully
+revalidated before selection or recency mutation; malformed identity, URL, bounds, JSON, metric, attribution, or time
+contracts fail closed, and invalid timestamps are removed before they can become immortal in global eviction.
+
 Match identity is exact: protected account partition, normalized Wayfarer server, provider/configuration/mapping
 identities, selected transport-profile GUID, canonical origin/destination, and the duplicate-preserving ordered anchor
-sequence. Coordinates reuse #260's signed 10^-5-degree integer representation. Offline selection performs no network
-work and displays retained/offline source, clamped age, linked attribution, and safe hosted provenance.
+sequence. Coordinates reuse #260's signed 10^-5-degree integer representation. Offline use performs no network work
+and displays retained/offline source, clamped age, linked attribution, and safe hosted provenance. An exact match
+offers **Use retained route**, **Refresh with Wayfarer**, and **Direct**. Refresh bypasses retained reuse only for that
+interaction while keeping retained guidance active; failure preserves it, success may replace it atomically, and the
+choice is not persisted.
 
 Chooser entries are scoped to the exact discovery catalog displayed. Mobile submits that catalog identity with the
 chosen profile; a `catalog-changed` capability response makes no route request, rediscovers once, and requires a
@@ -783,7 +792,9 @@ Manages application settings using MAUI Preferences and SecureStorage.
 
 These values are owned by one committed authentication envelope. Onboarding and QR connection commit through it;
 logout, clear, and reset rotate the partition coherently. A QR connectivity probe supplies candidate server/token
-directly and never temporarily changes the committed envelope.
+directly and never temporarily changes the committed envelope. Credential-bearing server URLs are rejected before a
+probe or commit. Clear invalidates the current-process snapshot and advances its revision even when protected storage
+write/removal fails; failed ordinary replacement leaves the preceding committed snapshot intact.
 
 ### Regular Settings (Preferences)
 

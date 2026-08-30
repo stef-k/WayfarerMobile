@@ -268,8 +268,8 @@ public sealed class RetainedWayfarerRouteRepositoryTests : IAsyncLifetime
         malformedTimestamp.StoredAtUnixMilliseconds = long.MaxValue;
         malformedTimestamp.LastUsedAtUnixMilliseconds = long.MaxValue;
         await owner.Connection.UpdateAsync(malformedTimestamp);
-        await owner.Repository.SaveAsync(Candidate("after-corruption", context: UniqueContext(500)),
-            PartitionA, receipt.AddMinutes(1), () => true);
+        (await owner.Repository.SaveAsync(Candidate("after-corruption", context: UniqueContext(500)),
+            PartitionA, receipt.AddMinutes(1), () => true)).Should().Be(RetainedRouteSaveResult.Saved);
 
         (await owner.Connection.FindAsync<RetainedWayfarerRouteEntity>(malformedTimestamp.Id))
             .Should().BeNull("invalid timestamps must not become immortal in the global LRU");
@@ -310,6 +310,24 @@ public sealed class RetainedWayfarerRouteRepositoryTests : IAsyncLifetime
             (await owner.Connection.FindAsync<RetainedWayfarerRouteEntity>(row.Id))!
                 .LastUsedAtUnixMilliseconds.Should().Be(priorLastUsed, corruptions[index].Name);
         }
+
+        var unpinnedContext = UniqueContext(700) with { SavedTransportProfileId = null };
+        await owner.Repository.SaveAsync(Candidate("valid-unpinned", context: unpinnedContext),
+            PartitionA, receipt, () => true);
+        var unpinnedLongitude = HostedRouteIdentity.Canonicalize(
+            new[] { unpinnedContext.Destination })[0];
+        var malformedAuthority = (await owner.Connection.Table<RetainedWayfarerRouteEntity>()
+            .Where(item => item.DestinationLongitude == unpinnedLongitude).ToListAsync()).Single();
+        malformedAuthority.Id = 0;
+        malformedAuthority.TransportProfileId = "33333333-3333-3333-3333-333333333333";
+        malformedAuthority.SelectedProfileAuthorityIdentity = "malformed";
+        await owner.Connection.InsertAsync(malformedAuthority);
+
+        var authoritative = await owner.Repository.SelectAsync(unpinnedContext, PartitionA,
+            receipt.AddMinutes(1), () => true);
+
+        authoritative!.Route.HostedProvenance!.TransportProfileId.Should().Be(ProfileId,
+            "a malformed row must not create profile ambiguity");
     }
 
     [Fact]

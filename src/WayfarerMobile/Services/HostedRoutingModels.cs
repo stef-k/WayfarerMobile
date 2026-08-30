@@ -176,7 +176,8 @@ public static class HostedRouteServerIdentity
     public static string Normalize(string? value)
     {
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)
-            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)) return string.Empty;
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            || !string.IsNullOrEmpty(uri.UserInfo)) return string.Empty;
         var authority = uri.GetLeftPart(UriPartial.Authority).ToLowerInvariant();
         return $"{authority}{uri.AbsolutePath}".TrimEnd('/');
     }

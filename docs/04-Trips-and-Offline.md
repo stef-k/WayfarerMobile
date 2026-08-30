@@ -30,12 +30,15 @@ The live cache can be inspected and cleared from **Settings** > **Map Cache**. C
 Without a network connection, downloaded Places, Segments, Areas, and Trip metadata remain available. Valid planned
 Segment geometry remains the highest navigation authority. When it is unavailable, Mobile can reuse an exact retained
 Wayfarer route previously authorized by the backend with storage mode `persistent`; otherwise it provides honest
-Direct distance and bearing guidance. Retained navigation performs no discovery, capability, or route request.
+Direct distance and bearing guidance. When a retained match exists, the focused chooser can use it offline, request
+one fresh Wayfarer route, or choose Direct. Retained use performs no discovery, capability, or route request. A failed,
+cancelled, or invalid fresh request leaves the prior retained guidance active and stored.
 Direct is straight-line guidance, not road-aware turn-by-turn routing.
 
 Retained Wayfarer routes are a separate bounded SQLite data set, not part of downloaded Trip geometry or the OSM live
 tile cache. At most 200 are kept across all servers and local account partitions. Successful use refreshes local LRU
-recency; routes do not expire merely because they are old. Clearing retained routes is idempotent and does not change
+recency; routes do not expire merely because they are old. Malformed installed rows fail closed and do not refresh
+recency. Clearing retained routes is idempotent, and older in-flight repository work cannot restore rows afterward. It does not change
 Trips, Places, Segments, saved geometry, Timeline data or queues, credentials/settings, or OSM tiles.
 
 Timeline data, queued locations, pending mutations, authentication state, and ordinary synchronization are independent of Trip downloads and the interactive map cache.

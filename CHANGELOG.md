@@ -10,6 +10,9 @@
   - Bounds retained routes to 200 globally with deterministic local last-use eviction and no automatic age expiry
   - Rotates a protected opaque routing partition with committed authentication authority without storing or deriving identity from tokens
   - Preserves the prior complete route after rejected, stale, cancelled, or failed refresh storage
+  - Offers retained, explicit fresh Wayfarer, and Direct choices; failed refresh keeps retained guidance active
+  - Rejects credential-bearing server and attribution URLs and fails closed on malformed installed rows
+  - Prevents pre-clear repository work from resurrecting rows and invalidates in-memory authentication when protected clear fails
 
 ### 2026-08-30
 - **Feature: transient authenticated Wayfarer routing (#260)**

@@ -210,6 +210,7 @@ public sealed class HostedRoutingService
         && double.IsFinite(item.Latitude) && item.Longitude is >= -180 and <= 180 && item.Latitude is >= -90 and <= 90;
     private static bool ValidAttribution(IReadOnlyList<HostedRouteAttribution>? value) => value is { Count: > 0 and <= 10 }
         && value.All(item => Bounded(item.Text, 200) && Bounded(item.Url, 500)
-            && Uri.TryCreate(item.Url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps);
+            && Uri.TryCreate(item.Url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps
+            && string.IsNullOrEmpty(uri.UserInfo));
     private static bool Bounded(string? value, int maximum) => value is { Length: > 0 } && value.Length <= maximum;
 }

@@ -12,6 +12,23 @@ namespace WayfarerMobile.Tests.Unit.Services;
 public sealed class HostedRoutingApiClientTests
 {
     [Fact]
+    public async Task CredentialBearingConfiguredServer_IsRejectedBeforeHttpClientCreation()
+    {
+        var settings = new Mock<ISettingsService>();
+        settings.SetupGet(value => value.IsConfigured).Returns(true);
+        settings.SetupGet(value => value.ServerUrl)
+            .Returns("https://user:password@wayfarer.example");
+        settings.SetupGet(value => value.ApiToken).Returns("secret-token");
+        var factory = new Mock<IHttpClientFactory>(MockBehavior.Strict);
+        var client = new HostedRoutingApiClient(factory.Object, settings.Object);
+
+        var action = () => client.DiscoverAsync(default);
+
+        await action.Should().ThrowAsync<HttpRequestException>();
+        factory.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public void TripJson_CapturesCurrentProfileGuidOnlyInTransientObjectState()
     {
         var profileId = Guid.Parse("11111111-1111-1111-1111-111111111111");

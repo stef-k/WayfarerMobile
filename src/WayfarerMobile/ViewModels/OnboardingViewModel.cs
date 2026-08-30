@@ -367,9 +367,8 @@ public partial class OnboardingViewModel : BaseViewModel
             return;
         }
 
-        // Validate URL format
-        if (!Uri.TryCreate(ServerUrl, UriKind.Absolute, out var uri) ||
-            (uri.Scheme != "http" && uri.Scheme != "https"))
+        var normalizedServer = HostedRouteServerIdentity.Normalize(ServerUrl);
+        if (normalizedServer.Length == 0)
         {
             var page = Application.Current?.Windows.FirstOrDefault()?.Page;
             if (page != null)
@@ -379,7 +378,7 @@ public partial class OnboardingViewModel : BaseViewModel
             return;
         }
 
-        await _settingsService.CommitAuthenticationAsync(ServerUrl, ApiToken);
+        await _settingsService.CommitAuthenticationAsync(normalizedServer, ApiToken);
         ServerConfigured = true;
 
         // Fetch settings and activities from server in background

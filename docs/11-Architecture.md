@@ -376,7 +376,10 @@ The `SettingsService` manages app configuration using MAUI Preferences and Secur
 authentication revision, and a cryptographically random opaque routing partition are committed through one authority
 mutation. The partition remains stable across restart, rotates whenever committed server/token authority is replaced
 or cleared (including re-entering the same token), and is never derived from or compared with the token. QR probes use
-explicit candidate credentials without changing committed settings.
+explicit candidate credentials without changing committed settings. HTTP/HTTPS server identities containing URI
+user-info are invalid. Logout, clear, or reset replaces current-process server, token, and partition authority with an
+empty rotated snapshot even when protected storage fails; ordinary failed credential replacement still preserves the
+prior committed snapshot.
 
 ```csharp
 public class SettingsService : ISettingsService
@@ -446,6 +449,8 @@ choice, and canonical origin/anchors/destination immediately before installation
 Provider credentials and provider-specific endpoints remain server-side. Retained lookup additionally requires the
 active protected account partition and exact provider/configuration/mapping/transport-profile authority. Coordinates
 use #260's signed 10^-5-degree canonical integers, including exact duplicate-preserving anchor sequence equality.
+An exact retained match opens the bounded retained/refresh/Direct chooser. Explicit refresh keeps the retained route
+as the active fallback until a complete fresh route is validated and storage-authorized replacement commits.
 
 ### Navigation Graph
 

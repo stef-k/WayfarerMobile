@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.Logging;
 
 namespace WayfarerMobile.Services;
@@ -66,8 +67,35 @@ public sealed class CommittedAuthenticationAuthority
         await ReplaceAsync(new(normalizedServer, apiToken, Guid.NewGuid()), cancellationToken);
     }
 
-    public Task ClearAsync(CancellationToken cancellationToken = default) =>
-        ReplaceAsync(new(null, null, Guid.NewGuid()), cancellationToken);
+    public async Task ClearAsync(CancellationToken cancellationToken = default)
+    {
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var replacement = new AuthenticationAuthoritySnapshot(null, null, Guid.NewGuid());
+            Volatile.Write(ref snapshot, replacement);
+            Interlocked.Increment(ref revision);
+
+            Exception? primaryFailure = null;
+            try
+            {
+                await store.SetAsync(EnvelopeKey, JsonSerializer.Serialize(replacement));
+            }
+            catch (Exception exception)
+            {
+                primaryFailure = exception;
+                TryRemove(EnvelopeKey, ref primaryFailure);
+            }
+            TryRemove(LegacyServerKey, ref primaryFailure);
+            TryRemove(LegacyTokenKey, ref primaryFailure);
+            if (primaryFailure != null) ExceptionDispatchInfo.Capture(primaryFailure).Throw();
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
 
     private async Task ReplaceAsync(AuthenticationAuthoritySnapshot replacement,
         CancellationToken cancellationToken)
@@ -94,8 +122,10 @@ public sealed class CommittedAuthenticationAuthority
         {
             var envelope = await store.GetAsync(EnvelopeKey);
             if (TryParse(envelope, out var loaded)) return loaded!;
-            var legacyServer = await store.GetAsync(LegacyServerKey);
-            var legacyToken = await store.GetAsync(LegacyTokenKey);
+            var legacyServer = string.IsNullOrEmpty(envelope)
+                ? await store.GetAsync(LegacyServerKey) : null;
+            var legacyToken = string.IsNullOrEmpty(envelope)
+                ? await store.GetAsync(LegacyTokenKey) : null;
             var normalizedServer = HostedRouteServerIdentity.Normalize(legacyServer);
             var migrated = normalizedServer.Length > 0 && !string.IsNullOrWhiteSpace(legacyToken)
                 ? new AuthenticationAuthoritySnapshot(normalizedServer, legacyToken, Guid.NewGuid())
@@ -131,6 +161,20 @@ public sealed class CommittedAuthenticationAuthority
         catch (JsonException)
         {
             return false;
+        }
+    }
+
+    private void TryRemove(string key, ref Exception? primaryFailure)
+    {
+        try
+        {
+            store.Remove(key);
+        }
+        catch (Exception exception)
+        {
+            if (primaryFailure == null) primaryFailure = exception;
+            else logger.LogWarning("Secondary protected authentication cleanup failed: {FailureType}",
+                exception.GetType().Name);
         }
     }
 }

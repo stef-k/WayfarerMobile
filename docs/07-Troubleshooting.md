@@ -168,6 +168,7 @@ For detailed troubleshooting:
 1. **Check internet connection**
 2. **Verify server URL**
    - Must start with `https://`
+   - Must not contain a username, password, or other user-info before the host
    - No trailing slash
    - Domain must be correct
 
@@ -265,8 +266,9 @@ the server supports the Mobile routing endpoints and that routing is enabled for
 are configured only on the server and are never entered in Mobile. An offline route is offered only for an exact
 account, server, provider authority, transport profile, endpoint, and ordered-anchor match that the backend previously
 marked `persistent`. Old routes do not expire automatically, but a logout, server/token replacement, or provider
-configuration change makes another partition or authority ineligible. A failed refresh preserves the prior complete
-retained route. If no eligible row exists, Direct remains the explicit fallback.
+configuration change makes another partition or authority ineligible. With an exact match, choose retained guidance,
+an explicit one-time Wayfarer refresh, or Direct. A failed, cancelled, or invalid refresh preserves the prior complete
+retained route as active guidance. If no eligible row exists, Direct remains the explicit fallback.
 
 ### Off-Route Constantly
 

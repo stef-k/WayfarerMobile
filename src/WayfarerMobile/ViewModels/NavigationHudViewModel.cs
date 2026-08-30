@@ -205,7 +205,8 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private static async Task OpenAttributionAsync(HostedRouteAttribution attribution)
     {
-        if (Uri.TryCreate(attribution.Url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps)
+        if (Uri.TryCreate(attribution.Url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps
+            && string.IsNullOrEmpty(uri.UserInfo))
             await Launcher.Default.OpenAsync(uri);
     }
 

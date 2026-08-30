@@ -162,13 +162,8 @@ public class DatabaseService : IAsyncDisposable, ILegacyRasterState, ISegmentWay
             await OsrmRoutingDecommissionMigration.ApplyAsync(this, CancellationToken.None);
         }
 
-        if (currentVersion < RetainedWayfarerRouteMigration.SchemaVersion)
-        {
-            await RetainedWayfarerRouteMigration.ApplyAsync(_database!, CancellationToken.None);
-        }
-
-        // Update schema version
-        await SetSchemaVersionAsync(CurrentSchemaVersion);
+        await RetainedWayfarerRouteMigration.ApplyApplicationUpgradeAsync(
+            _database!, currentVersion, SetSchemaVersionAsync, CancellationToken.None);
         Console.WriteLine($"[DatabaseService] Migration complete. Schema version: {CurrentSchemaVersion}");
     }
 

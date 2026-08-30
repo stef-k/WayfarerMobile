@@ -97,6 +97,7 @@ The QR code for app configuration contains only:
 - Tokens are stored in platform-encrypted SecureStorage
 - Tokens are not included in crash reports
 - Tokens are cleared on logout
+- Server URLs containing URI user-info, including embedded usernames or passwords, are rejected
 
 ### Hosted Routing Disclosure
 
@@ -112,6 +113,13 @@ retains only safe provider/profile provenance and linked attribution. Only exact
 bounded local retention. Stored rows exclude tokens/hashes, credentials, protected configuration, provider URLs/raw
 responses, member or user names, notes, and provider SDK objects. Clear-retained-routes affects only that table; it does
 not alter Trip geometry, Timeline/queues, credentials/settings, or OSM live tiles.
+Credential-bearing attribution links are rejected. Malformed retained rows never become navigation authority or update
+recency. Successful retained-route clear also fences older in-flight repository work from recreating rows.
+
+Authentication clear/logout/reset fails closed in memory: the current process observes an empty server and token, a
+newly rotated non-secret partition, and an advanced revision even if SecureStorage persistence or removal fails. The
+primary storage failure is still reported. This differs from an ordinary failed credential replacement, which leaves
+the preceding committed authority visible.
 
 ## Secure Storage
 

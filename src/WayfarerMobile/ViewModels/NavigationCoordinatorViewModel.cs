@@ -346,9 +346,42 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
         _hostedRequest = context;
         _hostedTargetOwner = targetOwner;
         var partition = _settings.RoutingAccountPartition;
-        if (await TryRetainedAsync(direct, context, partition)) return direct;
+        var retainedDecision = await ResolveRetainedChoiceAsync(direct, context, partition);
+        if (retainedDecision.RouteComplete) return direct;
+        var retainedFallback = retainedDecision.RefreshFallback;
+        var result = await RequestFreshRouteAsync(context, generation, partition, retainedFallback);
+        if (result == null) return direct;
+        if (result.Outcome != HostedRoutingOutcome.Success || result.Candidate == null)
+        {
+            if (retainedFallback != null)
+                RestoreRetainedSelection(context, partition, retainedFallback);
+            return direct;
+        }
+        if (_hostedRoutingGeneration != generation || _hostedRequest?.Generation != generation) return direct;
+        var published = false;
+        await MainThread.InvokeOnMainThreadAsync(() =>
+        {
+            var live = CreateLiveAuthority();
+            if (live != null) published = HostedRoutePublication.TryPublish(result.Candidate, live, direct);
+        });
+        if (published)
+        {
+            await _retainedRouting.SaveAsync(result.Candidate, partition, DateTimeOffset.UtcNow,
+                () => IsCandidateCurrent(result.Candidate, partition), _hostedRoutingCancellation.Token);
+        }
+        else if (retainedFallback != null)
+        {
+            RestoreRetainedSelection(context, partition, retainedFallback);
+        }
+        return direct;
+    }
+
+    private async Task<HostedRoutingResult?> RequestFreshRouteAsync(HostedRouteRequestContext context,
+        long generation, Guid partition, HostedRouteProvenance? retainedFallback)
+    {
         var catalogRediscoveryAvailable = true;
-        var result = await _hostedRouting.RequestRouteAsync(context, cancellationToken: _hostedRoutingCancellation.Token);
+        var result = await _hostedRouting.RequestRouteAsync(context,
+            cancellationToken: _hostedRoutingCancellation!.Token);
         if (result.Outcome == HostedRoutingOutcome.CatalogChanged) catalogRediscoveryAvailable = false;
         var maximumPresentations = result.Outcome switch
         {
@@ -362,17 +395,19 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
         {
             if (_hostedRoutingGeneration != generation || _hostedRequest?.Generation != generation
                 || result.Choices is not { Count: > 0 }
-                || !HostedOpaqueIdentity.IsValid(result.DiscoveryCatalogIdentity)) return direct;
+                || !HostedOpaqueIdentity.IsValid(result.DiscoveryCatalogIdentity)) return null;
             var options = result.Choices.Select(item =>
                 $"{item.DisplayName} — {item.ModeKey} ({item.TransportProfileId:D})").ToArray();
             var selected = await _dialogs.SelectAsync("Wayfarer routing profile", options, "Direct");
             var index = selected == null ? -1 : Array.IndexOf(options, selected);
             if (index < 0)
             {
-                _hostedRouting.SelectDirect(Interlocked.Increment(ref _hostedRoutingGeneration));
-                return direct;
+                if (retainedFallback != null)
+                    RestoreRetainedSelection(context, partition, retainedFallback);
+                else _hostedRouting.SelectDirect(Interlocked.Increment(ref _hostedRoutingGeneration));
+                return null;
             }
-            if (_hostedRoutingGeneration != generation || _hostedRequest?.Generation != generation) return direct;
+            if (_hostedRoutingGeneration != generation || _hostedRequest?.Generation != generation) return null;
             var choiceContext = context with { ExpectedCatalogIdentity = result.DiscoveryCatalogIdentity };
             _hostedRequest = choiceContext;
             result = await _hostedRouting.RequestRouteAsync(
@@ -380,39 +415,56 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
                 catalogRediscoveryAvailable);
             if (result.Outcome == HostedRoutingOutcome.CatalogChanged) catalogRediscoveryAvailable = false;
         }
-        if (result.Outcome == HostedRoutingOutcome.CatalogChanged)
-        {
-            _hostedRouting.SelectDirect(Interlocked.Increment(ref _hostedRoutingGeneration));
-            return direct;
-        }
-        if (result.Outcome != HostedRoutingOutcome.Success || result.Candidate == null) return direct;
-        if (_hostedRoutingGeneration != generation || _hostedRequest?.Generation != generation) return direct;
-        var published = false;
-        await MainThread.InvokeOnMainThreadAsync(() =>
-        {
-            var live = CreateLiveAuthority();
-            if (live != null) published = HostedRoutePublication.TryPublish(result.Candidate, live, direct);
-        });
-        if (published)
-        {
-            await _retainedRouting.SaveAsync(result.Candidate, partition, DateTimeOffset.UtcNow,
-                () => IsCandidateCurrent(result.Candidate, partition), _hostedRoutingCancellation.Token);
-        }
-        return direct;
+        if (result.Outcome != HostedRoutingOutcome.CatalogChanged) return result;
+        if (retainedFallback != null)
+            RestoreRetainedSelection(context, partition, retainedFallback);
+        else _hostedRouting.SelectDirect(Interlocked.Increment(ref _hostedRoutingGeneration));
+        return null;
     }
 
-    private async Task<bool> TryRetainedAsync(NavigationRoute target, HostedRouteRequestContext context,
+    private async Task<RetainedRouteDecision> ResolveRetainedChoiceAsync(NavigationRoute target,
+        HostedRouteRequestContext context, Guid partition)
+    {
+        var retained = await TrySelectRetainedAsync(context, partition);
+        if (retained?.HostedProvenance is not { } provenance)
+            return new(false, null);
+        var choice = await _dialogs.SelectAsync("Wayfarer retained route",
+            ["Use retained route", "Refresh with Wayfarer"], "Direct");
+        if (!IsRequestCurrent(context, partition)) return new(true, null);
+        if (choice == "Use retained route")
+        {
+            if (HostedRoutePublication.TryPublishRetained(retained, target))
+                _hostedRouting.SelectRetained(context.Generation, provenance.TransportProfileId,
+                    provenance.SelectedProfileAuthorityIdentity);
+            return new(true, null);
+        }
+        if (choice != "Refresh with Wayfarer")
+        {
+            _hostedRouting.SelectDirect(context.Generation);
+            return new(true, null);
+        }
+        if (!HostedRoutePublication.TryPublishRetained(retained, target)) return new(true, null);
+        _hostedRouting.SelectRetained(context.Generation, provenance.TransportProfileId,
+            provenance.SelectedProfileAuthorityIdentity);
+        return new(false, provenance);
+    }
+
+    private async Task<NavigationRoute?> TrySelectRetainedAsync(HostedRouteRequestContext context,
         Guid partition)
     {
         var retained = await _retainedRouting.TrySelectOfflineAsync(context, partition,
             DateTimeOffset.UtcNow, () => IsRequestCurrent(context, partition),
             _hostedRoutingCancellation!.Token);
-        if (retained?.HostedProvenance is not { } provenance
-            || !IsRequestCurrent(context, partition)
-            || !HostedRoutePublication.TryPublishRetained(retained, target)) return false;
-        _hostedRouting.SelectRetained(context.Generation, provenance.TransportProfileId,
-            provenance.SelectedProfileAuthorityIdentity);
-        return true;
+        return retained?.HostedProvenance is not null && IsRequestCurrent(context, partition)
+            ? retained : null;
+    }
+
+    private void RestoreRetainedSelection(HostedRouteRequestContext context, Guid partition,
+        HostedRouteProvenance retained)
+    {
+        if (IsRequestCurrent(context, partition))
+            _hostedRouting.SelectRetained(context.Generation, retained.TransportProfileId,
+                retained.SelectedProfileAuthorityIdentity);
     }
 
     private HostedRouteRequestContext CreateHostedContext(double fromLat, double fromLon, double toLat,
@@ -505,6 +557,9 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
         public HostedRouteCoordinate? ResolveDestination() =>
             CurrentDestination == null ? InitialDestination : CurrentDestination();
     }
+
+    private sealed record RetainedRouteDecision(bool RouteComplete,
+        HostedRouteProvenance? RefreshFallback);
 
     /// <summary>
     /// Starts navigation with a pre-calculated route (for non-trip navigation).
