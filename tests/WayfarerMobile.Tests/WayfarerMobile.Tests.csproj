@@ -76,6 +76,9 @@
     <Compile Include="..\..\src\WayfarerMobile\Interfaces\INavigationRouteBuilder.cs" Link="Production\INavigationRouteBuilder.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\NavigationRouteBuilder.cs" Link="Production\NavigationRouteBuilder.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\TripNavigationService.cs" Link="Production\TripNavigationService.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Services\HostedRoutingModels.cs" Link="Production\HostedRoutingModels.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Services\HostedRoutingService.cs" Link="Production\HostedRoutingService.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Services\HostedRoutingApiClient.cs" Link="Production\HostedRoutingApiClient.cs" />
     <Compile Remove="Infrastructure\Entities\QueuedLocation.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Data\Entities\QueuedLocation.cs" Link="Production\QueuedLocation.cs" />
   </ItemGroup>

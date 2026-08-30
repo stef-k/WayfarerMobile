@@ -39,7 +39,13 @@ public class NavigationRoute
     /// Gets or sets the initial bearing for direct routes (degrees from north).
     /// </summary>
     public double InitialBearing { get; set; }
+
+    /// <summary>Gets transient linked attribution for the active hosted route.</summary>
+    public List<HostedRouteAttribution> Attribution { get; set; } = new();
 }
+
+/// <summary>Contains one safe linked attribution displayed only with an active hosted route.</summary>
+public sealed record HostedRouteAttribution(string Text, string Url);
 
 /// <summary>
 /// A single turn-by-turn instruction in the navigation route.
