@@ -401,7 +401,7 @@ public enum NavigationEdgeType
 {
     /// <summary>User-defined segment from trip data.</summary>
     UserSegment,
-    /// <summary>Route fetched from third-party routing service (OSRM, etc.).</summary>
+    /// <summary>Provider-independent routed geometry.</summary>
     Fetched
 }
 

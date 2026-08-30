@@ -33,6 +33,12 @@ public class MockTripNavigationService : ITripNavigationService
     /// <inheritdoc/>
     public NavigationRoute? ActiveRoute => _activeRoute;
 
+    /// <inheritdoc/>
+    public void StopNavigation()
+    {
+        _activeRoute = null;
+    }
+
     /// <summary>
     /// Gets the loaded trip, if any.
     /// </summary>
@@ -121,7 +127,7 @@ public class MockTripNavigationService : ITripNavigationService
 
     /// <inheritdoc/>
     public Task<NavigationRoute?> CalculateRouteToPlaceAsync(double currentLat, double currentLon,
-        string destinationPlaceId, bool fetchFromOsrm = true)
+        string destinationPlaceId)
     {
         _activeRoute = _nextRouteToReturn;
         return Task.FromResult(_activeRoute);

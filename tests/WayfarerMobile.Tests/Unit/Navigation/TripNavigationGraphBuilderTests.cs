@@ -27,18 +27,6 @@ public class TripNavigationGraphBuilderTests
         edge.RouteGeometry.Should().NotBeEquivalentTo(corruptPoints);
     }
 
-    [Fact]
-    public void Build_InvalidSegmentGeometry_RetainsEdgeWithoutDetailedGeometry()
-    {
-        var (trip, fromId, toId) = CreateTrip("{not json");
-
-        var graph = TripNavigationGraphBuilder.Build(trip);
-
-        var edge = graph.GetEdgeBetween(fromId.ToString(), toId.ToString());
-        edge.Should().NotBeNull();
-        edge!.RouteGeometry.Should().BeNullOrEmpty();
-    }
-
     private static (TripDetails Trip, Guid FromId, Guid ToId) CreateTrip(string geometry)
     {
         var fromId = Guid.NewGuid();

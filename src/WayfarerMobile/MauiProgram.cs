@@ -83,11 +83,12 @@ public static class MauiProgram
         var logPath = Path.Combine(logDirectory, "wayfarer-app-.log");
 
         // Configure Serilog
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Information()
+        var loggerConfiguration = new LoggerConfiguration()
+            .MinimumLevel.Information();
 #if DEBUG
-            .MinimumLevel.Debug()
+        loggerConfiguration.MinimumLevel.Debug();
 #endif
+        Log.Logger = loggerConfiguration
             .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
             .MinimumLevel.Override("System", LogEventLevel.Warning)
             .MinimumLevel.Override("Microsoft.Maui.Controls.Element", LogEventLevel.Error) // Suppress Syncfusion binding warnings
@@ -242,8 +243,6 @@ public static class MauiProgram
         services.AddSingleton<ITimelineLayerService, TimelineLayerService>(); // Stateless rendering
 
         // Routing Services
-        services.AddSingleton<OsrmRoutingService>();
-        services.AddSingleton<RouteCacheService>();
         services.AddSingleton<INavigationRouteBuilder, NavigationRouteBuilder>();
         services.AddSingleton<TripNavigationService>();
         services.AddSingleton<ITripNavigationService>(sp => sp.GetRequiredService<TripNavigationService>());
@@ -430,13 +429,6 @@ public static class MauiProgram
             client.DefaultRequestVersion = new Version(2, 0);
             client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrHigher;
             client.DefaultRequestHeaders.UserAgent.ParseAdd("WayfarerMobile/1.0 (+https://github.com/stef-k/WayfarerMobile)");
-        });
-
-        // Osrm - routing service with 30s timeout
-        services.AddHttpClient("Osrm", client =>
-        {
-            client.Timeout = TimeSpan.FromSeconds(30);
-            client.DefaultRequestHeaders.Add("User-Agent", "WayfarerMobile/1.0");
         });
 
         // SSE - Server-Sent Events with isolated connection pool and long timeout

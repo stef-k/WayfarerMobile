@@ -26,11 +26,6 @@ services.AddHttpClient("WayfarerApi", client =>
         new MediaTypeWithQualityHeaderValue("application/json"));
 });
 
-services.AddHttpClient("Osrm", client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(30);
-    client.DefaultRequestHeaders.Add("User-Agent", "WayfarerMobile/1.0");
-});
 ```
 
 ### Creating Requests
@@ -480,85 +475,9 @@ public async Task<ApiResult<T>> SendAsync<T>(HttpRequestMessage request)
 }
 ```
 
-## OSRM Routing API
+## Mobile Routing Boundary
 
-The app uses the public OSRM demo server for route calculation when no user-defined segment exists.
-
-### Route Request
-
-**Endpoint**: `GET https://router.project-osrm.org/route/v1/{profile}/{coordinates}`
-
-**Parameters**:
-| Parameter | Description |
-|-----------|-------------|
-| profile | `foot`, `car`, or `bike` |
-| coordinates | `{lon1},{lat1};{lon2},{lat2}` |
-
-**Query Parameters**:
-| Parameter | Value | Description |
-|-----------|-------|-------------|
-| overview | `full` | Return full route geometry |
-| geometries | `polyline` | Encoded polyline format |
-| steps | `false` | Don't return turn-by-turn steps |
-
-**Example**:
-```
-GET https://router.project-osrm.org/route/v1/foot/-0.1278,51.5074;-0.1300,51.5100?overview=full&geometries=polyline
-```
-
-**Response**:
-```json
-{
-  "code": "Ok",
-  "routes": [
-    {
-      "geometry": "encoded_polyline",
-      "legs": [
-        {
-          "distance": 450.5,
-          "duration": 324.0
-        }
-      ],
-      "distance": 450.5,
-      "duration": 324.0
-    }
-  ]
-}
-```
-
-### Rate Limiting
-
-The OSRM demo server has rate limits:
-- Maximum 1 request per second
-- No API key required
-
-The `OsrmRoutingService` implements rate limiting:
-
-```csharp
-private static readonly SemaphoreSlim _rateLimiter = new(1, 1);
-private static DateTime _lastRequestTime = DateTime.MinValue;
-private const int MinRequestIntervalMs = 1100; // Slightly over 1 second
-
-public async Task<OsrmRouteResult?> GetRouteAsync(...)
-{
-    await _rateLimiter.WaitAsync();
-    try
-    {
-        var elapsed = DateTime.UtcNow - _lastRequestTime;
-        if (elapsed.TotalMilliseconds < MinRequestIntervalMs)
-        {
-            await Task.Delay(MinRequestIntervalMs - (int)elapsed.TotalMilliseconds);
-        }
-
-        // Make request...
-        _lastRequestTime = DateTime.UtcNow;
-    }
-    finally
-    {
-        _rateLimiter.Release();
-    }
-}
-```
+Mobile does not contact a public or commercial routing provider. Valid downloaded Trip Segment geometry remains available offline; otherwise navigation uses Direct straight-line distance and bearing guidance. Direct is not hosted turn-by-turn routing. Authenticated provider-neutral Wayfarer routing is future work and is not implemented yet.
 
 ## JSON Serialization
 

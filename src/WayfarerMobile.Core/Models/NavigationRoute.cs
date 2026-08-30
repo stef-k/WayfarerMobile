@@ -31,7 +31,7 @@ public class NavigationRoute
     public TimeSpan EstimatedDuration { get; set; }
 
     /// <summary>
-    /// Gets or sets whether this is a direct/straight-line route (no OSRM data).
+    /// Gets or sets whether this is a direct/straight-line route rather than routed geometry.
     /// </summary>
     public bool IsDirectRoute { get; set; }
 

@@ -398,7 +398,7 @@ public class SettingsService : ISettingsService
 | **API** | `ApiClient`, `GroupsService`, `GroupMemberManager` |
 | **Sync** | `QueueDrainService`, `TripSyncCoordinator`, `TimelineSyncService`, `SyncEventBus` |
 | **Maps** | `MapBuilder`, `LocationLayerService`, `TripLayerService`, `GroupLayerService`, `TimelineLayerService`, `DroppedPinLayerService` |
-| **Navigation** | `TripNavigationService`, `OsrmRoutingService`, `RouteCacheService` |
+| **Navigation** | `TripNavigationService`, `NavigationRouteBuilder` |
 | **Interactive map cache** | `WayfarerTileSource`, `LiveTileCacheService`, `LiveTileCacheRepository` |
 | **Trip** | `TripStateManager`, `TripContentService`, `TripMetadataBuilder`, `PlaceOperationsHandler`, `RegionOperationsHandler` |
 | **Timeline** | `TimelineDataService`, `LocalTimelineStorageService`, `MutationQueueService` |
@@ -419,11 +419,6 @@ services.AddHttpClient("WayfarerApi", client =>
         new MediaTypeWithQualityHeaderValue("application/json"));
 });
 
-services.AddHttpClient("Osrm", client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(30);
-    client.DefaultRequestHeaders.Add("User-Agent", "WayfarerMobile/1.0");
-});
 ```
 
 ## Navigation System
@@ -432,10 +427,10 @@ services.AddHttpClient("Osrm", client =>
 
 The `TripNavigationService` calculates routes with the following priority:
 
-1. **User Segments**: Trip-defined routes with polyline geometry (always preferred)
-2. **Cached OSRM**: Previously fetched route if still valid
-3. **OSRM Fetch**: Online route from `router.project-osrm.org`
-4. **Direct Route**: Straight line with bearing + distance (offline fallback)
+1. **Saved Segment geometry**: Trip-defined geometry (always preferred when valid)
+2. **Direct guidance**: Straight line with bearing and distance
+
+Mobile does not contact a public routing provider. Authenticated Wayfarer-hosted routing is future work and is not part of the current architecture.
 
 ### Navigation Graph
 

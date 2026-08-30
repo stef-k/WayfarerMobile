@@ -36,25 +36,24 @@ public static class TripNavigationGraphBuilder
         foreach (var segment in trip.Segments)
         {
             var parseResult = TripSegmentGeometryParser.Parse(segment.Geometry);
+            if (!parseResult.IsSuccess)
+            {
+                if (parseResult.Failure != SegmentGeometryFailure.Empty)
+                    geometryFailure?.Invoke(segment.Id, parseResult.Failure!.Value);
+                continue;
+            }
+
             if (segment.Waypoints.Count == 0)
             {
                 var edge = CreateEdge(segment, segment.OriginId, segment.DestinationId,
                     segment.DistanceKm ?? 0, (int)(segment.DurationMinutes ?? 0));
-                if (parseResult.IsSuccess) edge.RouteGeometry = ToRoutePoints(parseResult.Coordinates);
-                else if (parseResult.Failure != SegmentGeometryFailure.Empty)
-                    geometryFailure?.Invoke(segment.Id, parseResult.Failure!.Value);
+                edge.RouteGeometry = ToRoutePoints(parseResult.Coordinates);
                 graph.AddEdge(edge);
                 continue;
             }
 
-            IReadOnlyList<SegmentCoordinate>? parsedGeometry = parseResult.IsSuccess
-                ? parseResult.Coordinates.Select(point => new SegmentCoordinate(point.Latitude, point.Longitude)).ToList()
-                : null;
-            if (!parseResult.IsSuccess && parseResult.Failure != SegmentGeometryFailure.Empty)
-            {
-                geometryFailure?.Invoke(segment.Id, parseResult.Failure!.Value);
-                continue;
-            }
+            IReadOnlyList<SegmentCoordinate> parsedGeometry = parseResult.Coordinates
+                .Select(point => new SegmentCoordinate(point.Latitude, point.Longitude)).ToList();
 
             var resolution = SegmentAnchorResolver.Resolve(segment, trip.AllPlaces, parsedGeometry);
             if (!resolution.IsValid) continue;

@@ -199,7 +199,7 @@ public class PolylineDecoderTests
     [Fact]
     public void Decode_RealWorldRoute_DecodesCorrectly()
     {
-        // Arrange - A short OSRM route segment
+        // Arrange - A short encoded Segment geometry
         // This represents a simple route that can be verified manually
         var encoded = "mz_eFvinjVnIhK";  // Simple route segment
 

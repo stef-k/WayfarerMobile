@@ -287,34 +287,6 @@ public partial class DiagnosticsViewModel : BaseViewModel
 
     #endregion
 
-    #region Location Queue Properties
-
-    [ObservableProperty]
-    private string _queueHealthStatus = "Unknown";
-
-    [ObservableProperty]
-    private int _pendingLocations;
-
-    [ObservableProperty]
-    private int _retryingLocations;
-
-    [ObservableProperty]
-    private int _syncedLocations;
-
-    [ObservableProperty]
-    private int _rejectedLocations;
-
-    [ObservableProperty]
-    private string _oldestPendingAge = "N/A";
-
-    [ObservableProperty]
-    private string _lastSyncTime = "Never";
-
-    [ObservableProperty]
-    private string _queueDetails = "No queue data";
-
-    #endregion
-
     #region Tile Cache Properties
 
     [ObservableProperty]
@@ -350,16 +322,6 @@ public partial class DiagnosticsViewModel : BaseViewModel
 
     [ObservableProperty]
     private string _trackingThresholds = "N/A";
-
-    #endregion
-
-    #region Navigation Properties
-
-    [ObservableProperty]
-    private bool _hasCachedRoute;
-
-    [ObservableProperty]
-    private string _cachedRouteInfo = "No cached route";
 
     #endregion
 
@@ -429,16 +391,13 @@ public partial class DiagnosticsViewModel : BaseViewModel
             var queueTask = _appDiagnosticService.GetLocationQueueDiagnosticsAsync();
             var cacheTask = _appDiagnosticService.GetTileCacheDiagnosticsAsync();
             var trackingTask = _appDiagnosticService.GetTrackingDiagnosticsAsync();
-            var navTask = _appDiagnosticService.GetNavigationDiagnosticsAsync();
-
-            await Task.WhenAll(healthTask, queueTask, cacheTask, trackingTask, navTask);
+            await Task.WhenAll(healthTask, queueTask, cacheTask, trackingTask);
 
             // Update UI
             UpdateHealthStatus(await healthTask);
             UpdateLocationQueue(await queueTask);
             UpdateTileCache(await cacheTask);
             UpdateTracking(await trackingTask);
-            UpdateNavigation(await navTask);
 
             // Load queue details
             await LoadQueueDetailsAsync();
@@ -621,108 +580,6 @@ public partial class DiagnosticsViewModel : BaseViewModel
         }
     }
 
-    // NOTE: Queue management actions (export, clear) moved to Settings > Offline Queue.
-    // Diagnostics is now read-only for queue information.
-
-    /// <summary>
-    /// Refreshes the location queue data.
-    /// </summary>
-    [RelayCommand]
-    private async Task RefreshQueueAsync()
-    {
-        try
-        {
-            var queueDiag = await _appDiagnosticService.GetLocationQueueDiagnosticsAsync();
-            UpdateLocationQueue(queueDiag);
-            await LoadQueueDetailsAsync();
-            await _toastService.ShowSuccessAsync("Queue refreshed");
-        }
-        catch (SQLiteException ex)
-        {
-            _logger.LogError(ex, "Database error refreshing queue");
-            await _toastService.ShowErrorAsync("Database error refreshing queue");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error refreshing queue");
-            await _toastService.ShowErrorAsync("Failed to refresh queue");
-        }
-    }
-
-    /// <summary>
-    /// Loads recent queue entries for display.
-    /// </summary>
-    private async Task LoadQueueDetailsAsync()
-    {
-        try
-        {
-            var locations = await _locationQueueRepository.GetAllQueuedLocationsAsync();
-
-            if (locations.Count == 0)
-            {
-                QueueDetails = "Queue is empty";
-                return;
-            }
-
-            // Take most recent 50 entries, ordered by timestamp descending
-            var recentLocations = locations
-                .OrderByDescending(l => l.Timestamp)
-                .Take(50)
-                .ToList();
-
-            var sb = new StringBuilder();
-            sb.AppendLine($"Showing {recentLocations.Count} of {locations.Count} entries (newest first)");
-            sb.AppendLine(new string('-', 60));
-
-            foreach (var loc in recentLocations)
-            {
-                var status = loc.SyncStatus switch
-                {
-                    Core.Enums.SyncStatus.Pending => loc.IsRejected ? "REJECTED" :
-                                         loc.SyncAttempts > 0 ? $"RETRY({loc.SyncAttempts})" : "PENDING",
-                    Core.Enums.SyncStatus.Syncing => "SYNCING",
-                    Core.Enums.SyncStatus.Synced => "SYNCED",
-                    _ => "?"
-                };
-
-                // Add USER indicator for user-invoked locations (manual check-ins)
-                var userTag = loc.IsUserInvoked ? " [USER]" : "";
-
-                var inv = System.Globalization.CultureInfo.InvariantCulture;
-                sb.AppendLine($"[{loc.Timestamp:HH:mm:ss}] {status}{userTag}");
-                sb.AppendLine($"  Loc: {loc.Latitude.ToString("F5", inv)}, {loc.Longitude.ToString("F5", inv)}");
-
-                if (loc.Accuracy.HasValue)
-                    sb.Append($"  Acc: {loc.Accuracy.Value.ToString("F0", inv)}m");
-                if (loc.Speed.HasValue)
-                    sb.Append($"  Spd: {loc.Speed.Value.ToString("F1", inv)}m/s");
-                if (loc.Accuracy.HasValue || loc.Speed.HasValue)
-                    sb.AppendLine();
-
-                // Show check-in notes for user-invoked locations
-                if (!string.IsNullOrEmpty(loc.CheckInNotes))
-                    sb.AppendLine($"  Notes: {loc.CheckInNotes}");
-
-                if (!string.IsNullOrEmpty(loc.LastError))
-                    sb.AppendLine($"  Err: {loc.LastError}");
-
-                sb.AppendLine();
-            }
-
-            QueueDetails = sb.ToString();
-        }
-        catch (SQLiteException ex)
-        {
-            _logger.LogError(ex, "Database error loading queue details");
-            QueueDetails = "Database error loading queue details";
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error loading queue details");
-            QueueDetails = $"Error loading queue details: {ex.Message}";
-        }
-    }
-
     #endregion
 
     #region Update Methods
@@ -755,29 +612,6 @@ public partial class DiagnosticsViewModel : BaseViewModel
         };
     }
 
-    private void UpdateLocationQueue(LocationQueueDiagnostics diag)
-    {
-        QueueHealthStatus = diag.QueueHealthStatus;
-        PendingLocations = diag.PendingCount;
-        RetryingLocations = diag.RetryingCount;
-        SyncedLocations = diag.SyncedCount;
-        RejectedLocations = diag.RejectedCount;
-
-        if (diag.OldestPendingTimestamp.HasValue)
-        {
-            var age = DateTime.UtcNow - diag.OldestPendingTimestamp.Value;
-            OldestPendingAge = age.TotalHours >= 1
-                ? $"{age.TotalHours:F1} hours"
-                : $"{age.TotalMinutes:F0} min";
-        }
-        else
-        {
-            OldestPendingAge = "N/A";
-        }
-
-        LastSyncTime = diag.LastSyncedTimestamp?.ToLocalTime().ToString("g") ?? "Never";
-    }
-
     private void UpdateTileCache(TileCacheDiagnostics diag)
     {
         CacheHealthStatus = diag.CacheHealthStatus;
@@ -802,22 +636,6 @@ public partial class DiagnosticsViewModel : BaseViewModel
         else
         {
             LastLocationInfo = "No location";
-        }
-    }
-
-    private void UpdateNavigation(NavigationDiagnostics diag)
-    {
-        HasCachedRoute = diag.HasCachedRoute;
-
-        if (diag.HasCachedRoute)
-        {
-            CachedRouteInfo = $"{diag.CachedRouteDestination} - {diag.CachedRouteWaypointCount} waypoints, " +
-                              $"{diag.CachedRouteDistance:F0}m, " +
-                              $"age: {diag.CacheAgeSeconds:F0}s, valid: {diag.IsCacheValid}";
-        }
-        else
-        {
-            CachedRouteInfo = "No cached route";
         }
     }
 

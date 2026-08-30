@@ -182,6 +182,8 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
     [RelayCommand]
     public void StopNavigation()
     {
+        _tripNavigationService.StopNavigation();
+
         // Notify visit notification service that navigation ended
         _currentNavigationPlaceId = null;
         _visitNotificationService.UpdateNavigationState(false, null);

@@ -27,7 +27,7 @@ The live cache can be inspected and cleared from **Settings** > **Map Cache**. C
 
 ## Using Trip Content Offline
 
-Without a network connection, downloaded Places, Segments, Areas, and Trip metadata remain available. Planned Segment geometry is preferred for navigation. A valid cached route can also be used; otherwise navigation provides an honest direct distance and bearing fallback when online routing is unavailable.
+Without a network connection, downloaded Places, Segments, Areas, and Trip metadata remain available. Valid planned Segment geometry is preferred for navigation; otherwise navigation provides honest Direct distance and bearing guidance. Direct is straight-line guidance, not road-aware turn-by-turn routing.
 
 Timeline data, queued locations, pending mutations, authentication state, and ordinary synchronization are independent of Trip downloads and the interactive map cache.
 

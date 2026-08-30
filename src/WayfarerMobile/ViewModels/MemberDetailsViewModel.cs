@@ -274,7 +274,7 @@ public partial class MemberDetailsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Navigates to the member's location using OSRM routing with straight line fallback.
+    /// Navigates to the member's location using Direct straight-line guidance.
     /// Calculates route from current location and displays it on the main map.
     /// </summary>
     [RelayCommand]
@@ -311,8 +311,7 @@ public partial class MemberDetailsViewModel : ObservableObject
             return;
         }
 
-        // Map selection to OSRM profile
-        var osrmProfile = navMethod switch
+        var travelProfile = navMethod switch
         {
             NavigationMethod.Walk => "foot",
             NavigationMethod.Drive => "car",
@@ -326,16 +325,15 @@ public partial class MemberDetailsViewModel : ObservableObject
             var destLon = SelectedMember.LastLocation.Longitude;
             var destName = SelectedMember.DisplayText ?? "Member";
 
-            _logger.LogInformation("Calculating {Mode} route to {Member} at {Lat},{Lon}", osrmProfile, destName, destLat, destLon);
+            _logger.LogInformation("Calculating Direct guidance to member using {Mode}", travelProfile);
 
-            // Calculate route using OSRM with straight line fallback
             var route = await _tripNavigationService.CalculateRouteToCoordinatesAsync(
                 currentLocation.Latitude,
                 currentLocation.Longitude,
                 destLat,
                 destLon,
                 destName,
-                osrmProfile);
+                travelProfile);
 
             // Close bottom sheet before navigating
             IsMemberSheetOpen = false;
@@ -348,16 +346,6 @@ public partial class MemberDetailsViewModel : ObservableObject
 
             _logger.LogInformation("Started navigation to {Member}: {Distance:F1}km",
                 destName, route.TotalDistanceMeters / 1000);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogNetworkWarningIfOnline("Network error calculating route: {Message}", ex.Message);
-            await _toastService.ShowErrorAsync("Failed to calculate route");
-        }
-        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-        {
-            _logger.LogError(ex, "Route calculation timed out");
-            await _toastService.ShowErrorAsync("Route calculation timed out");
         }
         catch (Exception ex)
         {

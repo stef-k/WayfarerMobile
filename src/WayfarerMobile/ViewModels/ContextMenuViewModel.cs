@@ -210,8 +210,7 @@ public partial class ContextMenuViewModel : BaseViewModel
             return;
         }
 
-        // Map selection to OSRM profile
-        var osrmProfile = navMethod switch
+        var travelProfile = navMethod switch
         {
             NavigationMethod.Walk => "foot",
             NavigationMethod.Drive => "car",
@@ -223,14 +222,14 @@ public partial class ContextMenuViewModel : BaseViewModel
         {
             _callbacks.IsBusy = true;
 
-            // Calculate route using OSRM with straight line fallback
+            // Direct guidance uses the selected travel mode only for its ETA.
             var route = await _callbacks.CalculateRouteToCoordinatesAsync(
                 currentLocation.Latitude,
                 currentLocation.Longitude,
                 ContextMenuLatitude,
                 ContextMenuLongitude,
                 "Dropped Pin",
-                osrmProfile);
+                travelProfile);
 
             // Clear dropped pin and start navigation
             ClearDroppedPin();
@@ -239,16 +238,6 @@ public partial class ContextMenuViewModel : BaseViewModel
             await _callbacks.StartNavigationWithRouteAsync(route);
 
             _logger.LogInformation("Started navigation to dropped pin: {Distance:F1}km", route.TotalDistanceMeters / 1000);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogNetworkWarningIfOnline("Network error calculating route: {Message}", ex.Message);
-            await _callbacks.ToastService.ShowErrorAsync("Network error. Please check your connection.");
-        }
-        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-        {
-            _logger.LogError(ex, "Route calculation timed out");
-            await _callbacks.ToastService.ShowErrorAsync("Request timed out. Please try again.");
         }
         catch (Exception ex)
         {
