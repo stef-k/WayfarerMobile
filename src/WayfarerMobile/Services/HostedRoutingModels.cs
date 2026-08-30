@@ -79,7 +79,8 @@ public sealed record HostedRouteCapabilityMetadata(string Provider, Guid Provide
     string MappingIdentity, string StorageMode);
 
 public sealed record HostedRouteCandidate(NavigationRoute Route, HostedRouteRequestContext Context,
-    Guid SelectedProfileId, string SelectedProfileAuthorityIdentity, HostedRouteCapabilityMetadata Metadata);
+    Guid SelectedProfileId, string SelectedProfileAuthorityIdentity, HostedRouteCapabilityMetadata Metadata,
+    DateTimeOffset GeneratedAt);
 
 public sealed record HostedRouteRequestContext(Guid? SavedTransportProfileId, string? ModeKey, string? Category,
     HostedRouteCoordinate Origin, HostedRouteCoordinate Destination, IReadOnlyList<HostedRouteCoordinate> Anchors,

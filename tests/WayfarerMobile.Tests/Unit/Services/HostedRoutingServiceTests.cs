@@ -101,7 +101,7 @@ public sealed class HostedRoutingServiceTests
         { SelectedTransportProfileId = WalkingProfile, SelectedProfileAuthorityIdentity = IdentityA };
         var candidate = new HostedRouteCandidate(new WayfarerMobile.Core.Models.NavigationRoute(),
             context, WalkingProfile, IdentityA,
-            new("geoapify", CyclingProfile, "mapping", "persistent"));
+            new("geoapify", CyclingProfile, "mapping", "persistent"), DateTimeOffset.UtcNow);
         var live = context with { SelectedProfileAuthorityIdentity = IdentityB };
 
         HostedRoutePublication.Current(candidate, live).Should().BeFalse();
@@ -164,6 +164,7 @@ public sealed class HostedRoutingServiceTests
         result.Outcome.Should().Be(HostedRoutingOutcome.Success);
         result.Candidate!.Metadata.Should().Be(new HostedRouteCapabilityMetadata("geoapify",
             Guid.Parse("22222222-2222-2222-2222-222222222222"), "mapping-v2", "future-transient"));
+        result.Candidate.GeneratedAt.Offset.Should().Be(TimeSpan.Zero);
     }
 
     [Theory]

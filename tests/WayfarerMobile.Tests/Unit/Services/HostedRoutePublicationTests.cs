@@ -61,7 +61,8 @@ public sealed class HostedRoutePublicationTests
         return new HostedRouteCandidate(RoutedRoute(), context,
             profileId,
             "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-            new("geoapify", Guid.Parse("22222222-2222-2222-2222-222222222222"), "mapping", "persistent"));
+            new("geoapify", Guid.Parse("22222222-2222-2222-2222-222222222222"), "mapping", "persistent"),
+            DateTimeOffset.UtcNow);
     }
 
     private static NavigationRoute DirectRoute() => new()

@@ -53,7 +53,8 @@ public sealed class HostedRoutingService
             var candidateContext = context with { SelectedTransportProfileId = selection.Profile.TransportProfileId,
                 SelectedProfileAuthorityIdentity = capability.SelectedProfileAuthorityIdentity };
             var candidate = new HostedRouteCandidate(BuildRoute(response, context.DestinationName), candidateContext,
-                selection.Profile.TransportProfileId, capability.SelectedProfileAuthorityIdentity!, metadata);
+                selection.Profile.TransportProfileId, capability.SelectedProfileAuthorityIdentity!, metadata,
+                response.GeneratedAt!.Value);
             return new(HostedRoutingOutcome.Success, Candidate: candidate);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
