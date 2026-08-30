@@ -86,6 +86,8 @@ public sealed class HostedRoutePublicationTests
         candidate.Context.TargetAssociation,
         candidate.Context.SegmentId,
         candidate.Context.SavedTransportProfileId,
+        candidate.Context.ModeKey,
+        candidate.Context.Category,
         candidate.SelectedProfileId,
         candidate.SelectedProfileAuthorityIdentity,
         candidate.Context.NavigationChoice);

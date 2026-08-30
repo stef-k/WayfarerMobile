@@ -42,10 +42,23 @@ public class NavigationRoute
 
     /// <summary>Gets transient linked attribution for the active hosted route.</summary>
     public List<HostedRouteAttribution> Attribution { get; set; } = new();
+
+    /// <summary>Gets or sets safe transient provenance for the active hosted route.</summary>
+    public HostedRouteProvenance? HostedProvenance { get; set; }
 }
 
 /// <summary>Contains one safe linked attribution displayed only with an active hosted route.</summary>
 public sealed record HostedRouteAttribution(string Text, string Url);
+
+/// <summary>Safe memory-only provenance retained with an active hosted route.</summary>
+public sealed record HostedRouteProvenance(
+    Guid TransportProfileId,
+    string SelectedProfileAuthorityIdentity,
+    string Provider,
+    Guid ProviderConfigurationId,
+    string MappingIdentity,
+    string StorageMode,
+    DateTimeOffset GeneratedAt);
 
 /// <summary>
 /// A single turn-by-turn instruction in the navigation route.

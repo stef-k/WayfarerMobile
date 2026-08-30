@@ -431,7 +431,12 @@ The `TripNavigationService` calculates routes with the following priority:
 2. **Authenticated Wayfarer route**: Fresh provider-neutral, session-only geometry
 3. **Direct guidance**: Straight line with bearing and distance
 
-Mobile contacts only its configured Wayfarer server. The coordinator validates a returned candidate against live session, server, profile, authority, target, endpoints, choice, and generation state in the same synchronous callback that installs it. Provider credentials and provider-specific endpoints remain server-side.
+Mobile contacts only its configured Wayfarer server. Routing identity uses a non-secret, process-local authentication
+session revision rather than the bearer token. In the final synchronous UI callback, the coordinator rebuilds current
+authority from the settings owner, live device location, current Trip Place/Segment data or member owner, and the
+hosted selection owner. It compares generation, normalized server, target and Segment identity, profile/authority,
+choice, and canonical origin/anchors/destination immediately before installation, with no await or dispatch gap.
+Provider credentials and provider-specific endpoints remain server-side.
 
 ### Navigation Graph
 

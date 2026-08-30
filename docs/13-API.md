@@ -482,11 +482,15 @@ Mobile never contacts a public or commercial routing provider. It discovers elig
 `GET /api/mobile/routing/capability/{transportProfileId}`, and requests a transient route with
 `POST /api/mobile/routing/route`. The discovery catalog identity scopes only pre-capability selection; the selected
 profile authority identity fences route execution and publication. Bearer credentials remain bound to the configured
-Wayfarer server, provider credentials stay server-side, and returned attribution is displayed as supplied.
+Wayfarer server, provider credentials stay server-side, and returned attribution is displayed as supplied. Mobile
+uses only a non-secret process-local authentication revision plus the normalized server for in-flight publication
+identity; it never copies or hashes the bearer token into routing state.
 
 Valid downloaded Trip Segment geometry remains higher authority. Hosted failures, old-server 404 responses, disabled
 providers, cancellation, and stale results fall back to Direct straight-line guidance without changing the general
 session. Hosted route output and profile choices are never persisted; offline hosted-route retention belongs to #261.
+Safe provider/profile provenance remains attached only to a successfully published active route and clears on normal
+replacement or stop.
 
 ## JSON Serialization
 

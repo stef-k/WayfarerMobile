@@ -1,3 +1,4 @@
+using WayfarerMobile.Core.Algorithms;
 using WayfarerMobile.Core.Models;
 
 namespace WayfarerMobile.Services;
@@ -84,13 +85,81 @@ public sealed record HostedRouteCandidate(NavigationRoute Route, HostedRouteRequ
 
 public sealed record HostedRouteRequestContext(Guid? SavedTransportProfileId, string? ModeKey, string? Category,
     HostedRouteCoordinate Origin, HostedRouteCoordinate Destination, IReadOnlyList<HostedRouteCoordinate> Anchors,
-    string DestinationName, long Generation, string SessionAuthority, string NormalizedServer,
-    string TargetAssociation, string NavigationChoice, string? ExpectedCatalogIdentity = null,
-    Guid? SelectedTransportProfileId = null, string? SelectedProfileAuthorityIdentity = null)
+    string DestinationName, long Generation, long AuthenticationSessionRevision, string NormalizedServer,
+    string TargetAssociation, string NavigationChoice, Guid? SegmentId = null,
+    string? ExpectedCatalogIdentity = null)
 {
     public static HostedRouteRequestContext ForTest(Guid profileId, string? expectedCatalogIdentity = null) => new(
         profileId, "walk", "active", new(23, 37), new(23.01, 37.01), [], "Target", 1,
-        "session", "https://wayfarer.test", "place:test", "hosted", expectedCatalogIdentity);
+        1, "https://wayfarer.test", "place:test", "hosted", ExpectedCatalogIdentity: expectedCatalogIdentity);
+}
+
+public sealed record HostedRouteLiveAuthority(
+    long Generation,
+    long AuthenticationSessionRevision,
+    string NormalizedServer,
+    HostedRouteCoordinate Origin,
+    HostedRouteCoordinate Destination,
+    IReadOnlyList<HostedRouteCoordinate> Anchors,
+    string TargetAssociation,
+    Guid? SegmentId,
+    Guid? SavedTransportProfileId,
+    string? ModeKey,
+    string? Category,
+    Guid? SelectedTransportProfileId,
+    string? SelectedProfileAuthorityIdentity,
+    string NavigationChoice);
+
+public sealed record HostedRouteSelection(long Generation, Guid TransportProfileId,
+    string SelectedProfileAuthorityIdentity);
+
+public sealed record HostedTripTargetAuthority(
+    Guid DestinationPlaceId,
+    Guid? SegmentId,
+    HostedRouteCoordinate Destination,
+    Guid? SavedTransportProfileId,
+    string ModeKey,
+    string Category,
+    IReadOnlyList<HostedRouteCoordinate> Anchors)
+{
+    public static HostedTripTargetAuthority? Resolve(TripDetails? trip, Guid destinationPlaceId,
+        double originLatitude, double originLongitude)
+    {
+        var destination = trip?.AllPlaces.SingleOrDefault(place => place.Id == destinationPlaceId);
+        if (destination == null) return null;
+
+        var places = trip!.AllPlaces.ToDictionary(place => place.Id);
+        var segment = trip.Segments
+            .Where(item => item.DestinationId == destinationPlaceId && item.OriginId is { } originId
+                && places.ContainsKey(originId))
+            .OrderBy(item =>
+            {
+                var origin = places[item.OriginId!.Value];
+                return GeoMath.CalculateDistance(originLatitude, originLongitude,
+                    origin.Latitude, origin.Longitude);
+            })
+            .FirstOrDefault();
+        var anchors = ResolveAnchors(segment, places);
+        if (anchors == null) return null;
+        var mode = segment?.TransportMode ?? "walk";
+        return new(destinationPlaceId, segment?.Id,
+            new(destination.Longitude, destination.Latitude),
+            HostedSegmentProfileIdentity.Get(segment), mode, mode, anchors);
+    }
+
+    private static IReadOnlyList<HostedRouteCoordinate>? ResolveAnchors(TripSegment? segment,
+        IReadOnlyDictionary<Guid, TripPlace> places)
+    {
+        if (segment == null || segment.Waypoints.Count == 0) return [];
+        if (segment.Waypoints.Count > 3) return null;
+        var anchors = new List<HostedRouteCoordinate>(segment.Waypoints.Count);
+        foreach (var waypoint in segment.Waypoints.OrderBy(item => item.Position))
+        {
+            if (!places.TryGetValue(waypoint.PlaceId, out var place)) return null;
+            anchors.Add(new(place.Longitude, place.Latitude));
+        }
+        return anchors;
+    }
 }
 
 public static class HostedRouteIdentity
@@ -125,34 +194,41 @@ public static class HostedOpaqueIdentity
 
 public static class HostedRoutePublication
 {
-    public static bool TryPublish(HostedRouteCandidate candidate, HostedRouteRequestContext live,
+    public static bool TryPublish(HostedRouteCandidate candidate, HostedRouteLiveAuthority live,
         NavigationRoute target)
     {
         if (!Current(candidate, live)) return false;
-        Copy(candidate.Route, target);
+        Copy(candidate, target);
         return true;
     }
 
-    public static bool Current(HostedRouteCandidate candidate, HostedRouteRequestContext live)
+    public static bool Current(HostedRouteCandidate candidate, HostedRouteLiveAuthority live)
     {
         var expected = candidate.Context;
         return live.Generation == expected.Generation
-            && live.SessionAuthority == expected.SessionAuthority
+            && live.AuthenticationSessionRevision == expected.AuthenticationSessionRevision
             && live.NormalizedServer == expected.NormalizedServer
             && live.TargetAssociation == expected.TargetAssociation
+            && live.SegmentId == expected.SegmentId
             && live.NavigationChoice == expected.NavigationChoice
             && live.NavigationChoice == "hosted"
             && live.SavedTransportProfileId == expected.SavedTransportProfileId
+            && live.ModeKey == expected.ModeKey
+            && live.Category == expected.Category
             && live.SelectedTransportProfileId == candidate.SelectedProfileId
             && live.SelectedProfileAuthorityIdentity == candidate.SelectedProfileAuthorityIdentity
-            && HostedRouteIdentity.Canonicalize(Points(live)).SequenceEqual(HostedRouteIdentity.Canonicalize(Points(expected)));
+            && HostedRouteIdentity.Canonicalize(Points(live.Origin, live.Anchors, live.Destination))
+                .SequenceEqual(HostedRouteIdentity.Canonicalize(
+                    Points(expected.Origin, expected.Anchors, expected.Destination)));
     }
 
-    private static IEnumerable<HostedRouteCoordinate> Points(HostedRouteRequestContext context) =>
-        new[] { context.Origin }.Concat(context.Anchors).Append(context.Destination);
+    private static IEnumerable<HostedRouteCoordinate> Points(HostedRouteCoordinate origin,
+        IReadOnlyList<HostedRouteCoordinate> anchors, HostedRouteCoordinate destination) =>
+        new[] { origin }.Concat(anchors).Append(destination);
 
-    private static void Copy(NavigationRoute source, NavigationRoute target)
+    private static void Copy(HostedRouteCandidate candidate, NavigationRoute target)
     {
+        var source = candidate.Route;
         target.Waypoints = source.Waypoints;
         target.Steps = source.Steps;
         target.DestinationName = source.DestinationName;
@@ -161,6 +237,13 @@ public static class HostedRoutePublication
         target.IsDirectRoute = false;
         target.InitialBearing = 0;
         target.Attribution = source.Attribution;
+        target.HostedProvenance = new(candidate.SelectedProfileId,
+            candidate.SelectedProfileAuthorityIdentity,
+            candidate.Metadata.Provider,
+            candidate.Metadata.ProviderConfigurationId,
+            candidate.Metadata.MappingIdentity,
+            candidate.Metadata.StorageMode,
+            candidate.GeneratedAt.ToUniversalTime());
     }
 }
 

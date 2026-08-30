@@ -552,16 +552,22 @@ public NavigationRoute? CalculateRouteToPlace(
 ```
 
 Hosted routes are authenticated, provider-neutral, session-only results. Provider credentials and provider selection
-remain on Wayfarer. The active HUD displays the linked attribution returned by Wayfarer and clears it on replacement
-or stop. Old servers, disabled routing, rejected requests, cancellation, malformed/stale responses, and provider
+remain on Wayfarer. The active route retains linked attribution plus safe transient provenance: selected transport
+profile and authority identities, provider and provider-configuration identities, mapping identity, storage mode, and
+the normalized backend generation timestamp. It contains no bearer token, credentials, or provider endpoint and
+clears through normal replacement or stop. Old servers, disabled routing, rejected requests, cancellation,
+malformed/stale responses, and provider
 unavailability remain routing-local and retain Direct guidance without affecting authentication or synchronization.
 Valid saved Segment geometry is never replaced automatically. Mobile does not persist generated geometry, selection,
 attribution, or authority identities; offline retention of hosted routes belongs to #261.
 
-`TransportProfileId` is the Segment's current planning profile identity. A returned route's selected profile and
-authority metadata are immutable provenance for that transient result; they do not rewrite the Segment and are not a
-durable current-profile setting. The coordinator treats service output as a candidate and performs its final live-state
-comparison immediately beside the synchronous route copy.
+`TransportProfileId` is the Segment's current planning profile identity. Current hosted selection state remains
+separate from the immutable provenance retained on a successfully published route; neither rewrites the Segment nor
+becomes a durable current-profile setting. The settings owner advances a non-secret, memory-only authentication
+session revision whenever the effective server or token authority changes, including logout/reset, so routing never
+copies or compares the token. At actual publication the coordinator rereads live location, exact Trip Place/Segment
+profile/ordered anchors by stable IDs, or the current member location from its owner. That state is compared beside
+the synchronous route/provenance copy.
 
 ### Navigation State
 

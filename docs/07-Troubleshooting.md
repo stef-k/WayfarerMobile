@@ -259,7 +259,11 @@ For detailed troubleshooting:
 
 ### Hosted Routing Falls Back to Direct
 
-Direct remains usable when the configured Wayfarer server is old, routing is disabled, no provider is available, authentication authority changes, or a response is stale or invalid. Confirm the server supports the Mobile routing endpoints and that routing is enabled for your account. Provider credentials are configured only on the server and are never entered in Mobile. A hosted route is session-only; offline retention is deferred to #261.
+Direct remains usable when the configured Wayfarer server is old, routing is disabled, no provider is available,
+authentication authority changes, or live location/target/profile state no longer matches a delayed response. Confirm
+the server supports the Mobile routing endpoints and that routing is enabled for your account. Provider credentials
+are configured only on the server and are never entered in Mobile. A hosted route and its safe provenance are
+session-only; offline retention is deferred to #261.
 
 ### Off-Route Constantly
 

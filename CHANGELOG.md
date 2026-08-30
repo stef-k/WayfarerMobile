@@ -7,7 +7,7 @@
   - Discovers and confirms server-owned routing profiles before requesting provider-neutral routes
   - Keeps provider credentials server-side and never contacts a routing provider directly
   - Preserves saved Segment geometry priority with Direct guidance for unavailable, rejected, cancelled, or stale work
-  - Displays server-returned attribution only for the active hosted route
+  - Retains safe server-returned attribution and hosted provenance only with the active route
   - Keeps hosted routes and profile selections session-only; offline retention remains future work in #261
 
 ### 2026-06-20

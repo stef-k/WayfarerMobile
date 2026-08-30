@@ -7,6 +7,7 @@ using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
+using WayfarerMobile.Services;
 using WayfarerMobile.Views.Controls;
 
 namespace WayfarerMobile.ViewModels;
@@ -325,6 +326,7 @@ public partial class MemberDetailsViewModel : ObservableObject
             var destLat = SelectedMember.LastLocation.Latitude;
             var destLon = SelectedMember.LastLocation.Longitude;
             var destName = SelectedMember.DisplayText ?? "Member";
+            var targetUserId = SelectedMember.UserId;
 
             _logger.LogInformation("Calculating Direct guidance to member using {Mode}", travelProfile);
 
@@ -335,7 +337,8 @@ public partial class MemberDetailsViewModel : ObservableObject
                 destLon,
                 destName,
                 travelProfile,
-                $"group-member:{SelectedMember.UserId}");
+                $"group-member:{targetUserId}",
+                () => ResolveCurrentMemberLocation(targetUserId));
 
             // Close bottom sheet before navigating
             IsMemberSheetOpen = false;
@@ -354,6 +357,13 @@ public partial class MemberDetailsViewModel : ObservableObject
             _logger.LogError("Member navigation failed: local-navigation-error");
             await _toastService.ShowErrorAsync("Failed to start navigation");
         }
+    }
+
+    private HostedRouteCoordinate? ResolveCurrentMemberLocation(string userId)
+    {
+        var location = _callbacks?.Members
+            .FirstOrDefault(member => member.UserId == userId)?.LastLocation;
+        return location == null ? null : new(location.Longitude, location.Latitude);
     }
 
     #endregion

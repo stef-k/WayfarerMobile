@@ -361,7 +361,8 @@ Route calculation differs based on navigation context:
 - Distance to destination
 - Bearing-based heading
 
-Direct is not road-aware. Hosted route geometry, attribution, and the chosen profile are session-only and are not retained for offline use; #261 owns offline retention.
+Direct is not road-aware. Hosted route geometry, attribution, and safe provider/profile provenance remain only with
+the active route and are not retained for offline use; replacement or stop clears them. #261 owns offline retention.
 
 ### External Maps Integration
 

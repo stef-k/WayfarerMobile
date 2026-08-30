@@ -6,7 +6,7 @@ namespace WayfarerMobile.Services;
 /// <summary>
 /// Service for managing application settings using MAUI Preferences.
 /// </summary>
-public class SettingsService : ISettingsService
+public partial class SettingsService : ISettingsService
 {
     private readonly ILogger<SettingsService> _logger;
 
@@ -95,152 +95,6 @@ public class SettingsService : ISettingsService
     {
         get => Preferences.Get(KeyBackgroundTrackingEnabled, false);
         set => Preferences.Set(KeyBackgroundTrackingEnabled, value);
-    }
-
-    // Cached values to avoid blocking SecureStorage calls on main thread
-    private string? _cachedServerUrl;
-    private string? _cachedApiToken;
-    private bool _serverUrlLoaded;
-    private bool _apiTokenLoaded;
-
-    /// <summary>
-    /// Pre-loads secure settings from SecureStorage into memory cache.
-    /// Call this at app startup to avoid blocking on first access.
-    /// </summary>
-    public async Task PreloadSecureSettingsAsync()
-    {
-        if (!_serverUrlLoaded)
-        {
-            try
-            {
-                _cachedServerUrl = await SecureStorage.Default.GetAsync(KeyServerUrl);
-            }
-            catch (InvalidOperationException ex)
-            {
-                // SecureStorage unavailable (common after data clear on Android)
-                _logger.LogWarning(ex, "SecureStorage unavailable for ServerUrl");
-                _cachedServerUrl = null;
-            }
-            catch (Exception ex)
-            {
-                // Other platform-specific failures - treat as empty
-                _logger.LogWarning(ex, "Unexpected error loading ServerUrl");
-                _cachedServerUrl = null;
-            }
-            _serverUrlLoaded = true;
-        }
-        if (!_apiTokenLoaded)
-        {
-            try
-            {
-                _cachedApiToken = await SecureStorage.Default.GetAsync(KeyApiToken);
-            }
-            catch (InvalidOperationException ex)
-            {
-                // SecureStorage unavailable (common after data clear on Android)
-                _logger.LogWarning(ex, "SecureStorage unavailable for ApiToken");
-                _cachedApiToken = null;
-            }
-            catch (Exception ex)
-            {
-                // Other platform-specific failures - treat as empty
-                _logger.LogWarning(ex, "Unexpected error loading ApiToken");
-                _cachedApiToken = null;
-            }
-            _apiTokenLoaded = true;
-        }
-    }
-
-    /// <summary>
-    /// Gets or sets the server URL for API calls.
-    /// Cached in memory to avoid SecureStorage deadlocks on Android.
-    /// </summary>
-    public string? ServerUrl
-    {
-        get
-        {
-            if (!_serverUrlLoaded)
-            {
-                try
-                {
-                    // First access - load from SecureStorage on background thread
-                    _cachedServerUrl = Task.Run(async () => await SecureStorage.Default.GetAsync(KeyServerUrl)).Result;
-                }
-                catch (InvalidOperationException ex)
-                {
-                    // SecureStorage unavailable (common after data clear on Android)
-                    _logger.LogWarning(ex, "SecureStorage unavailable for ServerUrl (sync)");
-                    _cachedServerUrl = null;
-                }
-                catch (Exception ex)
-                {
-                    // Other platform-specific failures - treat as empty
-                    _logger.LogWarning(ex, "Unexpected error loading ServerUrl (sync)");
-                    _cachedServerUrl = null;
-                }
-                _serverUrlLoaded = true;
-            }
-            return _cachedServerUrl;
-        }
-        set
-        {
-            _cachedServerUrl = value;
-            _serverUrlLoaded = true;
-            if (string.IsNullOrEmpty(value))
-            {
-                SecureStorage.Default.Remove(KeyServerUrl);
-            }
-            else
-            {
-                Task.Run(async () => await SecureStorage.Default.SetAsync(KeyServerUrl, value));
-            }
-        }
-    }
-
-    /// <summary>
-    /// Gets or sets the API authentication token.
-    /// Cached in memory to avoid SecureStorage deadlocks on Android.
-    /// </summary>
-    public string? ApiToken
-    {
-        get
-        {
-            if (!_apiTokenLoaded)
-            {
-                try
-                {
-                    // First access - load from SecureStorage on background thread
-                    _cachedApiToken = Task.Run(async () => await SecureStorage.Default.GetAsync(KeyApiToken)).Result;
-                }
-                catch (InvalidOperationException ex)
-                {
-                    // SecureStorage unavailable (common after data clear on Android)
-                    _logger.LogWarning(ex, "SecureStorage unavailable for ApiToken (sync)");
-                    _cachedApiToken = null;
-                }
-                catch (Exception ex)
-                {
-                    // Other platform-specific failures - treat as empty
-                    _logger.LogWarning(ex, "Unexpected error loading ApiToken (sync)");
-                    _cachedApiToken = null;
-                }
-                _apiTokenLoaded = true;
-            }
-            return _cachedApiToken;
-        }
-        set
-        {
-            _cachedApiToken = value;
-            _apiTokenLoaded = true;
-            if (string.IsNullOrEmpty(value))
-            {
-                SecureStorage.Default.Remove(KeyApiToken);
-            }
-            else
-            {
-                Task.Run(async () => await SecureStorage.Default.SetAsync(KeyApiToken, value));
-            }
-        }
     }
 
     /// <summary>
@@ -688,6 +542,7 @@ public class SettingsService : ISettingsService
     public void Clear()
     {
         Preferences.Clear();
+        ClearAuth();
         // Reset first run to false since app was used
         IsFirstRun = false;
     }
@@ -702,8 +557,7 @@ public class SettingsService : ISettingsService
         SecureStorage.Default.Remove(KeyServerUrl);
 
         // Clear cached values
-        _cachedApiToken = null;
-        _cachedServerUrl = null;
+        ClearCachedAuthentication();
         _apiTokenLoaded = true;
         _serverUrlLoaded = true;
 
@@ -748,8 +602,7 @@ public class SettingsService : ISettingsService
         }
 
         // Reset cached values
-        _cachedServerUrl = null;
-        _cachedApiToken = null;
+        ClearCachedAuthentication();
         _serverUrlLoaded = true;
         _apiTokenLoaded = true;
 

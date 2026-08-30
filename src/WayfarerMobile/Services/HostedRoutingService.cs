@@ -12,7 +12,13 @@ public sealed class HostedRoutingService
     private readonly ILogger<HostedRoutingService> logger;
     private readonly object stateLock = new();
     private long activeGeneration;
+    private HostedRouteSelection? currentSelection;
     public bool IsLoading { get; private set; }
+
+    public HostedRouteSelection? CurrentSelection
+    {
+        get { lock (stateLock) return currentSelection; }
+    }
 
     public HostedRoutingService(IHostedRoutingApiClient api, ILogger<HostedRoutingService> logger)
     {
@@ -46,13 +52,12 @@ public sealed class HostedRoutingService
                 context.Destination, context.Anchors, capability.SelectedProfileAuthorityIdentity!);
             var response = await api.GetRouteAsync(request, cancellationToken);
             if (!ValidResponse(response, request, capability)) return new(HostedRoutingOutcome.InvalidResponse);
-            if (!CurrentGeneration(context.Generation))
+            if (!SelectCurrent(context.Generation, selection.Profile.TransportProfileId,
+                capability.SelectedProfileAuthorityIdentity!))
                 return new(HostedRoutingOutcome.Stale);
             var metadata = new HostedRouteCapabilityMetadata(capability.Provider!,
                 capability.ProviderConfigurationId!.Value, capability.MappingIdentity!, capability.StorageMode!);
-            var candidateContext = context with { SelectedTransportProfileId = selection.Profile.TransportProfileId,
-                SelectedProfileAuthorityIdentity = capability.SelectedProfileAuthorityIdentity };
-            var candidate = new HostedRouteCandidate(BuildRoute(response, context.DestinationName), candidateContext,
+            var candidate = new HostedRouteCandidate(BuildRoute(response, context.DestinationName), context,
                 selection.Profile.TransportProfileId, capability.SelectedProfileAuthorityIdentity!, metadata,
                 response.GeneratedAt!.Value);
             return new(HostedRoutingOutcome.Success, Candidate: candidate);
@@ -78,6 +83,7 @@ public sealed class HostedRoutingService
         lock (stateLock)
         {
             activeGeneration = generation;
+            currentSelection = null;
             IsLoading = false;
         }
     }
@@ -88,14 +94,20 @@ public sealed class HostedRoutingService
         {
             if (context.Generation < activeGeneration) return false;
             activeGeneration = context.Generation;
+            currentSelection = null;
             IsLoading = true;
             return true;
         }
     }
 
-    private bool CurrentGeneration(long generation)
+    private bool SelectCurrent(long generation, Guid profileId, string authorityIdentity)
     {
-        lock (stateLock) return activeGeneration == generation;
+        lock (stateLock)
+        {
+            if (activeGeneration != generation) return false;
+            currentSelection = new(generation, profileId, authorityIdentity);
+            return true;
+        }
     }
 
     private static bool AvailableCatalog(HostedRoutingCatalog value) => value.Outcome == "available"

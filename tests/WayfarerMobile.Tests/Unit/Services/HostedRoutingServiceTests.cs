@@ -97,12 +97,14 @@ public sealed class HostedRoutingServiceTests
     [Fact]
     public void Publication_SelectedAuthorityChangeBeforePublication_DiscardsCandidate()
     {
-        var context = HostedRouteRequestContext.ForTest(WalkingProfile) with
-        { SelectedTransportProfileId = WalkingProfile, SelectedProfileAuthorityIdentity = IdentityA };
+        var context = HostedRouteRequestContext.ForTest(WalkingProfile);
         var candidate = new HostedRouteCandidate(new WayfarerMobile.Core.Models.NavigationRoute(),
             context, WalkingProfile, IdentityA,
             new("geoapify", CyclingProfile, "mapping", "persistent"), DateTimeOffset.UtcNow);
-        var live = context with { SelectedProfileAuthorityIdentity = IdentityB };
+        var live = new HostedRouteLiveAuthority(context.Generation, context.AuthenticationSessionRevision,
+            context.NormalizedServer, context.Origin, context.Destination, context.Anchors,
+            context.TargetAssociation, context.SegmentId, context.SavedTransportProfileId,
+            context.ModeKey, context.Category, WalkingProfile, IdentityB, context.NavigationChoice);
 
         HostedRoutePublication.Current(candidate, live).Should().BeFalse();
     }
