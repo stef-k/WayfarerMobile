@@ -123,7 +123,6 @@ public sealed class HostedRoutingService
             || value.ProviderConfigurationId != capability.ProviderConfigurationId
             || value.MappingIdentity != capability.MappingIdentity || value.StorageMode != capability.StorageMode
             || value.GeneratedAt is not { } generatedAt || generatedAt.Offset != TimeSpan.Zero
-            || generatedAt > DateTimeOffset.UtcNow.AddMinutes(5)
             || value.Geometry is not { Count: >= 2 and <= MaximumGeometry }
             || value.MatchPoints is null || value.DistanceMetres is not double distance || distance < 0 || !double.IsFinite(distance)
             || value.DurationSeconds is not double duration || duration < 0 || !double.IsFinite(duration)
