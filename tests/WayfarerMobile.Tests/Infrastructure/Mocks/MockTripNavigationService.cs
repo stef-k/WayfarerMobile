@@ -33,6 +33,12 @@ public class MockTripNavigationService : ITripNavigationService
     /// <inheritdoc/>
     public NavigationRoute? ActiveRoute => _activeRoute;
 
+    /// <inheritdoc/>
+    public void StopNavigation()
+    {
+        _activeRoute = null;
+    }
+
     /// <summary>
     /// Gets the loaded trip, if any.
     /// </summary>

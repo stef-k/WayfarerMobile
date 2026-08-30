@@ -44,6 +44,11 @@ public interface ITripNavigationService
     NavigationRoute? ActiveRoute { get; }
 
     /// <summary>
+    /// Stops the active navigation session without unloading trip data.
+    /// </summary>
+    void StopNavigation();
+
+    /// <summary>
     /// Loads a trip for navigation, building the routing graph.
     /// </summary>
     /// <param name="trip">The trip details.</param>

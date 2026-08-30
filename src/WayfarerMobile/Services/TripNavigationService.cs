@@ -122,11 +122,18 @@ public class TripNavigationService : ITripNavigationService
     /// </summary>
     public void UnloadTrip()
     {
+        StopNavigation();
         _currentGraph = null;
         _currentTrip = null;
+    }
+
+    /// <inheritdoc/>
+    public void StopNavigation()
+    {
         _activeRoute = null;
         _destinationPlaceId = null;
         _announcedStepKeys.Clear();
+        _lastAnnouncementTime = DateTime.MinValue;
     }
 
     /// <summary>
@@ -153,9 +160,6 @@ public class TripNavigationService : ITripNavigationService
             return null;
         }
 
-        _destinationPlaceId = destinationPlaceId;
-        _announcedStepKeys.Clear(); // Reset announcements for new route
-
         // Priority 1: Check for user-defined segment route
         if (_currentGraph.IsWithinSegmentRoutingRange(currentLat, currentLon))
         {
@@ -165,17 +169,19 @@ public class TripNavigationService : ITripNavigationService
                 var path = _currentGraph.FindPath(nearestNode.Id, destinationPlaceId);
                 if (path.Count > 0)
                 {
-                    _activeRoute = _routeBuilder.BuildFromSegmentPath(path, currentLat, currentLon, _currentGraph);
-                    _logger.LogDebug("Using segment route with {WaypointCount} waypoints", _activeRoute?.Waypoints.Count);
-                    return _activeRoute;
+                    var segmentRoute = _routeBuilder.BuildFromSegmentPath(path, currentLat, currentLon, _currentGraph);
+                    InstallRoute(segmentRoute, destinationPlaceId);
+                    _logger.LogDebug("Using segment route with {WaypointCount} waypoints", segmentRoute.Waypoints.Count);
+                    return segmentRoute;
                 }
             }
         }
 
         // Priority 2: Direct navigation (bearing + distance)
-        _activeRoute = _routeBuilder.BuildDirectRoute(currentLat, currentLon, destination);
+        var directRoute = _routeBuilder.BuildDirectRoute(currentLat, currentLon, destination);
+        InstallRoute(directRoute, destinationPlaceId);
         _logger.LogDebug("Using direct route to {Destination}", destination.Name);
-        return _activeRoute;
+        return directRoute;
     }
 
     /// <summary>
@@ -213,12 +219,9 @@ public class TripNavigationService : ITripNavigationService
         string profile = "foot")
     {
         _logger.LogInformation("Calculating Direct guidance to {Name}", destName);
-        _announcedStepKeys.Clear(); // Reset announcements for new route
-
-        // Direct route (straight line) with profile-aware ETA
         _logger.LogInformation("Using direct route to {Name} with profile {Profile}", destName, profile);
         var directRoute = _routeBuilder.BuildDirectRouteToCoordinates(currentLat, currentLon, destLat, destLon, destName, profile);
-        _activeRoute = directRoute;
+        InstallRoute(directRoute, destinationPlaceId: null);
         return Task.FromResult(directRoute);
     }
 
@@ -256,7 +259,6 @@ public class TripNavigationService : ITripNavigationService
             return state;
         }
 
-        // Calculate distance to destination
         var destinationWaypoint = _activeRoute.Waypoints.LastOrDefault();
         if (destinationWaypoint != null)
         {
@@ -269,12 +271,12 @@ public class TripNavigationService : ITripNavigationService
                 destinationWaypoint.Latitude, destinationWaypoint.Longitude);
         }
 
-        // Check for arrival
         if (state.DistanceToDestinationMeters <= TripNavigationGraph.SegmentRoutingThresholdMeters)
         {
             state.Status = NavigationStatus.Arrived;
             state.Message = $"You have arrived at {_activeRoute.DestinationName}";
             StateChanged?.Invoke(this, state);
+            StopNavigation();
             return state;
         }
 
@@ -302,7 +304,6 @@ public class TripNavigationService : ITripNavigationService
             return state;
         }
 
-        // On route - calculate progress
         state.Status = NavigationStatus.OnRoute;
         state.DistanceToNextWaypointMeters = CalculateDistanceToNextWaypoint(currentLat, currentLon);
         state.NextWaypointName = GetNextWaypointName(currentLat, currentLon);
@@ -312,11 +313,17 @@ public class TripNavigationService : ITripNavigationService
         // Estimate time remaining (walking speed 5 km/h)
         state.EstimatedTimeRemaining = TimeSpan.FromSeconds(state.DistanceToDestinationMeters / 1.4);
 
-        // Check for turn announcements
         CheckForTurnAnnouncement(currentLat, currentLon, state);
 
         StateChanged?.Invoke(this, state);
         return state;
+    }
+
+    private void InstallRoute(NavigationRoute route, string? destinationPlaceId)
+    {
+        StopNavigation();
+        _activeRoute = route;
+        _destinationPlaceId = destinationPlaceId;
     }
 
     /// <summary>
