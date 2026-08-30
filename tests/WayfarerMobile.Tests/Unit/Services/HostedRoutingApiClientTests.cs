@@ -1,5 +1,7 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using WayfarerMobile.Core.Interfaces;
@@ -9,6 +11,19 @@ namespace WayfarerMobile.Tests.Unit.Services;
 
 public sealed class HostedRoutingApiClientTests
 {
+    [Fact]
+    public void TripJson_CapturesCurrentProfileGuidOnlyInTransientObjectState()
+    {
+        var profileId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var resolver = new DefaultJsonTypeInfoResolver();
+        resolver.Modifiers.Add(HostedSegmentProfileIdentity.Configure);
+        var segment = JsonSerializer.Deserialize<WayfarerMobile.Core.Models.TripSegment>(
+            $$"""{"id":"22222222-2222-2222-2222-222222222222","transportProfileId":"{{profileId}}"}""",
+            new JsonSerializerOptions { TypeInfoResolver = resolver });
+
+        HostedSegmentProfileIdentity.Get(segment).Should().Be(profileId);
+    }
+
     [Fact]
     public async Task ControlledFlow_UsesOnlyAuthenticatedWayfarerContractAndBothIdentities()
     {

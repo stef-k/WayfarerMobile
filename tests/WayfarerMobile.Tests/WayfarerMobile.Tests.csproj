@@ -79,6 +79,7 @@
     <Compile Include="..\..\src\WayfarerMobile\Services\HostedRoutingModels.cs" Link="Production\HostedRoutingModels.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\HostedRoutingService.cs" Link="Production\HostedRoutingService.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\HostedRoutingApiClient.cs" Link="Production\HostedRoutingApiClient.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Services\HostedSegmentProfileIdentity.cs" Link="Production\HostedSegmentProfileIdentity.cs" />
     <Compile Remove="Infrastructure\Entities\QueuedLocation.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Data\Entities\QueuedLocation.cs" Link="Production\QueuedLocation.cs" />
   </ItemGroup>
