@@ -62,19 +62,15 @@ public static class HostedProfileSelector
             : new(HostedProfileSelectionKind.RequiresChoice, null, catalog.Profiles);
     }
 
-    public static HostedRoutingProfile? Confirm(HostedRoutingProfile? choice, HostedRoutingCatalog currentCatalog) =>
-        choice != null && currentCatalog.DiscoveryCatalogIdentity != null
-            ? currentCatalog.Profiles.SingleOrDefault(item => item.TransportProfileId == choice.TransportProfileId)
-            : null;
-
     private static bool TextMatches(HostedRoutingProfile item, string? modeKey, string? category) =>
         (!string.IsNullOrWhiteSpace(modeKey) && string.Equals(item.ModeKey, modeKey, StringComparison.OrdinalIgnoreCase))
         || (!string.IsNullOrWhiteSpace(category) && string.Equals(item.Category, category, StringComparison.OrdinalIgnoreCase));
 }
 
-public enum HostedRoutingOutcome { Success, Unavailable, RequiresChoice, InvalidResponse, Stale, Cancelled }
+public enum HostedRoutingOutcome { Success, Unavailable, RequiresChoice, CatalogChanged, InvalidResponse, Stale, Cancelled }
 public sealed record HostedRoutingResult(HostedRoutingOutcome Outcome, NavigationRoute? Route = null,
-    IReadOnlyList<HostedRoutingProfile>? Choices = null, HostedRouteCandidate? Candidate = null);
+    IReadOnlyList<HostedRoutingProfile>? Choices = null, HostedRouteCandidate? Candidate = null,
+    string? DiscoveryCatalogIdentity = null);
 
 public sealed record HostedRouteCapabilityMetadata(string Provider, Guid ProviderConfigurationId,
     string MappingIdentity, string StorageMode);

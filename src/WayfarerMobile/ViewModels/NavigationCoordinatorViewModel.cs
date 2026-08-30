@@ -343,8 +343,19 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
         _hostedRequest = context;
         _hostedTargetOwner = targetOwner;
         var result = await _hostedRouting.RequestRouteAsync(context, cancellationToken: _hostedRoutingCancellation.Token);
-        if (result.Outcome == HostedRoutingOutcome.RequiresChoice && result.Choices is { Count: > 0 })
+        var maximumPresentations = result.Outcome switch
         {
+            HostedRoutingOutcome.RequiresChoice => 2,
+            HostedRoutingOutcome.CatalogChanged => 1,
+            _ => 0
+        };
+        for (var presentation = 0; presentation < maximumPresentations
+            && result.Outcome is HostedRoutingOutcome.RequiresChoice or HostedRoutingOutcome.CatalogChanged;
+            presentation++)
+        {
+            if (_hostedRoutingGeneration != generation || _hostedRequest?.Generation != generation
+                || result.Choices is not { Count: > 0 }
+                || !HostedOpaqueIdentity.IsValid(result.DiscoveryCatalogIdentity)) return direct;
             var options = result.Choices.Select(item =>
                 $"{item.DisplayName} — {item.ModeKey} ({item.TransportProfileId:D})").ToArray();
             var selected = await _dialogs.SelectAsync("Wayfarer routing profile", options, "Direct");
@@ -355,7 +366,15 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
                 return direct;
             }
             if (_hostedRoutingGeneration != generation || _hostedRequest?.Generation != generation) return direct;
-            result = await _hostedRouting.RequestRouteAsync(context, result.Choices[index], _hostedRoutingCancellation.Token);
+            var choiceContext = context with { ExpectedCatalogIdentity = result.DiscoveryCatalogIdentity };
+            _hostedRequest = choiceContext;
+            result = await _hostedRouting.RequestRouteAsync(
+                choiceContext, result.Choices[index], _hostedRoutingCancellation.Token);
+        }
+        if (result.Outcome == HostedRoutingOutcome.CatalogChanged)
+        {
+            _hostedRouting.SelectDirect(Interlocked.Increment(ref _hostedRoutingGeneration));
+            return direct;
         }
         if (result.Outcome != HostedRoutingOutcome.Success || result.Candidate == null) return direct;
         if (_hostedRoutingGeneration != generation || _hostedRequest?.Generation != generation) return direct;

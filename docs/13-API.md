@@ -486,6 +486,11 @@ Wayfarer server, provider credentials stay server-side, and returned attribution
 uses only a non-secret process-local authentication revision plus the normalized server for in-flight publication
 identity; it never copies or hashes the bearer token into routing state.
 
+A chooser selection carries the discovery identity of the catalog the user actually saw into capability. A
+`catalog-changed` response causes one bounded rediscovery and refreshed presentation; cancellation retains Direct and
+no route request is sent. Catalog drift after successful capability is outside chooser authority and does not by
+itself invalidate the confirmed selected profile.
+
 Valid downloaded Trip Segment geometry remains higher authority. Hosted failures, old-server 404 responses, disabled
 providers, cancellation, and stale results fall back to Direct straight-line guidance without changing the general
 session. Hosted route output and profile choices are never persisted; offline hosted-route retention belongs to #261.

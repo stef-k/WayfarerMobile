@@ -561,6 +561,11 @@ unavailability remain routing-local and retain Direct guidance without affecting
 Valid saved Segment geometry is never replaced automatically. Mobile does not persist generated geometry, selection,
 attribution, or authority identities; offline retention of hosted routes belongs to #261.
 
+Chooser entries are scoped to the exact discovery catalog displayed. Mobile submits that catalog identity with the
+chosen profile; a `catalog-changed` capability response makes no route request, rediscovers once, and requires a
+fresh choice from the refreshed labels or retains Direct when dismissed. Once capability succeeds, unrelated later
+catalog changes do not invalidate the confirmed route.
+
 `TransportProfileId` is the Segment's current planning profile identity. Current hosted selection state remains
 separate from the immutable provenance retained on a successfully published route; neither rewrites the Segment nor
 becomes a durable current-profile setting. The settings owner advances a non-secret, memory-only authentication

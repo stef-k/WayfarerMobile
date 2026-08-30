@@ -4,7 +4,11 @@ namespace WayfarerMobile.ViewModels;
 
 public sealed class NavigationHudViewModel : IDisposable
 {
-    public event EventHandler<string?>? StopNavigationRequested;
+    public event EventHandler<string?>? StopNavigationRequested
+    {
+        add { }
+        remove { }
+    }
 
     public Task StartNavigationAsync(NavigationRoute route) => Task.CompletedTask;
 
