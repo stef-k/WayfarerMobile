@@ -40,6 +40,27 @@ public class MockSettingsService : ISettingsService
         }
     }
     public long AuthenticationSessionRevision { get; private set; }
+    public Guid RoutingAccountPartition { get; private set; } =
+        Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+
+    public Task CommitAuthenticationAsync(string serverUrl, string apiToken,
+        CancellationToken cancellationToken = default)
+    {
+        _serverUrl = serverUrl;
+        _apiToken = apiToken;
+        RoutingAccountPartition = Guid.NewGuid();
+        AuthenticationSessionRevision++;
+        return Task.CompletedTask;
+    }
+
+    public Task ClearAuthenticationAsync(CancellationToken cancellationToken = default)
+    {
+        _serverUrl = null;
+        _apiToken = null;
+        RoutingAccountPartition = Guid.NewGuid();
+        AuthenticationSessionRevision++;
+        return Task.CompletedTask;
+    }
     public int LocationTimeThresholdMinutes { get; set; } = 5;
     public int LocationDistanceThresholdMeters { get; set; } = 100;
     public int LocationAccuracyThresholdMeters { get; set; } = 50;
@@ -178,8 +199,7 @@ public class MockSettingsService : ISettingsService
 
     public void ClearAuth()
     {
-        ServerUrl = null;
-        ApiToken = null;
+        ClearAuthenticationAsync().GetAwaiter().GetResult();
     }
 
     public void ResetToDefaults()

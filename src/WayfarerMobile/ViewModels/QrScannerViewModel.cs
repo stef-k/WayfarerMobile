@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Services;
 using ZXing.Net.Maui;
 
 namespace WayfarerMobile.ViewModels;
@@ -15,6 +16,7 @@ public partial class QrScannerViewModel : BaseViewModel
 {
     private readonly ISettingsService _settingsService;
     private readonly IApiClient _apiClient;
+    private readonly ICandidateConnectionProbe _connectionProbe;
     private readonly ILogger<QrScannerViewModel> _logger;
 
     /// <summary>
@@ -61,10 +63,12 @@ public partial class QrScannerViewModel : BaseViewModel
     public QrScannerViewModel(
         ISettingsService settingsService,
         IApiClient apiClient,
+        ICandidateConnectionProbe connectionProbe,
         ILogger<QrScannerViewModel> logger)
     {
         _settingsService = settingsService;
         _apiClient = apiClient;
+        _connectionProbe = connectionProbe;
         _logger = logger;
         Title = "Scan QR Code";
     }
@@ -96,7 +100,9 @@ public partial class QrScannerViewModel : BaseViewModel
             }
 
             // Validate URL - HTTPS only for security
-            if (!Uri.TryCreate(config.ServerUrl, UriKind.Absolute, out var serverUri))
+            var normalizedServer = HostedRouteServerIdentity.Normalize(config.ServerUrl);
+            if (normalizedServer.Length == 0
+                || !Uri.TryCreate(normalizedServer, UriKind.Absolute, out var serverUri))
             {
                 ShowError("Invalid server URL format.");
                 return;
@@ -111,7 +117,7 @@ public partial class QrScannerViewModel : BaseViewModel
             StatusMessage = "Testing connection...";
 
             // Test the connection
-            var connectionValid = await TestConnectionAsync(config.ServerUrl, config.ApiToken);
+            var connectionValid = await TestConnectionAsync(normalizedServer, config.ApiToken);
             if (!connectionValid)
             {
                 ShowError("Could not connect to server. Please check the QR code and try again.");
@@ -119,8 +125,7 @@ public partial class QrScannerViewModel : BaseViewModel
             }
 
             // Save configuration
-            _settingsService.ServerUrl = config.ServerUrl;
-            _settingsService.ApiToken = config.ApiToken;
+            await _settingsService.CommitAuthenticationAsync(normalizedServer, config.ApiToken);
 
             _logger.LogInformation("Server configuration saved successfully");
 
@@ -252,36 +257,14 @@ public partial class QrScannerViewModel : BaseViewModel
     /// </summary>
     private async Task<bool> TestConnectionAsync(string serverUrl, string apiToken)
     {
-        // Temporarily configure the API client for testing
-        var originalUrl = _settingsService.ServerUrl;
-        var originalToken = _settingsService.ApiToken;
-
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-
-            _settingsService.ServerUrl = serverUrl;
-            _settingsService.ApiToken = apiToken;
-
-            // Test the connection by calling the health endpoint or similar
-            var result = await _apiClient.TestConnectionAsync(cts.Token);
-
-            if (!result)
-            {
-                // Test failed - restore original settings
-                _settingsService.ServerUrl = originalUrl;
-                _settingsService.ApiToken = originalToken;
-            }
-
-            return result;
+            return await _connectionProbe.TestAsync(serverUrl, apiToken, cts.Token);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Connection test failed");
-
-            // Restore original settings on error
-            _settingsService.ServerUrl = originalUrl;
-            _settingsService.ApiToken = originalToken;
 
             return false;
         }

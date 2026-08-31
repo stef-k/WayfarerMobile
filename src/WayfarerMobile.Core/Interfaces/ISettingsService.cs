@@ -25,17 +25,27 @@ public interface ISettingsService
     /// <summary>
     /// Gets or sets the server URL for API calls.
     /// </summary>
-    string? ServerUrl { get; set; }
+    string? ServerUrl { get; }
 
     /// <summary>
     /// Gets or sets the API authentication token.
     /// </summary>
-    string? ApiToken { get; set; }
+    string? ApiToken { get; }
+
+    /// <summary>Gets the stable opaque local partition for the committed authentication authority.</summary>
+    Guid RoutingAccountPartition { get; }
 
     /// <summary>
     /// Gets the non-secret in-memory revision of the effective authentication authority.
     /// </summary>
     long AuthenticationSessionRevision { get; }
+
+    /// <summary>Atomically commits server, token, revision, and a new routing partition.</summary>
+    Task CommitAuthenticationAsync(string serverUrl, string apiToken,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Clears credentials and rotates the routing partition through the same authority owner.</summary>
+    Task ClearAuthenticationAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets or sets the minimum time between logged locations (from server).

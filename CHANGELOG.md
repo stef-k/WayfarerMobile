@@ -2,13 +2,25 @@
 
 ## 1.2.0
 
+### 2026-08-31
+- **Feature: bounded offline Wayfarer routing (#261)**
+  - Retains only fully validated routes whose backend storage authority is exactly `persistent`
+  - Reuses exact account, server, provider authority, transport profile, endpoint, and ordered-anchor matches offline
+  - Preserves saved Segment geometry as highest authority and Direct as the explicit universal fallback
+  - Bounds retained routes to 200 globally with deterministic local last-use eviction and no automatic age expiry
+  - Rotates a protected opaque routing partition with committed authentication authority without storing or deriving identity from tokens
+  - Preserves the prior complete route after rejected, stale, cancelled, or failed refresh storage
+  - Offers retained, explicit fresh Wayfarer, and Direct choices; failed refresh keeps retained guidance active
+  - Rejects credential-bearing server and attribution URLs and fails closed on malformed installed rows
+  - Prevents pre-clear repository work from resurrecting rows and invalidates in-memory authentication when protected clear fails
+
 ### 2026-08-30
 - **Feature: transient authenticated Wayfarer routing (#260)**
   - Discovers and confirms server-owned routing profiles before requesting provider-neutral routes
   - Keeps provider credentials server-side and never contacts a routing provider directly
   - Preserves saved Segment geometry priority with Direct guidance for unavailable, rejected, cancelled, or stale work
   - Retains safe server-returned attribution and hosted provenance only with the active route
-  - Keeps hosted routes and profile selections session-only; offline retention remains future work in #261
+  - Keeps non-persistent hosted routes and profile selections session-only
 
 ### 2026-06-20
 - **Feature: Search private trips (#228, PR #231)**

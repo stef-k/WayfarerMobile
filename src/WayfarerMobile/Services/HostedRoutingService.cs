@@ -104,6 +104,16 @@ public sealed class HostedRoutingService
         }
     }
 
+    public void SelectRetained(long generation, Guid profileId, string authorityIdentity)
+    {
+        lock (stateLock)
+        {
+            activeGeneration = generation;
+            currentSelection = new(generation, profileId, authorityIdentity);
+            IsLoading = false;
+        }
+    }
+
     private bool Begin(HostedRouteRequestContext context)
     {
         lock (stateLock)
@@ -186,7 +196,8 @@ public sealed class HostedRoutingService
         {
             Instruction = item.Text, ManeuverType = item.Type, DistanceMeters = item.DistanceMetres,
             DurationSeconds = item.DurationSeconds, Longitude = value.Geometry![item.FromIndex].Longitude,
-            Latitude = value.Geometry![item.FromIndex].Latitude
+            Latitude = value.Geometry![item.FromIndex].Latitude,
+            GeometryFromIndex = item.FromIndex, GeometryToIndex = item.ToIndex
         }).ToList(),
         DestinationName = destinationName,
         TotalDistanceMeters = value.DistanceMetres!.Value,
@@ -199,6 +210,7 @@ public sealed class HostedRoutingService
         && double.IsFinite(item.Latitude) && item.Longitude is >= -180 and <= 180 && item.Latitude is >= -90 and <= 90;
     private static bool ValidAttribution(IReadOnlyList<HostedRouteAttribution>? value) => value is { Count: > 0 and <= 10 }
         && value.All(item => Bounded(item.Text, 200) && Bounded(item.Url, 500)
-            && Uri.TryCreate(item.Url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps);
+            && Uri.TryCreate(item.Url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps
+            && string.IsNullOrEmpty(uri.UserInfo));
     private static bool Bounded(string? value, int maximum) => value is { Length: > 0 } && value.Length <= maximum;
 }

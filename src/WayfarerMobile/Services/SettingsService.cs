@@ -14,9 +14,11 @@ public partial class SettingsService : ISettingsService
     /// Creates a new instance of SettingsService.
     /// </summary>
     /// <param name="logger">Logger instance.</param>
-    public SettingsService(ILogger<SettingsService> logger)
+    public SettingsService(ILogger<SettingsService> logger,
+        CommittedAuthenticationAuthority authenticationAuthority)
     {
         _logger = logger;
+        this.authenticationAuthority = authenticationAuthority;
     }
 
     #region Keys
@@ -24,8 +26,6 @@ public partial class SettingsService : ISettingsService
     private const string KeyIsFirstRun = "is_first_run";
     private const string KeyTimelineTrackingEnabled = "timeline_tracking_enabled";
     private const string KeyBackgroundTrackingEnabled = "background_tracking_enabled";
-    private const string KeyServerUrl = "server_url";
-    private const string KeyApiToken = "api_token";
     private const string KeyLocationTimeThreshold = "location_time_threshold";
     private const string KeyLocationDistanceThreshold = "location_distance_threshold";
     private const string KeyLocationAccuracyThreshold = "location_accuracy_threshold";
@@ -553,13 +553,7 @@ public partial class SettingsService : ISettingsService
     /// </summary>
     public void ClearAuth()
     {
-        SecureStorage.Default.Remove(KeyApiToken);
-        SecureStorage.Default.Remove(KeyServerUrl);
-
-        // Clear cached values
-        ClearCachedAuthentication();
-        _apiTokenLoaded = true;
-        _serverUrlLoaded = true;
+        ClearAuthenticationAsync().GetAwaiter().GetResult();
 
         // Clear sync reference - new account will have different timeline
         ClearSyncReference();
@@ -601,10 +595,7 @@ public partial class SettingsService : ISettingsService
             _logger.LogWarning(ex, "Unexpected error clearing SecureStorage");
         }
 
-        // Reset cached values
-        ClearCachedAuthentication();
-        _serverUrlLoaded = true;
-        _apiTokenLoaded = true;
+        ClearAuthenticationAsync().GetAwaiter().GetResult();
 
         // Ensure IsFirstRun is true so onboarding will show
         try

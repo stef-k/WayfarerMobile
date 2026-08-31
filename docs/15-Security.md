@@ -97,6 +97,7 @@ The QR code for app configuration contains only:
 - Tokens are stored in platform-encrypted SecureStorage
 - Tokens are not included in crash reports
 - Tokens are cleared on logout
+- Server URLs containing URI user-info, including embedded usernames or passwords, are rejected
 
 ### Hosted Routing Disclosure
 
@@ -104,10 +105,21 @@ When a user requests hosted routing, Mobile sends the selected profile identity 
 and approved ordered anchors to the configured Wayfarer backend. Wayfarer may disclose those coordinates to its
 selected routing provider. Provider credentials, provider endpoints, and native provider modes remain server-side.
 Mobile uses a non-secret, process-local authentication revision to invalidate in-flight work when the effective
-server/token authority changes; the bearer token is never copied, hashed, logged, or persisted as routing identity.
+server/token authority changes and a protected random GUID to partition retained routes. The partition is stable for
+the committed authority across restart and rotates on authority replacement, logout, clear, or reset; it is never
+derived from or compared with the bearer token. The token is never copied, hashed, logged, or persisted in SQLite.
 At publication it rereads the live origin and the exact current Trip or member target owner. The active hosted route
-retains only safe provider/profile provenance and linked attribution, which clear on replacement or stop. #261 owns
-any future offline retention policy.
+retains only safe provider/profile provenance and linked attribution. Only exact `persistent` backend authority permits
+bounded local retention. Stored rows exclude tokens/hashes, credentials, protected configuration, provider URLs/raw
+responses, member or user names, notes, and provider SDK objects. Clear-retained-routes affects only that table; it does
+not alter Trip geometry, Timeline/queues, credentials/settings, or OSM live tiles.
+Credential-bearing attribution links are rejected. Malformed retained rows never become navigation authority or update
+recency. Successful retained-route clear also fences older in-flight repository work from recreating rows.
+
+Authentication clear/logout/reset fails closed in memory: the current process observes an empty server and token, a
+newly rotated non-secret partition, and an advanced revision even if SecureStorage persistence or removal fails. The
+primary storage failure is still reported. This differs from an ordinary failed credential replacement, which leaves
+the preceding committed authority visible.
 
 ## Secure Storage
 
@@ -121,7 +133,7 @@ Sensitive data is stored using MAUI's `SecureStorage` which uses:
 
 | Classification | Storage Method | Examples |
 |----------------|----------------|----------|
-| Sensitive | SecureStorage | API token, Server URL |
+| Sensitive | SecureStorage | Committed API token, Server URL, opaque routing partition |
 | Confidential | Preferences | User ID, Email |
 | Normal | SQLite | Location queue, Settings |
 

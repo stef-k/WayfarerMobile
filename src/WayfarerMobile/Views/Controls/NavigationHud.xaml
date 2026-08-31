@@ -139,6 +139,11 @@
                     </BindableLayout.ItemTemplate>
                 </HorizontalStackLayout>
 
+                <Label Text="{Binding HostedRouteSourceText}"
+                       HorizontalOptions="Center"
+                       FontSize="11"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+
                 <!-- Progress bar -->
                 <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto">
                     <ProgressBar Grid.Row="0"

@@ -190,6 +190,23 @@ public sealed class HostedRoutingServiceTests
         api.Verify(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Fact]
+    public async Task CredentialBearingHttpsAttribution_IsRejected()
+    {
+        var api = SuccessfulApi(WalkingProfile, IdentityA, IdentityA);
+        api.Setup(client => client.GetCapabilityAsync(WalkingProfile, IdentityA,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(HostedRoutingCapability.Available(WalkingProfile, IdentityA, IdentityA,
+                [new("Unsafe", "https://user:password@example.test/attribution")]));
+        var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
+
+        var result = await service.RequestRouteAsync(HostedRouteRequestContext.ForTest(WalkingProfile));
+
+        result.Outcome.Should().Be(HostedRoutingOutcome.Unavailable);
+        api.Verify(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Theory]
     [InlineData("unavailable")]
     [InlineData("routing-disabled")]

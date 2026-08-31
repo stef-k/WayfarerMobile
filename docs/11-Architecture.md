@@ -318,6 +318,7 @@ The `DatabaseService` manages all SQLite operations using sqlite-net-pcl:
 | `OfflinePlaces` | Trip places for offline access |
 | `OfflineSegments` | Trip segments for offline navigation |
 | `OfflineAreas` | Trip regions for offline display |
+| `RetainedWayfarerRoutes` | Bounded, validated backend-authorized hosted routes |
 
 **Source**: `src/WayfarerMobile/Data/Services/DatabaseService.cs`
 
@@ -371,14 +372,22 @@ The timeline uses an **offline-first** pattern with server enrichment:
 
 ### Settings Service
 
-The `SettingsService` manages app configuration using MAUI Preferences and SecureStorage:
+The `SettingsService` manages app configuration using MAUI Preferences and SecureStorage. Server, token,
+authentication revision, and a cryptographically random opaque routing partition are committed through one authority
+mutation. The partition remains stable across restart, rotates whenever committed server/token authority is replaced
+or cleared (including re-entering the same token), and is never derived from or compared with the token. QR probes use
+explicit candidate credentials without changing committed settings. HTTP/HTTPS server identities containing URI
+user-info are invalid. Logout, clear, or reset replaces current-process server, token, and partition authority with an
+empty rotated snapshot even when protected storage fails; ordinary failed credential replacement still preserves the
+prior committed snapshot.
 
 ```csharp
 public class SettingsService : ISettingsService
 {
     // Stored in SecureStorage (encrypted)
-    public string? ServerUrl { get; set; }
-    public string? ApiToken { get; set; }
+    public string? ServerUrl { get; }
+    public string? ApiToken { get; }
+    public Guid RoutingAccountPartition { get; }
 
     // Stored in Preferences
     public bool TimelineTrackingEnabled { get; set; }
@@ -428,15 +437,20 @@ services.AddHttpClient("WayfarerApi", client =>
 The `TripNavigationService` calculates routes with the following priority:
 
 1. **Saved Segment geometry**: Trip-defined geometry (always preferred when valid)
-2. **Authenticated Wayfarer route**: Fresh provider-neutral, session-only geometry
-3. **Direct guidance**: Straight line with bearing and distance
+2. **Retained Wayfarer route**: Exact validated offline match
+3. **Fresh authenticated Wayfarer route**: Provider-neutral server result
+4. **Direct guidance**: Straight line with bearing and distance
 
 Mobile contacts only its configured Wayfarer server. Routing identity uses a non-secret, process-local authentication
 session revision rather than the bearer token. In the final synchronous UI callback, the coordinator rebuilds current
 authority from the settings owner, live device location, current Trip Place/Segment data or member owner, and the
 hosted selection owner. It compares generation, normalized server, target and Segment identity, profile/authority,
 choice, and canonical origin/anchors/destination immediately before installation, with no await or dispatch gap.
-Provider credentials and provider-specific endpoints remain server-side.
+Provider credentials and provider-specific endpoints remain server-side. Retained lookup additionally requires the
+active protected account partition and exact provider/configuration/mapping/transport-profile authority. Coordinates
+use #260's signed 10^-5-degree canonical integers, including exact duplicate-preserving anchor sequence equality.
+An exact retained match opens the bounded retained/refresh/Direct chooser. Explicit refresh keeps the retained route
+as the active fallback until a complete fresh route is validated and storage-authorized replacement commits.
 
 ### Navigation Graph
 

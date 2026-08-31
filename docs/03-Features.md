@@ -301,7 +301,7 @@ From the main map, you can add your current location to the loaded trip as a new
 
 ## Navigation
 
-Navigate with saved Trip Segment geometry, transient authenticated Wayfarer-hosted routing, or honest straight-line Direct guidance. Mobile contacts only the configured Wayfarer server; that server may use its selected routing provider.
+Navigate with saved Trip Segment geometry, an exact retained or fresh authenticated Wayfarer-hosted route, or honest straight-line Direct guidance. Mobile contacts only the configured Wayfarer server; that server may use its selected routing provider.
 
 ### Navigation Contexts
 
@@ -343,14 +343,16 @@ Route calculation differs based on navigation context:
 | Priority | Source | When Used |
 |----------|--------|-----------|
 | 1 | **User Segments** | Trip has pre-defined route geometry |
-| 2 | **Wayfarer hosted route** | Saved geometry is unavailable and authenticated routing is available |
-| 3 | **Direct Route** | Hosted routing is not selected, unavailable, or rejected |
+| 2 | **Retained Wayfarer route** | Saved geometry is unavailable and an exact retained match is chosen |
+| 3 | **Fresh Wayfarer route** | No retained match exists, or **Refresh with Wayfarer** is chosen |
+| 4 | **Direct Route** | Hosted routing is explicitly bypassed, unavailable, or rejected |
 
 **Ad-Hoc Navigation** (groups, map locations):
 | Priority | Source | When Used |
 |----------|--------|-----------|
-| 1 | **Wayfarer hosted route** | Authenticated routing is available and selected |
-| 2 | **Direct Route** | Hosted routing is not selected, unavailable, or rejected |
+| 1 | **Retained Wayfarer route** | An exact retained match is chosen |
+| 2 | **Fresh Wayfarer route** | No retained match exists, or **Refresh with Wayfarer** is chosen |
+| 3 | **Direct Route** | Hosted routing is explicitly bypassed, unavailable, or rejected |
 
 > **Note**: Ad-hoc navigation does not have saved Segment geometry because there is no Trip context.
 
@@ -361,8 +363,14 @@ Route calculation differs based on navigation context:
 - Distance to destination
 - Bearing-based heading
 
-Direct is not road-aware. Hosted route geometry, attribution, and safe provider/profile provenance remain only with
-the active route and are not retained for offline use; replacement or stop clears them. #261 owns offline retention.
+When an exact retained match exists, choose **Use retained route**, **Refresh with Wayfarer**, or **Direct**. Retained
+is the first offline choice. Refresh is one interaction only: the retained route stays active and stored unless a
+complete validated fresh route replaces it. Direct publishes no retained route and performs no hosted request.
+A retained route is eligible
+only when the backend authorized exact `persistent` storage and the account partition, normalized server, provider
+authority, selected transport profile, canonical endpoints, and ordered anchors all still match. Its overlay identifies
+the route as offline and shows age plus linked attribution. There is no automatic age expiry. Stopping or replacing
+navigation clears the active presentation but does not delete retained rows.
 
 ### External Maps Integration
 
