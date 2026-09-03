@@ -536,20 +536,19 @@ public class TripNavigationGraph
 ### Route Calculation
 
 ```csharp
-public NavigationRoute? CalculateRouteToPlace(
+public async Task<NavigationRoute?> CalculateRouteToPlaceAsync(
     double currentLat, double currentLon,
     string destinationPlaceId)
 {
-    // Priority 1: User-defined segment
-    if (_currentGraph.IsWithinSegmentRoutingRange(currentLat, currentLon))
-    {
-        var path = _currentGraph.FindPath(nearestNodeId, destinationPlaceId);
-        if (path.Count > 0)
-            return BuildRouteFromPath(path, currentLat, currentLon);
-    }
+    // Priority 1: accepted Segment geometry
+    if (TryBuildAcceptedSegmentRoute(destinationPlaceId, out var saved)) return saved;
 
-    // Priority 2: Direct route
-    return BuildDirectRoute(currentLat, currentLon, destination);
+    // Priority 2: exact eligible retained route
+    if (TryFindRetainedRoute(destinationPlaceId, out var retained)) return retained;
+
+    // Priority 3: one explicit provider-native mode choice
+    // Priority 4: Direct only when the user explicitly chooses it
+    return await ChooseFreshOrDirectAsync(currentLat, currentLon, destinationPlaceId);
 }
 ```
 
