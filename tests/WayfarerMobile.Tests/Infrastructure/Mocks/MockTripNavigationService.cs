@@ -119,10 +119,10 @@ public class MockTripNavigationService : ITripNavigationService
 
     /// <inheritdoc/>
     public NavigationRoute? CalculateRouteToPlace(double currentLat, double currentLon,
-        string destinationPlaceId)
+        string destinationPlaceId, bool activate = true)
     {
-        _activeRoute = _nextRouteToReturn;
-        return _activeRoute;
+        if (activate) _activeRoute = _nextRouteToReturn;
+        return _nextRouteToReturn;
     }
 
     /// <inheritdoc/>
@@ -152,10 +152,10 @@ public class MockTripNavigationService : ITripNavigationService
     public void ActivateRoute(NavigationRoute route) => _activeRoute = route;
 
     /// <inheritdoc/>
-    public NavigationRoute? CalculateRouteToNextPlace(double currentLat, double currentLon)
+    public NavigationRoute? CalculateRouteToNextPlace(double currentLat, double currentLon, bool activate = true)
     {
-        _activeRoute = _nextRouteToReturn;
-        return _activeRoute;
+        if (activate) _activeRoute = _nextRouteToReturn;
+        return _nextRouteToReturn;
     }
 
     /// <inheritdoc/>

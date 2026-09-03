@@ -66,9 +66,7 @@ public sealed class HostedRoutingService
                 selectedMode.Key);
             var response = await api.GetRouteAsync(request, cancellationToken);
             if (!ValidResponse(response, request, capability)) return new(HostedRoutingOutcome.InvalidResponse);
-            if (!SelectCurrent(context.Generation, profileId, selectedMode.Key,
-                capability.SelectedProfileAuthorityIdentity!))
-                return new(HostedRoutingOutcome.Stale);
+            if (!IsCurrentGeneration(context.Generation)) return new(HostedRoutingOutcome.Stale);
             var metadata = new HostedRouteCapabilityMetadata(capability.Provider!,
                 capability.ProviderConfigurationId!.Value, capability.MappingIdentity!, capability.StorageMode!);
             var candidate = new HostedRouteCandidate(BuildRoute(response, context.DestinationName), context,
@@ -112,15 +110,22 @@ public sealed class HostedRoutingService
         }
     }
 
-    /// <summary>Restores the selection that preceded a dismissed chooser.</summary>
-    public void RestoreSelection(HostedRouteSelection? selection)
+    /// <summary>Commits a validated candidate only while its invocation still owns service state.</summary>
+    public bool TrySelectCandidate(HostedRouteCandidate candidate, HostedRouteSelection? expectedSelection)
     {
         lock (stateLock)
         {
-            activeGeneration = selection?.Generation ?? 0;
-            currentSelection = selection;
-            IsLoading = false;
+            if (activeGeneration != candidate.Context.Generation
+                || !Equals(currentSelection, expectedSelection)) return false;
+            currentSelection = new(candidate.Context.Generation, candidate.SelectedProfileId,
+                candidate.SelectedProviderMode, candidate.SelectedProfileAuthorityIdentity);
+            return true;
         }
+    }
+
+    private bool IsCurrentGeneration(long generation)
+    {
+        lock (stateLock) return activeGeneration == generation;
     }
 
     private bool Begin(HostedRouteRequestContext context)
@@ -129,18 +134,7 @@ public sealed class HostedRoutingService
         {
             if (context.Generation < activeGeneration) return false;
             activeGeneration = context.Generation;
-            currentSelection = null;
             IsLoading = true;
-            return true;
-        }
-    }
-
-    private bool SelectCurrent(long generation, Guid profileId, string providerMode, string authorityIdentity)
-    {
-        lock (stateLock)
-        {
-            if (activeGeneration != generation) return false;
-            currentSelection = new(generation, profileId, providerMode, authorityIdentity);
             return true;
         }
     }

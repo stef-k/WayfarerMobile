@@ -43,7 +43,7 @@ public interface IContextMenuCallbacks
     /// <summary>
     /// Calculates a route to the specified coordinates.
     /// </summary>
-    Task<NavigationRoute> CalculateRouteToCoordinatesAsync(
+    Task<NavigationRoute?> CalculateRouteToCoordinatesAsync(
         double fromLat, double fromLon,
         double toLat, double toLon,
         string destinationName,

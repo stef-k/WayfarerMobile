@@ -67,7 +67,8 @@ public interface ITripNavigationService
     /// <param name="currentLon">Current longitude.</param>
     /// <param name="destinationPlaceId">Destination place ID.</param>
     /// <returns>The calculated route or null if no route found.</returns>
-    NavigationRoute? CalculateRouteToPlace(double currentLat, double currentLon, string destinationPlaceId);
+    NavigationRoute? CalculateRouteToPlace(double currentLat, double currentLon, string destinationPlaceId,
+        bool activate = true);
 
     /// <summary>
     /// Calculates a route to a specific place using saved Segment geometry or Direct guidance.
@@ -113,7 +114,7 @@ public interface ITripNavigationService
     /// <param name="currentLat">Current latitude.</param>
     /// <param name="currentLon">Current longitude.</param>
     /// <returns>The calculated route or null if no next place.</returns>
-    NavigationRoute? CalculateRouteToNextPlace(double currentLat, double currentLon);
+    NavigationRoute? CalculateRouteToNextPlace(double currentLat, double currentLon, bool activate = true);
 
     /// <summary>
     /// Updates navigation state with current location.
