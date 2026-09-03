@@ -238,8 +238,10 @@ public partial class TripItemEditorViewModel : BaseViewModel
         if (selectedPlace == null)
             return;
 
-        await (_callbacks?.StartNavigationToPlaceAsync(selectedPlace.Id.ToString()) ?? Task.CompletedTask);
-        _callbacks?.CloseTripSheet();
+        var navigationStarted = await (_callbacks?.StartNavigationToPlaceAsync(selectedPlace.Id.ToString())
+            ?? Task.FromResult(false));
+        if (navigationStarted)
+            _callbacks?.CloseTripSheet();
     }
 
     /// <summary>

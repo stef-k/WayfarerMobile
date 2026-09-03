@@ -8,6 +8,13 @@ public sealed class Share
     public static Share Default { get; } = new();
 
     public Task RequestAsync(ShareFileRequest request) => Task.CompletedTask;
+    public Task RequestAsync(ShareTextRequest request) => Task.CompletedTask;
+}
+
+public sealed class ShareTextRequest
+{
+    public string? Text { get; init; }
+    public string? Title { get; init; }
 }
 
 public sealed class ShareFileRequest
@@ -19,6 +26,27 @@ public sealed class ShareFileRequest
 public sealed class ShareFile(string fullPath)
 {
     public string FullPath { get; } = fullPath;
+}
+
+public sealed record Location(double Latitude, double Longitude);
+
+public sealed class MapLaunchOptions
+{
+    public string? Name { get; init; }
+}
+
+public sealed class Map
+{
+    public static Map Default { get; } = new();
+
+    public Task OpenAsync(Location location, MapLaunchOptions options) => Task.CompletedTask;
+}
+
+public sealed class Clipboard
+{
+    public static Clipboard Default { get; } = new();
+
+    public Task SetTextAsync(string text) => Task.CompletedTask;
 }
 
 public enum NetworkAccess { None, Internet }
@@ -41,4 +69,8 @@ namespace Microsoft.Maui.ApplicationModel
             return Task.CompletedTask;
         }
     }
+}
+
+namespace Microsoft.Maui.ApplicationModel.DataTransfer
+{
 }

@@ -673,7 +673,7 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     }
 
     /// <inheritdoc/>
-    Task ITripSheetCallbacks.StartNavigationToPlaceAsync(string placeId)
+    Task<bool> ITripSheetCallbacks.StartNavigationToPlaceAsync(string placeId)
         => Navigation.StartNavigationToPlaceAsync(placeId);
 
     /// <inheritdoc/>

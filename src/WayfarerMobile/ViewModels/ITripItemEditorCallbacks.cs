@@ -102,9 +102,10 @@ public interface ITripItemEditorCallbacks
     #region Navigation Operations
 
     /// <summary>
-    /// Starts navigation to a trip place.
+    /// Attempts to start navigation to a trip place.
     /// </summary>
-    Task StartNavigationToPlaceAsync(string placeId);
+    /// <returns>True when navigation started; otherwise, false.</returns>
+    Task<bool> StartNavigationToPlaceAsync(string placeId);
 
     #endregion
 

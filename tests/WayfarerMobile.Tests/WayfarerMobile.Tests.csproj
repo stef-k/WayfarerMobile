@@ -89,6 +89,9 @@
     <Compile Include="..\..\src\WayfarerMobile\ViewModels\BaseViewModel.cs" Link="Production\BaseViewModel.cs" />
     <Compile Include="..\..\src\WayfarerMobile\ViewModels\INavigationCallbacks.cs" Link="Production\INavigationCallbacks.cs" />
     <Compile Include="..\..\src\WayfarerMobile\ViewModels\NavigationCoordinatorViewModel.cs" Link="Production\NavigationCoordinatorViewModel.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\ViewModels\ITripItemEditorCallbacks.cs" Link="Production\ITripItemEditorCallbacks.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\ViewModels\TripItemEditorViewModel.cs" Link="Production\TripItemEditorViewModel.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Interfaces\IWikipediaService.cs" Link="Production\IWikipediaService.cs" />
     <Compile Remove="Infrastructure\Entities\QueuedLocation.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Data\Entities\QueuedLocation.cs" Link="Production\QueuedLocation.cs" />
   </ItemGroup>

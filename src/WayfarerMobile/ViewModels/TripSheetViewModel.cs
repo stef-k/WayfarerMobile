@@ -1337,8 +1337,8 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
         _callbacks?.UpdatePlaceSelection(place);
 
     /// <inheritdoc/>
-    Task ITripItemEditorCallbacks.StartNavigationToPlaceAsync(string placeId) =>
-        _callbacks?.StartNavigationToPlaceAsync(placeId) ?? Task.CompletedTask;
+    Task<bool> ITripItemEditorCallbacks.StartNavigationToPlaceAsync(string placeId) =>
+        _callbacks?.StartNavigationToPlaceAsync(placeId) ?? Task.FromResult(false);
 
     /// <inheritdoc/>
     Task<string?> ITripItemEditorCallbacks.DisplayActionSheetAsync(string title, string cancel, string? destruction, params string[] buttons) =>

@@ -126,19 +126,19 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
     /// </summary>
     /// <param name="placeId">The place ID to navigate to.</param>
     [RelayCommand]
-    public async Task StartNavigationToPlaceAsync(string placeId)
+    public async Task<bool> StartNavigationToPlaceAsync(string placeId)
     {
         var currentLocation = _callbacks?.CurrentLocation;
         if (currentLocation == null)
         {
             _logger.LogDebug("Cannot start navigation: no current location");
-            return;
+            return false;
         }
 
         if (!_tripNavigationService.IsTripLoaded)
         {
             _logger.LogDebug("Cannot start navigation: no trip loaded");
-            return;
+            return false;
         }
 
         var route = _tripNavigationService.CalculateRouteToPlace(
@@ -176,7 +176,10 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
             _callbacks?.SetFollowingLocation(false); // Don't auto-center during navigation
 
             _logger.LogInformation("Started navigation to place {PlaceId}", placeId);
+            return true;
         }
+
+        return false;
     }
 
     /// <summary>

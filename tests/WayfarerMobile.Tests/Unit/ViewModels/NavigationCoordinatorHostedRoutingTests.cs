@@ -286,8 +286,9 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
             .Returns(new LocationData { Latitude = origin.Latitude, Longitude = origin.Longitude });
         coordinator.SetCallbacks(callbacks.Object);
 
-        await coordinator.StartNavigationToPlaceAsync(destination.Id.ToString());
+        var started = await coordinator.StartNavigationToPlaceAsync(destination.Id.ToString());
 
+        started.Should().BeTrue();
         navigation.ActiveRoute!.IsDirectRoute.Should().BeFalse();
         navigation.ActiveRoute.Waypoints.Should().HaveCount(4);
         navigation.ActiveRoute.Waypoints.Should().ContainSingle(waypoint =>

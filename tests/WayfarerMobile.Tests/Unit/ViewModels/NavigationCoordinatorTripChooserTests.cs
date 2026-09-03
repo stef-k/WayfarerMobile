@@ -31,8 +31,9 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
             37, 23, 37.001, 23.001, "Existing");
         scenario.Coordinator.IsNavigating = true;
 
-        await scenario.Coordinator.StartNavigationToPlaceAsync(scenario.Destination.Id.ToString());
+        var started = await scenario.Coordinator.StartNavigationToPlaceAsync(scenario.Destination.Id.ToString());
 
+        started.Should().BeFalse();
         scenario.Navigation.ActiveRoute.Should().BeSameAs(prior);
         scenario.Coordinator.IsNavigating.Should().BeTrue();
         scenario.Callbacks.Verify(value => value.ShowNavigationRoute(It.IsAny<NavigationRoute>()), Times.Never);
@@ -60,8 +61,9 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
     {
         var scenario = CreateScenario("Direct");
 
-        await scenario.Coordinator.StartNavigationToPlaceAsync(scenario.Destination.Id.ToString());
+        var started = await scenario.Coordinator.StartNavigationToPlaceAsync(scenario.Destination.Id.ToString());
 
+        started.Should().BeTrue();
         scenario.Navigation.ActiveRoute.Should().NotBeNull();
         scenario.Navigation.ActiveRoute!.IsDirectRoute.Should().BeTrue();
         scenario.Coordinator.IsNavigating.Should().BeTrue();
