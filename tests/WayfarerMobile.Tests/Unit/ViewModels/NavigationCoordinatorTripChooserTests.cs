@@ -131,6 +131,8 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
         scenario.WakeLock.Verify(service => service.AcquireWakeLock(true), Times.Once);
         scenario.Audio.Verify(service => service.AnnounceNavigationStartAsync(
             scenario.Destination.Name, It.IsAny<double>()), Times.Once);
+        scenario.Coordinator.StopNavigation();
+        scenario.WakeLock.Verify(service => service.ReleaseWakeLock(), Times.Once);
     }
 
     private Scenario CreateScenario(string? chooserResult, Mock<IWakeLockService>? wakeLock = null,
