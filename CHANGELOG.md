@@ -27,7 +27,7 @@
 - **Feature: transient authenticated Wayfarer routing (#260)**
   - Historical release note: introduced the hosted-routing contract later superseded by personal-provider-native mode discovery
   - Keeps provider credentials server-side and never contacts a routing provider directly
-  - Preserves saved Segment geometry priority with Direct guidance for unavailable, rejected, cancelled, or stale work
+  - Historical behavior paired saved Segment geometry priority with Direct fallback; the current flow requires explicit Direct
   - Retains safe server-returned attribution and hosted provenance only with the active route
   - Keeps non-persistent hosted routes and profile selections session-only
 
