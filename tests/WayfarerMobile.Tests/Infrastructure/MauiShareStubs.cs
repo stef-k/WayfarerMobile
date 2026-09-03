@@ -49,6 +49,13 @@ public sealed class Clipboard
     public Task SetTextAsync(string text) => Task.CompletedTask;
 }
 
+public sealed class Launcher
+{
+    public static Launcher Default { get; } = new();
+
+    public Task<bool> OpenAsync(Uri uri) => Task.FromResult(true);
+}
+
 public enum NetworkAccess { None, Internet }
 public sealed class ConnectivityChangedEventArgs(NetworkAccess networkAccess) : EventArgs { public NetworkAccess NetworkAccess { get; } = networkAccess; }
 public interface IConnectivity

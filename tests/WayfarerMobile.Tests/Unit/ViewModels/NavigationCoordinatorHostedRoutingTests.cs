@@ -277,7 +277,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         navigation.LoadTrip(trip).Should().BeTrue();
         var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
         var coordinator = new NavigationCoordinatorViewModel(
-            navigation, new NavigationHudViewModel(), Mock.Of<IVisitNotificationService>(),
+            navigation, CreateNavigationHud(navigation), Mock.Of<IVisitNotificationService>(),
             new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance),
             CreateRetainedRoutingService(), new MockSettingsService(), Mock.Of<IDialogService>(),
             state, NullLogger<NavigationCoordinatorViewModel>.Instance);
@@ -375,7 +375,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         lastHostedRouting = hostedRouting;
         var coordinator = new NavigationCoordinatorViewModel(
             navigation,
-            new NavigationHudViewModel(),
+            CreateNavigationHud(navigation),
             Mock.Of<IVisitNotificationService>(),
             hostedRouting,
             retainedRouting ?? CreateRetainedRoutingService(),
@@ -387,6 +387,10 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         coordinator.SetCallbacks(callbacks.Object);
         return (coordinator, navigation, settings, callbacks);
     }
+
+    private static NavigationHudViewModel CreateNavigationHud(ITripNavigationService navigation) =>
+        new(navigation, Mock.Of<INavigationAudioService>(), Mock.Of<IWakeLockService>(),
+            NullLogger<NavigationHudViewModel>.Instance);
 
     private RetainedWayfarerRoutingService CreateRetainedRoutingService()
     {
