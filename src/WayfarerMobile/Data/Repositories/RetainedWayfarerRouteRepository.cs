@@ -272,6 +272,7 @@ public sealed class RetainedWayfarerRouteRepository
             MappingIdentity = candidate.Metadata.MappingIdentity,
             TransportProfileId = candidate.SelectedProfileId.ToString("D"),
             SelectedProfileAuthorityIdentity = candidate.SelectedProfileAuthorityIdentity,
+            ProviderMode = candidate.SelectedProviderMode,
             ModeKey = candidate.Context.ModeKey!,
             Category = candidate.Context.Category!,
             OriginLongitude = canonical[0], OriginLatitude = canonical[1],
@@ -364,7 +365,7 @@ public sealed class RetainedWayfarerRouteRepository
                 EstimatedDuration = TimeSpan.FromSeconds(row.DurationSeconds), IsDirectRoute = false,
                 Attribution = attribution.ToList(),
                 HostedProvenance = new(profileId, row.SelectedProfileAuthorityIdentity, row.Provider,
-                    configurationId, row.MappingIdentity, row.StorageAuthority, generated)
+                    configurationId, row.MappingIdentity, row.StorageAuthority, generated, row.ProviderMode)
                 { IsRetained = true, Age = age }
             };
             return true;

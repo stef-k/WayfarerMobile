@@ -17,6 +17,7 @@ public sealed class RetainedWayfarerRouteEntity
     [Indexed]
     public string TransportProfileId { get; set; } = string.Empty;
     public string SelectedProfileAuthorityIdentity { get; set; } = string.Empty;
+    public string? ProviderMode { get; set; }
     public string ModeKey { get; set; } = string.Empty;
     public string Category { get; set; } = string.Empty;
     public int OriginLongitude { get; set; }

@@ -397,8 +397,9 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
                 || result.Choices is not { Count: > 0 }
                 || !HostedOpaqueIdentity.IsValid(result.DiscoveryCatalogIdentity)) return null;
             var options = result.Choices.Select(item =>
-                $"{item.DisplayName} — {item.ModeKey} ({item.TransportProfileId:D})").ToArray();
-            var selected = await _dialogs.SelectAsync("Wayfarer routing profile", options, "Direct");
+                item.Label).ToArray();
+            var selected = await _dialogs.SelectAsync(
+                "Provider route mode (separate from the Segment Transport Profile)", options, "Direct");
             var index = selected == null ? -1 : Array.IndexOf(options, selected);
             if (index < 0)
             {
@@ -408,7 +409,11 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
                 return null;
             }
             if (_hostedRoutingGeneration != generation || _hostedRequest?.Generation != generation) return null;
-            var choiceContext = context with { ExpectedCatalogIdentity = result.DiscoveryCatalogIdentity };
+            var choiceContext = context with
+            {
+                ExpectedCatalogIdentity = result.DiscoveryCatalogIdentity,
+                ExpectedProvider = result.Provider
+            };
             _hostedRequest = choiceContext;
             result = await _hostedRouting.RequestRouteAsync(
                 choiceContext, result.Choices[index], _hostedRoutingCancellation.Token,
@@ -434,8 +439,8 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
         if (choice == "Use retained route")
         {
             if (HostedRoutePublication.TryPublishRetained(retained, target))
-                _hostedRouting.SelectRetained(context.Generation, provenance.TransportProfileId,
-                    provenance.SelectedProfileAuthorityIdentity);
+            _hostedRouting.SelectRetained(context.Generation, provenance.TransportProfileId,
+                provenance.ProviderMode ?? string.Empty, provenance.SelectedProfileAuthorityIdentity);
             return new(true, null);
         }
         if (choice != "Refresh with Wayfarer")
@@ -445,7 +450,7 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
         }
         if (!HostedRoutePublication.TryPublishRetained(retained, target)) return new(true, null);
         _hostedRouting.SelectRetained(context.Generation, provenance.TransportProfileId,
-            provenance.SelectedProfileAuthorityIdentity);
+            provenance.ProviderMode ?? string.Empty, provenance.SelectedProfileAuthorityIdentity);
         return new(false, provenance);
     }
 
@@ -464,7 +469,7 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
     {
         if (IsRequestCurrent(context, partition))
             _hostedRouting.SelectRetained(context.Generation, retained.TransportProfileId,
-                retained.SelectedProfileAuthorityIdentity);
+                retained.ProviderMode ?? string.Empty, retained.SelectedProfileAuthorityIdentity);
     }
 
     private HostedRouteRequestContext CreateHostedContext(double fromLat, double fromLon, double toLat,
@@ -509,7 +514,7 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
             HostedRouteServerIdentity.Normalize(_settings.ServerUrl), new(location.Longitude, location.Latitude), destination,
             tripAuthority?.Anchors ?? [], owner.Association, tripAuthority?.SegmentId,
             tripAuthority?.SavedTransportProfileId, mode, category, selection?.TransportProfileId,
-            selection?.SelectedProfileAuthorityIdentity, "hosted");
+            selection?.SelectedProfileAuthorityIdentity, "hosted", selection?.ProviderMode);
     }
 
     private static string NormalizeMode(string profile) => profile switch
