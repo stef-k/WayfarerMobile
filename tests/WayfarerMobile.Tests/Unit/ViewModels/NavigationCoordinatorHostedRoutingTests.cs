@@ -17,6 +17,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
     private const string IdentityB = "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ";
     private readonly List<SQLiteAsyncConnection> retainedConnections = [];
     private readonly List<string> retainedDatabasePaths = [];
+    private HostedRoutingService? lastHostedRouting;
 
     public Task InitializeAsync() => Task.CompletedTask;
 
@@ -30,48 +31,45 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task OpenChooser_CatalogChanges_SubmitsDisplayedIdentityThenRefreshesBeforeReselection()
+    public async Task OpenChooser_CatalogChangesThenDismissalReturnsNoRoute()
     {
-        var catalogA = Catalog(IdentityA,
-            new(WalkingProfile, "Walking", "walk", "active"),
-            new(HikingProfile, "Hiking", "walk", "outdoors"));
-        var catalogB = Catalog(IdentityB,
-            new(WalkingProfile, "On foot", "walk", "active"),
-            new(HikingProfile, "Trail", "walk", "outdoors"));
+        var catalogA = Catalog(IdentityA, new HostedProviderMode("walk", "Walk"),
+            new HostedProviderMode("bicycle", "Bicycle"));
+        var catalogB = Catalog(IdentityB, new HostedProviderMode("walk", "On foot"));
         var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
         api.SetupSequence(client => client.DiscoverAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(catalogA)
             .ReturnsAsync(catalogB);
-        api.Setup(client => client.GetCapabilityAsync(WalkingProfile, IdentityA, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new HostedRoutingCapability("catalog-changed", WalkingProfile,
+        api.Setup(client => client.GetCapabilityAsync(Guid.Empty, "walk", IdentityA, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HostedRoutingCapability("catalog-changed", Guid.Empty,
                 null, null, null, null, null, null, null));
-        api.Setup(client => client.GetCapabilityAsync(WalkingProfile, IdentityB, It.IsAny<CancellationToken>()))
+        api.Setup(client => client.GetCapabilityAsync(Guid.Empty, "walk", IdentityB, It.IsAny<CancellationToken>()))
             .ReturnsAsync(HostedRoutingCapability.Available(
-                WalkingProfile, IdentityB, IdentityB, Attribution()));
+                Guid.Empty, IdentityB, IdentityB, Attribution()));
         api.Setup(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(HostedRouteResponse.ValidForTest(WalkingProfile, IdentityB));
+            .ReturnsAsync(HostedRouteResponse.ValidForTest(Guid.Empty, IdentityB));
         var presentations = new List<IReadOnlyList<string>>();
         var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
-        dialogs.Setup(service => service.SelectAsync("Wayfarer routing profile",
+        dialogs.Setup(service => service.SelectAsync(
+                "Provider route mode (separate from the Segment Transport Profile)",
                 It.IsAny<IReadOnlyList<string>>(), "Direct"))
             .Callback<string, IReadOnlyList<string>, string>((_, choices, _) => presentations.Add(choices))
             .ReturnsAsync(() => presentations.Count == 1
-                ? $"Walking — walk ({WalkingProfile:D})"
+                ? "Walk"
                 : null);
         var (coordinator, navigation, _, callbacks) = CreateCoordinator(api.Object, dialogs.Object);
         callbacks.SetupGet(value => value.CurrentLocation).Returns(new LocationData { Latitude = 37, Longitude = 23 });
 
         var route = await coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.01, 23.01, "Target", "foot");
 
-        route.Should().BeSameAs(navigation.ActiveRoute);
-        route.IsDirectRoute.Should().BeTrue();
-        route.HostedProvenance.Should().BeNull();
+        route.Should().BeNull();
+        navigation.ActiveRoute.Should().BeNull();
         presentations.Should().HaveCount(2);
-        presentations[0].Should().ContainSingle(choice => choice.StartsWith("Walking —", StringComparison.Ordinal));
-        presentations[1].Should().ContainSingle(choice => choice.StartsWith("On foot —", StringComparison.Ordinal));
-        api.Verify(client => client.GetCapabilityAsync(WalkingProfile, IdentityA,
+        presentations[0].Should().Equal("Walk", "Bicycle");
+        presentations[1].Should().Equal("On foot");
+        api.Verify(client => client.GetCapabilityAsync(Guid.Empty, "walk", IdentityA,
             It.IsAny<CancellationToken>()), Times.Once);
-        api.Verify(client => client.GetCapabilityAsync(It.IsAny<Guid>(), IdentityB,
+        api.Verify(client => client.GetCapabilityAsync(It.IsAny<Guid>(), It.IsAny<string>(), IdentityB,
             It.IsAny<CancellationToken>()), Times.Never);
         api.Verify(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(),
             It.IsAny<CancellationToken>()), Times.Never);
@@ -80,29 +78,28 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
     [Fact]
     public async Task OpenChooser_RepeatedCatalogChange_RefreshesOnlyOnceAndRetainsDirect()
     {
-        var catalogA = Catalog(IdentityA,
-            new(WalkingProfile, "Walking", "walk", "active"),
-            new(HikingProfile, "Hiking", "walk", "outdoors"));
-        var catalogB = Catalog(IdentityB,
-            new HostedRoutingProfile(WalkingProfile, "On foot", "walk", "active"));
+        var catalogA = Catalog(IdentityA, new HostedProviderMode("walk", "Walk"),
+            new HostedProviderMode("bicycle", "Bicycle"));
+        var catalogB = Catalog(IdentityB, new HostedProviderMode("walk", "On foot"));
         var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
         api.SetupSequence(client => client.DiscoverAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(catalogA)
             .ReturnsAsync(catalogB);
-        api.Setup(client => client.GetCapabilityAsync(WalkingProfile, IdentityA, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new HostedRoutingCapability("catalog-changed", WalkingProfile,
+        api.Setup(client => client.GetCapabilityAsync(Guid.Empty, "walk", IdentityA, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HostedRoutingCapability("catalog-changed", Guid.Empty,
                 null, null, null, null, null, null, null));
-        api.Setup(client => client.GetCapabilityAsync(WalkingProfile, IdentityB, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new HostedRoutingCapability("catalog-changed", WalkingProfile,
+        api.Setup(client => client.GetCapabilityAsync(Guid.Empty, "walk", IdentityB, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HostedRoutingCapability("catalog-changed", Guid.Empty,
                 null, null, null, null, null, null, null));
         var presentations = new List<IReadOnlyList<string>>();
         var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
-        dialogs.Setup(service => service.SelectAsync("Wayfarer routing profile",
+        dialogs.Setup(service => service.SelectAsync(
+                "Provider route mode (separate from the Segment Transport Profile)",
                 It.IsAny<IReadOnlyList<string>>(), "Direct"))
             .Callback<string, IReadOnlyList<string>, string>((_, choices, _) => presentations.Add(choices))
             .ReturnsAsync(() => presentations.Count == 1
-                ? $"Walking — walk ({WalkingProfile:D})"
-                : $"On foot — walk ({WalkingProfile:D})");
+                ? "Walk"
+                : "On foot");
         var (coordinator, navigation, _, callbacks) = CreateCoordinator(api.Object, dialogs.Object);
         callbacks.SetupGet(value => value.CurrentLocation).Returns(new LocationData { Latitude = 37, Longitude = 23 });
 
@@ -112,16 +109,16 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         route.IsDirectRoute.Should().BeTrue();
         presentations.Should().HaveCount(2);
         api.Verify(client => client.DiscoverAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
-        api.Verify(client => client.GetCapabilityAsync(WalkingProfile, IdentityA,
+        api.Verify(client => client.GetCapabilityAsync(Guid.Empty, "walk", IdentityA,
             It.IsAny<CancellationToken>()), Times.Once);
-        api.Verify(client => client.GetCapabilityAsync(WalkingProfile, IdentityB,
+        api.Verify(client => client.GetCapabilityAsync(Guid.Empty, "walk", IdentityB,
             It.IsAny<CancellationToken>()), Times.Once);
         api.Verify(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task DelayedHostedResponse_CurrentLocationChanges_DoesNotPublishToActiveDirectRoute()
+    public async Task DelayedHostedResponse_CurrentLocationChanges_PreservesPriorActiveRoute()
     {
         var routeResponse = new TaskCompletionSource<HostedRouteResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
         var routeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -132,10 +129,12 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
                 routeStarted.SetResult();
                 return routeResponse.Task;
             });
-        var dialogs = Mock.Of<IDialogService>();
+        var dialogs = SelectedModeDialogs();
         var (coordinator, navigation, _, callbacks) = CreateCoordinator(api.Object, dialogs);
         var location = new LocationData { Latitude = 37, Longitude = 23 };
         callbacks.SetupGet(value => value.CurrentLocation).Returns(() => location);
+        var prior = await coordinator.CalculateRouteToCoordinatesAsync(
+            37, 23, 37.005, 23.005, "Existing", "direct");
 
         var pending = coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.01, 23.01, "Target", "foot");
         await routeStarted.Task;
@@ -143,18 +142,15 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         routeResponse.SetResult(HostedRouteResponse.ValidForTest(WalkingProfile, IdentityA));
         var route = await pending;
 
-        route.Should().BeSameAs(navigation.ActiveRoute);
-        route.IsDirectRoute.Should().BeTrue();
-        route.Waypoints.Should().HaveCount(2);
-        route.Attribution.Should().BeEmpty();
-        route.HostedProvenance.Should().BeNull();
+        route.Should().BeNull();
+        navigation.ActiveRoute.Should().BeSameAs(prior);
     }
 
     [Fact]
     public async Task CurrentHostedResponse_PublishesToActiveRouteAndDirectReplacementClearsProvenance()
     {
         var api = SuccessfulApi();
-        var (coordinator, navigation, _, callbacks) = CreateCoordinator(api.Object, Mock.Of<IDialogService>());
+        var (coordinator, navigation, _, callbacks) = CreateCoordinator(api.Object, SelectedModeDialogs());
         callbacks.SetupGet(value => value.CurrentLocation).Returns(new LocationData { Latitude = 37, Longitude = 23 });
 
         var hosted = await coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.01, 23.01, "Target", "foot");
@@ -163,7 +159,8 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         hosted.IsDirectRoute.Should().BeFalse();
         hosted.Attribution.Should().ContainSingle(item => item.Text == "Powered by Wayfarer test");
         hosted.HostedProvenance.Should().NotBeNull();
-        hosted.HostedProvenance!.TransportProfileId.Should().Be(WalkingProfile);
+        hosted.HostedProvenance!.TransportProfileId.Should().Be(Guid.Empty);
+        hosted.HostedProvenance.ProviderMode.Should().Be("walk");
 
         var direct = await coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.02, 23.02, "Direct", "direct");
 
@@ -222,6 +219,10 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
                 It.Is<IReadOnlyList<string>>(options => options.SequenceEqual(
                     new[] { "Use retained route", "Refresh with Wayfarer" })), "Direct"))
             .ReturnsAsync("Refresh with Wayfarer");
+        dialogs.Setup(service => service.SelectAsync(
+                "Provider route mode (separate from the Segment Transport Profile)",
+                It.Is<IReadOnlyList<string>>(options => options.SequenceEqual(new[] { "Walk" })), "Direct"))
+            .ReturnsAsync("Walk");
         var (coordinator, navigation, _, callbacks) = CreateCoordinator(
             api.Object, dialogs.Object, retainedService, settings);
         callbacks.SetupGet(value => value.CurrentLocation)
@@ -233,7 +234,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         selected.Should().BeSameAs(navigation.ActiveRoute);
         selected.HostedProvenance!.IsRetained.Should().Be(!freshSucceeds);
         api.Verify(client => client.DiscoverAsync(It.IsAny<CancellationToken>()), Times.Once);
-        api.Verify(client => client.GetCapabilityAsync(WalkingProfile, IdentityA,
+        api.Verify(client => client.GetCapabilityAsync(Guid.Empty, "walk", IdentityA,
             It.IsAny<CancellationToken>()), Times.Once);
         api.Verify(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -242,11 +243,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
                 settings.AuthenticationSessionRevision, "https://test.example.com",
                 "ad-hoc-coordinates", "hosted"),
             settings.RoutingAccountPartition, DateTimeOffset.UtcNow, () => true);
-        retained!.Route.Steps.Should().ContainSingle(step =>
-            step.Instruction == (freshSucceeds ? "Continue" : "Retained"));
-        if (freshSucceeds)
-            retained.Route.HostedProvenance!.GeneratedAt.Should().BeCloseTo(
-                selected.HostedProvenance.GeneratedAt, TimeSpan.FromMilliseconds(1));
+        retained!.Route.Steps.Should().ContainSingle(step => step.Instruction == "Retained");
     }
 
     [Fact]
@@ -314,7 +311,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
             NullLogger<RetainedWayfarerRoutingService>.Instance);
         var api = SuccessfulApi();
         var (coordinator, navigation, _, callbacks) = CreateCoordinator(
-            api.Object, Mock.Of<IDialogService>(), retained);
+            api.Object, SelectedModeDialogs(), retained);
         callbacks.SetupGet(value => value.CurrentLocation)
             .Returns(new LocationData { Latitude = 37, Longitude = 23 });
 
@@ -358,7 +355,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         };
         var candidate = new HostedRouteCandidate(route, context, WalkingProfile, IdentityA,
             new("geoapify", Guid.Parse("22222222-2222-2222-2222-222222222222"),
-                "mapping", "persistent"), DateTimeOffset.UtcNow.AddMinutes(-1));
+                "mapping", "persistent"), DateTimeOffset.UtcNow.AddMinutes(-1), "walk");
         (await repository.SaveAsync(candidate, settings.RoutingAccountPartition,
             DateTimeOffset.UtcNow, () => true)).Should().Be(RetainedRouteSaveResult.Saved);
         return (repository, new(repository,
@@ -378,11 +375,13 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
             new NavigationRouteBuilder(NullLogger<NavigationRouteBuilder>.Instance),
             state);
         var settings = suppliedSettings ?? new MockSettingsService();
+        var hostedRouting = new HostedRoutingService(api, NullLogger<HostedRoutingService>.Instance);
+        lastHostedRouting = hostedRouting;
         var coordinator = new NavigationCoordinatorViewModel(
             navigation,
             new NavigationHudViewModel(),
             Mock.Of<IVisitNotificationService>(),
-            new HostedRoutingService(api, NullLogger<HostedRoutingService>.Instance),
+            hostedRouting,
             retainedRouting ?? CreateRetainedRoutingService(),
             settings,
             dialogs,
@@ -408,18 +407,220 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
     {
         var api = new Mock<IHostedRoutingApiClient>();
         api.Setup(client => client.DiscoverAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Catalog(IdentityA,
-                new HostedRoutingProfile(WalkingProfile, "Walking", "walk", "active")));
-        api.Setup(client => client.GetCapabilityAsync(WalkingProfile, IdentityA, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(HostedRoutingCapability.Available(WalkingProfile, IdentityA, IdentityA, Attribution()));
+            .ReturnsAsync(Catalog(IdentityA, new HostedProviderMode("walk", "Walk")));
+        api.Setup(client => client.GetCapabilityAsync(Guid.Empty, "walk", IdentityA, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(HostedRoutingCapability.Available(Guid.Empty, IdentityA, IdentityA, Attribution()));
         api.Setup(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(HostedRouteResponse.ValidForTest(WalkingProfile, IdentityA));
+            .ReturnsAsync(HostedRouteResponse.ValidForTest(Guid.Empty, IdentityA));
         return api;
     }
 
-    private static HostedRoutingCatalog Catalog(string identity, params HostedRoutingProfile[] profiles) =>
-        new(identity, "available", profiles);
+    private static HostedRoutingCatalog Catalog(string identity, params HostedProviderMode[] modes) =>
+        new(identity, "available", [], "geoapify", modes);
 
     private static IReadOnlyList<HostedRouteAttribution> Attribution() =>
         [new("Powered by Wayfarer test", "https://example.test")];
+
+    private static IDialogService SelectedModeDialogs()
+    {
+        var dialogs = new Mock<IDialogService>();
+        dialogs.Setup(service => service.SelectAsync(
+                "Provider route mode (separate from the Segment Transport Profile)",
+                It.IsAny<IReadOnlyList<string>>(), "Direct"))
+            .ReturnsAsync("Walk");
+        return dialogs.Object;
+    }
+
+    [Fact]
+    public async Task FreshRoute_DismissedChooserReturnsNoRouteAndPreservesCurrentNavigation()
+    {
+        var modes = new[]
+        {
+            new HostedProviderMode("walk", "Walk"), new("bicycle", "Bicycle"),
+            new("motorcycle", "Motorcycle"), new("drive", "Drive"), new("bus", "Bus")
+        };
+        var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
+        api.Setup(client => client.DiscoverAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Catalog(IdentityA, modes));
+        var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
+        dialogs.Setup(service => service.SelectAsync(
+                "Provider route mode (separate from the Segment Transport Profile)",
+                It.Is<IReadOnlyList<string>>(choices => choices.SequenceEqual(
+                    new[] { "Walk", "Bicycle", "Motorcycle", "Drive", "Bus" })), "Direct"))
+            .ReturnsAsync((string?)null);
+        var (coordinator, navigation, _, callbacks) = CreateCoordinator(api.Object, dialogs.Object);
+        callbacks.SetupGet(value => value.CurrentLocation)
+            .Returns(new LocationData { Latitude = 37, Longitude = 23 });
+
+        var priorRoute = await coordinator.CalculateRouteToCoordinatesAsync(
+            37, 23, 37.005, 23.005, "Existing", "direct");
+        coordinator.IsNavigating = true;
+        lastHostedRouting!.SelectRetained(1, WalkingProfile, "walk", IdentityA);
+        var priorSelection = lastHostedRouting!.CurrentSelection;
+
+        var route = await coordinator.CalculateRouteToCoordinatesAsync(
+            37, 23, 37.01, 23.01, "Target", "car");
+
+        route.Should().BeNull();
+        navigation.ActiveRoute.Should().BeSameAs(priorRoute);
+        coordinator.IsNavigating.Should().BeTrue();
+        priorSelection!.ProviderMode.Should().Be("walk");
+        lastHostedRouting.CurrentSelection.Should().Be(priorSelection);
+        api.Verify(client => client.GetCapabilityAsync(It.IsAny<Guid>(), It.IsAny<string>(),
+            It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        api.Verify(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task StaleChooserDismissal_DoesNotOverwriteOrCancelNewerRequest()
+    {
+        var firstChooser = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstPresented = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondRequestToken = CancellationToken.None;
+        var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
+        api.Setup(client => client.DiscoverAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Catalog(IdentityA, new HostedProviderMode("walk", "Walk")));
+        api.Setup(client => client.GetCapabilityAsync(Guid.Empty, "walk", IdentityA,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(HostedRoutingCapability.Available(Guid.Empty, IdentityA, IdentityA, Attribution()));
+        api.Setup(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<HostedRouteRequest, CancellationToken>((_, token) => secondRequestToken = token)
+            .ReturnsAsync(HostedRouteResponse.ValidForTest(Guid.Empty, IdentityA));
+        var presentation = 0;
+        var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
+        dialogs.Setup(service => service.SelectAsync(
+                "Provider route mode (separate from the Segment Transport Profile)",
+                It.IsAny<IReadOnlyList<string>>(), "Direct"))
+            .Returns(() =>
+            {
+                if (Interlocked.Increment(ref presentation) == 1)
+                {
+                    firstPresented.SetResult();
+                    return firstChooser.Task;
+                }
+                return Task.FromResult<string?>("Walk");
+            });
+        var (coordinator, navigation, _, callbacks) = CreateCoordinator(api.Object, dialogs.Object);
+        callbacks.SetupGet(value => value.CurrentLocation)
+            .Returns(new LocationData { Latitude = 37, Longitude = 23 });
+
+        var stale = coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.01, 23.01, "A", "foot");
+        await firstPresented.Task;
+        var current = await coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.01, 23.01, "B", "foot");
+        var currentSelection = lastHostedRouting!.CurrentSelection;
+        firstChooser.SetResult(null);
+
+        (await stale).Should().BeNull();
+        api.Verify(client => client.GetCapabilityAsync(Guid.Empty, "walk", IdentityA,
+            It.IsAny<CancellationToken>()), Times.Once);
+        api.Verify(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        current.Should().BeSameAs(navigation.ActiveRoute);
+        current!.IsDirectRoute.Should().BeFalse();
+        lastHostedRouting.CurrentSelection.Should().BeSameAs(currentSelection);
+        currentSelection.Should().NotBeNull();
+        currentSelection!.ProviderMode.Should().Be("walk");
+        secondRequestToken.IsCancellationRequested.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task AuthorityChangeDuringDismissal_DoesNotReviveOldSelection()
+    {
+        var settings = new MockSettingsService();
+        var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
+        api.Setup(client => client.DiscoverAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Catalog(IdentityA, new HostedProviderMode("walk", "Walk")));
+        var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
+        dialogs.Setup(service => service.SelectAsync(
+                "Provider route mode (separate from the Segment Transport Profile)",
+                It.IsAny<IReadOnlyList<string>>(), "Direct"))
+            .Callback(() =>
+            {
+                settings.ApiToken = "replacement-token";
+                lastHostedRouting!.SelectDirect(100);
+            })
+            .ReturnsAsync((string?)null);
+        var (coordinator, _, _, callbacks) = CreateCoordinator(
+            api.Object, dialogs.Object, suppliedSettings: settings);
+        callbacks.SetupGet(value => value.CurrentLocation)
+            .Returns(new LocationData { Latitude = 37, Longitude = 23 });
+        lastHostedRouting!.SelectRetained(1, WalkingProfile, "walk", IdentityA);
+
+        var route = await coordinator.CalculateRouteToCoordinatesAsync(
+            37, 23, 37.01, 23.01, "Target", "foot");
+
+        route.Should().BeNull();
+        lastHostedRouting.CurrentSelection.Should().BeNull();
+        api.Verify(client => client.GetCapabilityAsync(It.IsAny<Guid>(), It.IsAny<string>(),
+            It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task FreshRoute_ExplicitDirectReturnsDirectWithoutProviderContact()
+    {
+        var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
+        api.Setup(client => client.DiscoverAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Catalog(IdentityA, new HostedProviderMode("walk", "Walk")));
+        var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
+        dialogs.Setup(service => service.SelectAsync(
+                "Provider route mode (separate from the Segment Transport Profile)",
+                It.Is<IReadOnlyList<string>>(choices => choices.SequenceEqual(new[] { "Walk" })), "Direct"))
+            .ReturnsAsync("Direct");
+        var (coordinator, navigation, _, callbacks) = CreateCoordinator(api.Object, dialogs.Object);
+        callbacks.SetupGet(value => value.CurrentLocation)
+            .Returns(new LocationData { Latitude = 37, Longitude = 23 });
+
+        var route = await coordinator.CalculateRouteToCoordinatesAsync(
+            37, 23, 37.01, 23.01, "Target", "car");
+
+        route.Should().BeSameAs(navigation.ActiveRoute);
+        route!.IsDirectRoute.Should().BeTrue();
+        api.Verify(client => client.GetCapabilityAsync(It.IsAny<Guid>(), It.IsAny<string>(),
+            It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        api.Verify(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ExplicitDirect_MakesNoHostedOrChooserContact()
+    {
+        var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
+        var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
+        var (coordinator, _, _, _) = CreateCoordinator(api.Object, dialogs.Object);
+
+        var route = await coordinator.CalculateRouteToCoordinatesAsync(
+            37, 23, 37.01, 23.01, "Target", "direct");
+
+        route!.IsDirectRoute.Should().BeTrue();
+        api.VerifyNoOtherCalls();
+        dialogs.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task AuthenticationChangesWhileChoosing_PreventCapabilityContact()
+    {
+        var settings = new MockSettingsService();
+        var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
+        api.Setup(client => client.DiscoverAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Catalog(IdentityA, new HostedProviderMode("walk", "Walk")));
+        var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
+        dialogs.Setup(service => service.SelectAsync(
+                "Provider route mode (separate from the Segment Transport Profile)",
+                It.IsAny<IReadOnlyList<string>>(), "Direct"))
+            .Callback(() => settings.ApiToken = "replacement-token")
+            .ReturnsAsync("Walk");
+        var (coordinator, navigation, _, callbacks) = CreateCoordinator(
+            api.Object, dialogs.Object, suppliedSettings: settings);
+        callbacks.SetupGet(value => value.CurrentLocation)
+            .Returns(new LocationData { Latitude = 37, Longitude = 23 });
+
+        var route = await coordinator.CalculateRouteToCoordinatesAsync(
+            37, 23, 37.01, 23.01, "Target", "foot");
+
+        route.Should().BeNull();
+        navigation.ActiveRoute.Should().BeNull();
+        api.Verify(client => client.GetCapabilityAsync(It.IsAny<Guid>(), It.IsAny<string>(),
+            It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 }

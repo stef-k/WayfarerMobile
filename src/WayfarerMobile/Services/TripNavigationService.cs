@@ -143,7 +143,8 @@ public class TripNavigationService : ITripNavigationService
     /// <param name="currentLon">Current longitude.</param>
     /// <param name="destinationPlaceId">Destination place ID.</param>
     /// <returns>The calculated route or null if no route found.</returns>
-    public NavigationRoute? CalculateRouteToPlace(double currentLat, double currentLon, string destinationPlaceId)
+    public NavigationRoute? CalculateRouteToPlace(double currentLat, double currentLon,
+        string destinationPlaceId, bool activate = true)
     {
         if (_currentGraph == null)
         {
@@ -170,16 +171,15 @@ public class TripNavigationService : ITripNavigationService
                 if (path.Count > 0)
                 {
                     var segmentRoute = _routeBuilder.BuildFromSegmentPath(path, currentLat, currentLon, _currentGraph);
-                    InstallRoute(segmentRoute, destinationPlaceId);
+                    if (activate) InstallRoute(segmentRoute, destinationPlaceId);
                     _logger.LogDebug("Using segment route with {WaypointCount} waypoints", segmentRoute.Waypoints.Count);
                     return segmentRoute;
                 }
             }
         }
 
-        // Priority 2: Direct navigation (bearing + distance)
         var directRoute = _routeBuilder.BuildDirectRoute(currentLat, currentLon, destination);
-        InstallRoute(directRoute, destinationPlaceId);
+        if (activate) InstallRoute(directRoute, destinationPlaceId);
         _logger.LogDebug("Using direct route to {Destination}", destination.Name);
         return directRoute;
     }
@@ -203,7 +203,6 @@ public class TripNavigationService : ITripNavigationService
 
     /// <summary>
     /// Calculates a route to arbitrary coordinates (not requiring a loaded trip).
-    /// Direct guidance is a straight line with distance, bearing, and profile-aware ETA.
     /// </summary>
     /// <param name="currentLat">Current latitude.</param>
     /// <param name="currentLon">Current longitude.</param>
@@ -211,19 +210,22 @@ public class TripNavigationService : ITripNavigationService
     /// <param name="destLon">Destination longitude.</param>
     /// <param name="destName">Destination name for display.</param>
     /// <param name="profile">Routing profile (foot, car, bike). Default is foot.</param>
+    /// <param name="activate">Whether to replace the active navigation route.</param>
     /// <returns>The Direct route.</returns>
     public Task<NavigationRoute> CalculateRouteToCoordinatesAsync(
         double currentLat, double currentLon,
         double destLat, double destLon,
         string destName,
-        string profile = "foot")
+        string profile = "foot",
+        bool activate = true)
     {
-        _logger.LogInformation("Calculating Direct guidance to {Name}", destName);
-        _logger.LogInformation("Using direct route to {Name} with profile {Profile}", destName, profile);
         var directRoute = _routeBuilder.BuildDirectRouteToCoordinates(currentLat, currentLon, destLat, destLon, destName, profile);
-        InstallRoute(directRoute, destinationPlaceId: null);
+        if (activate) InstallRoute(directRoute, destinationPlaceId: null);
         return Task.FromResult(directRoute);
     }
+
+    /// <inheritdoc/>
+    public void ActivateRoute(NavigationRoute route) => InstallRoute(route, destinationPlaceId: null);
 
     /// <summary>
     /// Calculates a route to the next place in sequence.
@@ -231,7 +233,7 @@ public class TripNavigationService : ITripNavigationService
     /// <param name="currentLat">Current latitude.</param>
     /// <param name="currentLon">Current longitude.</param>
     /// <returns>The calculated route or null if no next place.</returns>
-    public NavigationRoute? CalculateRouteToNextPlace(double currentLat, double currentLon)
+    public NavigationRoute? CalculateRouteToNextPlace(double currentLat, double currentLon, bool activate = true)
     {
         var nextPlace = GetNextPlaceInSequence(currentLat, currentLon);
         if (nextPlace == null)
@@ -240,7 +242,7 @@ public class TripNavigationService : ITripNavigationService
             return null;
         }
 
-        return CalculateRouteToPlace(currentLat, currentLon, nextPlace.Id.ToString());
+        return CalculateRouteToPlace(currentLat, currentLon, nextPlace.Id.ToString(), activate);
     }
 
     /// <summary>

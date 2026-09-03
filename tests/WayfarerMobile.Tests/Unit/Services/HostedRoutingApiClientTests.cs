@@ -53,9 +53,9 @@ public sealed class HostedRoutingApiClientTests
             requests.Add((request.RequestUri!, request.Headers.Authorization?.ToString(), body));
             var json = request.RequestUri!.AbsolutePath switch
             {
-                "/api/mobile/routing/profiles" => $$"""{"outcome":"available","discoveryCatalogIdentity":"{{identity}}","profiles":[{"transportProfileId":"{{profileId}}","displayName":"Walking","modeKey":"walk","category":"active"}]}""",
-                var path when path.StartsWith("/api/mobile/routing/capability/") => $$"""{"outcome":"available","transportProfileId":"{{profileId}}","provider":"geoapify","providerConfigurationId":"22222222-2222-2222-2222-222222222222","mappingIdentity":"mapping","storageMode":"persistent","attribution":[{"text":"Powered by test","url":"https://example.test"}],"discoveryCatalogIdentity":"{{identity}}","selectedProfileAuthorityIdentity":"{{identity}}"}""",
-                "/api/mobile/routing/route" => $$"""{"succeeded":true,"outcome":"available","geometry":[{"longitude":23,"latitude":37},{"longitude":23.01,"latitude":37.01}],"distanceMetres":1500,"durationSeconds":900,"instructions":[{"text":"Continue","type":"continue","fromIndex":0,"toIndex":1,"distanceMetres":1500,"durationSeconds":900}],"generatedAt":"2026-08-30T00:00:00+02:00","provider":"geoapify","providerConfigurationId":"22222222-2222-2222-2222-222222222222","mappingIdentity":"mapping","transportProfileId":"{{profileId}}","matchPoints":[{"longitude":23,"latitude":37},{"longitude":23.01,"latitude":37.01}],"attribution":[{"text":"Powered by test","url":"https://example.test"}],"storageMode":"persistent","selectedProfileAuthorityIdentity":"{{identity}}"}""",
+                "/api/mobile/routing/profiles" => $$"""{"outcome":"available","discoveryCatalogIdentity":"{{identity}}","profiles":[],"provider":"geoapify","providerModes":[{"key":"walk","label":"Walk"},{"key":"bus","label":"Bus"}],"futureField":true}""",
+                var path when path.StartsWith("/api/mobile/routing/capability/") => $$"""{"outcome":"available","transportProfileId":"{{profileId}}","provider":"geoapify","providerConfigurationId":"22222222-2222-2222-2222-222222222222","mappingIdentity":"mapping","storageMode":"persistent","attribution":[{"text":"Powered by test","url":"https://example.test"}],"discoveryCatalogIdentity":"{{identity}}","selectedProfileAuthorityIdentity":"{{identity}}","providerMode":"walk"}""",
+                "/api/mobile/routing/route" => $$"""{"succeeded":true,"outcome":"available","geometry":[{"longitude":23,"latitude":37},{"longitude":23.01,"latitude":37.01}],"distanceMetres":1500,"durationSeconds":900,"instructions":[{"text":"Continue","type":"continue","fromIndex":0,"toIndex":1,"distanceMetres":1500,"durationSeconds":900}],"generatedAt":"2026-08-30T00:00:00+02:00","provider":"geoapify","providerConfigurationId":"22222222-2222-2222-2222-222222222222","mappingIdentity":"mapping","transportProfileId":"{{profileId}}","matchPoints":[{"longitude":23,"latitude":37},{"longitude":23.01,"latitude":37.01}],"attribution":[{"text":"Powered by test","url":"https://example.test"}],"storageMode":"persistent","selectedProfileAuthorityIdentity":"{{identity}}","providerMode":"walk"}""",
                 _ => throw new InvalidOperationException("Unexpected endpoint")
             };
             return Json(HttpStatusCode.OK, json);
@@ -63,20 +63,25 @@ public sealed class HostedRoutingApiClientTests
         var client = Create(handler);
 
         var catalog = await client.DiscoverAsync(default);
-        var capability = await client.GetCapabilityAsync(profileId, catalog.DiscoveryCatalogIdentity!, default);
+        var capability = await client.GetCapabilityAsync(
+            profileId, "walk", catalog.DiscoveryCatalogIdentity!, default);
         var route = await client.GetRouteAsync(new(profileId, new(23, 37), new(23.01, 37.01), [],
-            capability.SelectedProfileAuthorityIdentity!), default);
+            capability.SelectedProfileAuthorityIdentity!, "walk"), default);
 
         route.Succeeded.Should().BeTrue();
         route.Provider.Should().Be("geoapify");
         route.ProviderConfigurationId.Should().Be(Guid.Parse("22222222-2222-2222-2222-222222222222"));
         route.MappingIdentity.Should().Be("mapping");
         route.StorageMode.Should().Be("persistent");
+        route.ProviderMode.Should().Be("walk");
         route.GeneratedAt.Should().Be(new DateTimeOffset(2026, 8, 29, 22, 0, 0, TimeSpan.Zero));
+        catalog.Modes.Should().Equal(new HostedProviderMode("walk", "Walk"), new HostedProviderMode("bus", "Bus"));
+        capability.ProviderMode.Should().Be("walk");
         requests.Should().OnlyContain(item => item.Uri.Host == "wayfarer.test" && item.Authorization == "Bearer token");
-        requests[1].Uri.Query.Should().Contain($"discoveryCatalogIdentity={identity}");
+        requests[1].Uri.Query.Should().Contain($"discoveryCatalogIdentity={identity}").And.Contain("providerMode=walk");
         requests[2].Body.Should().Contain($"\"selectedProfileAuthorityIdentity\":\"{identity}\"")
-            .And.NotContain("discoveryCatalogIdentity").And.NotContain("provider").And.NotContain("apiKey");
+            .And.Contain("\"providerMode\":\"walk\"")
+            .And.NotContain("discoveryCatalogIdentity").And.NotContain("apiKey");
     }
 
     [Fact]
@@ -130,7 +135,7 @@ public sealed class HostedRoutingApiClientTests
 
         var capability = await client.GetCapabilityAsync(
             Guid.Parse("11111111-1111-1111-1111-111111111111"),
-            "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", default);
+            "walk", "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", default);
 
         capability.Outcome.Should().Be("invalid-request");
     }
@@ -143,7 +148,7 @@ public sealed class HostedRoutingApiClientTests
             """{"succeeded":false,"outcome":"invalid-request"}"""))));
 
         var route = await client.GetRouteAsync(new(profileId, new(23, 37), new(23.01, 37.01), [],
-            "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"), default);
+            "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "walk"), default);
 
         route.Outcome.Should().Be("invalid-request");
         route.Succeeded.Should().BeFalse();
@@ -170,7 +175,8 @@ public sealed class HostedRoutingApiClientTests
         });
         var client = Create(new RecordingHandler(_ => Task.FromResult(Json(HttpStatusCode.OK, json))));
 
-        var route = await client.GetRouteAsync(new(profileId, new(23, 37), new(23.01, 37.01), [], identity), default);
+        var route = await client.GetRouteAsync(
+            new(profileId, new(23, 37), new(23.01, 37.01), [], identity, "walk"), default);
 
         if (valid)
             route.GeneratedAt.Should().Be(new DateTimeOffset(2026, 8, 30, 10, 0, 0, TimeSpan.Zero));

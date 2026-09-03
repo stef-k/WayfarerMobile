@@ -12,26 +12,6 @@ public sealed class HostedRoutingServiceTests
     private const string IdentityB = "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ";
 
     [Theory]
-    [InlineData(true, "unknown", "unknown", HostedProfileSelectionKind.Selected)]
-    [InlineData(false, "walk", "hiking", HostedProfileSelectionKind.Selected)]
-    [InlineData(false, "walk", "active", HostedProfileSelectionKind.RequiresChoice)]
-    [InlineData(false, "boat", "water", HostedProfileSelectionKind.RequiresChoice)]
-    public void SelectProfile_UsesGuidThenOnlyAnUnambiguousTextualHint(
-        bool savedGuidMatches, string modeKey, string category, HostedProfileSelectionKind expected)
-    {
-        var catalog = Catalog(
-            new HostedRoutingProfile(WalkingProfile, "Walking", "walk", "active"),
-            new HostedRoutingProfile(CyclingProfile, "Cycling", "bike", "active"));
-
-        var result = HostedProfileSelector.Select(
-            savedGuidMatches ? WalkingProfile : null, modeKey, category, catalog);
-
-        result.Kind.Should().Be(expected);
-        if (savedGuidMatches || modeKey == "walk" && category == "hiking")
-            result.Profile?.TransportProfileId.Should().Be(WalkingProfile);
-    }
-
-    [Theory]
     [InlineData("v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", true)]
     [InlineData("v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", false)]
     [InlineData(" v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", false)]
@@ -50,7 +30,7 @@ public sealed class HostedRoutingServiceTests
         var catalog = Catalog(new HostedRoutingProfile(WalkingProfile, "Walking", "walk", "active"));
         api.Setup(client => client.DiscoverAsync(It.IsAny<CancellationToken>())).ReturnsAsync(catalog);
         api.Setup(client => client.GetCapabilityAsync(
-                WalkingProfile, catalog.DiscoveryCatalogIdentity!, It.IsAny<CancellationToken>()))
+                WalkingProfile, "walk", catalog.DiscoveryCatalogIdentity!, It.IsAny<CancellationToken>()))
             .ReturnsAsync(HostedRoutingCapability.Available(
                 WalkingProfile, catalog.DiscoveryCatalogIdentity!, IdentityA, Attribution()));
         api.Setup(client => client.GetRouteAsync(
@@ -60,12 +40,17 @@ public sealed class HostedRoutingServiceTests
             .ReturnsAsync(HostedRouteResponse.ValidForTest(WalkingProfile, IdentityA));
         var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
 
-        var result = await service.RequestRouteAsync(HostedRouteRequestContext.ForTest(
-            WalkingProfile, expectedCatalogIdentity: catalog.DiscoveryCatalogIdentity));
+        var discovery = await service.RequestRouteAsync(HostedRouteRequestContext.ForTest(WalkingProfile));
+        var context = HostedRouteRequestContext.ForTest(WalkingProfile,
+            expectedCatalogIdentity: catalog.DiscoveryCatalogIdentity) with { ExpectedProvider = "geoapify" };
+        var result = await service.RequestRouteAsync(context, new("walk", "Walk"));
 
+        discovery.Outcome.Should().Be(HostedRoutingOutcome.RequiresChoice);
         result.Outcome.Should().Be(HostedRoutingOutcome.Success);
         result.Candidate.Should().NotBeNull();
         result.Candidate!.Route.IsDirectRoute.Should().BeFalse();
+        result.Candidate.SelectedProviderMode.Should().Be("walk");
+        result.Candidate.Context.SavedTransportProfileId.Should().Be(WalkingProfile);
         result.Candidate.Route.Attribution.Should().ContainSingle(item => item.Text == "Powered by Wayfarer test");
         api.VerifyAll();
     }
@@ -76,8 +61,7 @@ public sealed class HostedRoutingServiceTests
         var api = SuccessfulApi(WalkingProfile, IdentityA, IdentityA);
         var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
 
-        var result = await service.RequestRouteAsync(HostedRouteRequestContext.ForTest(
-            WalkingProfile, expectedCatalogIdentity: IdentityA));
+        var result = await RequestChosenAsync(service, HostedRouteRequestContext.ForTest(WalkingProfile));
 
         result.Outcome.Should().Be(HostedRoutingOutcome.Success);
     }
@@ -88,7 +72,7 @@ public sealed class HostedRoutingServiceTests
         var context = HostedRouteRequestContext.ForTest(WalkingProfile);
         var candidate = new HostedRouteCandidate(new WayfarerMobile.Core.Models.NavigationRoute(),
             context, WalkingProfile, IdentityA,
-            new("geoapify", CyclingProfile, "mapping", "persistent"), DateTimeOffset.UtcNow);
+            new("geoapify", CyclingProfile, "mapping", "persistent"), DateTimeOffset.UtcNow, "walk");
         var live = new HostedRouteLiveAuthority(context.Generation, context.AuthenticationSessionRevision,
             context.NormalizedServer, context.Origin, context.Destination, context.Anchors,
             context.TargetAssociation, context.SegmentId, context.SavedTransportProfileId,
@@ -107,9 +91,9 @@ public sealed class HostedRoutingServiceTests
             .Returns(() => { aStarted.SetResult(); return aCompletion.Task; })
             .ReturnsAsync(HostedRouteResponse.ValidForTest(WalkingProfile, IdentityA));
         var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
-        var a = service.RequestRouteAsync(HostedRouteRequestContext.ForTest(WalkingProfile) with { Generation = 1 });
+        var a = RequestChosenAsync(service, HostedRouteRequestContext.ForTest(WalkingProfile) with { Generation = 1 });
         await aStarted.Task;
-        var b = service.RequestRouteAsync(HostedRouteRequestContext.ForTest(WalkingProfile) with { Generation = 2 });
+        var b = RequestChosenAsync(service, HostedRouteRequestContext.ForTest(WalkingProfile) with { Generation = 2 });
 
         (await b).Outcome.Should().Be(HostedRoutingOutcome.Success);
         service.IsLoading.Should().BeFalse();
@@ -127,7 +111,7 @@ public sealed class HostedRoutingServiceTests
         api.Setup(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(), It.IsAny<CancellationToken>()))
             .Returns(() => { started.SetResult(); return completion.Task; });
         var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
-        var pending = service.RequestRouteAsync(HostedRouteRequestContext.ForTest(WalkingProfile));
+        var pending = RequestChosenAsync(service, HostedRouteRequestContext.ForTest(WalkingProfile));
         await started.Task;
 
         service.SelectDirect(2);
@@ -141,7 +125,7 @@ public sealed class HostedRoutingServiceTests
     public async Task CapabilityAndRouteMetadata_MustMatchAndUnknownStorageRemainsTransientlyUsable()
     {
         var api = SuccessfulApi(WalkingProfile, IdentityA, IdentityA);
-        api.Setup(client => client.GetCapabilityAsync(WalkingProfile, IdentityA, It.IsAny<CancellationToken>()))
+        api.Setup(client => client.GetCapabilityAsync(WalkingProfile, "walk", IdentityA, It.IsAny<CancellationToken>()))
             .ReturnsAsync(HostedRoutingCapability.Available(WalkingProfile, IdentityA, IdentityA, Attribution(),
                 mappingIdentity: "mapping-v2", storageMode: "future-transient"));
         api.Setup(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(), It.IsAny<CancellationToken>()))
@@ -149,7 +133,7 @@ public sealed class HostedRoutingServiceTests
             { MappingIdentity = "mapping-v2", StorageMode = "future-transient" });
         var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
 
-        var result = await service.RequestRouteAsync(HostedRouteRequestContext.ForTest(WalkingProfile));
+        var result = await RequestChosenAsync(service, HostedRouteRequestContext.ForTest(WalkingProfile));
 
         result.Outcome.Should().Be(HostedRoutingOutcome.Success);
         result.Candidate!.Metadata.Should().Be(new HostedRouteCapabilityMetadata("geoapify",
@@ -163,12 +147,12 @@ public sealed class HostedRoutingServiceTests
     public async Task TerminalCapabilityOutcome_MakesNoRouteContact(string outcome)
     {
         var api = SuccessfulApi(WalkingProfile, IdentityA, IdentityA);
-        api.Setup(client => client.GetCapabilityAsync(WalkingProfile, IdentityA, It.IsAny<CancellationToken>()))
+        api.Setup(client => client.GetCapabilityAsync(WalkingProfile, "walk", IdentityA, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new HostedRoutingCapability(outcome, WalkingProfile, null, null, null, null,
                 null, outcome == "catalog-changed" ? null : IdentityA, null));
         var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
 
-        await service.RequestRouteAsync(HostedRouteRequestContext.ForTest(WalkingProfile));
+        await RequestChosenAsync(service, HostedRouteRequestContext.ForTest(WalkingProfile));
 
         api.Verify(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -184,7 +168,7 @@ public sealed class HostedRoutingServiceTests
             { Succeeded = false, Outcome = outcome });
         var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
 
-        var result = await service.RequestRouteAsync(HostedRouteRequestContext.ForTest(WalkingProfile));
+        var result = await RequestChosenAsync(service, HostedRouteRequestContext.ForTest(WalkingProfile));
 
         result.Outcome.Should().Be(HostedRoutingOutcome.InvalidResponse);
         api.Verify(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(), It.IsAny<CancellationToken>()), Times.Once);
@@ -194,13 +178,13 @@ public sealed class HostedRoutingServiceTests
     public async Task CredentialBearingHttpsAttribution_IsRejected()
     {
         var api = SuccessfulApi(WalkingProfile, IdentityA, IdentityA);
-        api.Setup(client => client.GetCapabilityAsync(WalkingProfile, IdentityA,
+        api.Setup(client => client.GetCapabilityAsync(WalkingProfile, "walk", IdentityA,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(HostedRoutingCapability.Available(WalkingProfile, IdentityA, IdentityA,
                 [new("Unsafe", "https://user:password@example.test/attribution")]));
         var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
 
-        var result = await service.RequestRouteAsync(HostedRouteRequestContext.ForTest(WalkingProfile));
+        var result = await RequestChosenAsync(service, HostedRouteRequestContext.ForTest(WalkingProfile));
 
         result.Outcome.Should().Be(HostedRoutingOutcome.Unavailable);
         api.Verify(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(),
@@ -221,7 +205,7 @@ public sealed class HostedRoutingServiceTests
         var result = await service.RequestRouteAsync(HostedRouteRequestContext.ForTest(WalkingProfile));
 
         result.Outcome.Should().Be(HostedRoutingOutcome.Unavailable);
-        api.Verify(client => client.GetCapabilityAsync(It.IsAny<Guid>(), It.IsAny<string>(),
+        api.Verify(client => client.GetCapabilityAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<CancellationToken>()), Times.Never);
         api.Verify(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(),
             It.IsAny<CancellationToken>()), Times.Never);
@@ -265,7 +249,7 @@ public sealed class HostedRoutingServiceTests
     }
 
     private static HostedRoutingCatalog Catalog(params HostedRoutingProfile[] profiles) =>
-        new(IdentityA, "available", profiles);
+        new(IdentityA, "available", profiles, "geoapify", [new("walk", "Walk")]);
 
     private static Mock<IHostedRoutingApiClient> SuccessfulApi(Guid profileId, string catalogIdentity,
         string authorityIdentity)
@@ -273,13 +257,84 @@ public sealed class HostedRoutingServiceTests
         var api = new Mock<IHostedRoutingApiClient>();
         api.Setup(client => client.DiscoverAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new HostedRoutingCatalog(catalogIdentity, "available",
-                [new(profileId, "Walking", "walk", "active")]));
-        api.Setup(client => client.GetCapabilityAsync(profileId, catalogIdentity, It.IsAny<CancellationToken>()))
+                [new(profileId, "Walking", "walk", "active")], "geoapify", [new("walk", "Walk")]));
+        api.Setup(client => client.GetCapabilityAsync(profileId, "walk", catalogIdentity, It.IsAny<CancellationToken>()))
             .ReturnsAsync(HostedRoutingCapability.Available(profileId, catalogIdentity, authorityIdentity, Attribution()));
         api.Setup(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(HostedRouteResponse.ValidForTest(profileId, authorityIdentity));
         return api;
     }
+
+    [Fact]
+    public async Task MalformedProviderModeCatalogs_FailClosedBeforeCapability()
+    {
+        var invalidCatalogs = new[]
+        {
+            new HostedRoutingCatalog(IdentityA, "available", [], "geoapify", []),
+            new HostedRoutingCatalog(IdentityA, "available", [], "geoapify",
+                Enumerable.Range(0, 21).Select(index => new HostedProviderMode($"mode-{index}", $"Mode {index}")).ToArray()),
+            new HostedRoutingCatalog(IdentityA, "available", [], "geoapify",
+                [new("walk", "Walk"), new("walk", "Hike")]),
+            new HostedRoutingCatalog(IdentityA, "available", [], "geoapify",
+                [new("walk", "Walk"), new("hike", "Walk")]),
+            new HostedRoutingCatalog(IdentityA, "available", [], "geoapify", [new(" ", "Walk")])
+        };
+
+        foreach (var catalog in invalidCatalogs)
+        {
+            var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
+            api.Setup(client => client.DiscoverAsync(It.IsAny<CancellationToken>())).ReturnsAsync(catalog);
+            var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
+
+            (await service.RequestRouteAsync(HostedRouteRequestContext.ForTest(WalkingProfile))).Outcome
+                .Should().Be(HostedRoutingOutcome.Unavailable);
+            api.Verify(client => client.GetCapabilityAsync(It.IsAny<Guid>(), It.IsAny<string>(),
+                It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+    }
+
+    [Fact]
+    public async Task OlderCatalogWithoutProviderModes_IsBoundedlyUnavailable()
+    {
+        var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
+        api.Setup(client => client.DiscoverAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HostedRoutingCatalog(IdentityA, "available",
+                [new(WalkingProfile, "Walking", "walk", "active")]));
+        var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
+
+        var result = await service.RequestRouteAsync(HostedRouteRequestContext.ForTest(WalkingProfile));
+
+        result.Outcome.Should().Be(HostedRoutingOutcome.Unavailable);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task ProviderModeMismatch_FromCapabilityOrResponse_FailsClosed(
+        bool capabilityMismatch, bool responseMismatch)
+    {
+        var api = SuccessfulApi(WalkingProfile, IdentityA, IdentityA);
+        if (capabilityMismatch)
+            api.Setup(client => client.GetCapabilityAsync(WalkingProfile, "walk", IdentityA,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(HostedRoutingCapability.Available(WalkingProfile, IdentityA, IdentityA,
+                    Attribution(), providerMode: "drive"));
+        if (responseMismatch)
+            api.Setup(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(HostedRouteResponse.ValidForTest(WalkingProfile, IdentityA) with
+                { ProviderMode = "drive" });
+        var service = new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance);
+
+        var result = await RequestChosenAsync(service, HostedRouteRequestContext.ForTest(WalkingProfile));
+
+        result.Outcome.Should().Be(capabilityMismatch
+            ? HostedRoutingOutcome.Unavailable : HostedRoutingOutcome.InvalidResponse);
+    }
+
+    private static Task<HostedRoutingResult> RequestChosenAsync(HostedRoutingService service,
+        HostedRouteRequestContext context) => service.RequestRouteAsync(
+            context with { ExpectedCatalogIdentity = IdentityA, ExpectedProvider = "geoapify" },
+            new HostedProviderMode("walk", "Walk"));
 
     private static IReadOnlyList<WayfarerMobile.Core.Models.HostedRouteAttribution> Attribution() =>
         [new("Powered by Wayfarer test", "https://example.test")];

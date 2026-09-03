@@ -251,6 +251,7 @@ public sealed class RetainedWayfarerRouteRepository
             || candidate.SelectedProfileId == Guid.Empty
             || candidate.Metadata.ProviderConfigurationId == Guid.Empty
             || !HostedOpaqueIdentity.IsValid(candidate.SelectedProfileAuthorityIdentity)
+            || !Bounded(candidate.SelectedProviderMode, 100)
             || !Bounded(candidate.Metadata.Provider, 100) || !Bounded(candidate.Metadata.MappingIdentity, 200)
             || !Bounded(candidate.Context.ModeKey, 100) || !Bounded(candidate.Context.Category, 100)
             || !Bounded(candidate.Context.NormalizedServer, MaximumServerLength)
@@ -272,6 +273,7 @@ public sealed class RetainedWayfarerRouteRepository
             MappingIdentity = candidate.Metadata.MappingIdentity,
             TransportProfileId = candidate.SelectedProfileId.ToString("D"),
             SelectedProfileAuthorityIdentity = candidate.SelectedProfileAuthorityIdentity,
+            ProviderMode = candidate.SelectedProviderMode,
             ModeKey = candidate.Context.ModeKey!,
             Category = candidate.Context.Category!,
             OriginLongitude = canonical[0], OriginLatitude = canonical[1],
@@ -364,7 +366,7 @@ public sealed class RetainedWayfarerRouteRepository
                 EstimatedDuration = TimeSpan.FromSeconds(row.DurationSeconds), IsDirectRoute = false,
                 Attribution = attribution.ToList(),
                 HostedProvenance = new(profileId, row.SelectedProfileAuthorityIdentity, row.Provider,
-                    configurationId, row.MappingIdentity, row.StorageAuthority, generated)
+                    configurationId, row.MappingIdentity, row.StorageAuthority, generated, row.ProviderMode)
                 { IsRetained = true, Age = age }
             };
             return true;
@@ -388,6 +390,7 @@ public sealed class RetainedWayfarerRouteRepository
             || !Bounded(row.Provider, 100) || !CanonicalGuid(row.ProviderConfigurationId, out configurationId)
             || !Bounded(row.MappingIdentity, 200) || !CanonicalGuid(row.TransportProfileId, out profileId)
             || !HostedOpaqueIdentity.IsValid(row.SelectedProfileAuthorityIdentity)
+            || row.ProviderMode is not null && !Bounded(row.ProviderMode, 100)
             || !Bounded(row.ModeKey, 100) || !Bounded(row.Category, 100)
             || row.StorageAuthority != "persistent" || !row.IsCurrentAuthority
             || !ValidCanonicalCoordinate(row.OriginLongitude, row.OriginLatitude)

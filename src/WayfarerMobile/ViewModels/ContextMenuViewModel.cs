@@ -232,6 +232,8 @@ public partial class ContextMenuViewModel : BaseViewModel
                 "Dropped Pin",
                 travelProfile);
 
+            if (route == null) return;
+
             // Clear dropped pin and start navigation
             ClearDroppedPin();
 

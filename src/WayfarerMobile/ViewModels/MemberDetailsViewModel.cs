@@ -340,6 +340,8 @@ public partial class MemberDetailsViewModel : ObservableObject
                 $"group-member:{targetUserId}",
                 () => ResolveCurrentMemberLocation(targetUserId));
 
+            if (route == null) return;
+
             // Close bottom sheet before navigating
             IsMemberSheetOpen = false;
 

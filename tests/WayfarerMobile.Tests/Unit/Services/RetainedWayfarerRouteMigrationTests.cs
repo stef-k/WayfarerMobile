@@ -46,7 +46,9 @@ public sealed class RetainedWayfarerRouteMigrationTests
                 .Should().Be("preserve-me");
             (await connection.ExecuteScalarAsync<string>(
                 "SELECT Value FROM AppSettings WHERE Key = 'db_schema_version'"))
-                .Should().Be("10", "the application schema owner records the completed migration");
+                .Should().Be("11", "the application schema owner records the completed migration");
+            var columns = await connection.GetTableInfoAsync("RetainedWayfarerRoutes");
+            columns.Select(column => column.Name).Should().Contain("ProviderMode");
             await connection.CloseAsync();
         }
         finally

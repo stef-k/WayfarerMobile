@@ -58,7 +58,8 @@ public sealed record HostedRouteProvenance(
     Guid ProviderConfigurationId,
     string MappingIdentity,
     string StorageMode,
-    DateTimeOffset GeneratedAt)
+    DateTimeOffset GeneratedAt,
+    string? ProviderMode = null)
 {
     /// <summary>Whether this route was selected from bounded local retained storage.</summary>
     public bool IsRetained { get; init; }

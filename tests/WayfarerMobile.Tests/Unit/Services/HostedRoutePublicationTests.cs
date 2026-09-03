@@ -62,7 +62,8 @@ public sealed class HostedRoutePublicationTests
             candidate.Metadata.ProviderConfigurationId,
             candidate.Metadata.MappingIdentity,
             candidate.Metadata.StorageMode,
-            candidate.GeneratedAt));
+            candidate.GeneratedAt,
+            candidate.SelectedProviderMode));
     }
 
     private static HostedRouteCandidate Candidate()
@@ -73,7 +74,7 @@ public sealed class HostedRoutePublicationTests
             profileId,
             "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
             new("geoapify", Guid.Parse("22222222-2222-2222-2222-222222222222"), "mapping", "persistent"),
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow, "walk");
     }
 
     private static HostedRouteLiveAuthority Live(HostedRouteCandidate candidate) => new(
@@ -90,7 +91,19 @@ public sealed class HostedRoutePublicationTests
         candidate.Context.Category,
         candidate.SelectedProfileId,
         candidate.SelectedProfileAuthorityIdentity,
-        candidate.Context.NavigationChoice);
+        candidate.Context.NavigationChoice,
+        candidate.SelectedProviderMode);
+
+    [Fact]
+    public void CandidateCannotPublishForDifferentProviderMode()
+    {
+        var direct = DirectRoute();
+        var candidate = Candidate();
+
+        HostedRoutePublication.TryPublish(candidate,
+            Live(candidate) with { SelectedProviderMode = "drive" }, direct).Should().BeFalse();
+        direct.IsDirectRoute.Should().BeTrue();
+    }
 
     private static NavigationRoute DirectRoute() => new()
     {

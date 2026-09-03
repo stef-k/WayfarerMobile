@@ -31,10 +31,11 @@ public sealed class HostedRoutingApiClient : IHostedRoutingApiClient
             ?? new(null, "invalid-response", []);
     }
 
-    public async Task<HostedRoutingCapability> GetCapabilityAsync(Guid profileId,
+    public async Task<HostedRoutingCapability> GetCapabilityAsync(Guid profileId, string providerMode,
         string discoveryCatalogIdentity, CancellationToken cancellationToken)
     {
-        var endpoint = $"/api/mobile/routing/capability/{profileId:D}?discoveryCatalogIdentity={Uri.EscapeDataString(discoveryCatalogIdentity)}";
+        var endpoint = $"/api/mobile/routing/capability/{profileId:D}?discoveryCatalogIdentity={Uri.EscapeDataString(discoveryCatalogIdentity)}"
+            + $"&providerMode={Uri.EscapeDataString(providerMode)}";
         using var response = await SendAsync(HttpMethod.Get, endpoint, null, cancellationToken);
         if (response.StatusCode == HttpStatusCode.NotFound)
             return new("unavailable", profileId, null, null, null, null, null, null, null);
@@ -89,11 +90,11 @@ public sealed class HostedRoutingApiClient : IHostedRoutingApiClient
     private sealed record CapabilityDto(string Outcome, Guid TransportProfileId, string? Provider,
         Guid? ProviderConfigurationId, string? MappingIdentity, string? StorageMode,
         IReadOnlyList<HostedRouteAttribution>? Attribution, string? DiscoveryCatalogIdentity,
-        string? SelectedProfileAuthorityIdentity)
+        string? SelectedProfileAuthorityIdentity, string? ProviderMode)
     {
         public HostedRoutingCapability ToModel() => new(Outcome, TransportProfileId, Provider,
             ProviderConfigurationId, MappingIdentity, StorageMode, Attribution, DiscoveryCatalogIdentity,
-            SelectedProfileAuthorityIdentity);
+            SelectedProfileAuthorityIdentity, ProviderMode);
     }
 
     private sealed record RouteResponseDto(bool Succeeded, string Outcome, IReadOnlyList<HostedRouteCoordinate>? Geometry,
@@ -101,12 +102,12 @@ public sealed class HostedRoutingApiClient : IHostedRoutingApiClient
         string? GeneratedAt, string? Provider, Guid? ProviderConfigurationId, string? MappingIdentity,
         Guid? TransportProfileId, IReadOnlyList<HostedRouteCoordinate>? MatchPoints,
         IReadOnlyList<HostedRouteAttribution>? Attribution, string? StorageMode,
-        string? SelectedProfileAuthorityIdentity)
+        string? SelectedProfileAuthorityIdentity, string? ProviderMode)
     {
         public HostedRouteResponse ToModel() => new(Succeeded, Outcome, Geometry, DistanceMetres, DurationSeconds,
             Instructions, ParseGeneratedAt(GeneratedAt), Provider, ProviderConfigurationId, MappingIdentity,
             TransportProfileId, MatchPoints, Attribution, StorageMode,
-            SelectedProfileAuthorityIdentity);
+            SelectedProfileAuthorityIdentity, ProviderMode);
 
         private static DateTimeOffset? ParseGeneratedAt(string? value)
         {

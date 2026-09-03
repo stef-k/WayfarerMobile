@@ -554,8 +554,10 @@ public NavigationRoute? CalculateRouteToPlace(
 ```
 
 Hosted routes are authenticated, provider-neutral results. Provider credentials and provider selection remain on
-Wayfarer. The active route retains linked attribution plus safe provenance: selected transport
-profile and authority identities, provider and provider-configuration identities, mapping identity, storage mode, and
+Wayfarer. Every fresh online route first presents exactly the active provider's discovered native modes, with no
+preselection or inference from the Segment's independent manual-planning Transport Profile. Choosing Direct cancels
+the online path without capability or route contact. The active route retains linked attribution plus safe provenance:
+selected transport profile, provider mode, and authority identities, provider and provider-configuration identities, mapping identity, storage mode, and
 the normalized backend generation timestamp. It contains no bearer token, credentials, or provider endpoint and
 clears through normal replacement or stop. Old servers, disabled routing, rejected requests, cancellation,
 malformed/stale responses, and provider
@@ -563,7 +565,8 @@ unavailability remain routing-local and retain Direct guidance without affecting
 Valid saved Segment geometry is never replaced automatically. Only a completely validated response whose exact backend
 storage authority is `persistent` can be retained. Transient and unknown modes remain active-route-only.
 
-`RetainedWayfarerRouteRepository` owns the schema-10 route table and a single narrow mutation gate. Lookup plus a
+`RetainedWayfarerRouteRepository` owns the schema-11 route table and a single narrow mutation gate. Schema 11 adds
+nullable provider-mode provenance without rewriting or invalidating older retained routes. Lookup plus a
 successful recency update, complete insert/replacement, cap eviction, and explicit clear are transactional. Immediately
 before a write transaction it revalidates #260's live generation/current-state authority; stale work performs no write.
 Storage/eviction failure rolls back the complete replacement, so a displayed fresh route can succeed while the prior
@@ -585,10 +588,12 @@ offers **Use retained route**, **Refresh with Wayfarer**, and **Direct**. Refres
 interaction while keeping retained guidance active; failure preserves it, success may replace it atomically, and the
 choice is not persisted.
 
-Chooser entries are scoped to the exact discovery catalog displayed. Mobile submits that catalog identity with the
-chosen profile; a `catalog-changed` capability response makes no route request, rediscovers once, and requires a
-fresh choice from the refreshed labels or retains Direct when dismissed. Once capability succeeds, unrelated later
-catalog changes do not invalidate the confirmed route.
+Chooser entries are scoped to the exact discovery catalog displayed. Mobile submits that catalog identity, the exact
+chosen provider-mode key, and the Segment's unchanged planning `TransportProfileId`; a `catalog-changed` capability
+response makes no route request, rediscovers once, and requires a fresh explicit choice from the refreshed labels.
+It never substitutes another mode. A server without the additive mode catalog produces bounded fresh-route
+unavailability while saved geometry, retained routes, and Direct remain usable. Once capability succeeds, the echoed
+mode and selected-provider authority fence the request, candidate, publication, and retained provenance.
 
 `TransportProfileId` is the Segment's current planning profile identity. Current hosted selection state remains
 separate from the immutable provenance retained on a successfully published route; neither rewrites the Segment nor

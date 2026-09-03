@@ -119,10 +119,10 @@ public class MockTripNavigationService : ITripNavigationService
 
     /// <inheritdoc/>
     public NavigationRoute? CalculateRouteToPlace(double currentLat, double currentLon,
-        string destinationPlaceId)
+        string destinationPlaceId, bool activate = true)
     {
-        _activeRoute = _nextRouteToReturn;
-        return _activeRoute;
+        if (activate) _activeRoute = _nextRouteToReturn;
+        return _nextRouteToReturn;
     }
 
     /// <inheritdoc/>
@@ -135,7 +135,7 @@ public class MockTripNavigationService : ITripNavigationService
 
     /// <inheritdoc/>
     public Task<NavigationRoute> CalculateRouteToCoordinatesAsync(double currentLat, double currentLon,
-        double destLat, double destLon, string destName, string profile = "foot")
+        double destLat, double destLon, string destName, string profile = "foot", bool activate = true)
     {
         var route = _nextRouteToReturn ?? new NavigationRoute
         {
@@ -144,15 +144,18 @@ public class MockTripNavigationService : ITripNavigationService
             EstimatedDuration = TimeSpan.FromSeconds(600),
             IsDirectRoute = true
         };
-        _activeRoute = route;
+        if (activate) _activeRoute = route;
         return Task.FromResult(route);
     }
 
     /// <inheritdoc/>
-    public NavigationRoute? CalculateRouteToNextPlace(double currentLat, double currentLon)
+    public void ActivateRoute(NavigationRoute route) => _activeRoute = route;
+
+    /// <inheritdoc/>
+    public NavigationRoute? CalculateRouteToNextPlace(double currentLat, double currentLon, bool activate = true)
     {
-        _activeRoute = _nextRouteToReturn;
-        return _activeRoute;
+        if (activate) _activeRoute = _nextRouteToReturn;
+        return _nextRouteToReturn;
     }
 
     /// <inheritdoc/>

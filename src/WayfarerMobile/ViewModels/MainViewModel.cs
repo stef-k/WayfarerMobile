@@ -719,7 +719,7 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         => MapDisplay.ClearDroppedPin();
 
     /// <inheritdoc/>
-    Task<NavigationRoute> IContextMenuCallbacks.CalculateRouteToCoordinatesAsync(
+    Task<NavigationRoute?> IContextMenuCallbacks.CalculateRouteToCoordinatesAsync(
         double fromLat, double fromLon, double toLat, double toLon,
         string destinationName, string profile)
         => Navigation.CalculateRouteToCoordinatesAsync(fromLat, fromLon, toLat, toLon, destinationName, profile);

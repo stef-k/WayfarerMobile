@@ -43,6 +43,7 @@ public sealed class RetainedWayfarerRouteRepositoryTests : IAsyncLifetime
         retained.Should().NotBeNull();
         retained!.Route.Waypoints.Should().ContainSingle(point => point.Longitude == 23.005);
         retained.Route.HostedProvenance!.IsRetained.Should().BeTrue();
+        retained.Route.HostedProvenance.ProviderMode.Should().Be("walk");
         retained.Route.HostedProvenance.Age.Should().Be(TimeSpan.FromDays(30) + TimeSpan.FromMinutes(5));
         otherAccount.Should().BeNull();
     }
@@ -414,7 +415,7 @@ public sealed class RetainedWayfarerRouteRepositoryTests : IAsyncLifetime
         };
         return new(route, context, ProfileId, AuthorityIdentity,
             metadata ?? new("geoapify", ConfigurationId, "mapping-v1", "persistent"),
-            generatedAt ?? new DateTimeOffset(2026, 8, 31, 7, 55, 0, TimeSpan.Zero));
+            generatedAt ?? new DateTimeOffset(2026, 8, 31, 7, 55, 0, TimeSpan.Zero), "walk");
     }
 
     private static HostedRouteRequestContext Context() => new(ProfileId, "walk", "active",
