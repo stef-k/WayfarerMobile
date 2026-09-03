@@ -20,12 +20,13 @@ namespace WayfarerMobile.Data.Services;
 ///   <item><see cref="WayfarerMobile.Data.Repositories.ILiveTileCacheRepository"/> - Live tile cache</item>
 /// </list>
 /// </summary>
-public class DatabaseService : IAsyncDisposable, ILegacyRasterState, ISegmentWaypointMigrationState, ILegacyOsrmPreferenceState
+public class DatabaseService : IAsyncDisposable, ILegacyRasterState, ISegmentWaypointMigrationState,
+    ILegacyOsrmPreferenceState, ITransportModePreferenceDeletionState
 {
     #region Constants
 
     private const string DatabaseFilename = "wayfarer.db3";
-    private const int CurrentSchemaVersion = RetainedWayfarerRouteMigration.SchemaVersion;
+    private const int CurrentSchemaVersion = TransportModePreferenceDeletionMigration.SchemaVersion;
     private const string SchemaVersionKey = "db_schema_version";
 
     private static readonly SQLiteOpenFlags DbFlags =
@@ -164,6 +165,10 @@ public class DatabaseService : IAsyncDisposable, ILegacyRasterState, ISegmentWay
 
         await RetainedWayfarerRouteMigration.ApplyApplicationUpgradeAsync(
             _database!, currentVersion, SetSchemaVersionAsync, CancellationToken.None);
+        if (currentVersion < TransportModePreferenceDeletionMigration.SchemaVersion)
+        {
+            await TransportModePreferenceDeletionMigration.ApplyAsync(this, CancellationToken.None);
+        }
         Console.WriteLine($"[DatabaseService] Migration complete. Schema version: {CurrentSchemaVersion}");
     }
 
@@ -356,6 +361,21 @@ public class DatabaseService : IAsyncDisposable, ILegacyRasterState, ISegmentWay
     }
 
     Task ILegacyOsrmPreferenceState.RecordSchemaVersionAsync(int version, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return SetSchemaVersionAsync(version);
+    }
+
+    Task ITransportModePreferenceDeletionState.RemovePreferenceAsync(
+        string key, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Preferences.Remove(key);
+        return Task.CompletedTask;
+    }
+
+    Task ITransportModePreferenceDeletionState.RecordSchemaVersionAsync(
+        int version, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         return SetSchemaVersionAsync(version);

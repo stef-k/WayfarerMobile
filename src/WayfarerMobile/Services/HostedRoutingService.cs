@@ -67,8 +67,7 @@ public sealed class HostedRoutingService
             var response = await api.GetRouteAsync(request, cancellationToken);
             if (!ValidResponse(response, request, capability)) return new(HostedRoutingOutcome.InvalidResponse);
             if (!IsCurrentGeneration(context.Generation)) return new(HostedRoutingOutcome.Stale);
-            var metadata = new HostedRouteCapabilityMetadata(capability.Provider!,
-                capability.ProviderConfigurationId!.Value, capability.MappingIdentity!, capability.StorageMode!);
+            var metadata = new HostedRouteCapabilityMetadata(capability.Provider!, capability.StorageMode!);
             var candidate = new HostedRouteCandidate(BuildRoute(response, context.DestinationName), context,
                 profileId, capability.SelectedProfileAuthorityIdentity!, metadata,
                 response.GeneratedAt!.Value, selectedMode.Key);
@@ -150,15 +149,10 @@ public sealed class HostedRoutingService
 
     private static bool AvailableCatalog(HostedRoutingCatalog value) => value.Outcome == "available"
         && HostedOpaqueIdentity.IsValid(value.DiscoveryCatalogIdentity) && Bounded(value.Provider, 100)
-        && value.Profiles.Count <= 100
-        && value.Profiles.Select(item => item.TransportProfileId).Distinct().Count() == value.Profiles.Count
-        && value.Profiles.All(ValidProfile) && value.Modes.Count is > 0 and <= 20
+        && value.Modes.Count is > 0 and <= 20
         && value.Modes.Select(item => item.Key).Distinct(StringComparer.Ordinal).Count() == value.Modes.Count
         && value.Modes.Select(item => item.Label).Distinct(StringComparer.Ordinal).Count() == value.Modes.Count
         && value.Modes.All(ValidMode);
-
-    private static bool ValidProfile(HostedRoutingProfile item) => item.TransportProfileId != Guid.Empty
-        && Bounded(item.DisplayName, 200) && Bounded(item.ModeKey, 100) && Bounded(item.Category, 100);
 
     private static bool ValidMode(HostedProviderMode item) => Bounded(item.Key, 100) && Bounded(item.Label, 200)
         && item.Key == item.Key.Trim() && item.Label == item.Label.Trim();
@@ -170,8 +164,7 @@ public sealed class HostedRoutingService
         && value.DiscoveryCatalogIdentity == catalogIdentity
         && HostedOpaqueIdentity.IsValid(value.DiscoveryCatalogIdentity)
         && HostedOpaqueIdentity.IsValid(value.SelectedProfileAuthorityIdentity)
-        && Bounded(value.Provider, 100) && value.ProviderConfigurationId is { } id && id != Guid.Empty
-        && Bounded(value.MappingIdentity, 200) && Bounded(value.StorageMode, 100)
+        && Bounded(value.Provider, 100) && Bounded(value.StorageMode, 100)
         && ValidAttribution(value.Attribution);
 
     private static bool ValidResponse(HostedRouteResponse value, HostedRouteRequest request,
@@ -182,8 +175,7 @@ public sealed class HostedRoutingService
             || value.SelectedProfileAuthorityIdentity != request.SelectedProfileAuthorityIdentity
             || !HostedOpaqueIdentity.IsValid(value.SelectedProfileAuthorityIdentity)
             || value.Provider != capability.Provider
-            || value.ProviderConfigurationId != capability.ProviderConfigurationId
-            || value.MappingIdentity != capability.MappingIdentity || value.StorageMode != capability.StorageMode
+            || value.StorageMode != capability.StorageMode
             || value.GeneratedAt is not { } generatedAt || generatedAt.Offset != TimeSpan.Zero
             || value.Geometry is not { Count: >= 2 and <= MaximumGeometry }
             || value.MatchPoints is null || value.DistanceMetres is not double distance || distance < 0 || !double.IsFinite(distance)

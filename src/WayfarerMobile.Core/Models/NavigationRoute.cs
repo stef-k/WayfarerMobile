@@ -55,8 +55,6 @@ public sealed record HostedRouteProvenance(
     Guid TransportProfileId,
     string SelectedProfileAuthorityIdentity,
     string Provider,
-    Guid ProviderConfigurationId,
-    string MappingIdentity,
     string StorageMode,
     DateTimeOffset GeneratedAt,
     string? ProviderMode = null)

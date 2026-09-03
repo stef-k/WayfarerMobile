@@ -102,7 +102,6 @@ public interface ITripNavigationService
         double currentLat, double currentLon,
         double destLat, double destLon,
         string destName,
-        string profile = "foot",
         bool activate = true);
 
     /// <summary>Installs a route selected by a coordinator.</summary>

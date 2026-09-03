@@ -47,7 +47,7 @@ public interface IContextMenuCallbacks
         double fromLat, double fromLon,
         double toLat, double toLon,
         string destinationName,
-        string profile);
+        bool direct);
 
     /// <summary>
     /// Starts navigation with the calculated route.

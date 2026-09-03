@@ -326,8 +326,6 @@ public sealed class TripNavigationRoutingRemovalTests
         Guid.NewGuid(),
         "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
         "geoapify",
-        Guid.NewGuid(),
-        "mapping",
         "persistent",
         DateTimeOffset.UtcNow);
 }

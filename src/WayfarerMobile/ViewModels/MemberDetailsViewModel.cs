@@ -312,15 +312,6 @@ public partial class MemberDetailsViewModel : ObservableObject
             return;
         }
 
-        var travelProfile = navMethod switch
-        {
-            NavigationMethod.Direct => "direct",
-            NavigationMethod.Walk => "foot",
-            NavigationMethod.Drive => "car",
-            NavigationMethod.Bike => "bike",
-            _ => "foot"
-        };
-
         try
         {
             var destLat = SelectedMember.LastLocation.Latitude;
@@ -328,7 +319,7 @@ public partial class MemberDetailsViewModel : ObservableObject
             var destName = SelectedMember.DisplayText ?? "Member";
             var targetUserId = SelectedMember.UserId;
 
-            _logger.LogInformation("Calculating Direct guidance to member using {Mode}", travelProfile);
+            _logger.LogInformation("Calculating navigation route to member");
 
             var route = await _navigationCoordinator.CalculateHostedRouteToCoordinatesAsync(
                 currentLocation.Latitude,
@@ -336,7 +327,7 @@ public partial class MemberDetailsViewModel : ObservableObject
                 destLat,
                 destLon,
                 destName,
-                travelProfile,
+                navMethod == NavigationMethod.Direct,
                 $"group-member:{targetUserId}",
                 () => ResolveCurrentMemberLocation(targetUserId));
 

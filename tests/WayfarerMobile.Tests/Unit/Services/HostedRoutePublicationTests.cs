@@ -59,8 +59,6 @@ public sealed class HostedRoutePublicationTests
             candidate.SelectedProfileId,
             candidate.SelectedProfileAuthorityIdentity,
             candidate.Metadata.Provider,
-            candidate.Metadata.ProviderConfigurationId,
-            candidate.Metadata.MappingIdentity,
             candidate.Metadata.StorageMode,
             candidate.GeneratedAt,
             candidate.SelectedProviderMode));
@@ -73,7 +71,7 @@ public sealed class HostedRoutePublicationTests
         return new HostedRouteCandidate(RoutedRoute(), context,
             profileId,
             "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-            new("geoapify", Guid.Parse("22222222-2222-2222-2222-222222222222"), "mapping", "persistent"),
+            new("geoapify", "persistent"),
             DateTimeOffset.UtcNow, "walk");
     }
 
@@ -87,8 +85,6 @@ public sealed class HostedRoutePublicationTests
         candidate.Context.TargetAssociation,
         candidate.Context.SegmentId,
         candidate.Context.SavedTransportProfileId,
-        candidate.Context.ModeKey,
-        candidate.Context.Category,
         candidate.SelectedProfileId,
         candidate.SelectedProfileAuthorityIdentity,
         candidate.Context.NavigationChoice,

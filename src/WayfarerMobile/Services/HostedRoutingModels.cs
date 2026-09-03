@@ -3,11 +3,9 @@ using WayfarerMobile.Core.Models;
 
 namespace WayfarerMobile.Services;
 
-public sealed record HostedRoutingProfile(Guid TransportProfileId, string DisplayName, string ModeKey, string Category);
 public sealed record HostedProviderMode(string Key, string Label);
 public sealed record HostedRoutingCatalog(string? DiscoveryCatalogIdentity, string Outcome,
-    IReadOnlyList<HostedRoutingProfile> Profiles, string? Provider = null,
-    IReadOnlyList<HostedProviderMode>? ProviderModes = null)
+    string? Provider = null, IReadOnlyList<HostedProviderMode>? ProviderModes = null)
 {
     public IReadOnlyList<HostedProviderMode> Modes => ProviderModes ?? [];
 }
@@ -16,17 +14,15 @@ public sealed record HostedRouteInstruction(string Text, string Type, int FromIn
     double DistanceMetres, double DurationSeconds);
 
 public sealed record HostedRoutingCapability(string Outcome, Guid TransportProfileId,
-    string? Provider, Guid? ProviderConfigurationId, string? MappingIdentity, string? StorageMode,
+    string? Provider, string? StorageMode,
     IReadOnlyList<HostedRouteAttribution>? Attribution, string? DiscoveryCatalogIdentity,
     string? SelectedProfileAuthorityIdentity, string? ProviderMode = null)
 {
     public static HostedRoutingCapability Available(Guid profileId, string catalogIdentity,
         string selectedAuthorityIdentity, IReadOnlyList<HostedRouteAttribution> attribution,
-        string providerMode = "walk",
-        string provider = "geoapify", Guid? providerConfigurationId = null,
-        string mappingIdentity = "mapping", string storageMode = "persistent") =>
-        new("available", profileId, provider, providerConfigurationId ?? Guid.Parse("22222222-2222-2222-2222-222222222222"),
-            mappingIdentity, storageMode, attribution, catalogIdentity, selectedAuthorityIdentity, providerMode);
+        string providerMode = "walk", string provider = "geoapify", string storageMode = "persistent") =>
+        new("available", profileId, provider, storageMode, attribution, catalogIdentity,
+            selectedAuthorityIdentity, providerMode);
 }
 
 public sealed record HostedRouteRequest(Guid TransportProfileId, HostedRouteCoordinate Origin,
@@ -35,7 +31,7 @@ public sealed record HostedRouteRequest(Guid TransportProfileId, HostedRouteCoor
 
 public sealed record HostedRouteResponse(bool Succeeded, string Outcome, IReadOnlyList<HostedRouteCoordinate>? Geometry,
     double? DistanceMetres, double? DurationSeconds, IReadOnlyList<HostedRouteInstruction>? Instructions,
-    DateTimeOffset? GeneratedAt, string? Provider, Guid? ProviderConfigurationId, string? MappingIdentity,
+    DateTimeOffset? GeneratedAt, string? Provider,
     Guid? TransportProfileId, IReadOnlyList<HostedRouteCoordinate>? MatchPoints,
     IReadOnlyList<HostedRouteAttribution>? Attribution, string? StorageMode,
     string? SelectedProfileAuthorityIdentity, string? ProviderMode = null)
@@ -43,7 +39,7 @@ public sealed record HostedRouteResponse(bool Succeeded, string Outcome, IReadOn
     public static HostedRouteResponse ValidForTest(Guid profileId, string selectedAuthorityIdentity) => new(
         true, "available", [new(23, 37), new(23.01, 37.01)], 1500, 900,
         [new("Continue", "continue", 0, 1, 1500, 900)], DateTimeOffset.UtcNow, "geoapify",
-        Guid.Parse("22222222-2222-2222-2222-222222222222"), "mapping", profileId,
+        profileId,
         [new(23, 37), new(23.01, 37.01)], [new("Powered by Wayfarer test", "https://example.test")],
         "persistent", selectedAuthorityIdentity, "walk");
 }
@@ -53,21 +49,20 @@ public sealed record HostedRoutingResult(HostedRoutingOutcome Outcome, Navigatio
     IReadOnlyList<HostedProviderMode>? Choices = null, HostedRouteCandidate? Candidate = null,
     string? DiscoveryCatalogIdentity = null, string? Provider = null);
 
-public sealed record HostedRouteCapabilityMetadata(string Provider, Guid ProviderConfigurationId,
-    string MappingIdentity, string StorageMode);
+public sealed record HostedRouteCapabilityMetadata(string Provider, string StorageMode);
 
 public sealed record HostedRouteCandidate(NavigationRoute Route, HostedRouteRequestContext Context,
     Guid SelectedProfileId, string SelectedProfileAuthorityIdentity,
     HostedRouteCapabilityMetadata Metadata, DateTimeOffset GeneratedAt, string SelectedProviderMode);
 
-public sealed record HostedRouteRequestContext(Guid? SavedTransportProfileId, string? ModeKey, string? Category,
+public sealed record HostedRouteRequestContext(Guid? SavedTransportProfileId,
     HostedRouteCoordinate Origin, HostedRouteCoordinate Destination, IReadOnlyList<HostedRouteCoordinate> Anchors,
     string DestinationName, long Generation, long AuthenticationSessionRevision, string NormalizedServer,
     string TargetAssociation, string NavigationChoice, Guid? SegmentId = null,
     string? ExpectedCatalogIdentity = null, string? ExpectedProvider = null)
 {
     public static HostedRouteRequestContext ForTest(Guid profileId, string? expectedCatalogIdentity = null) => new(
-        profileId, "walk", "active", new(23, 37), new(23.01, 37.01), [], "Target", 1,
+        profileId, new(23, 37), new(23.01, 37.01), [], "Target", 1,
         1, "https://wayfarer.test", "place:test", "hosted", ExpectedCatalogIdentity: expectedCatalogIdentity);
 }
 
@@ -81,8 +76,6 @@ public sealed record HostedRouteLiveAuthority(
     string TargetAssociation,
     Guid? SegmentId,
     Guid? SavedTransportProfileId,
-    string? ModeKey,
-    string? Category,
     Guid? SelectedTransportProfileId,
     string? SelectedProfileAuthorityIdentity,
     string NavigationChoice,
@@ -96,8 +89,6 @@ public sealed record HostedTripTargetAuthority(
     Guid? SegmentId,
     HostedRouteCoordinate Destination,
     Guid? SavedTransportProfileId,
-    string ModeKey,
-    string Category,
     IReadOnlyList<HostedRouteCoordinate> Anchors)
 {
     public static HostedTripTargetAuthority? Resolve(TripDetails? trip, Guid destinationPlaceId,
@@ -119,10 +110,9 @@ public sealed record HostedTripTargetAuthority(
             .FirstOrDefault();
         var anchors = ResolveAnchors(segment, places);
         if (anchors == null) return null;
-        var mode = segment?.TransportMode ?? "walk";
         return new(destinationPlaceId, segment?.Id,
             new(destination.Longitude, destination.Latitude),
-            HostedSegmentProfileIdentity.Get(segment), mode, mode, anchors);
+            HostedSegmentProfileIdentity.Get(segment), anchors);
     }
 
     private static IReadOnlyList<HostedRouteCoordinate>? ResolveAnchors(TripSegment? segment,
@@ -217,8 +207,6 @@ public static class HostedRoutePublication
             && live.NavigationChoice == expected.NavigationChoice
             && live.NavigationChoice == "hosted"
             && live.SavedTransportProfileId == expected.SavedTransportProfileId
-            && live.ModeKey == expected.ModeKey
-            && live.Category == expected.Category
             && HostedRouteIdentity.Canonicalize(Points(live.Origin, live.Anchors, live.Destination))
                 .SequenceEqual(HostedRouteIdentity.Canonicalize(
                     Points(expected.Origin, expected.Anchors, expected.Destination)));
@@ -235,8 +223,6 @@ public static class HostedRoutePublication
         target.HostedProvenance = new(candidate.SelectedProfileId,
             candidate.SelectedProfileAuthorityIdentity,
             candidate.Metadata.Provider,
-            candidate.Metadata.ProviderConfigurationId,
-            candidate.Metadata.MappingIdentity,
             candidate.Metadata.StorageMode, generated, candidate.SelectedProviderMode);
     }
 

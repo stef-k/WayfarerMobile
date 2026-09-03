@@ -44,7 +44,6 @@ public partial class SettingsService : ISettingsService
     private const string KeyNavigationVibrationEnabled = "navigation_vibration_enabled";
     private const string KeyAutoRerouteEnabled = "auto_reroute_enabled";
     private const string KeyDistanceUnits = "distance_units";
-    private const string KeyLastTransportMode = "last_transport_mode";
 
     // Groups settings
     private const string KeyLastSelectedGroupId = "last_selected_group_id";
@@ -277,15 +276,6 @@ public partial class SettingsService : ISettingsService
     {
         get => Preferences.Get(KeyDistanceUnits, "kilometers");
         set => Preferences.Set(KeyDistanceUnits, value == "miles" ? "miles" : "kilometers");
-    }
-
-    /// <summary>
-    /// Gets or sets the last used transport mode for navigation.
-    /// </summary>
-    public string LastTransportMode
-    {
-        get => Preferences.Get(KeyLastTransportMode, "walk");
-        set => Preferences.Set(KeyLastTransportMode, value ?? "walk");
     }
 
     #endregion

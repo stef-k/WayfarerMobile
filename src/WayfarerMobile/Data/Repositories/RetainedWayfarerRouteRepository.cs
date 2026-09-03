@@ -130,20 +130,18 @@ public sealed class RetainedWayfarerRouteRepository
         connection.Execute(@"
             UPDATE RetainedWayfarerRoutes SET IsCurrentAuthority = 0
             WHERE AccountPartition = ? AND NormalizedServer = ? AND TransportProfileId = ?
-              AND (Provider <> ? OR ProviderConfigurationId <> ? OR MappingIdentity <> ?
-                   OR SelectedProfileAuthorityIdentity <> ?)",
+              AND (Provider <> ? OR ProviderMode <> ? OR SelectedProfileAuthorityIdentity <> ?)",
             prepared.Entity.AccountPartition, prepared.Entity.NormalizedServer,
             prepared.Entity.TransportProfileId, prepared.Entity.Provider,
-            prepared.Entity.ProviderConfigurationId, prepared.Entity.MappingIdentity,
+            prepared.Entity.ProviderMode,
             prepared.Entity.SelectedProfileAuthorityIdentity);
         connection.Execute(@"
             UPDATE RetainedWayfarerRoutes SET IsCurrentAuthority = 1
             WHERE AccountPartition = ? AND NormalizedServer = ? AND TransportProfileId = ?
-              AND Provider = ? AND ProviderConfigurationId = ? AND MappingIdentity = ?
-              AND SelectedProfileAuthorityIdentity = ?",
+              AND Provider = ? AND ProviderMode = ? AND SelectedProfileAuthorityIdentity = ?",
             prepared.Entity.AccountPartition, prepared.Entity.NormalizedServer,
             prepared.Entity.TransportProfileId, prepared.Entity.Provider,
-            prepared.Entity.ProviderConfigurationId, prepared.Entity.MappingIdentity,
+            prepared.Entity.ProviderMode,
             prepared.Entity.SelectedProfileAuthorityIdentity);
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -193,11 +191,11 @@ public sealed class RetainedWayfarerRouteRepository
         RetainedWayfarerRouteEntity value) => connection.Query<RetainedWayfarerRouteEntity>(@"
             SELECT * FROM RetainedWayfarerRoutes
             WHERE AccountPartition = ? AND NormalizedServer = ? AND Provider = ?
-              AND ProviderConfigurationId = ? AND MappingIdentity = ? AND TransportProfileId = ?
+              AND ProviderMode = ? AND TransportProfileId = ?
               AND SelectedProfileAuthorityIdentity = ? AND OriginLongitude = ? AND OriginLatitude = ?
               AND DestinationLongitude = ? AND DestinationLatitude = ? AND AnchorsKey = ?
             LIMIT 1", value.AccountPartition, value.NormalizedServer, value.Provider,
-            value.ProviderConfigurationId, value.MappingIdentity, value.TransportProfileId,
+            value.ProviderMode, value.TransportProfileId,
             value.SelectedProfileAuthorityIdentity, value.OriginLongitude, value.OriginLatitude,
             value.DestinationLongitude, value.DestinationLatitude, value.AnchorsKey).SingleOrDefault();
 
@@ -212,9 +210,6 @@ public sealed class RetainedWayfarerRouteRepository
             if (!TryBuildRoute(row, destinationName, selectionTimeUtc, out var route)) continue;
             valid.Add((row, route!));
         }
-        if (lookup.TransportProfileId == null
-            && valid.Select(item => item.Row.TransportProfileId).Distinct(StringComparer.Ordinal).Take(2).Count() != 1)
-            return null;
         if (valid.Count == 0) return null;
         var selected = valid[0];
         connection.Execute("UPDATE RetainedWayfarerRoutes SET LastUsedAtUnixMilliseconds = ? WHERE Id = ?",
@@ -232,15 +227,10 @@ public sealed class RetainedWayfarerRouteRepository
         var arguments = new object[] { lookup.AccountPartition, lookup.NormalizedServer,
             lookup.Canonical[0], lookup.Canonical[1], lookup.Canonical[^2], lookup.Canonical[^1],
             lookup.AnchorsKey };
-        var profileClause = lookup.TransportProfileId is not null
-            ? " AND TransportProfileId = ?"
-            : " AND (ModeKey = ? OR Category = ?)";
-        var profileArguments = lookup.TransportProfileId is { } selectedProfileId
-            ? new object[] { selectedProfileId.ToString("D") }
-            : new object[] { lookup.ModeKey, lookup.Category };
-        return connection.Query<RetainedWayfarerRouteEntity>(common + profileClause
+        var profileId = lookup.TransportProfileId ?? Guid.Empty;
+        return connection.Query<RetainedWayfarerRouteEntity>(common + " AND TransportProfileId = ?"
             + " ORDER BY LastUsedAtUnixMilliseconds DESC, StoredAtUnixMilliseconds DESC, Id DESC",
-            arguments.Concat(profileArguments).ToArray());
+            arguments.Append(profileId.ToString("D")).ToArray());
     }
 
     private static bool TryPrepare(HostedRouteCandidate candidate, Guid partition,
@@ -248,12 +238,9 @@ public sealed class RetainedWayfarerRouteRepository
     {
         prepared = null;
         if (partition == Guid.Empty || candidate.Metadata.StorageMode != "persistent"
-            || candidate.SelectedProfileId == Guid.Empty
-            || candidate.Metadata.ProviderConfigurationId == Guid.Empty
             || !HostedOpaqueIdentity.IsValid(candidate.SelectedProfileAuthorityIdentity)
             || !Bounded(candidate.SelectedProviderMode, 100)
-            || !Bounded(candidate.Metadata.Provider, 100) || !Bounded(candidate.Metadata.MappingIdentity, 200)
-            || !Bounded(candidate.Context.ModeKey, 100) || !Bounded(candidate.Context.Category, 100)
+            || !Bounded(candidate.Metadata.Provider, 100)
             || !Bounded(candidate.Context.NormalizedServer, MaximumServerLength)
             || HostedRouteServerIdentity.Normalize(candidate.Context.NormalizedServer) != candidate.Context.NormalizedServer)
             return false;
@@ -269,13 +256,13 @@ public sealed class RetainedWayfarerRouteRepository
             NormalizedServer = candidate.Context.NormalizedServer,
             AccountPartition = partition.ToString("D"),
             Provider = candidate.Metadata.Provider,
-            ProviderConfigurationId = candidate.Metadata.ProviderConfigurationId.ToString("D"),
-            MappingIdentity = candidate.Metadata.MappingIdentity,
+            ProviderConfigurationId = string.Empty,
+            MappingIdentity = string.Empty,
             TransportProfileId = candidate.SelectedProfileId.ToString("D"),
             SelectedProfileAuthorityIdentity = candidate.SelectedProfileAuthorityIdentity,
             ProviderMode = candidate.SelectedProviderMode,
-            ModeKey = candidate.Context.ModeKey!,
-            Category = candidate.Context.Category!,
+            ModeKey = string.Empty,
+            Category = string.Empty,
             OriginLongitude = canonical[0], OriginLatitude = canonical[1],
             DestinationLongitude = canonical[^2], DestinationLatitude = canonical[^1],
             AnchorsKey = AnchorKey(canonical), GeometryJson = serialized!.Geometry,
@@ -318,13 +305,12 @@ public sealed class RetainedWayfarerRouteRepository
         lookup = null;
         var server = HostedRouteServerIdentity.Normalize(context.NormalizedServer);
         if (partition == Guid.Empty || server != context.NormalizedServer
-            || !Bounded(server, MaximumServerLength)
-            || !Bounded(context.ModeKey, 100) || !Bounded(context.Category, 100)) return false;
+            || !Bounded(server, MaximumServerLength)) return false;
         try
         {
             var canonical = HostedRouteIdentity.Canonicalize(RequestPoints(context));
             lookup = new(partition.ToString("D"), server, context.SavedTransportProfileId,
-                context.ModeKey!, context.Category!, canonical, AnchorKey(canonical));
+                canonical, AnchorKey(canonical));
             return true;
         }
         catch (ArgumentOutOfRangeException) { return false; }
@@ -337,7 +323,7 @@ public sealed class RetainedWayfarerRouteRepository
         try
         {
             if (!TryValidateInstalledRow(row, selectionTimeUtc, out var profileId,
-                out var configurationId, out var generated)) return false;
+                out var generated)) return false;
             var geometry = JsonSerializer.Deserialize<StoredCoordinate[]>(row.GeometryJson);
             var instructions = JsonSerializer.Deserialize<StoredInstruction[]>(row.InstructionsJson);
             var attribution = JsonSerializer.Deserialize<HostedRouteAttribution[]>(row.AttributionJson);
@@ -366,7 +352,7 @@ public sealed class RetainedWayfarerRouteRepository
                 EstimatedDuration = TimeSpan.FromSeconds(row.DurationSeconds), IsDirectRoute = false,
                 Attribution = attribution.ToList(),
                 HostedProvenance = new(profileId, row.SelectedProfileAuthorityIdentity, row.Provider,
-                    configurationId, row.MappingIdentity, row.StorageAuthority, generated, row.ProviderMode)
+                    row.StorageAuthority, generated, row.ProviderMode)
                 { IsRetained = true, Age = age }
             };
             return true;
@@ -378,20 +364,17 @@ public sealed class RetainedWayfarerRouteRepository
     }
 
     private static bool TryValidateInstalledRow(RetainedWayfarerRouteEntity row,
-        DateTimeOffset selectionTimeUtc, out Guid profileId, out Guid configurationId,
-        out DateTimeOffset generated)
+        DateTimeOffset selectionTimeUtc, out Guid profileId, out DateTimeOffset generated)
     {
         profileId = Guid.Empty;
-        configurationId = Guid.Empty;
         generated = default;
         if (!CanonicalGuid(row.AccountPartition, out _)
             || !Bounded(row.NormalizedServer, MaximumServerLength)
             || HostedRouteServerIdentity.Normalize(row.NormalizedServer) != row.NormalizedServer
-            || !Bounded(row.Provider, 100) || !CanonicalGuid(row.ProviderConfigurationId, out configurationId)
-            || !Bounded(row.MappingIdentity, 200) || !CanonicalGuid(row.TransportProfileId, out profileId)
+            || !Bounded(row.Provider, 100) || !Guid.TryParseExact(row.TransportProfileId, "D", out profileId)
+            || profileId.ToString("D") != row.TransportProfileId
             || !HostedOpaqueIdentity.IsValid(row.SelectedProfileAuthorityIdentity)
-            || row.ProviderMode is not null && !Bounded(row.ProviderMode, 100)
-            || !Bounded(row.ModeKey, 100) || !Bounded(row.Category, 100)
+            || !Bounded(row.ProviderMode, 100)
             || row.StorageAuthority != "persistent" || !row.IsCurrentAuthority
             || !ValidCanonicalCoordinate(row.OriginLongitude, row.OriginLatitude)
             || !ValidCanonicalCoordinate(row.DestinationLongitude, row.DestinationLatitude)
@@ -463,5 +446,5 @@ public sealed class RetainedWayfarerRouteRepository
     private sealed record StoredInstruction(string Text, string Type, int FromIndex, int ToIndex,
         double DistanceMetres, double DurationSeconds);
     private sealed record Lookup(string AccountPartition, string NormalizedServer, Guid? TransportProfileId,
-        string ModeKey, string Category, IReadOnlyList<int> Canonical, string AnchorsKey);
+        IReadOnlyList<int> Canonical, string AnchorsKey);
 }

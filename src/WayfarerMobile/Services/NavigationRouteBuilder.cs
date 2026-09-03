@@ -108,17 +108,12 @@ public class NavigationRouteBuilder : INavigationRouteBuilder
     public NavigationRoute BuildDirectRouteToCoordinates(
         double startLat, double startLon,
         double destLat, double destLon,
-        string destName,
-        string profile = "foot")
+        string destName)
     {
         var distance = GeoMath.CalculateDistance(startLat, startLon, destLat, destLon);
         var bearing = GeoMath.CalculateBearing(startLat, startLon, destLat, destLon);
         var direction = GetCardinalDirection(bearing);
         var distanceText = FormatDistance(distance);
-
-        // Get speed based on profile (m/s)
-        var speed = GetSpeedForProfile(profile);
-        var durationSeconds = distance / speed;
 
         // Create instruction for straight-line navigation
         var instruction = string.IsNullOrEmpty(destName) || destName == "Dropped Pin"
@@ -131,7 +126,7 @@ public class NavigationRouteBuilder : INavigationRouteBuilder
             {
                 Instruction = instruction,
                 DistanceMeters = distance,
-                DurationSeconds = durationSeconds,
+                DurationSeconds = 0,
                 ManeuverType = "depart",
                 Latitude = startLat,
                 Longitude = startLon
@@ -157,25 +152,9 @@ public class NavigationRouteBuilder : INavigationRouteBuilder
             Steps = steps,
             DestinationName = destName,
             TotalDistanceMeters = distance,
-            EstimatedDuration = TimeSpan.FromSeconds(durationSeconds),
+            EstimatedDuration = TimeSpan.Zero,
             IsDirectRoute = true,
             InitialBearing = bearing
-        };
-    }
-
-    /// <summary>
-    /// Gets the average speed in m/s for a routing profile.
-    /// </summary>
-    /// <param name="profile">The routing profile (foot, car, bike).</param>
-    /// <returns>Speed in meters per second.</returns>
-    private static double GetSpeedForProfile(string profile)
-    {
-        return profile.ToLowerInvariant() switch
-        {
-            "car" => 13.9,   // ~50 km/h (accounting for urban traffic, stops)
-            "bike" => 4.2,   // ~15 km/h (average cycling speed)
-            "foot" => 1.4,   // ~5 km/h (walking speed)
-            _ => 1.4         // Default to walking
         };
     }
 

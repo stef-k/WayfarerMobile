@@ -135,7 +135,7 @@ public class MockTripNavigationService : ITripNavigationService
 
     /// <inheritdoc/>
     public Task<NavigationRoute> CalculateRouteToCoordinatesAsync(double currentLat, double currentLon,
-        double destLat, double destLon, string destName, string profile = "foot", bool activate = true)
+        double destLat, double destLon, string destName, bool activate = true)
     {
         var route = _nextRouteToReturn ?? new NavigationRoute
         {

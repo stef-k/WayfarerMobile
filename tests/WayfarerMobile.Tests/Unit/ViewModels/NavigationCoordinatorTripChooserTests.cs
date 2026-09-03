@@ -93,7 +93,7 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
         navigation.LoadTrip(trip).Should().BeTrue();
         var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
         api.Setup(client => client.DiscoverAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new HostedRoutingCatalog(Identity, "available", [], "geoapify",
+            .ReturnsAsync(new HostedRoutingCatalog(Identity, "available", "geoapify",
                 [new HostedProviderMode("walk", "Walk")]));
         var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
         dialogs.Setup(service => service.SelectAsync(

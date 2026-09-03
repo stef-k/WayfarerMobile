@@ -232,8 +232,7 @@ public sealed class RetainedWayfarerRouteRepositoryTests : IAsyncLifetime
         var authorities = new[]
         {
             baselineMetadata with { Provider = "other-provider" },
-            baselineMetadata with { ProviderConfigurationId = Guid.Parse("44444444-4444-4444-4444-444444444444") },
-            baselineMetadata with { MappingIdentity = "mapping-v2" }
+            baselineMetadata with { StorageMode = "future-transient" }
         };
         foreach (var authority in authorities)
         {
@@ -414,11 +413,11 @@ public sealed class RetainedWayfarerRouteRepositoryTests : IAsyncLifetime
             Attribution = [new("Powered by Wayfarer test", "https://example.test/attribution")]
         };
         return new(route, context, ProfileId, AuthorityIdentity,
-            metadata ?? new("geoapify", ConfigurationId, "mapping-v1", "persistent"),
+            metadata ?? new("geoapify", "persistent"),
             generatedAt ?? new DateTimeOffset(2026, 8, 31, 7, 55, 0, TimeSpan.Zero), "walk");
     }
 
-    private static HostedRouteRequestContext Context() => new(ProfileId, "walk", "active",
+    private static HostedRouteRequestContext Context() => new(ProfileId,
         new(23, 37), new(23.01, 37.01), [new(23.002, 37.002), new(23.002, 37.002)],
         "must-not-be-stored", 7, 3, "https://wayfarer.test", "place:private", "hosted");
 
