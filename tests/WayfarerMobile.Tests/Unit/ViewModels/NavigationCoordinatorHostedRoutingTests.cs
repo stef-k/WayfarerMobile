@@ -76,7 +76,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task OpenChooser_RepeatedCatalogChange_RefreshesOnlyOnceAndRetainsDirect()
+    public async Task OpenChooser_RepeatedCatalogChange_RefreshesOnlyOnceAndReturnsUnavailable()
     {
         var catalogA = Catalog(IdentityA, new HostedProviderMode("walk", "Walk"),
             new HostedProviderMode("bicycle", "Bicycle"));
@@ -171,11 +171,8 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         direct.HostedProvenance.Should().BeNull();
     }
 
-    [Theory]
-    [InlineData("Use retained route", true)]
-    [InlineData(null, false)]
-    public async Task MatchingRetainedAdHocRoute_OffersRetainedOrDirectWithoutHostedContact(
-        string? choice, bool expectRetained)
+    [Fact]
+    public async Task MatchingRetainedAdHocRoute_OffersRetainedWithoutHostedContact()
     {
         var (_, retainedService, settings) = await CreateRetainedScenarioAsync();
         var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
@@ -183,7 +180,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         dialogs.Setup(service => service.SelectAsync("Wayfarer retained route",
                 It.Is<IReadOnlyList<string>>(options => options.SequenceEqual(
                     new[] { "Use retained route", "Refresh with Wayfarer" })), "Direct"))
-            .ReturnsAsync(choice);
+            .ReturnsAsync("Use retained route");
         var (coordinator, navigation, _, callbacks) = CreateCoordinator(
             api.Object, dialogs.Object, retainedService, settings);
         callbacks.SetupGet(value => value.CurrentLocation)
@@ -193,9 +190,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
             37, 23, 37.01, 23.01, "Current target");
 
         selected.Should().BeSameAs(navigation.ActiveRoute);
-        selected.IsDirectRoute.Should().Be(!expectRetained);
-        if (expectRetained) selected.HostedProvenance!.IsRetained.Should().BeTrue();
-        else selected.HostedProvenance.Should().BeNull();
+        selected!.HostedProvenance!.IsRetained.Should().BeTrue();
         api.VerifyNoOtherCalls();
     }
 
@@ -243,7 +238,8 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
                 settings.AuthenticationSessionRevision, "https://test.example.com",
                 "ad-hoc-coordinates", "hosted"),
             settings.RoutingAccountPartition, DateTimeOffset.UtcNow, () => true);
-        retained!.Route.Steps.Should().ContainSingle(step => step.Instruction == "Retained");
+        retained!.Route.Steps.Should().ContainSingle(step => step.Instruction ==
+            (freshSucceeds ? "Continue" : "Retained"));
     }
 
     [Fact]
@@ -353,7 +349,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
             EstimatedDuration = TimeSpan.FromSeconds(900),
             Attribution = [new("Powered by Wayfarer test", "https://example.test")]
         };
-        var candidate = new HostedRouteCandidate(route, context, WalkingProfile, IdentityA,
+        var candidate = new HostedRouteCandidate(route, context, Guid.Empty, IdentityA,
             new("geoapify", "persistent"), DateTimeOffset.UtcNow.AddMinutes(-1), "walk");
         (await repository.SaveAsync(candidate, settings.RoutingAccountPartition,
             DateTimeOffset.UtcNow, () => true)).Should().Be(RetainedRouteSaveResult.Saved);

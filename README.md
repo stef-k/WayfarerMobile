@@ -34,7 +34,7 @@ Wayfarer Mobile is a privacy-first companion app for self-hosted Wayfarer server
 | **Timeline Export/Import** | Export to CSV or GeoJSON, import with duplicate detection |
 | **Trip Management** | Browse trips, places, segments, and polygon zones from your server |
 | **Offline Trip Content** | Retain Trip metadata, Places, routes, Areas, and navigation data |
-| **Turn-by-Turn Navigation** | Voice-guided navigation with multi-tier route fallback |
+| **Turn-by-Turn Navigation** | Saved and retained routes, personal-provider modes, or explicit Direct guidance |
 | **Group Sharing** | Real-time location sharing via SSE with colored member markers |
 | **Activity Types** | 20 built-in activities with icons, editable per-location, server sync every 6 hours |
 | **Manual Check-ins** | Quick location logging with activity type and notes |
@@ -46,7 +46,7 @@ Wayfarer Mobile is a privacy-first companion app for self-hosted Wayfarer server
 
 - **Offline-First Architecture**: Local SQLite storage with background sync, works without internet
 - **Smart Battery Usage**: Three-phase sleep/wake optimization for background tracking (~1-3% per hour)
-- **Truthful Navigation**: Saved Trip Segment geometry when available, otherwise straight-line Direct guidance
+- **Truthful Navigation**: Saved Segment geometry and retained routes take priority; fresh routing uses one personal-provider-native chooser, while Direct is explicit and network-free
 - **Queue Resilience**: Configurable queue limit (default 25,000), fast sync (12s/location), export to CSV/GeoJSON
 
 > **Map cache note**: OpenStreetMap tiles requested during interactive viewing are kept in a bounded live cache. Previously viewed tiles may remain usable while cached, but Trip downloads do not include or guarantee an offline basemap area.
@@ -133,7 +133,7 @@ WayfarerMobile/
 |----------|------------|
 | Framework | .NET 10 MAUI |
 | Maps | Mapsui 5.1 with OpenStreetMap tiles |
-| Navigation | Saved Segment geometry and Direct guidance |
+| Navigation | Saved/retained geometry, personal-provider modes, and explicit Direct guidance |
 | UI Components | Syncfusion MAUI Toolkit (MIT) |
 | MVVM | CommunityToolkit.Mvvm |
 | Database | SQLite-net-pcl |

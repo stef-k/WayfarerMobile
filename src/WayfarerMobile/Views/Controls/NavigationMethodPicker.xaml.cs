@@ -146,7 +146,7 @@ public partial class NavigationMethodPicker : ContentView
     public Task<NavigationMethod?> ShowAsync()
     {
         _tcs = new TaskCompletionSource<NavigationMethod?>();
-        _column.SelectedIndex = 0; // Default to Walk
+        _column.SelectedIndex = 0; // Default to the Wayfarer provider flow
         NavPicker.IsOpen = true;
         return _tcs.Task;
     }

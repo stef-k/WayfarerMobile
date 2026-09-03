@@ -71,6 +71,10 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _etaText = string.Empty;
 
+    /// <summary>Gets whether the active route has a defensible ETA.</summary>
+    [ObservableProperty]
+    private bool _hasEta;
+
     /// <summary>
     /// Gets or sets the current instruction text.
     /// </summary>
@@ -458,6 +462,12 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
     /// </summary>
     private void UpdateEtaText(TimeSpan eta)
     {
+        HasEta = eta > TimeSpan.Zero;
+        if (!HasEta)
+        {
+            EtaText = string.Empty;
+            return;
+        }
         if (eta.TotalHours >= 1)
         {
             EtaText = $"{(int)eta.TotalHours}h {eta.Minutes}m";

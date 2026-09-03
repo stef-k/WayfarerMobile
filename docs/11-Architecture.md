@@ -438,16 +438,18 @@ The `TripNavigationService` calculates routes with the following priority:
 
 1. **Saved Segment geometry**: Trip-defined geometry (always preferred when valid)
 2. **Retained Wayfarer route**: Exact validated offline match
-3. **Fresh authenticated Wayfarer route**: Provider-neutral server result
-4. **Direct guidance**: Straight line with bearing and distance
+3. **Fresh authenticated Wayfarer route**: Explicit mode from the active personal provider
+4. **Direct guidance**: Explicit network-free straight line with bearing and distance, without ETA
 
 Mobile contacts only its configured Wayfarer server. Routing identity uses a non-secret, process-local authentication
 session revision rather than the bearer token. In the final synchronous UI callback, the coordinator rebuilds current
 authority from the settings owner, live device location, current Trip Place/Segment data or member owner, and the
-hosted selection owner. It compares generation, normalized server, target and Segment identity, profile/authority,
-choice, and canonical origin/anchors/destination immediately before installation, with no await or dispatch gap.
+hosted selection owner. It compares generation, normalized server, target and Segment identity, optional planning
+profile, opaque personal-provider authority, exact provider-native mode, choice, and canonical
+origin/anchors/destination immediately before installation, with no await or dispatch gap.
 Provider credentials and provider-specific endpoints remain server-side. Retained lookup additionally requires the
-active protected account partition and exact provider/configuration/mapping/transport-profile authority. Coordinates
+active protected account partition and exact provider/mode/opaque-authority plus optional Segment-profile authority.
+Legacy configuration and mapping columns are not runtime authority. Coordinates
 use #260's signed 10^-5-degree canonical integers, including exact duplicate-preserving anchor sequence equality.
 An exact retained match opens the bounded retained/refresh/Direct chooser. Explicit refresh keeps the retained route
 as the active fallback until a complete fresh route is validated and storage-authorized replacement commits.

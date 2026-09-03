@@ -34,7 +34,9 @@ public sealed class TripNavigationRoutingRemovalTests
         progressing.Status.Should().Be(NavigationStatus.OnRoute);
         progressing.DistanceToDestinationMeters.Should().BePositive();
         progressing.DistanceToNextWaypointMeters.Should().BePositive();
-        progressing.EstimatedTimeRemaining.Should().BePositive();
+        route.EstimatedDuration.Should().Be(TimeSpan.Zero);
+        route.Steps.Should().OnlyContain(step => step.DurationSeconds == 0);
+        progressing.EstimatedTimeRemaining.Should().Be(TimeSpan.Zero);
         progressing.ProgressPercent.Should().BeGreaterThan(0);
         arrived.Status.Should().Be(NavigationStatus.Arrived);
         publishedStates.Select(state => state.Status).Should().ContainInOrder(

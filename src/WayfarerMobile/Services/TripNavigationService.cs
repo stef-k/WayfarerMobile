@@ -310,8 +310,9 @@ public class TripNavigationService : ITripNavigationService
         state.CurrentInstruction = GetCurrentInstruction(currentLat, currentLon);
         state.ProgressPercent = CalculateRouteProgress(currentLat, currentLon);
 
-        // Estimate time remaining (walking speed 5 km/h)
-        state.EstimatedTimeRemaining = TimeSpan.FromSeconds(state.DistanceToDestinationMeters / 1.4);
+        state.EstimatedTimeRemaining = _activeRoute.IsDirectRoute
+            ? TimeSpan.Zero
+            : TimeSpan.FromSeconds(state.DistanceToDestinationMeters / 1.4);
 
         CheckForTurnAnnouncement(currentLat, currentLon, state);
 

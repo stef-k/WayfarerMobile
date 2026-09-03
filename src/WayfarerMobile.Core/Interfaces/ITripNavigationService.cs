@@ -95,7 +95,6 @@ public interface ITripNavigationService
     /// <param name="destLat">Destination latitude.</param>
     /// <param name="destLon">Destination longitude.</param>
     /// <param name="destName">Destination name for display.</param>
-    /// <param name="profile">Routing profile (foot, car, bike). Default is foot.</param>
     /// <param name="activate">Whether to replace the active navigation route.</param>
     /// <returns>The Direct route.</returns>
     Task<NavigationRoute> CalculateRouteToCoordinatesAsync(

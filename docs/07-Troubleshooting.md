@@ -258,21 +258,24 @@ For detailed troubleshooting:
 3. **Check destination**: Place must have valid coordinates
 4. **Try different place**: Some places may have issues
 
-### Hosted Routing Falls Back to Direct
+### Fresh Provider Routing Is Unavailable
 
-Direct remains usable when the configured Wayfarer server is old, routing is disabled, no provider is available,
-authentication authority changes, or live location/target/profile state no longer matches a delayed response. Confirm
-the server supports the Mobile routing endpoints and that routing is enabled for your account. Provider credentials
-are configured only on the server and are never entered in Mobile. An offline route is offered only for an exact
-account, server, provider authority, transport profile, endpoint, and ordered-anchor match that the backend previously
-marked `persistent`. Old routes do not expire automatically, but a logout, server/token replacement, or provider
-configuration change makes another partition or authority ineligible. With an exact match, choose retained guidance,
+Fresh routing remains boundedly unavailable when the configured Wayfarer server is old, no active verified personal
+provider exposes native routing modes, authentication authority changes, or live location/target state no longer
+matches a delayed response. Mobile does not silently switch to Direct. Confirm the server supports provider-native
+Mobile routing and configure the personal provider on that server. Mobile never stores provider credentials. An
+offline route is offered only for an exact account, server, provider, opaque selected authority, provider-native mode,
+optional Segment profile, endpoint, and ordered-anchor match that the backend previously marked `persistent`. Old
+routes do not expire automatically, but logout or server/token replacement makes another partition ineligible. With an exact match, choose retained guidance,
 an explicit one-time Wayfarer refresh, or Direct. A failed, cancelled, or invalid refresh preserves the prior complete
 retained route as active guidance. If no eligible row exists, Direct remains the explicit fallback.
 Fresh online routing requires an explicit choice from the active provider's modes. These choices are independent of
 the Segment's manual-planning Transport Profile. An older server that does not return the additive mode catalog cannot
 provide a fresh route to this Mobile version, but saved geometry and retained routes remain available without discovery,
 and Direct remains an explicit network-free choice.
+
+Transport Profiles remain manual Segment-planning provenance and never choose a provider mode. Mobile does not use
+administrator routing templates, mappings, server-default routing, or OSRM. Mapbox Directions is unsupported.
 
 ### Off-Route Constantly
 

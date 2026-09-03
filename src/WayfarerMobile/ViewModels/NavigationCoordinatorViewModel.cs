@@ -373,6 +373,7 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
         if (result.Outcome != HostedRoutingOutcome.Success || result.Candidate == null)
         {
             if (!IsInvocationCurrent(context, partition, cancellation)) return null;
+            if (result.Outcome == HostedRoutingOutcome.Cancelled) return direct;
             if (retainedFallback != null)
                 RestoreRetainedSelection(context, partition, retainedFallback);
             else return null;
@@ -451,7 +452,6 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
         if (result.Outcome != HostedRoutingOutcome.CatalogChanged) return result;
         if (retainedFallback != null)
             RestoreRetainedSelection(context, partition, retainedFallback);
-        else if (IsInvocationCurrent(context, partition, cancellation)) _hostedRouting.SelectDirect(generation);
         return new(HostedRoutingOutcome.Unavailable);
     }
 
