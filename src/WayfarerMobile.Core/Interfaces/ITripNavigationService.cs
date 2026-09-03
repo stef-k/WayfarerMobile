@@ -95,12 +95,17 @@ public interface ITripNavigationService
     /// <param name="destLon">Destination longitude.</param>
     /// <param name="destName">Destination name for display.</param>
     /// <param name="profile">Routing profile (foot, car, bike). Default is foot.</param>
+    /// <param name="activate">Whether to replace the active navigation route.</param>
     /// <returns>The Direct route.</returns>
     Task<NavigationRoute> CalculateRouteToCoordinatesAsync(
         double currentLat, double currentLon,
         double destLat, double destLon,
         string destName,
-        string profile = "foot");
+        string profile = "foot",
+        bool activate = true);
+
+    /// <summary>Installs a route selected by a coordinator.</summary>
+    void ActivateRoute(NavigationRoute route);
 
     /// <summary>
     /// Calculates a route to the next place in sequence.

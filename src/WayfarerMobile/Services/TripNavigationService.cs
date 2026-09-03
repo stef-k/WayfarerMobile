@@ -203,7 +203,6 @@ public class TripNavigationService : ITripNavigationService
 
     /// <summary>
     /// Calculates a route to arbitrary coordinates (not requiring a loaded trip).
-    /// Direct guidance is a straight line with distance, bearing, and profile-aware ETA.
     /// </summary>
     /// <param name="currentLat">Current latitude.</param>
     /// <param name="currentLon">Current longitude.</param>
@@ -211,19 +210,22 @@ public class TripNavigationService : ITripNavigationService
     /// <param name="destLon">Destination longitude.</param>
     /// <param name="destName">Destination name for display.</param>
     /// <param name="profile">Routing profile (foot, car, bike). Default is foot.</param>
+    /// <param name="activate">Whether to replace the active navigation route.</param>
     /// <returns>The Direct route.</returns>
     public Task<NavigationRoute> CalculateRouteToCoordinatesAsync(
         double currentLat, double currentLon,
         double destLat, double destLon,
         string destName,
-        string profile = "foot")
+        string profile = "foot",
+        bool activate = true)
     {
-        _logger.LogInformation("Calculating Direct guidance to {Name}", destName);
-        _logger.LogInformation("Using direct route to {Name} with profile {Profile}", destName, profile);
         var directRoute = _routeBuilder.BuildDirectRouteToCoordinates(currentLat, currentLon, destLat, destLon, destName, profile);
-        InstallRoute(directRoute, destinationPlaceId: null);
+        if (activate) InstallRoute(directRoute, destinationPlaceId: null);
         return Task.FromResult(directRoute);
     }
+
+    /// <inheritdoc/>
+    public void ActivateRoute(NavigationRoute route) => InstallRoute(route, destinationPlaceId: null);
 
     /// <summary>
     /// Calculates a route to the next place in sequence.

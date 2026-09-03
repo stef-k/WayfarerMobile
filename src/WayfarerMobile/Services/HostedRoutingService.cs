@@ -112,6 +112,17 @@ public sealed class HostedRoutingService
         }
     }
 
+    /// <summary>Restores the selection that preceded a dismissed chooser.</summary>
+    public void RestoreSelection(HostedRouteSelection? selection)
+    {
+        lock (stateLock)
+        {
+            activeGeneration = selection?.Generation ?? 0;
+            currentSelection = selection;
+            IsLoading = false;
+        }
+    }
+
     private bool Begin(HostedRouteRequestContext context)
     {
         lock (stateLock)
