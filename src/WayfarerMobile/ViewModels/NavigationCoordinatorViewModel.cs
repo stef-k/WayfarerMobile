@@ -418,6 +418,7 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
                 "Provider route mode (separate from the Segment Transport Profile)", options, "Direct");
             if (selected == null)
             {
+                ReleaseDismissedInvocation(context, partition, cancellation);
                 return null;
             }
             if (selected == "Direct")
@@ -563,6 +564,15 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
     private bool IsInvocationCurrent(HostedRouteRequestContext context, Guid partition,
         CancellationTokenSource cancellation) => ReferenceEquals(_hostedRoutingCancellation, cancellation)
         && !cancellation.IsCancellationRequested && IsRequestCurrent(context, partition);
+
+    private void ReleaseDismissedInvocation(HostedRouteRequestContext context, Guid partition,
+        CancellationTokenSource cancellation)
+    {
+        if (!IsInvocationCurrent(context, partition, cancellation)) return;
+        if (ReferenceEquals(Interlocked.CompareExchange(
+                ref _hostedRoutingCancellation, null, cancellation), cancellation))
+            cancellation.Dispose();
+    }
 
     private void CancelHostedRouting(bool incrementGeneration = true)
     {
