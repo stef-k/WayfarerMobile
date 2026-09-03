@@ -408,7 +408,8 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
                 else _hostedRouting.SelectDirect(Interlocked.Increment(ref _hostedRoutingGeneration));
                 return null;
             }
-            if (_hostedRoutingGeneration != generation || _hostedRequest?.Generation != generation) return null;
+            if (_hostedRoutingGeneration != generation || _hostedRequest?.Generation != generation
+                || !IsRequestCurrent(context, partition)) return null;
             var choiceContext = context with
             {
                 ExpectedCatalogIdentity = result.DiscoveryCatalogIdentity,
@@ -439,8 +440,8 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
         if (choice == "Use retained route")
         {
             if (HostedRoutePublication.TryPublishRetained(retained, target))
-            _hostedRouting.SelectRetained(context.Generation, provenance.TransportProfileId,
-                provenance.ProviderMode ?? string.Empty, provenance.SelectedProfileAuthorityIdentity);
+                _hostedRouting.SelectRetained(context.Generation, provenance.TransportProfileId,
+                    provenance.ProviderMode ?? string.Empty, provenance.SelectedProfileAuthorityIdentity);
             return new(true, null);
         }
         if (choice != "Refresh with Wayfarer")

@@ -2,6 +2,13 @@
 
 ## 1.2.0
 
+### 2026-09-03
+- **Feature: provider-native hosted routing modes (#538)**
+  - Requires an explicit backend-provided mode choice for every fresh online route, independently of manual Transport Profiles
+  - Preserves accepted Segment geometry and retained-route priority, with explicit network-free Direct routing
+  - Fences capability, requests, publication, and new retained provenance to the selected mode and provider authority
+  - Treats older servers without additive mode discovery as bounded fresh-route unavailability without inventing modes
+
 ### 2026-08-31
 - **Feature: bounded offline Wayfarer routing (#261)**
   - Retains only fully validated routes whose backend storage authority is exactly `persistent`

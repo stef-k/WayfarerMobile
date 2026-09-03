@@ -31,7 +31,7 @@ public sealed record HostedRoutingCapability(string Outcome, Guid TransportProfi
 
 public sealed record HostedRouteRequest(Guid TransportProfileId, HostedRouteCoordinate Origin,
     HostedRouteCoordinate Destination, IReadOnlyList<HostedRouteCoordinate> Anchors,
-    string SelectedProfileAuthorityIdentity, string ProviderMode = "walk");
+    string SelectedProfileAuthorityIdentity, string ProviderMode);
 
 public sealed record HostedRouteResponse(bool Succeeded, string Outcome, IReadOnlyList<HostedRouteCoordinate>? Geometry,
     double? DistanceMetres, double? DurationSeconds, IReadOnlyList<HostedRouteInstruction>? Instructions,
@@ -58,7 +58,7 @@ public sealed record HostedRouteCapabilityMetadata(string Provider, Guid Provide
 
 public sealed record HostedRouteCandidate(NavigationRoute Route, HostedRouteRequestContext Context,
     Guid SelectedProfileId, string SelectedProfileAuthorityIdentity,
-    HostedRouteCapabilityMetadata Metadata, DateTimeOffset GeneratedAt, string SelectedProviderMode = "walk");
+    HostedRouteCapabilityMetadata Metadata, DateTimeOffset GeneratedAt, string SelectedProviderMode);
 
 public sealed record HostedRouteRequestContext(Guid? SavedTransportProfileId, string? ModeKey, string? Category,
     HostedRouteCoordinate Origin, HostedRouteCoordinate Destination, IReadOnlyList<HostedRouteCoordinate> Anchors,

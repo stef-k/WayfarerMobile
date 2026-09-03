@@ -72,7 +72,7 @@ public sealed class HostedRoutingServiceTests
         var context = HostedRouteRequestContext.ForTest(WalkingProfile);
         var candidate = new HostedRouteCandidate(new WayfarerMobile.Core.Models.NavigationRoute(),
             context, WalkingProfile, IdentityA,
-            new("geoapify", CyclingProfile, "mapping", "persistent"), DateTimeOffset.UtcNow);
+            new("geoapify", CyclingProfile, "mapping", "persistent"), DateTimeOffset.UtcNow, "walk");
         var live = new HostedRouteLiveAuthority(context.Generation, context.AuthenticationSessionRevision,
             context.NormalizedServer, context.Origin, context.Destination, context.Anchors,
             context.TargetAssociation, context.SegmentId, context.SavedTransportProfileId,

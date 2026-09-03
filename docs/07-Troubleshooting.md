@@ -269,6 +269,10 @@ marked `persistent`. Old routes do not expire automatically, but a logout, serve
 configuration change makes another partition or authority ineligible. With an exact match, choose retained guidance,
 an explicit one-time Wayfarer refresh, or Direct. A failed, cancelled, or invalid refresh preserves the prior complete
 retained route as active guidance. If no eligible row exists, Direct remains the explicit fallback.
+Fresh online routing requires an explicit choice from the active provider's modes. These choices are independent of
+the Segment's manual-planning Transport Profile. An older server that does not return the additive mode catalog cannot
+provide a fresh route to this Mobile version, but saved geometry and retained routes remain available without discovery,
+and Direct remains an explicit network-free choice.
 
 ### Off-Route Constantly
 

@@ -66,7 +66,7 @@ public sealed class HostedRoutingApiClientTests
         var capability = await client.GetCapabilityAsync(
             profileId, "walk", catalog.DiscoveryCatalogIdentity!, default);
         var route = await client.GetRouteAsync(new(profileId, new(23, 37), new(23.01, 37.01), [],
-            capability.SelectedProfileAuthorityIdentity!), default);
+            capability.SelectedProfileAuthorityIdentity!, "walk"), default);
 
         route.Succeeded.Should().BeTrue();
         route.Provider.Should().Be("geoapify");
@@ -148,7 +148,7 @@ public sealed class HostedRoutingApiClientTests
             """{"succeeded":false,"outcome":"invalid-request"}"""))));
 
         var route = await client.GetRouteAsync(new(profileId, new(23, 37), new(23.01, 37.01), [],
-            "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"), default);
+            "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "walk"), default);
 
         route.Outcome.Should().Be("invalid-request");
         route.Succeeded.Should().BeFalse();
@@ -175,7 +175,8 @@ public sealed class HostedRoutingApiClientTests
         });
         var client = Create(new RecordingHandler(_ => Task.FromResult(Json(HttpStatusCode.OK, json))));
 
-        var route = await client.GetRouteAsync(new(profileId, new(23, 37), new(23.01, 37.01), [], identity), default);
+        var route = await client.GetRouteAsync(
+            new(profileId, new(23, 37), new(23.01, 37.01), [], identity, "walk"), default);
 
         if (valid)
             route.GeneratedAt.Should().Be(new DateTimeOffset(2026, 8, 30, 10, 0, 0, TimeSpan.Zero));
