@@ -33,7 +33,10 @@ public sealed record Location(double Latitude, double Longitude);
 public sealed class MapLaunchOptions
 {
     public string? Name { get; init; }
+    public NavigationMode NavigationMode { get; init; }
 }
+
+public enum NavigationMode { None, Walking }
 
 public sealed class Map
 {
@@ -56,6 +59,19 @@ public sealed class Launcher
     public Task<bool> OpenAsync(Uri uri) => Task.FromResult(true);
 }
 
+public sealed class HtmlWebViewSource
+{
+    public string Html { get; set; } = string.Empty;
+}
+
+public enum AppTheme { Unspecified, Light, Dark }
+
+public class Application
+{
+    public static Application? Current { get; set; }
+    public AppTheme RequestedTheme { get; set; }
+}
+
 public enum NetworkAccess { None, Internet }
 public sealed class ConnectivityChangedEventArgs(NetworkAccess networkAccess) : EventArgs { public NetworkAccess NetworkAccess { get; } = networkAccess; }
 public interface IConnectivity
@@ -66,6 +82,12 @@ public interface IConnectivity
 public static class Connectivity { public static IConnectivity Current { get; set; } = new ConnectivityStub(); private sealed class ConnectivityStub : IConnectivity { public NetworkAccess NetworkAccess => NetworkAccess.Internet; public event EventHandler<ConnectivityChangedEventArgs>? ConnectivityChanged; } }
 namespace Microsoft.Maui.ApplicationModel
 {
+    public static class Map
+    {
+        public static Task OpenAsync(global::Location location, global::MapLaunchOptions options) =>
+            Task.CompletedTask;
+    }
+
     public static class MainThread
     {
         public static void BeginInvokeOnMainThread(Action action) => action();
@@ -80,4 +102,13 @@ namespace Microsoft.Maui.ApplicationModel
 
 namespace Microsoft.Maui.ApplicationModel.DataTransfer
 {
+}
+
+namespace WayfarerMobile.Helpers
+{
+    public static class NotesViewerHelper
+    {
+        public static global::HtmlWebViewSource PrepareNotesHtml(
+            string html, string? backendBaseUrl, bool isDark) => new() { Html = html };
+    }
 }

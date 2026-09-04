@@ -26,6 +26,45 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task EditorThroughTripSheet_MissingLocation_PreservesPreCommitState()
+    {
+        var scenario = CreateScenario("Direct");
+        var callbacks = new NavigationCallbackBridge(scenario.Coordinator);
+        scenario.Coordinator.SetCallbacks(callbacks);
+        using var sheet = CreateTripSheet(scenario.State, scenario.Editor);
+        sheet.SetCallbacks(callbacks);
+        sheet.SelectedTripPlace = scenario.Destination;
+        sheet.IsTripSheetOpen = true;
+
+        await sheet.Editor.NavigateToTripPlaceCommand.ExecuteAsync(null);
+
+        scenario.Coordinator.IsNavigating.Should().BeFalse();
+        scenario.Navigation.ActiveRoute.Should().BeNull();
+        scenario.Hud.IsNavigating.Should().BeFalse();
+        callbacks.RouteShown.Should().BeFalse();
+        scenario.VisitNotifications.Verify(value => value.UpdateNavigationState(
+            It.IsAny<bool>(), It.IsAny<Guid?>()), Times.Never);
+        sheet.IsTripSheetOpen.Should().BeTrue();
+        callbacks.CloseCalls.Should().Be(0);
+        scenario.Api.Verify(client => client.DiscoverAsync(It.IsAny<CancellationToken>()), Times.Never);
+        VerifyNoProviderRequest(scenario.Api);
+    }
+
+    [Fact]
+    public async Task TripSheetWithoutParent_ReturnsFalseAndRemainsOpen()
+    {
+        var scenario = CreateScenario("Direct");
+        using var sheet = CreateTripSheet(scenario.State, scenario.Editor);
+        sheet.SelectedTripPlace = scenario.Destination;
+        sheet.IsTripSheetOpen = true;
+
+        await sheet.Editor.NavigateToTripPlaceCommand.ExecuteAsync(null);
+
+        sheet.IsTripSheetOpen.Should().BeTrue();
+        scenario.Coordinator.IsNavigating.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task TripPlaceDismissal_PreservesActiveRouteAndNavigationState()
     {
         var scenario = CreateScenario(null);
@@ -187,7 +226,7 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
             .Returns(new LocationData { Latitude = origin.Latitude, Longitude = origin.Longitude });
         coordinator.SetCallbacks(callbacks.Object);
         return new(coordinator, navigation, hud, callbacks, api, destination, wakeLock, audio,
-            visitNotifications);
+            visitNotifications, state, CreateEditor(Mock.Of<ITripItemEditorCallbacks>()));
     }
 
     private static TripItemEditorViewModel CreateEditor(ITripItemEditorCallbacks callbacks)
@@ -198,6 +237,13 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
         editor.SetCallbacks(callbacks);
         return editor;
     }
+
+    private static TripSheetViewModel CreateTripSheet(
+        ITripStateManager state, TripItemEditorViewModel editor) => new(
+            editor, state, Mock.Of<ITripSyncService>(), Mock.Of<ITripRepository>(),
+            Mock.Of<IPlaceRepository>(), Mock.Of<ISegmentRepository>(), Mock.Of<IAreaRepository>(),
+            new MockSettingsService(), Mock.Of<IWikipediaService>(), new MockToastService(),
+            NullLogger<TripSheetViewModel>.Instance);
 
     private RetainedWayfarerRoutingService CreateRetainedRoutingService()
     {
@@ -222,5 +268,39 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
         TripNavigationService Navigation, NavigationHudViewModel Hud,
         Mock<INavigationCallbacks> Callbacks, Mock<IHostedRoutingApiClient> Api,
         TripPlace Destination, Mock<IWakeLockService> WakeLock, Mock<INavigationAudioService> Audio,
-        Mock<IVisitNotificationService> VisitNotifications);
+        Mock<IVisitNotificationService> VisitNotifications, ITripStateManager State,
+        TripItemEditorViewModel Editor);
+
+    private sealed class NavigationCallbackBridge(NavigationCoordinatorViewModel coordinator)
+        : INavigationCallbacks, ITripSheetCallbacks
+    {
+        public LocationData? CurrentLocation => null;
+        public TripPlace? SelectedTripPlace => null;
+        public bool IsNavigating => coordinator.IsNavigating;
+        public bool RouteShown { get; private set; }
+        public int CloseCalls { get; private set; }
+        public void ShowNavigationRoute(NavigationRoute route) => RouteShown = true;
+        public void ClearNavigationRoute() => RouteShown = false;
+        public void ZoomToNavigationRoute() { }
+        public void UpdateNavigationRouteProgress(NavigationRoute route, double latitude, double longitude) { }
+        public void SetFollowingLocation(bool following) { }
+        public void CenterOnLocation(double latitude, double longitude, int? zoomLevel = null) { }
+        public void OpenTripSheet() { }
+        public void CloseTripSheet() => CloseCalls++;
+        public void UpdatePlaceSelection(TripPlace? place) { }
+        public void ClearPlaceSelection() { }
+        public Task RefreshTripLayersAsync(TripDetails? trip) => Task.CompletedTask;
+        public void UnloadTripFromMap() { }
+        public Task<bool> StartNavigationToPlaceAsync(string placeId) =>
+            coordinator.StartNavigationToPlaceAsync(placeId);
+        public Task NavigateToPageAsync(string route, IDictionary<string, object>? parameters = null) =>
+            Task.CompletedTask;
+        public Task<string?> DisplayActionSheetAsync(
+            string title, string cancel, string? destruction, params string[] buttons) =>
+            Task.FromResult<string?>(null);
+        public Task<string?> DisplayPromptAsync(string title, string message, string? initialValue = null) =>
+            Task.FromResult<string?>(null);
+        public Task<bool> DisplayAlertAsync(string title, string message, string accept, string cancel) =>
+            Task.FromResult(false);
+    }
 }
