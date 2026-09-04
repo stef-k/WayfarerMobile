@@ -48,6 +48,34 @@ public sealed class TripItemEditorNavigationTests
         callbacks.VerifyNoOtherCalls();
     }
 
+    [Fact]
+    public async Task NavigationCancellation_PropagatesAndLeavesTripSheetOpen()
+    {
+        var place = new TripPlace { Id = Guid.NewGuid(), Name = "Destination" };
+        var callbacks = new Mock<ITripItemEditorCallbacks>(MockBehavior.Strict);
+        callbacks.SetupGet(value => value.SelectedTripPlace).Returns(place);
+        callbacks.Setup(value => value.StartNavigationToPlaceAsync(place.Id.ToString()))
+            .ThrowsAsync(new OperationCanceledException());
+        var editor = CreateEditor(callbacks.Object);
+
+        var act = () => editor.NavigateToTripPlaceCommand.ExecuteAsync(null);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        callbacks.Verify(value => value.CloseTripSheet(), Times.Never);
+    }
+
+    [Fact]
+    public async Task MissingCallbacks_ReturnsWithoutClosingTripSheet()
+    {
+        var editor = new TripItemEditorViewModel(
+            Mock.Of<ITripSyncService>(), null!, Mock.Of<IWikipediaService>(),
+            new MockToastService(), NullLogger<TripItemEditorViewModel>.Instance);
+
+        await editor.NavigateToTripPlaceCommand.ExecuteAsync(null);
+
+        editor.IsBusy.Should().BeFalse();
+    }
+
     private static TripItemEditorViewModel CreateEditor(ITripItemEditorCallbacks callbacks)
     {
         var editor = new TripItemEditorViewModel(

@@ -15,10 +15,20 @@ public interface IWakeLockService
     /// Acquires a wake lock to keep the device awake during navigation.
     /// </summary>
     /// <param name="keepScreenOn">Whether to keep the screen on (true) or just CPU (false).</param>
-    void AcquireWakeLock(bool keepScreenOn = true);
+    bool TryAcquireWakeLock(WakeLockOwner owner, bool keepScreenOn = true);
 
     /// <summary>
     /// Releases the wake lock, allowing the device to sleep normally.
     /// </summary>
-    void ReleaseWakeLock();
+    void ReleaseWakeLock(WakeLockOwner owner);
+}
+
+/// <summary>Identifies the current application behavior that owns a wake-lock claim.</summary>
+public enum WakeLockOwner
+{
+    /// <summary>The persistent Keep Screen On application behavior.</summary>
+    Persistent,
+
+    /// <summary>An active in-app navigation session.</summary>
+    Navigation
 }

@@ -77,8 +77,8 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
     public async Task WakeLockFailure_CommitsNavigationAndClosesTripSheetExactlyOnce()
     {
         var wakeLock = new Mock<IWakeLockService>(MockBehavior.Strict);
-        wakeLock.Setup(service => service.AcquireWakeLock(true))
-            .Throws(new InvalidOperationException("wake lock unavailable"));
+        wakeLock.Setup(service => service.TryAcquireWakeLock(WakeLockOwner.Navigation, true))
+            .Returns(false);
         var scenario = CreateScenario("Direct", wakeLock: wakeLock);
         var editorCallbacks = new Mock<ITripItemEditorCallbacks>(MockBehavior.Strict);
         editorCallbacks.SetupGet(value => value.SelectedTripPlace).Returns(scenario.Destination);
@@ -97,7 +97,7 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
             true, scenario.Destination.Id), Times.Once);
         editorCallbacks.Verify(value => value.CloseTripSheet(), Times.Once);
         scenario.Coordinator.StopNavigation();
-        wakeLock.Verify(value => value.ReleaseWakeLock(), Times.Never);
+        wakeLock.Verify(value => value.ReleaseWakeLock(It.IsAny<WakeLockOwner>()), Times.Never);
     }
 
     [Fact]
@@ -128,11 +128,11 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
         var started = await scenario.Coordinator.StartNavigationToPlaceAsync(scenario.Destination.Id.ToString());
 
         started.Should().BeTrue();
-        scenario.WakeLock.Verify(service => service.AcquireWakeLock(true), Times.Once);
+        scenario.WakeLock.Verify(service => service.TryAcquireWakeLock(WakeLockOwner.Navigation, true), Times.Once);
         scenario.Audio.Verify(service => service.AnnounceNavigationStartAsync(
             scenario.Destination.Name, It.IsAny<double>()), Times.Once);
         scenario.Coordinator.StopNavigation();
-        scenario.WakeLock.Verify(service => service.ReleaseWakeLock(), Times.Once);
+        scenario.WakeLock.Verify(service => service.ReleaseWakeLock(WakeLockOwner.Navigation), Times.Once);
     }
 
     private Scenario CreateScenario(string? chooserResult, Mock<IWakeLockService>? wakeLock = null,
@@ -168,7 +168,12 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
                 It.IsAny<IReadOnlyList<string>>(), "Direct"))
             .ReturnsAsync(chooserResult);
         audio ??= new Mock<INavigationAudioService>();
-        wakeLock ??= new Mock<IWakeLockService>();
+        if (wakeLock == null)
+        {
+            wakeLock = new Mock<IWakeLockService>();
+            wakeLock.Setup(service => service.TryAcquireWakeLock(WakeLockOwner.Navigation, true))
+                .Returns(true);
+        }
         var hud = new NavigationHudViewModel(navigation, audio.Object, wakeLock.Object,
             NullLogger<NavigationHudViewModel>.Instance);
         var visitNotifications = new Mock<IVisitNotificationService>();

@@ -113,11 +113,11 @@ public partial class AppearanceSettingsViewModel : ObservableObject
         // Use native wake lock service for reliable screen-on behavior
         if (value)
         {
-            _wakeLockService.AcquireWakeLock(keepScreenOn: true);
+            _wakeLockService.TryAcquireWakeLock(WakeLockOwner.Persistent, keepScreenOn: true);
         }
         else
         {
-            _wakeLockService.ReleaseWakeLock();
+            _wakeLockService.ReleaseWakeLock(WakeLockOwner.Persistent);
         }
     }
 

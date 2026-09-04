@@ -245,8 +245,8 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
         // Navigation state is already committed; device wakefulness is best effort.
         try
         {
-            _wakeLockService.AcquireWakeLock(keepScreenOn: true);
-            _navigationWakeLockHeld = true;
+            _navigationWakeLockHeld = _wakeLockService.TryAcquireWakeLock(
+                WakeLockOwner.Navigation, keepScreenOn: true);
         }
         catch (Exception ex)
         {
@@ -504,7 +504,7 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
         if (!_navigationWakeLockHeld)
             return;
 
-        _wakeLockService.ReleaseWakeLock();
+        _wakeLockService.ReleaseWakeLock(WakeLockOwner.Navigation);
         _navigationWakeLockHeld = false;
     }
 
