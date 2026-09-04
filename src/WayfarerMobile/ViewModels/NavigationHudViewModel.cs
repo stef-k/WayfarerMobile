@@ -19,6 +19,7 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
     private readonly INavigationAudioService _audioService;
     private readonly IWakeLockService _wakeLockService;
     private readonly ILogger<NavigationHudViewModel> _logger;
+    private bool _navigationWakeLockHeld;
 
     // Audio announcement tracking
     private NavigationStatus _lastAnnouncedStatus = NavigationStatus.NoRoute;
@@ -70,6 +71,10 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
     /// </summary>
     [ObservableProperty]
     private string _etaText = string.Empty;
+
+    /// <summary>Gets whether the active route has a defensible ETA.</summary>
+    [ObservableProperty]
+    private bool _hasEta;
 
     /// <summary>
     /// Gets or sets the current instruction text.
@@ -237,13 +242,29 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
         _lastAnnouncedWaypointName = null;
         _lastWaypointAnnouncementTime = DateTime.MinValue;
 
-        // Acquire wake lock to keep screen on during navigation
-        _wakeLockService.AcquireWakeLock(keepScreenOn: true);
+        // Navigation state is already committed; device wakefulness is best effort.
+        try
+        {
+            _navigationWakeLockHeld = _wakeLockService.TryAcquireWakeLock(
+                WakeLockOwner.Navigation, keepScreenOn: true);
+        }
+        catch (Exception ex)
+        {
+            _navigationWakeLockHeld = false;
+            _logger.LogWarning(ex, "Could not acquire the navigation wake lock");
+        }
 
         _logger.LogInformation("Navigation HUD started for destination: {Destination}", route.DestinationName);
 
-        // Announce navigation start
-        await _audioService.AnnounceNavigationStartAsync(route.DestinationName, route.TotalDistanceMeters);
+        // The initial announcement is ancillary and must not undo visible navigation state.
+        try
+        {
+            await _audioService.AnnounceNavigationStartAsync(route.DestinationName, route.TotalDistanceMeters);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not announce navigation start");
+        }
     }
 
     /// <summary>
@@ -269,8 +290,7 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
         _lastAnnouncedWaypointName = null;
         _lastWaypointAnnouncementTime = DateTime.MinValue;
 
-        // Release wake lock when navigation ends
-        _wakeLockService.ReleaseWakeLock();
+        ReleaseNavigationWakeLock();
 
         _logger.LogInformation("Navigation HUD stopped");
     }
@@ -458,6 +478,12 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
     /// </summary>
     private void UpdateEtaText(TimeSpan eta)
     {
+        HasEta = eta > TimeSpan.Zero;
+        if (!HasEta)
+        {
+            EtaText = string.Empty;
+            return;
+        }
         if (eta.TotalHours >= 1)
         {
             EtaText = $"{(int)eta.TotalHours}h {eta.Minutes}m";
@@ -470,6 +496,16 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
         {
             EtaText = "< 1 min";
         }
+    }
+
+    /// <summary>Releases the wake lock only when this navigation start acquired it.</summary>
+    private void ReleaseNavigationWakeLock()
+    {
+        if (!_navigationWakeLockHeld)
+            return;
+
+        _wakeLockService.ReleaseWakeLock(WakeLockOwner.Navigation);
+        _navigationWakeLockHeld = false;
     }
 
     #endregion
@@ -489,8 +525,7 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
         _navigationService.StateChanged -= OnNavigationStateChanged;
         _navigationService.Rerouted -= OnRerouted;
 
-        // Ensure wake lock is released
-        _wakeLockService.ReleaseWakeLock();
+        ReleaseNavigationWakeLock();
     }
 
     #endregion

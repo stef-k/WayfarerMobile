@@ -70,8 +70,6 @@ public sealed class HostedRoutingApiClientTests
 
         route.Succeeded.Should().BeTrue();
         route.Provider.Should().Be("geoapify");
-        route.ProviderConfigurationId.Should().Be(Guid.Parse("22222222-2222-2222-2222-222222222222"));
-        route.MappingIdentity.Should().Be("mapping");
         route.StorageMode.Should().Be("persistent");
         route.ProviderMode.Should().Be("walk");
         route.GeneratedAt.Should().Be(new DateTimeOffset(2026, 8, 29, 22, 0, 0, TimeSpan.Zero));
@@ -92,11 +90,11 @@ public sealed class HostedRoutingApiClientTests
         var catalog = await client.DiscoverAsync(default);
 
         catalog.Outcome.Should().Be("unavailable");
-        catalog.Profiles.Should().BeEmpty();
+        catalog.Modes.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task Discovery_IgnoresUnknownAdditiveResponseMember()
+    public async Task Discovery_IgnoresLegacyProfilesAndUnknownAdditiveResponseMember()
     {
         const string identity = "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
         var profileId = Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -112,19 +110,19 @@ public sealed class HostedRoutingApiClientTests
         var catalog = await client.DiscoverAsync(default);
 
         catalog.Outcome.Should().Be("available");
-        catalog.Profiles.Should().ContainSingle();
+        catalog.Modes.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task Discovery_RejectsWrongKindForRequiredProfilesMember()
+    public async Task Discovery_IgnoresWrongKindForUnusedLegacyProfilesMember()
     {
         var client = Create(new RecordingHandler(_ => Task.FromResult(Json(HttpStatusCode.OK,
             """{"outcome":"available","discoveryCatalogIdentity":"v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","profiles":"wrong"}"""))));
 
         var catalog = await client.DiscoverAsync(default);
 
-        catalog.Outcome.Should().Be("invalid-response");
-        catalog.Profiles.Should().BeEmpty();
+        catalog.Outcome.Should().Be("available");
+        catalog.Modes.Should().BeEmpty();
     }
 
     [Fact]

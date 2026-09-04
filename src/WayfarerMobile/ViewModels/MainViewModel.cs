@@ -673,7 +673,7 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     }
 
     /// <inheritdoc/>
-    Task ITripSheetCallbacks.StartNavigationToPlaceAsync(string placeId)
+    Task<bool> ITripSheetCallbacks.StartNavigationToPlaceAsync(string placeId)
         => Navigation.StartNavigationToPlaceAsync(placeId);
 
     /// <inheritdoc/>
@@ -721,8 +721,8 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     /// <inheritdoc/>
     Task<NavigationRoute?> IContextMenuCallbacks.CalculateRouteToCoordinatesAsync(
         double fromLat, double fromLon, double toLat, double toLon,
-        string destinationName, string profile)
-        => Navigation.CalculateRouteToCoordinatesAsync(fromLat, fromLon, toLat, toLon, destinationName, profile);
+        string destinationName, bool direct)
+        => Navigation.CalculateRouteToCoordinatesAsync(fromLat, fromLon, toLat, toLon, destinationName, direct);
 
     /// <inheritdoc/>
     Task IContextMenuCallbacks.StartNavigationWithRouteAsync(NavigationRoute route)
@@ -747,13 +747,12 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         // Fallback to action sheet if page reference not available
         var result = await page.DisplayActionSheetAsync(
             "Navigate by", "Cancel", null,
-            "🚶 Walk", "🚗 Drive", "🚴 Bike", "📍 External Maps");
+            "🧭 Wayfarer route", "📏 Direct", "📍 External Maps");
 
         return result switch
         {
-            "🚶 Walk" => Views.Controls.NavigationMethod.Walk,
-            "🚗 Drive" => Views.Controls.NavigationMethod.Drive,
-            "🚴 Bike" => Views.Controls.NavigationMethod.Bike,
+            "🧭 Wayfarer route" => Views.Controls.NavigationMethod.Wayfarer,
+            "📏 Direct" => Views.Controls.NavigationMethod.Direct,
             "📍 External Maps" => Views.Controls.NavigationMethod.ExternalMaps,
             _ => null
         };

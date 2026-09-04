@@ -967,13 +967,12 @@ public partial class GroupsViewModel : BaseViewModel,
         // Fallback to action sheet if page reference not available
         var result = await page.DisplayActionSheetAsync(
             "Navigate by", "Cancel", null,
-            "🚶 Walk", "🚗 Drive", "🚴 Bike", "📍 External Maps");
+            "🧭 Wayfarer route", "📏 Direct", "📍 External Maps");
 
         return result switch
         {
-            "🚶 Walk" => NavigationMethod.Walk,
-            "🚗 Drive" => NavigationMethod.Drive,
-            "🚴 Bike" => NavigationMethod.Bike,
+            "🧭 Wayfarer route" => NavigationMethod.Wayfarer,
+            "📏 Direct" => NavigationMethod.Direct,
             "📍 External Maps" => NavigationMethod.ExternalMaps,
             _ => null
         };

@@ -228,17 +228,16 @@ public sealed class RetainedWayfarerRouteRepositoryTests : IAsyncLifetime
             (await owner.Repository.SelectAsync(mismatch, PartitionA, receipt.AddMinutes(1), () => true))
                 .Should().BeNull();
 
-        var baselineMetadata = Candidate("unused").Metadata;
-        var authorities = new[]
+        var authorityChanges = new[]
         {
-            baselineMetadata with { Provider = "other-provider" },
-            baselineMetadata with { ProviderConfigurationId = Guid.Parse("44444444-4444-4444-4444-444444444444") },
-            baselineMetadata with { MappingIdentity = "mapping-v2" }
+            Candidate("provider", context: UniqueContext(50),
+                metadata: new("other-provider", "persistent")),
+            Candidate("identity", context: UniqueContext(50),
+                authorityIdentity: "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ")
         };
-        foreach (var authority in authorities)
+        foreach (var authorityChange in authorityChanges)
         {
-            await owner.Repository.SaveAsync(Candidate("authority-change", context: UniqueContext(50),
-                metadata: authority), PartitionA, receipt.AddMinutes(2), () => true);
+            await owner.Repository.SaveAsync(authorityChange, PartitionA, receipt.AddMinutes(2), () => true);
             (await owner.Repository.SelectAsync(baseline, PartitionA, receipt.AddMinutes(3), () => true))
                 .Should().BeNull();
             await owner.Repository.SaveAsync(Candidate("restore"), PartitionA, receipt.AddMinutes(4), () => true);
@@ -327,7 +326,7 @@ public sealed class RetainedWayfarerRouteRepositoryTests : IAsyncLifetime
         var authoritative = await owner.Repository.SelectAsync(unpinnedContext, PartitionA,
             receipt.AddMinutes(1), () => true);
 
-        authoritative!.Route.HostedProvenance!.TransportProfileId.Should().Be(ProfileId,
+        authoritative!.Route.HostedProvenance!.TransportProfileId.Should().Be(Guid.Empty,
             "a malformed row must not create profile ambiguity");
     }
 
@@ -392,7 +391,7 @@ public sealed class RetainedWayfarerRouteRepositoryTests : IAsyncLifetime
 
     private static HostedRouteCandidate Candidate(string instruction, double middleLongitude = 23.005,
         HostedRouteRequestContext? context = null, HostedRouteCapabilityMetadata? metadata = null,
-        DateTimeOffset? generatedAt = null)
+        DateTimeOffset? generatedAt = null, string authorityIdentity = AuthorityIdentity)
     {
         context ??= Context();
         var route = new NavigationRoute
@@ -413,12 +412,12 @@ public sealed class RetainedWayfarerRouteRepositoryTests : IAsyncLifetime
             EstimatedDuration = TimeSpan.FromSeconds(900),
             Attribution = [new("Powered by Wayfarer test", "https://example.test/attribution")]
         };
-        return new(route, context, ProfileId, AuthorityIdentity,
-            metadata ?? new("geoapify", ConfigurationId, "mapping-v1", "persistent"),
+        return new(route, context, context.SavedTransportProfileId ?? Guid.Empty, authorityIdentity,
+            metadata ?? new("geoapify", "persistent"),
             generatedAt ?? new DateTimeOffset(2026, 8, 31, 7, 55, 0, TimeSpan.Zero), "walk");
     }
 
-    private static HostedRouteRequestContext Context() => new(ProfileId, "walk", "active",
+    private static HostedRouteRequestContext Context() => new(ProfileId,
         new(23, 37), new(23.01, 37.01), [new(23.002, 37.002), new(23.002, 37.002)],
         "must-not-be-stored", 7, 3, "https://wayfarer.test", "place:private", "hosted");
 

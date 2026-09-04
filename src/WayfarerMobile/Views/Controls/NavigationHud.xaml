@@ -101,7 +101,7 @@
                     </Frame>
 
                     <!-- ETA -->
-                    <VerticalStackLayout Grid.Column="2" HorizontalOptions="End">
+                    <VerticalStackLayout Grid.Column="2" HorizontalOptions="End" IsVisible="{Binding HasEta}">
                         <Label Text="ETA"
                                FontSize="11"
                                TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
@@ -184,6 +184,7 @@
 
                 <Label Grid.Column="2"
                        Text="{Binding EtaText}"
+                       IsVisible="{Binding HasEta}"
                        FontSize="14"
                        VerticalOptions="Center"
                        TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />

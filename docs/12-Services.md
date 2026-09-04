@@ -500,7 +500,7 @@ Wayfarer server; Mobile never contacts a routing provider directly.
   1. Valid saved Segment geometry (trip-defined routes)
   2. An exact retained Wayfarer route
   3. A freshly requested Wayfarer-hosted route
-  4. Direct Route (straight-line fallback)
+  4. Explicit Direct Route (straight-line guidance)
 
 **Ad-Hoc Navigation** (`CalculateRouteToCoordinatesAsync`):
 - Used for groups, map locations, any coordinates
@@ -508,16 +508,16 @@ Wayfarer server; Mobile never contacts a routing provider directly.
 - Route priority:
   1. An exact retained Wayfarer route
   2. A freshly requested Wayfarer-hosted route
-  3. Direct Route
+  3. Explicit Direct Route
 
 ```csharp
 // Trip navigation - uses full route priority chain
 var route = await _tripNavigationService.CalculateRouteToPlaceAsync(
     currentLat, currentLon, destinationPlaceId);
 
-// Ad-hoc navigation - Direct straight-line guidance
+// Ad-hoc navigation - explicitly selected Direct straight-line guidance
 var route = await _tripNavigationService.CalculateRouteToCoordinatesAsync(
-    currentLat, currentLon, destLat, destLon, destName, profile: "foot");
+    currentLat, currentLon, destLat, destLon, destName);
 ```
 
 ### Navigation Graph
@@ -536,20 +536,19 @@ public class TripNavigationGraph
 ### Route Calculation
 
 ```csharp
-public NavigationRoute? CalculateRouteToPlace(
+public async Task<NavigationRoute?> CalculateRouteToPlaceAsync(
     double currentLat, double currentLon,
     string destinationPlaceId)
 {
-    // Priority 1: User-defined segment
-    if (_currentGraph.IsWithinSegmentRoutingRange(currentLat, currentLon))
-    {
-        var path = _currentGraph.FindPath(nearestNodeId, destinationPlaceId);
-        if (path.Count > 0)
-            return BuildRouteFromPath(path, currentLat, currentLon);
-    }
+    // Priority 1: accepted Segment geometry
+    if (TryBuildAcceptedSegmentRoute(destinationPlaceId, out var saved)) return saved;
 
-    // Priority 2: Direct route
-    return BuildDirectRoute(currentLat, currentLon, destination);
+    // Priority 2: exact eligible retained route
+    if (TryFindRetainedRoute(destinationPlaceId, out var retained)) return retained;
+
+    // Priority 3: one explicit provider-native mode choice
+    // Priority 4: Direct only when the user explicitly chooses it
+    return await ChooseFreshOrDirectAsync(currentLat, currentLon, destinationPlaceId);
 }
 ```
 
@@ -557,16 +556,16 @@ Hosted routes are authenticated, provider-neutral results. Provider credentials 
 Wayfarer. Every fresh online route first presents exactly the active provider's discovered native modes, with no
 preselection or inference from the Segment's independent manual-planning Transport Profile. Choosing Direct cancels
 the online path without capability or route contact. The active route retains linked attribution plus safe provenance:
-selected transport profile, provider mode, and authority identities, provider and provider-configuration identities, mapping identity, storage mode, and
+optional Segment transport profile, provider mode, opaque personal-provider authority identity, provider, storage mode, and
 the normalized backend generation timestamp. It contains no bearer token, credentials, or provider endpoint and
 clears through normal replacement or stop. Old servers, disabled routing, rejected requests, cancellation,
 malformed/stale responses, and provider
-unavailability remain routing-local and retain Direct guidance without affecting authentication or synchronization.
+unavailability remain routing-local without silently selecting Direct or affecting authentication or synchronization.
 Valid saved Segment geometry is never replaced automatically. Only a completely validated response whose exact backend
 storage authority is `persistent` can be retained. Transient and unknown modes remain active-route-only.
 
 `RetainedWayfarerRouteRepository` owns the schema-11 route table and a single narrow mutation gate. Schema 11 adds
-nullable provider-mode provenance without rewriting or invalidating older retained routes. Lookup plus a
+nullable provider-mode provenance without fabricating authority for older rows; rows without an exact native mode are ineligible. Lookup plus a
 successful recency update, complete insert/replacement, cap eviction, and explicit clear are transactional. Immediately
 before a write transaction it revalidates #260's live generation/current-state authority; stale work performs no write.
 Storage/eviction failure rolls back the complete replacement, so a displayed fresh route can succeed while the prior
@@ -580,8 +579,8 @@ replace, update recency, or return a selection afterward. Failed clear does not 
 revalidated before selection or recency mutation; malformed identity, URL, bounds, JSON, metric, attribution, or time
 contracts fail closed, and invalid timestamps are removed before they can become immortal in global eviction.
 
-Match identity is exact: protected account partition, normalized Wayfarer server, provider/configuration/mapping
-identities, selected transport-profile GUID, canonical origin/destination, and the duplicate-preserving ordered anchor
+Match identity is exact: protected account partition, normalized Wayfarer server, provider, exact provider-native mode,
+opaque selected-authority identity, optional Segment transport-profile GUID, canonical origin/destination, and the duplicate-preserving ordered anchor
 sequence. Coordinates reuse #260's signed 10^-5-degree integer representation. Offline use performs no network work
 and displays retained/offline source, clamped age, linked attribution, and safe hosted provenance. An exact match
 offers **Use retained route**, **Refresh with Wayfarer**, and **Direct**. Refresh bypasses retained reuse only for that
@@ -595,7 +594,7 @@ It never substitutes another mode. A server without the additive mode catalog pr
 unavailability while saved geometry, retained routes, and Direct remain usable. Once capability succeeds, the echoed
 mode and selected-provider authority fence the request, candidate, publication, and retained provenance.
 
-`TransportProfileId` is the Segment's current planning profile identity. Current hosted selection state remains
+`TransportProfileId` is the Segment's current planning profile identity or the empty additive request value for ad-hoc routing. It never selects or validates a provider mode. Current hosted selection state remains
 separate from the immutable provenance retained on a successfully published route; neither rewrites the Segment nor
 becomes a durable current-profile setting. The settings owner advances a non-secret, memory-only authentication
 session revision whenever the effective server or token authority changes, including logout/reset, so routing never
@@ -722,7 +721,9 @@ Schema version 10 adds only `RetainedWayfarerRoutes`; the migration preserves al
 bounded JSON payloads contain validated ordered WGS84 geometry, instructions with valid geometry indices, finite
 non-negative distance/duration, local receipt/use timestamps, backend generation provenance, exact storage authority,
 and safe attribution links. It stores no token/hash, credentials, protected configuration, provider endpoint or raw
-response, member/user name, note, or provider SDK object. Legacy `cached_osrm_route` data remains deletion-only.
+response, member/user name, note, or provider SDK object. Schema 9 deletes only legacy `cached_osrm_route`
+preference data and provides no OSRM routing capability. Schema 12 deletes only `last_transport_mode`, never reads or
+reuses its value, and records completion only after deletion succeeds.
 
 ### Initialization
 

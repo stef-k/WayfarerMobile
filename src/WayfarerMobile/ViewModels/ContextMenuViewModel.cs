@@ -210,27 +210,17 @@ public partial class ContextMenuViewModel : BaseViewModel
             return;
         }
 
-        var travelProfile = navMethod switch
-        {
-            NavigationMethod.Direct => "direct",
-            NavigationMethod.Walk => "foot",
-            NavigationMethod.Drive => "car",
-            NavigationMethod.Bike => "bike",
-            _ => "foot"
-        };
-
         try
         {
             _callbacks.IsBusy = true;
 
-            // Direct guidance uses the selected travel mode only for its ETA.
             var route = await _callbacks.CalculateRouteToCoordinatesAsync(
                 currentLocation.Latitude,
                 currentLocation.Longitude,
                 ContextMenuLatitude,
                 ContextMenuLongitude,
                 "Dropped Pin",
-                travelProfile);
+                direct: navMethod == NavigationMethod.Direct);
 
             if (route == null) return;
 

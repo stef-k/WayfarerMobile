@@ -89,6 +89,14 @@
     <Compile Include="..\..\src\WayfarerMobile\ViewModels\BaseViewModel.cs" Link="Production\BaseViewModel.cs" />
     <Compile Include="..\..\src\WayfarerMobile\ViewModels\INavigationCallbacks.cs" Link="Production\INavigationCallbacks.cs" />
     <Compile Include="..\..\src\WayfarerMobile\ViewModels\NavigationCoordinatorViewModel.cs" Link="Production\NavigationCoordinatorViewModel.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\ViewModels\NavigationHudViewModel.cs" Link="Production\NavigationHudViewModel.cs" />
+    <Compile Remove="Infrastructure\NavigationCoordinatorTestStubs.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\ViewModels\ITripItemEditorCallbacks.cs" Link="Production\ITripItemEditorCallbacks.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\ViewModels\TripItemEditorViewModel.cs" Link="Production\TripItemEditorViewModel.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\ViewModels\ITripSheetCallbacks.cs" Link="Production\ITripSheetCallbacks.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\ViewModels\TripSheetViewModel.cs" Link="Production\TripSheetViewModel.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Messages\PlaceMarkerChangedMessage.cs" Link="Production\PlaceMarkerChangedMessage.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Interfaces\IWikipediaService.cs" Link="Production\IWikipediaService.cs" />
     <Compile Remove="Infrastructure\Entities\QueuedLocation.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Data\Entities\QueuedLocation.cs" Link="Production\QueuedLocation.cs" />
   </ItemGroup>

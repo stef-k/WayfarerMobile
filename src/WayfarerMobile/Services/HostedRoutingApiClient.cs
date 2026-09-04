@@ -25,10 +25,10 @@ public sealed class HostedRoutingApiClient : IHostedRoutingApiClient
     public async Task<HostedRoutingCatalog> DiscoverAsync(CancellationToken cancellationToken)
     {
         using var response = await SendAsync(HttpMethod.Get, "/api/mobile/routing/profiles", null, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.NotFound) return new(null, "unavailable", []);
-        if (!response.IsSuccessStatusCode) return new(null, "unavailable", []);
+        if (response.StatusCode == HttpStatusCode.NotFound) return new(null, "unavailable");
+        if (!response.IsSuccessStatusCode) return new(null, "unavailable");
         return await ParseAsync<HostedRoutingCatalog>(response, cancellationToken)
-            ?? new(null, "invalid-response", []);
+            ?? new(null, "invalid-response");
     }
 
     public async Task<HostedRoutingCapability> GetCapabilityAsync(Guid profileId, string providerMode,
@@ -38,9 +38,9 @@ public sealed class HostedRoutingApiClient : IHostedRoutingApiClient
             + $"&providerMode={Uri.EscapeDataString(providerMode)}";
         using var response = await SendAsync(HttpMethod.Get, endpoint, null, cancellationToken);
         if (response.StatusCode == HttpStatusCode.NotFound)
-            return new("unavailable", profileId, null, null, null, null, null, null, null);
+            return new("unavailable", profileId, null, null, null, null, null);
         var value = await ParseAsync<CapabilityDto>(response, cancellationToken);
-        return value?.ToModel() ?? new("invalid-response", profileId, null, null, null, null, null, null, null);
+        return value?.ToModel() ?? new("invalid-response", profileId, null, null, null, null, null);
     }
 
     public async Task<HostedRouteResponse> GetRouteAsync(HostedRouteRequest request,
@@ -85,28 +85,26 @@ public sealed class HostedRoutingApiClient : IHostedRoutingApiClient
     }
 
     private static HostedRouteResponse Failure(string outcome) =>
-        new(false, outcome, null, null, null, null, null, null, null, null, null, null, null, null, null);
+        new(false, outcome, null, null, null, null, null, null, null, null, null, null, null);
 
     private sealed record CapabilityDto(string Outcome, Guid TransportProfileId, string? Provider,
-        Guid? ProviderConfigurationId, string? MappingIdentity, string? StorageMode,
-        IReadOnlyList<HostedRouteAttribution>? Attribution, string? DiscoveryCatalogIdentity,
+        string? StorageMode, IReadOnlyList<HostedRouteAttribution>? Attribution, string? DiscoveryCatalogIdentity,
         string? SelectedProfileAuthorityIdentity, string? ProviderMode)
     {
         public HostedRoutingCapability ToModel() => new(Outcome, TransportProfileId, Provider,
-            ProviderConfigurationId, MappingIdentity, StorageMode, Attribution, DiscoveryCatalogIdentity,
+            StorageMode, Attribution, DiscoveryCatalogIdentity,
             SelectedProfileAuthorityIdentity, ProviderMode);
     }
 
     private sealed record RouteResponseDto(bool Succeeded, string Outcome, IReadOnlyList<HostedRouteCoordinate>? Geometry,
         double? DistanceMetres, double? DurationSeconds, IReadOnlyList<HostedRouteInstruction>? Instructions,
-        string? GeneratedAt, string? Provider, Guid? ProviderConfigurationId, string? MappingIdentity,
+        string? GeneratedAt, string? Provider,
         Guid? TransportProfileId, IReadOnlyList<HostedRouteCoordinate>? MatchPoints,
         IReadOnlyList<HostedRouteAttribution>? Attribution, string? StorageMode,
         string? SelectedProfileAuthorityIdentity, string? ProviderMode)
     {
         public HostedRouteResponse ToModel() => new(Succeeded, Outcome, Geometry, DistanceMetres, DurationSeconds,
-            Instructions, ParseGeneratedAt(GeneratedAt), Provider, ProviderConfigurationId, MappingIdentity,
-            TransportProfileId, MatchPoints, Attribution, StorageMode,
+            Instructions, ParseGeneratedAt(GeneratedAt), Provider, TransportProfileId, MatchPoints, Attribution, StorageMode,
             SelectedProfileAuthorityIdentity, ProviderMode);
 
         private static DateTimeOffset? ParseGeneratedAt(string? value)

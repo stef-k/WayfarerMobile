@@ -32,7 +32,6 @@ public partial class TripItemEditorViewModel : BaseViewModel
     private readonly DatabaseService _databaseService;
     private readonly IWikipediaService _wikipediaService;
     private readonly IToastService _toastService;
-    private readonly ISettingsService _settingsService;
     private readonly ILogger<TripItemEditorViewModel> _logger;
 
     // Callbacks to parent ViewModel
@@ -136,14 +135,12 @@ public partial class TripItemEditorViewModel : BaseViewModel
         DatabaseService databaseService,
         IWikipediaService wikipediaService,
         IToastService toastService,
-        ISettingsService settingsService,
         ILogger<TripItemEditorViewModel> logger)
     {
         _tripSyncService = tripSyncService;
         _databaseService = databaseService;
         _wikipediaService = wikipediaService;
         _toastService = toastService;
-        _settingsService = settingsService;
         _logger = logger;
 
         // Subscribe to EntityCreated to reconcile temp IDs with server IDs (D2)
@@ -241,30 +238,10 @@ public partial class TripItemEditorViewModel : BaseViewModel
         if (selectedPlace == null)
             return;
 
-        // Show transport mode picker
-        var selected = await (_callbacks?.DisplayActionSheetAsync(
-            "Navigation Mode",
-            "Cancel",
-            null,
-            "Walk", "Drive", "Cycle") ?? Task.FromResult<string?>(null));
-
-        if (string.IsNullOrEmpty(selected) || selected == "Cancel")
-            return;
-
-        // Map display name to OSRM profile
-        var profile = selected switch
-        {
-            "Walk" => "foot",
-            "Drive" => "car",
-            "Cycle" => "bike",
-            _ => "foot"
-        };
-
-        // Save selection for next time
-        _settingsService.LastTransportMode = profile;
-
-        await (_callbacks?.StartNavigationToPlaceAsync(selectedPlace.Id.ToString()) ?? Task.CompletedTask);
-        _callbacks?.CloseTripSheet();
+        var navigationStarted = await (_callbacks?.StartNavigationToPlaceAsync(selectedPlace.Id.ToString())
+            ?? Task.FromResult(false));
+        if (navigationStarted)
+            _callbacks?.CloseTripSheet();
     }
 
     /// <summary>

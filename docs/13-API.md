@@ -477,29 +477,34 @@ public async Task<ApiResult<T>> SendAsync<T>(HttpRequestMessage request)
 
 ## Mobile Routing Boundary
 
-Mobile never contacts a public or commercial routing provider. It discovers eligible profiles with authenticated
-`GET /api/mobile/routing/profiles`, confirms a selected profile with
+Mobile never contacts a public or commercial routing provider. It discovers the active personal provider and its native modes with authenticated
+`GET /api/mobile/routing/profiles`, confirms an explicit provider mode with
 `GET /api/mobile/routing/capability/{transportProfileId}`, and requests a transient route with
 `POST /api/mobile/routing/route`. The discovery catalog identity scopes only pre-capability selection; the selected
-profile authority identity fences route execution and publication. Bearer credentials remain bound to the configured
+opaque selected-authority identity fences route execution and publication. Bearer credentials remain bound to the configured
 Wayfarer server, provider credentials stay server-side, and only bounded credential-free HTTPS attribution is displayed. Mobile
 uses a protected random local account partition, a non-secret authentication revision, and the normalized server for
 routing identity; credential-bearing HTTP/HTTPS server URLs are invalid, and Mobile never derives, copies, hashes,
 compares, logs, or stores the bearer token as routing identity.
 
 A chooser selection carries the discovery identity of the catalog the user actually saw into capability. A
-`catalog-changed` response causes one bounded rediscovery and refreshed presentation; cancellation retains Direct and
+`catalog-changed` response causes one bounded rediscovery and refreshed presentation; dismissal preserves existing state and
 no route request is sent. Catalog drift after successful capability is outside chooser authority and does not by
 itself invalidate the confirmed selected profile.
 
 Valid downloaded Trip Segment geometry remains higher authority. Before contacting Wayfarer, Mobile may select a
-retained route only for the exact current partition/server/provider/configuration/mapping/profile and canonical
+retained route only for the exact current partition/server/provider/mode/opaque-authority, optional Segment profile, and canonical
 endpoint/ordered-anchor identity. Such offline use sends no discovery, capability, or route request. A retained match
 also offers a one-interaction fresh request or Direct; failed fresh work preserves the retained route. Hosted failures,
-old-server 404 responses, disabled providers, cancellation, and stale results otherwise fall back to Direct guidance
-without changing the general session. Only a fully validated response with storage mode exactly `persistent` is stored;
+old-server 404 responses, unavailable providers, dismissal, and stale results do not silently select Direct or change
+the general session. Only a fully validated response with storage mode exactly `persistent` is stored;
 unknown modes are transient. Safe attribution and hosted provenance round-trip, while provider request URLs and raw
 responses never enter SQLite.
+
+Transport Profile data is independent Segment planning provenance and an additive change fence only. Updated Mobile
+does not consume server profile projections, administrator provider-configuration identity, mapping identity,
+server-default routing, aliases, or OSRM. Ad-hoc requests use no invented Transport Profile. An older backend without
+provider-native modes is boundedly unavailable for fresh routing. Mapbox Directions remains unsupported.
 
 ## JSON Serialization
 

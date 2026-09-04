@@ -108,13 +108,6 @@ public class NavigationCoordinatorViewModelTests : IDisposable
     #region StartNavigationToPlaceAsync Tests
 
     [Fact]
-    public void StartNavigationToPlace_WithNoLocation_DoesNotStart()
-    {
-        // Document expected behavior:
-        // if (_callbacks?.CurrentLocation == null) return early
-    }
-
-    [Fact]
     public void StartNavigationToPlace_WithNoTripLoaded_DoesNotStart()
     {
         // Document expected behavior:

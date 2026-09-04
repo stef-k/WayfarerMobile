@@ -86,7 +86,6 @@ public class MockSettingsService : ISettingsService
     public bool NavigationVibrationEnabled { get; set; } = true;
     public bool AutoRerouteEnabled { get; set; } = true;
     public string DistanceUnits { get; set; } = "kilometers";
-    public string LastTransportMode { get; set; } = "driving";
 
     #endregion
 
@@ -221,7 +220,6 @@ public class MockSettingsService : ISettingsService
         NavigationVibrationEnabled = true;
         AutoRerouteEnabled = true;
         DistanceUnits = "kilometers";
-        LastTransportMode = "driving";
         LastSelectedGroupId = null;
         LastSelectedGroupName = null;
         GroupsLegendExpanded = true;

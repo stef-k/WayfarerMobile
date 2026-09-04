@@ -85,11 +85,8 @@ public class AppLifecycleService : IAppLifecycleService
             }
 
             // Release any wake locks (screen can turn off in background)
-            if (_wakeLockService.IsWakeLockHeld)
-            {
-                _wakeLockService.ReleaseWakeLock();
-                _logger.LogDebug("Wake lock released on suspend");
-            }
+            _wakeLockService.ReleaseWakeLock(WakeLockOwner.Persistent);
+            _logger.LogDebug("Persistent wake-lock claim released on suspend");
 
             _logger.LogInformation("App state saved successfully");
         }
@@ -145,8 +142,9 @@ public class AppLifecycleService : IAppLifecycleService
             // Acquire wake lock if user setting is enabled (keeps screen on while app is in foreground)
             if (_settingsService.KeepScreenOn)
             {
-                _wakeLockService.AcquireWakeLock(keepScreenOn: true);
-                _logger.LogDebug("Wake lock acquired (KeepScreenOn setting enabled)");
+                var acquired = _wakeLockService.TryAcquireWakeLock(
+                    WakeLockOwner.Persistent, keepScreenOn: true);
+                _logger.LogDebug("Persistent wake-lock claim acquisition result: {Acquired}", acquired);
             }
 
             _logger.LogInformation("App state restored successfully");

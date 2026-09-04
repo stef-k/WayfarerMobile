@@ -117,11 +117,6 @@ public interface ISettingsService
     /// </summary>
     string DistanceUnits { get; set; }
 
-    /// <summary>
-    /// Gets or sets the last used transport mode for navigation.
-    /// </summary>
-    string LastTransportMode { get; set; }
-
     #endregion
 
     #region Groups Settings

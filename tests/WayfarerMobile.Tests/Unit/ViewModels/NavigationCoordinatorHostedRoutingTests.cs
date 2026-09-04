@@ -42,7 +42,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
             .ReturnsAsync(catalogB);
         api.Setup(client => client.GetCapabilityAsync(Guid.Empty, "walk", IdentityA, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new HostedRoutingCapability("catalog-changed", Guid.Empty,
-                null, null, null, null, null, null, null));
+                null, null, null, null, null));
         api.Setup(client => client.GetCapabilityAsync(Guid.Empty, "walk", IdentityB, It.IsAny<CancellationToken>()))
             .ReturnsAsync(HostedRoutingCapability.Available(
                 Guid.Empty, IdentityB, IdentityB, Attribution()));
@@ -60,7 +60,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         var (coordinator, navigation, _, callbacks) = CreateCoordinator(api.Object, dialogs.Object);
         callbacks.SetupGet(value => value.CurrentLocation).Returns(new LocationData { Latitude = 37, Longitude = 23 });
 
-        var route = await coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.01, 23.01, "Target", "foot");
+        var route = await coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.01, 23.01, "Target");
 
         route.Should().BeNull();
         navigation.ActiveRoute.Should().BeNull();
@@ -76,7 +76,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task OpenChooser_RepeatedCatalogChange_RefreshesOnlyOnceAndRetainsDirect()
+    public async Task OpenChooser_RepeatedCatalogChange_RefreshesOnlyOnceAndReturnsUnavailable()
     {
         var catalogA = Catalog(IdentityA, new HostedProviderMode("walk", "Walk"),
             new HostedProviderMode("bicycle", "Bicycle"));
@@ -87,10 +87,10 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
             .ReturnsAsync(catalogB);
         api.Setup(client => client.GetCapabilityAsync(Guid.Empty, "walk", IdentityA, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new HostedRoutingCapability("catalog-changed", Guid.Empty,
-                null, null, null, null, null, null, null));
+                null, null, null, null, null));
         api.Setup(client => client.GetCapabilityAsync(Guid.Empty, "walk", IdentityB, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new HostedRoutingCapability("catalog-changed", Guid.Empty,
-                null, null, null, null, null, null, null));
+                null, null, null, null, null));
         var presentations = new List<IReadOnlyList<string>>();
         var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
         dialogs.Setup(service => service.SelectAsync(
@@ -103,10 +103,10 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         var (coordinator, navigation, _, callbacks) = CreateCoordinator(api.Object, dialogs.Object);
         callbacks.SetupGet(value => value.CurrentLocation).Returns(new LocationData { Latitude = 37, Longitude = 23 });
 
-        var route = await coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.01, 23.01, "Target", "foot");
+        var route = await coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.01, 23.01, "Target");
 
-        route.Should().BeSameAs(navigation.ActiveRoute);
-        route.IsDirectRoute.Should().BeTrue();
+        route.Should().BeNull();
+        navigation.ActiveRoute.Should().BeNull();
         presentations.Should().HaveCount(2);
         api.Verify(client => client.DiscoverAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
         api.Verify(client => client.GetCapabilityAsync(Guid.Empty, "walk", IdentityA,
@@ -134,9 +134,9 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         var location = new LocationData { Latitude = 37, Longitude = 23 };
         callbacks.SetupGet(value => value.CurrentLocation).Returns(() => location);
         var prior = await coordinator.CalculateRouteToCoordinatesAsync(
-            37, 23, 37.005, 23.005, "Existing", "direct");
+            37, 23, 37.005, 23.005, "Existing", direct: true);
 
-        var pending = coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.01, 23.01, "Target", "foot");
+        var pending = coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.01, 23.01, "Target");
         await routeStarted.Task;
         location = new LocationData { Latitude = 37.1, Longitude = 23.1 };
         routeResponse.SetResult(HostedRouteResponse.ValidForTest(WalkingProfile, IdentityA));
@@ -153,7 +153,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         var (coordinator, navigation, _, callbacks) = CreateCoordinator(api.Object, SelectedModeDialogs());
         callbacks.SetupGet(value => value.CurrentLocation).Returns(new LocationData { Latitude = 37, Longitude = 23 });
 
-        var hosted = await coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.01, 23.01, "Target", "foot");
+        var hosted = await coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.01, 23.01, "Target");
 
         hosted.Should().BeSameAs(navigation.ActiveRoute);
         hosted.IsDirectRoute.Should().BeFalse();
@@ -162,7 +162,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         hosted.HostedProvenance!.TransportProfileId.Should().Be(Guid.Empty);
         hosted.HostedProvenance.ProviderMode.Should().Be("walk");
 
-        var direct = await coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.02, 23.02, "Direct", "direct");
+        var direct = await coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.02, 23.02, "Direct", direct: true);
 
         direct.Should().BeSameAs(navigation.ActiveRoute);
         direct.Should().NotBeSameAs(hosted);
@@ -171,11 +171,8 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         direct.HostedProvenance.Should().BeNull();
     }
 
-    [Theory]
-    [InlineData("Use retained route", true)]
-    [InlineData(null, false)]
-    public async Task MatchingRetainedAdHocRoute_OffersRetainedOrDirectWithoutHostedContact(
-        string? choice, bool expectRetained)
+    [Fact]
+    public async Task MatchingRetainedAdHocRoute_OffersRetainedWithoutHostedContact()
     {
         var (_, retainedService, settings) = await CreateRetainedScenarioAsync();
         var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
@@ -183,19 +180,17 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         dialogs.Setup(service => service.SelectAsync("Wayfarer retained route",
                 It.Is<IReadOnlyList<string>>(options => options.SequenceEqual(
                     new[] { "Use retained route", "Refresh with Wayfarer" })), "Direct"))
-            .ReturnsAsync(choice);
+            .ReturnsAsync("Use retained route");
         var (coordinator, navigation, _, callbacks) = CreateCoordinator(
             api.Object, dialogs.Object, retainedService, settings);
         callbacks.SetupGet(value => value.CurrentLocation)
             .Returns(new LocationData { Latitude = 37, Longitude = 23 });
 
         var selected = await coordinator.CalculateRouteToCoordinatesAsync(
-            37, 23, 37.01, 23.01, "Current target", "foot");
+            37, 23, 37.01, 23.01, "Current target");
 
         selected.Should().BeSameAs(navigation.ActiveRoute);
-        selected.IsDirectRoute.Should().Be(!expectRetained);
-        if (expectRetained) selected.HostedProvenance!.IsRetained.Should().BeTrue();
-        else selected.HostedProvenance.Should().BeNull();
+        selected!.HostedProvenance!.IsRetained.Should().BeTrue();
         api.VerifyNoOtherCalls();
     }
 
@@ -229,7 +224,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
             .Returns(new LocationData { Latitude = 37, Longitude = 23 });
 
         var selected = await coordinator.CalculateRouteToCoordinatesAsync(
-            37, 23, 37.01, 23.01, "Current target", "foot");
+            37, 23, 37.01, 23.01, "Current target");
 
         selected.Should().BeSameAs(navigation.ActiveRoute);
         selected.HostedProvenance!.IsRetained.Should().Be(!freshSucceeds);
@@ -238,12 +233,13 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
             It.IsAny<CancellationToken>()), Times.Once);
         api.Verify(client => client.GetRouteAsync(It.IsAny<HostedRouteRequest>(),
             It.IsAny<CancellationToken>()), Times.Once);
-        var retained = await repository.SelectAsync(new HostedRouteRequestContext(null, "walk", "walk",
+        var retained = await repository.SelectAsync(new HostedRouteRequestContext(null,
                 new(23, 37), new(23.01, 37.01), [], "Current target", 1,
                 settings.AuthenticationSessionRevision, "https://test.example.com",
                 "ad-hoc-coordinates", "hosted"),
             settings.RoutingAccountPartition, DateTimeOffset.UtcNow, () => true);
-        retained!.Route.Steps.Should().ContainSingle(step => step.Instruction == "Retained");
+        retained!.Route.Steps.Should().ContainSingle(step => step.Instruction ==
+            (freshSucceeds ? "Continue" : "Retained"));
     }
 
     [Fact]
@@ -281,7 +277,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         navigation.LoadTrip(trip).Should().BeTrue();
         var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
         var coordinator = new NavigationCoordinatorViewModel(
-            navigation, new NavigationHudViewModel(), Mock.Of<IVisitNotificationService>(),
+            navigation, CreateNavigationHud(navigation), Mock.Of<IVisitNotificationService>(),
             new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance),
             CreateRetainedRoutingService(), new MockSettingsService(), Mock.Of<IDialogService>(),
             state, NullLogger<NavigationCoordinatorViewModel>.Instance);
@@ -290,8 +286,9 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
             .Returns(new LocationData { Latitude = origin.Latitude, Longitude = origin.Longitude });
         coordinator.SetCallbacks(callbacks.Object);
 
-        await coordinator.StartNavigationToPlaceAsync(destination.Id.ToString());
+        var started = await coordinator.StartNavigationToPlaceAsync(destination.Id.ToString());
 
+        started.Should().BeTrue();
         navigation.ActiveRoute!.IsDirectRoute.Should().BeFalse();
         navigation.ActiveRoute.Waypoints.Should().HaveCount(4);
         navigation.ActiveRoute.Waypoints.Should().ContainSingle(waypoint =>
@@ -316,7 +313,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
             .Returns(new LocationData { Latitude = 37, Longitude = 23 });
 
         var route = await coordinator.CalculateRouteToCoordinatesAsync(
-            37, 23, 37.01, 23.01, "Target", "foot");
+            37, 23, 37.01, 23.01, "Target");
 
         route.Should().BeSameAs(navigation.ActiveRoute);
         route.IsDirectRoute.Should().BeFalse();
@@ -331,7 +328,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         await RetainedWayfarerRouteMigration.ApplyAsync(connection, CancellationToken.None);
         var repository = new RetainedWayfarerRouteRepository(connection);
         var settings = new MockSettingsService();
-        var context = new HostedRouteRequestContext(null, "walk", "walk",
+        var context = new HostedRouteRequestContext(null,
             new(23, 37), new(23.01, 37.01), [], "Current target", 1,
             settings.AuthenticationSessionRevision, "https://test.example.com",
             "ad-hoc-coordinates", "hosted");
@@ -353,9 +350,8 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
             EstimatedDuration = TimeSpan.FromSeconds(900),
             Attribution = [new("Powered by Wayfarer test", "https://example.test")]
         };
-        var candidate = new HostedRouteCandidate(route, context, WalkingProfile, IdentityA,
-            new("geoapify", Guid.Parse("22222222-2222-2222-2222-222222222222"),
-                "mapping", "persistent"), DateTimeOffset.UtcNow.AddMinutes(-1), "walk");
+        var candidate = new HostedRouteCandidate(route, context, Guid.Empty, IdentityA,
+            new("geoapify", "persistent"), DateTimeOffset.UtcNow.AddMinutes(-1), "walk");
         (await repository.SaveAsync(candidate, settings.RoutingAccountPartition,
             DateTimeOffset.UtcNow, () => true)).Should().Be(RetainedRouteSaveResult.Saved);
         return (repository, new(repository,
@@ -379,7 +375,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         lastHostedRouting = hostedRouting;
         var coordinator = new NavigationCoordinatorViewModel(
             navigation,
-            new NavigationHudViewModel(),
+            CreateNavigationHud(navigation),
             Mock.Of<IVisitNotificationService>(),
             hostedRouting,
             retainedRouting ?? CreateRetainedRoutingService(),
@@ -391,6 +387,10 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         coordinator.SetCallbacks(callbacks.Object);
         return (coordinator, navigation, settings, callbacks);
     }
+
+    private static NavigationHudViewModel CreateNavigationHud(ITripNavigationService navigation) =>
+        new(navigation, Mock.Of<INavigationAudioService>(), Mock.Of<IWakeLockService>(),
+            NullLogger<NavigationHudViewModel>.Instance);
 
     private RetainedWayfarerRoutingService CreateRetainedRoutingService()
     {
@@ -416,7 +416,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
     }
 
     private static HostedRoutingCatalog Catalog(string identity, params HostedProviderMode[] modes) =>
-        new(identity, "available", [], "geoapify", modes);
+        new(identity, "available", "geoapify", modes);
 
     private static IReadOnlyList<HostedRouteAttribution> Attribution() =>
         [new("Powered by Wayfarer test", "https://example.test")];
@@ -453,13 +453,13 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
             .Returns(new LocationData { Latitude = 37, Longitude = 23 });
 
         var priorRoute = await coordinator.CalculateRouteToCoordinatesAsync(
-            37, 23, 37.005, 23.005, "Existing", "direct");
+            37, 23, 37.005, 23.005, "Existing", direct: true);
         coordinator.IsNavigating = true;
         lastHostedRouting!.SelectRetained(1, WalkingProfile, "walk", IdentityA);
         var priorSelection = lastHostedRouting!.CurrentSelection;
 
         var route = await coordinator.CalculateRouteToCoordinatesAsync(
-            37, 23, 37.01, 23.01, "Target", "car");
+            37, 23, 37.01, 23.01, "Target");
 
         route.Should().BeNull();
         navigation.ActiveRoute.Should().BeSameAs(priorRoute);
@@ -505,9 +505,9 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         callbacks.SetupGet(value => value.CurrentLocation)
             .Returns(new LocationData { Latitude = 37, Longitude = 23 });
 
-        var stale = coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.01, 23.01, "A", "foot");
+        var stale = coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.01, 23.01, "A");
         await firstPresented.Task;
-        var current = await coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.01, 23.01, "B", "foot");
+        var current = await coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.01, 23.01, "B");
         var currentSelection = lastHostedRouting!.CurrentSelection;
         firstChooser.SetResult(null);
 
@@ -548,7 +548,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         lastHostedRouting!.SelectRetained(1, WalkingProfile, "walk", IdentityA);
 
         var route = await coordinator.CalculateRouteToCoordinatesAsync(
-            37, 23, 37.01, 23.01, "Target", "foot");
+            37, 23, 37.01, 23.01, "Target");
 
         route.Should().BeNull();
         lastHostedRouting.CurrentSelection.Should().BeNull();
@@ -572,7 +572,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
             .Returns(new LocationData { Latitude = 37, Longitude = 23 });
 
         var route = await coordinator.CalculateRouteToCoordinatesAsync(
-            37, 23, 37.01, 23.01, "Target", "car");
+            37, 23, 37.01, 23.01, "Target");
 
         route.Should().BeSameAs(navigation.ActiveRoute);
         route!.IsDirectRoute.Should().BeTrue();
@@ -590,7 +590,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         var (coordinator, _, _, _) = CreateCoordinator(api.Object, dialogs.Object);
 
         var route = await coordinator.CalculateRouteToCoordinatesAsync(
-            37, 23, 37.01, 23.01, "Target", "direct");
+            37, 23, 37.01, 23.01, "Target", direct: true);
 
         route!.IsDirectRoute.Should().BeTrue();
         api.VerifyNoOtherCalls();
@@ -616,7 +616,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
             .Returns(new LocationData { Latitude = 37, Longitude = 23 });
 
         var route = await coordinator.CalculateRouteToCoordinatesAsync(
-            37, 23, 37.01, 23.01, "Target", "foot");
+            37, 23, 37.01, 23.01, "Target");
 
         route.Should().BeNull();
         navigation.ActiveRoute.Should().BeNull();

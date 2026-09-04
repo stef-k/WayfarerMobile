@@ -4,10 +4,12 @@
 
 ### 2026-09-03
 - **Feature: provider-native hosted routing modes (#538)**
+  - Removes preliminary Walk/Drive/Bike routing pickers and enters the saved → retained → provider-native → explicit Direct flow directly
   - Requires an explicit backend-provided mode choice for every fresh online route, independently of manual Transport Profiles
   - Preserves accepted Segment geometry and retained-route priority, with explicit network-free Direct routing
-  - Fences capability, requests, publication, and new retained provenance to the selected mode and provider authority
+  - Fences capability, requests, publication, and retained provenance to the selected mode and opaque personal-provider authority without admin configuration or mapping metadata
   - Treats older servers without additive mode discovery as bounded fresh-route unavailability without inventing modes
+  - Deletes the obsolete `last_transport_mode` preference at schema 12 without reading or reusing it; schema 9 remains deletion-only cleanup for `cached_osrm_route`
 
 ### 2026-08-31
 - **Feature: bounded offline Wayfarer routing (#261)**
@@ -23,9 +25,9 @@
 
 ### 2026-08-30
 - **Feature: transient authenticated Wayfarer routing (#260)**
-  - Discovers and confirms server-owned routing profiles before requesting provider-neutral routes
+  - Historical release note: introduced the hosted-routing contract later superseded by personal-provider-native mode discovery
   - Keeps provider credentials server-side and never contacts a routing provider directly
-  - Preserves saved Segment geometry priority with Direct guidance for unavailable, rejected, cancelled, or stale work
+  - Historical behavior paired saved Segment geometry priority with Direct fallback; the current flow requires explicit Direct
   - Retains safe server-returned attribution and hosted provenance only with the active route
   - Keeps non-persistent hosted routes and profile selections session-only
 

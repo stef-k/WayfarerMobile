@@ -7,10 +7,8 @@ namespace WayfarerMobile.Views.Controls;
 /// </summary>
 public enum NavigationMethod
 {
+    Wayfarer,
     Direct,
-    Walk,
-    Drive,
-    Bike,
     ExternalMaps
 }
 
@@ -24,10 +22,8 @@ public partial class NavigationMethodPicker : ContentView
 
     private static readonly List<string> NavigationMethods = new()
     {
-        "🧭  Direct",
-        "🚶  Walk",
-        "🚗  Drive",
-        "🚴  Bike",
+        "🧭  Wayfarer route",
+        "📏  Direct",
         "📍  External Maps"
     };
 
@@ -150,7 +146,7 @@ public partial class NavigationMethodPicker : ContentView
     public Task<NavigationMethod?> ShowAsync()
     {
         _tcs = new TaskCompletionSource<NavigationMethod?>();
-        _column.SelectedIndex = 0; // Default to Walk
+        _column.SelectedIndex = 0; // Default to the Wayfarer provider flow
         NavPicker.IsOpen = true;
         return _tcs.Task;
     }
@@ -163,11 +159,9 @@ public partial class NavigationMethodPicker : ContentView
         var selectedIndex = _column.SelectedIndex;
         var method = selectedIndex switch
         {
-            0 => NavigationMethod.Direct,
-            1 => NavigationMethod.Walk,
-            2 => NavigationMethod.Drive,
-            3 => NavigationMethod.Bike,
-            4 => NavigationMethod.ExternalMaps,
+            0 => NavigationMethod.Wayfarer,
+            1 => NavigationMethod.Direct,
+            2 => NavigationMethod.ExternalMaps,
             _ => NavigationMethod.Direct
         };
 

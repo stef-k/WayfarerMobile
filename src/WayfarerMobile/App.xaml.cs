@@ -137,7 +137,7 @@ public partial class App : Application
             if (settings.KeepScreenOn)
             {
                 var wakeLockService = _serviceProvider.GetService<IWakeLockService>();
-                wakeLockService?.AcquireWakeLock(keepScreenOn: true);
+                wakeLockService?.TryAcquireWakeLock(WakeLockOwner.Persistent, keepScreenOn: true);
             }
 
             // Note: Language preference (LanguagePreference) is only for navigation voice guidance,

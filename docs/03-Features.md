@@ -301,7 +301,7 @@ From the main map, you can add your current location to the loaded trip as a new
 
 ## Navigation
 
-Navigate with saved Trip Segment geometry, an exact retained or fresh authenticated Wayfarer-hosted route, or honest straight-line Direct guidance. Mobile contacts only the configured Wayfarer server; that server may use its selected routing provider.
+Navigate with saved Trip Segment geometry, an exact retained route, a fresh personal-provider route, or honest straight-line Direct guidance. Mobile contacts only the configured Wayfarer server and never contacts a routing provider directly.
 
 ### Navigation Contexts
 
@@ -310,22 +310,23 @@ The app supports navigation in different contexts:
 | Context | Started From | Features |
 |---------|--------------|----------|
 | **Trip Navigation** | Trip sidebar → place | Uses trip segments, full route priority |
-| **Group Navigation** | Groups → member | Hosted routing when available, otherwise Direct |
-| **Map Navigation** | Long-press on map | Hosted routing when available, otherwise Direct |
+| **Group Navigation** | Groups → member | Wayfarer provider chooser, explicit Direct, or External Maps |
+| **Map Navigation** | Long-press on map | Wayfarer provider chooser, explicit Direct, or External Maps |
 
 ### Starting Trip Navigation
 
 1. Open a downloaded trip
 2. Tap a place in the sidebar
 3. Tap **Navigate**
-4. Select transport mode (Walk/Drive/Bike)
+4. Use saved or retained geometry, or explicitly choose a mode from the active personal provider; choose **Direct** for straight-line guidance
 5. Navigation overlay appears
 
 ### Starting Ad-Hoc Navigation
 
 1. From **Groups**: Tap member → **Navigate**
 2. From **Map**: Long-press location → **Navigate**
-3. Select transport mode or **External Maps**
+3. Choose **Wayfarer route**, **Direct**, or the separate **External Maps** action
+4. For a fresh Wayfarer route, explicitly select one mode from the active personal provider
 
 ### Navigation Display
 
@@ -345,32 +346,38 @@ Route calculation differs based on navigation context:
 | 1 | **User Segments** | Trip has pre-defined route geometry |
 | 2 | **Retained Wayfarer route** | Saved geometry is unavailable and an exact retained match is chosen |
 | 3 | **Fresh Wayfarer route** | No retained match exists, or **Refresh with Wayfarer** is chosen |
-| 4 | **Direct Route** | Hosted routing is explicitly bypassed, unavailable, or rejected |
+| 4 | **Direct Route** | Explicitly chosen provider-independent guidance |
 
 **Ad-Hoc Navigation** (groups, map locations):
 | Priority | Source | When Used |
 |----------|--------|-----------|
 | 1 | **Retained Wayfarer route** | An exact retained match is chosen |
 | 2 | **Fresh Wayfarer route** | No retained match exists, or **Refresh with Wayfarer** is chosen |
-| 3 | **Direct Route** | Hosted routing is explicitly bypassed, unavailable, or rejected |
+| 3 | **Direct Route** | Explicitly chosen provider-independent guidance |
 
 > **Note**: Ad-hoc navigation does not have saved Segment geometry because there is no Trip context.
 
 **User Segments**: Routes you defined when planning the trip. These include the exact polyline geometry and are always preferred over calculated routes.
 
-**Direct Route**: When saved Segment geometry is unavailable or invalid, shows straight-line navigation with:
+**Direct Route**: When explicitly chosen, shows provider-independent, network-free straight-line navigation with:
 - Cardinal direction (N, NE, E, etc.)
 - Distance to destination
 - Bearing-based heading
+- No transport-speed ETA
 
 When an exact retained match exists, choose **Use retained route**, **Refresh with Wayfarer**, or **Direct**. Retained
 is the first offline choice. Refresh is one interaction only: the retained route stays active and stored unless a
 complete validated fresh route replaces it. Direct publishes no retained route and performs no hosted request.
 A retained route is eligible
-only when the backend authorized exact `persistent` storage and the account partition, normalized server, provider
-authority, selected transport profile, canonical endpoints, and ordered anchors all still match. Its overlay identifies
+only when the backend authorized exact `persistent` storage and the account partition, normalized server, provider,
+opaque selected authority, exact provider-native mode, optional Segment profile, canonical endpoints, and ordered anchors all still match. Its overlay identifies
 the route as offline and shows age plus linked attribution. There is no automatic age expiry. Stopping or replacing
 navigation clears the active presentation but does not delete retained rows.
+
+Transport Profiles remain independent manual-planning provenance for Segments. They do not select, filter, default,
+or validate provider modes. Updated Mobile does not use administrator templates, server-default routing, mappings,
+OSRM, or Transport Profile aliases. Older servers without provider-native modes make fresh routing boundedly
+unavailable; saved routes, eligible retained routes, Direct, and External Maps remain usable. Mapbox Directions is unsupported.
 
 ### External Maps Integration
 
