@@ -47,17 +47,26 @@ public sealed class WakeLockOwnership
     {
         lock (_lock)
         {
-            if (!_owners.Remove(owner) || _owners.Count > 0 || !_physicalLockHeld)
+            if (!_owners.Contains(owner))
                 return;
+
+            if (_owners.Count > 1)
+            {
+                _owners.Remove(owner);
+                return;
+            }
 
             try
             {
                 if (releasePhysical())
+                {
+                    _owners.Remove(owner);
                     _physicalLockHeld = false;
+                }
             }
             catch
             {
-                // Preserve the held state because the physical release outcome is unknown.
+                // Preserve the claim and held state so the same owner can retry.
             }
         }
     }

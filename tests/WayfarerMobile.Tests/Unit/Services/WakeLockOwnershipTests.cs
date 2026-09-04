@@ -82,6 +82,7 @@ public sealed class WakeLockOwnershipTests
     public void PhysicalCallbacksThrow_OwnershipStateRemainsConsistent()
     {
         var ownership = new WakeLockOwnership();
+        var releases = 0;
 
         ownership.TryAcquire(WakeLockOwner.Navigation,
             () => throw new InvalidOperationException()).Should().BeFalse();
@@ -91,6 +92,10 @@ public sealed class WakeLockOwnershipTests
         ownership.Release(WakeLockOwner.Persistent,
             () => throw new InvalidOperationException());
         ownership.IsHeld.Should().BeTrue();
+
+        ownership.Release(WakeLockOwner.Persistent, () => { releases++; return true; });
+        releases.Should().Be(1);
+        ownership.IsHeld.Should().BeFalse();
     }
 
     [Fact]
@@ -111,16 +116,42 @@ public sealed class WakeLockOwnershipTests
     }
 
     [Fact]
-    public void PhysicalReleaseFailure_RetainsConsistentPhysicalState()
+    public void FailedFinalRelease_RetainsClaimForSuccessfulRetry()
     {
         var ownership = new WakeLockOwnership();
+        var releases = 0;
         ownership.TryAcquire(WakeLockOwner.Persistent, () => true).Should().BeTrue();
 
-        ownership.Release(WakeLockOwner.Persistent, () => false);
+        ownership.Release(WakeLockOwner.Persistent, () => { releases++; return false; });
         ownership.IsHeld.Should().BeTrue();
 
-        ownership.TryAcquire(WakeLockOwner.Navigation, () => false).Should().BeTrue();
-        ownership.Release(WakeLockOwner.Navigation, () => true);
+        ownership.Release(WakeLockOwner.Persistent, () => { releases++; return true; });
+        releases.Should().Be(2);
+        ownership.IsHeld.Should().BeFalse();
+    }
+
+    [Fact]
+    public void DifferentOwnerAfterFailedRelease_DoesNotReplaceRetainedClaim()
+    {
+        var ownership = new WakeLockOwnership();
+        var acquisitions = 0;
+        var releases = 0;
+        ownership.TryAcquire(WakeLockOwner.Persistent,
+            () => { acquisitions++; return true; }).Should().BeTrue();
+        ownership.Release(WakeLockOwner.Persistent, () => false);
+
+        ownership.TryAcquire(WakeLockOwner.Navigation,
+            () => { acquisitions++; return true; }).Should().BeTrue();
+        ownership.Release(WakeLockOwner.Navigation,
+            () => { releases++; return true; });
+
+        acquisitions.Should().Be(1);
+        releases.Should().Be(0);
+        ownership.IsHeld.Should().BeTrue();
+
+        ownership.Release(WakeLockOwner.Persistent,
+            () => { releases++; return true; });
+        releases.Should().Be(1);
         ownership.IsHeld.Should().BeFalse();
     }
 }
