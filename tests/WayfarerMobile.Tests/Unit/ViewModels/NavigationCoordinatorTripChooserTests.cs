@@ -157,6 +157,11 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
         scenario.Navigation.ActiveRoute.Should().NotBeNull();
         scenario.Hud.IsNavigating.Should().BeTrue();
         audio.Verify(service => service.AnnounceOffRouteAsync(), Times.Once);
+        scenario.WakeLock.Verify(service => service.TryAcquireWakeLock(
+            WakeLockOwner.Navigation, true), Times.Once);
+        scenario.Coordinator.StopNavigation();
+        scenario.WakeLock.Verify(service => service.ReleaseWakeLock(
+            WakeLockOwner.Navigation), Times.Once);
     }
 
     [Fact]
