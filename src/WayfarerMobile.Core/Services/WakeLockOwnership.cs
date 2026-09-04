@@ -23,8 +23,18 @@ public sealed class WakeLockOwnership
             if (_owners.Contains(owner))
                 return true;
 
-            if (!_physicalLockHeld && !acquirePhysical())
-                return false;
+            if (!_physicalLockHeld)
+            {
+                try
+                {
+                    if (!acquirePhysical())
+                        return false;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
 
             _physicalLockHeld = true;
             _owners.Add(owner);
@@ -40,8 +50,15 @@ public sealed class WakeLockOwnership
             if (!_owners.Remove(owner) || _owners.Count > 0 || !_physicalLockHeld)
                 return;
 
-            if (releasePhysical())
-                _physicalLockHeld = false;
+            try
+            {
+                if (releasePhysical())
+                    _physicalLockHeld = false;
+            }
+            catch
+            {
+                // Preserve the held state because the physical release outcome is unknown.
+            }
         }
     }
 }

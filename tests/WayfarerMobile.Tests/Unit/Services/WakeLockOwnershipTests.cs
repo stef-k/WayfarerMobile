@@ -59,6 +59,41 @@ public sealed class WakeLockOwnershipTests
     }
 
     [Fact]
+    public void RepeatedAcquireReleaseCycles_DoNotLeakOrDoubleRelease()
+    {
+        var ownership = new WakeLockOwnership();
+        var acquisitions = 0;
+        var releases = 0;
+
+        for (var index = 0; index < 3; index++)
+        {
+            ownership.TryAcquire(WakeLockOwner.Navigation,
+                () => { acquisitions++; return true; }).Should().BeTrue();
+            ownership.Release(WakeLockOwner.Navigation,
+                () => { releases++; return true; });
+        }
+
+        acquisitions.Should().Be(3);
+        releases.Should().Be(3);
+        ownership.IsHeld.Should().BeFalse();
+    }
+
+    [Fact]
+    public void PhysicalCallbacksThrow_OwnershipStateRemainsConsistent()
+    {
+        var ownership = new WakeLockOwnership();
+
+        ownership.TryAcquire(WakeLockOwner.Navigation,
+            () => throw new InvalidOperationException()).Should().BeFalse();
+        ownership.IsHeld.Should().BeFalse();
+
+        ownership.TryAcquire(WakeLockOwner.Persistent, () => true).Should().BeTrue();
+        ownership.Release(WakeLockOwner.Persistent,
+            () => throw new InvalidOperationException());
+        ownership.IsHeld.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task ConcurrentOwners_PreserveOnePhysicalLifetime()
     {
         var ownership = new WakeLockOwnership();
