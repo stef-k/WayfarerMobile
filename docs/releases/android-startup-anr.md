@@ -117,3 +117,24 @@ device launch, establish whether the freeze is at splash or a rendered page and
 coordinate the attempt with the maintainer. Repeat startup and in-place upgrade
 acceptance, then the short release checklist. Compilation/signing alone establish
 neither startup readiness nor publication acceptance.
+
+## Splash lettering correction
+
+The maintainer's subsequent screenshot shows the splash screen, with the outer
+Wayfarer letters clipped. The generated baseline bitmap contains complete letters;
+the word sits high and nearly spans the square, extending beyond its inscribed
+circle. Android's splash masking explains the visible edge clipping.
+
+The SVG now places the baselines at 58/88 instead of 45/75 and uses 26 instead of
+28 for the Wayfarer font size. Mobile remains size 20; canvas, background and MAUI
+BaseSize are unchanged. This centers the text block and retains a large wordmark.
+Generated bitmaps were visually inspected, and white lettering fits inside the
+canvas's inscribed circle at all five Android densities (mdpi through xxxhdpi).
+This geometric check is not physical-device visual acceptance; confirm both outer
+letters on the reviewed replacement during the coordinated startup attempt.
+
+Android Release compilation after the SVG edit passed in 1m53.10s, with 0 errors
+and 132 existing warnings, using the same build command above. Retained log:
+`%TEMP%\wayfarermobile-splash-fix-android-build.log`. Whitespace and complete-branch
+Code Guard checks passed; SVG is outside Code Guard's supported source analysis
+and was checked through resource compilation and generated-artwork inspection.

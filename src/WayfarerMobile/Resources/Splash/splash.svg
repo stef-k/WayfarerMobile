@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
 <svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
-  <!-- Larger text version with proper spacing -->
-  <text x="64" y="45" font-family="Arial, sans-serif" font-size="28" font-weight="bold"
+  <!-- Center the lettering with clearance for Android's circular splash mask. -->
+  <text x="64" y="58" font-family="Arial, sans-serif" font-size="26" font-weight="bold"
         text-anchor="middle" fill="#FFFFFF">Wayfarer</text>
-  <text x="64" y="75" font-family="Arial, sans-serif" font-size="20"
+  <text x="64" y="88" font-family="Arial, sans-serif" font-size="20"
         text-anchor="middle" fill="#FFFFFF">Mobile</text>
 </svg>

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Splash screen: center the lettering and add clearance so Android's circular
+  mask does not clip the first and last letters of Wayfarer.
 - Android startup: remove the authentication preload's dependency on the UI
   context when synchronous settings readers join it. Controlled regression passes;
   physical startup acceptance remains blocked pending a reviewed replacement.
