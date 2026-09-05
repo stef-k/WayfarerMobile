@@ -1,6 +1,10 @@
 public static class FileSystem
 {
-    public static string CacheDirectory => Path.GetTempPath();
+    // Per-async-flow isolation prevents migration cleanup from touching another test's files.
+    public static AsyncLocal<string?> DatabaseTestRoot { get; } = new();
+    public static string AppDataDirectory => DatabaseTestRoot.Value
+        ?? throw new InvalidOperationException("A database test must set its isolated root.");
+    public static string CacheDirectory => DatabaseTestRoot.Value ?? Path.GetTempPath();
 }
 
 public sealed class Share
