@@ -97,7 +97,10 @@ In **Settings** > **Cache**, you can:
 
 1. Download the new version from the GitHub releases page
 2. Install over the existing app
-3. Your data and settings are preserved
+3. Keep app data intact: do not uninstall or clear storage before upgrading.
+
+For 1.2.0 → 1.3.0, read the [upgrade notes](releases/1.3.0.md) for intentional
+cache cleanup, preservation evidence and the pending device checklist.
 
 ### Updating (TestFlight)
 
@@ -134,7 +137,7 @@ Or via Settings:
 This can happen if:
 - Not enough storage space - free up space and retry
 - Corrupt download - re-download the APK
-- Conflicting signatures - uninstall any previous version first
+- Conflicting signatures - stop and obtain an APK signed with the original release key; do not uninstall to bypass an upgrade failure
 - Architecture mismatch - ensure you have the correct APK for your device
 
 ### "Unable to Install" (iOS)
