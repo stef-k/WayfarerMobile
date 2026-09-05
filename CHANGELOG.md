@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Android startup: remove the authentication preload's dependency on the UI
+  context when synchronous settings readers join it. Controlled regression passes;
+  physical startup acceptance remains blocked pending a reviewed replacement.
+  See [startup ANR investigation](docs/releases/android-startup-anr.md).
+
 ## 1.3.0
 
 Local preparation; Android device acceptance and publication are pending.

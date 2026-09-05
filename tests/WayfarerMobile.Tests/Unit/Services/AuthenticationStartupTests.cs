@@ -52,6 +52,7 @@ public sealed class AuthenticationStartupTests
             var completed = await Task.WhenAny(current, context.Posted.Task).WaitAsync(TimeSpan.FromSeconds(10));
             completed.Should().BeSameAs(current, "authentication loading must release its gate without the blocked caller context");
             var snapshot = await current;
+            await preload.WaitAsync(TimeSpan.FromSeconds(10));
             snapshot.ServerUrl.Should().Be("https://wayfarer.test");
             snapshot.ApiToken.Should().Be("test-token");
             snapshot.RoutingPartition.Should().NotBe(Guid.Empty);
