@@ -45,11 +45,13 @@ public sealed class CommittedAuthenticationAuthority
     public async Task PreloadAsync()
     {
         if (snapshot != null) return;
-        await gate.WaitAsync();
+        // Current can synchronously join this load on the caller's context. Neither
+        // loading nor releasing the gate may depend on that context being pumped.
+        await gate.WaitAsync().ConfigureAwait(false);
         try
         {
             if (snapshot != null) return;
-            var loaded = await LoadAsync();
+            var loaded = await LoadAsync().ConfigureAwait(false);
             Volatile.Write(ref snapshot, loaded);
             Interlocked.Increment(ref revision);
         }
@@ -120,17 +122,17 @@ public sealed class CommittedAuthenticationAuthority
     {
         try
         {
-            var envelope = await store.GetAsync(EnvelopeKey);
+            var envelope = await store.GetAsync(EnvelopeKey).ConfigureAwait(false);
             if (TryParse(envelope, out var loaded)) return loaded!;
             var legacyServer = string.IsNullOrEmpty(envelope)
-                ? await store.GetAsync(LegacyServerKey) : null;
+                ? await store.GetAsync(LegacyServerKey).ConfigureAwait(false) : null;
             var legacyToken = string.IsNullOrEmpty(envelope)
-                ? await store.GetAsync(LegacyTokenKey) : null;
+                ? await store.GetAsync(LegacyTokenKey).ConfigureAwait(false) : null;
             var normalizedServer = HostedRouteServerIdentity.Normalize(legacyServer);
             var migrated = normalizedServer.Length > 0 && !string.IsNullOrWhiteSpace(legacyToken)
                 ? new AuthenticationAuthoritySnapshot(normalizedServer, legacyToken, Guid.NewGuid())
                 : new AuthenticationAuthoritySnapshot(null, null, Guid.NewGuid());
-            await store.SetAsync(EnvelopeKey, JsonSerializer.Serialize(migrated));
+            await store.SetAsync(EnvelopeKey, JsonSerializer.Serialize(migrated)).ConfigureAwait(false);
             store.Remove(LegacyServerKey);
             store.Remove(LegacyTokenKey);
             return migrated;
