@@ -10,6 +10,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Infrastructure\Entities\LiveTileEntity.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Data\Services\DatabaseService.cs" Link="Production\DatabaseService.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Data\Entities\LiveTile.cs" Link="Production\LiveTile.cs" />
     <Compile Remove="Infrastructure\Entities\DownloadedTripEntity.cs" />
     <Compile Remove="Infrastructure\Entities\OfflinePlaceEntity.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Data\Entities\OfflineSegment.cs" Link="Production\OfflineSegment.cs" />

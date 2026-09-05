@@ -1,6 +1,37 @@
 # Changelog
 
-## 1.2.0
+## 1.3.0
+
+Local preparation; Android device acceptance and publication are pending.
+See [upgrade and review evidence](docs/releases/1.3.0.md).
+
+### Release changes since 1.2.0
+
+- Tracking and queue recovery: serialized recovery export suspends delivery across
+  restart, preserves pending rows and portable GUIDs, and supports explicit resume
+  and reconciliation after separate phone Timeline and backend imports (#250).
+- Timeline: CSV round trips preserve quoted multiline fields; GeoJSON exports use
+  standard structural names and imports also accept earlier Mobile casing (#247).
+- Maps: replaces bulk Trip raster downloads and speculative prefetch with
+  viewport-driven OSM browsing and HTTP-aware live caching. Trip content remains
+  available offline, but complete offline basemap coverage is not promised (#246, #255).
+- Trips: shared Segment geometry parsing and ordered intermediate Places preserve
+  saved paths, anchor order, map decorations and offline navigation (#248, #249).
+- Navigation: removes direct public OSRM requests; fresh routing goes through
+  authenticated Wayfarer with an explicit personal-provider-native mode choice.
+  Saved geometry and exact valid retained routes take priority; Direct remains
+  explicit and network-free. Mapbox Directions is unsupported (#262–#266).
+- Navigation lifecycle: cancellation keeps the Trip sheet open; screen-on ownership
+  is shared safely between navigation and the appearance setting (#266).
+- Groups: peer visibility uses the backend-compatible POST method; removes an
+  unused user-location SSE subscription while retaining group subscriptions (#257, #258).
+- Tooling: adopts the already-merged .NET SDK 10.0.400/workload 10.0.400.1 and
+  dependency updates; documentation-only CI and Android validation are risk-based
+  (#239–#242). No additional dependency upgrades in this preparation.
+- Upgrade: application ID stays `me.stefk.wayfarermobile`; version code increases
+  from published code 3 to 4. Local schema advances from 6 to 12, removing obsolete
+  Trip raster state and routing preferences while preserving user-authored content.
+
 
 ### 2026-09-03
 - **Feature: provider-native hosted routing modes (#538)**
@@ -30,6 +61,8 @@
   - Historical behavior paired saved Segment geometry priority with Direct fallback; the current flow requires explicit Direct
   - Retains safe server-returned attribution and hosted provenance only with the active route
   - Keeps non-persistent hosted routes and profile selections session-only
+
+## 1.2.0
 
 ### 2026-06-20
 - **Feature: Search private trips (#228, PR #231)**

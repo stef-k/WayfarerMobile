@@ -450,7 +450,7 @@
                                             <VerticalStackLayout BindableLayout.ItemsSource="{Binding AnchorTrail}"
                                                                  IsVisible="{Binding HasWaypoints}" Spacing="1">
                                                 <BindableLayout.ItemTemplate>
-                                                    <DataTemplate>
+                                                    <DataTemplate x:DataType="x:String">
                                                         <Label Text="{Binding .}" FontSize="11" LineBreakMode="WordWrap"
                                                                TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
                                                     </DataTemplate>
@@ -525,7 +525,7 @@
                     <VerticalStackLayout BindableLayout.ItemsSource="{Binding TripSheet.SelectedTripSegmentTrail}"
                                          IsVisible="{Binding TripSheet.SelectedTripSegment.HasWaypoints}" Spacing="6">
                         <BindableLayout.ItemTemplate>
-                            <DataTemplate>
+                            <DataTemplate x:DataType="x:String">
                                 <Label Text="{Binding .}" FontSize="15" LineBreakMode="WordWrap" />
                             </DataTemplate>
                         </BindableLayout.ItemTemplate>
