@@ -345,6 +345,7 @@ public partial class MapDisplayViewModel : BaseViewModel
         _selectedSegment = _selectedSegment == null
             ? null
             : trip.Segments.FirstOrDefault(segment => segment.Id == _selectedSegment.Id);
+        ReplaceSegmentRows(trip);
         _displayedTrip = trip;
         var placePoints = new List<MPoint>();
 
@@ -363,8 +364,7 @@ public partial class MapDisplayViewModel : BaseViewModel
         if (_tripAreasLayer != null)
             _tripLayerService.UpdateTripAreas(_tripAreasLayer, trip.AllAreas);
 
-        if (_tripSegmentsLayer != null)
-            _tripLayerService.UpdateTripSegments(_tripSegmentsLayer, trip.Segments, trip.AllPlaces);
+        RefreshOrdinarySegments();
 
         RefreshSelectedSegmentDecorations();
         return placePoints;
@@ -375,7 +375,7 @@ public partial class MapDisplayViewModel : BaseViewModel
         _selectedSegment = segment;
         if (_segmentBadgesLayer == null || _segmentChevronsLayer == null || _map == null) return;
         _tripLayerService.UpdateSelectedSegmentDecorations(
-            _segmentBadgesLayer, _segmentChevronsLayer, segment,
+            _segmentBadgesLayer, _segmentChevronsLayer, VisibleSelectedSegment(),
             (IReadOnlyCollection<TripPlace>?)_displayedTrip?.AllPlaces ?? Array.Empty<TripPlace>(),
             _map.Navigator.Viewport, _callbacks?.IsNavigating ?? false);
         _map.Refresh();
@@ -394,6 +394,7 @@ public partial class MapDisplayViewModel : BaseViewModel
     public void ClearTripLayers()
     {
         InvalidateTripLayerWork();
+        ReplaceSegmentRows(null);
         _displayedTrip = null;
         _selectedSegment = null;
         _tripPlacesLayer?.Clear();

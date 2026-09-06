@@ -129,6 +129,8 @@
     <PackageReference Include="Mapsui.Rendering.Skia" Version="5.1.0" />
     <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="8.3.1.3" />
     <Compile Include="../../src/WayfarerMobile/ViewModels/MainViewModel.Trips.cs" Link="Production/MainViewModel.Trips.cs" />
+    <Compile Include="../../src/WayfarerMobile/ViewModels/MapDisplayViewModel.Segments.cs" Link="Production/MapDisplayViewModel.Segments.cs" />
+    <Compile Include="../../src/WayfarerMobile/ViewModels/SegmentMapRow.cs" Link="Production/SegmentMapRow.cs" />
     <Compile Include="../../src/WayfarerMobile/ViewModels/MapDisplayViewModel.cs" Link="Production/MapDisplayViewModel.cs" />
     <Compile Include="../../src/WayfarerMobile/ViewModels/IMapDisplayCallbacks.cs" Link="Production/IMapDisplayCallbacks.cs" />
     <Compile Include="../../src/WayfarerMobile/Interfaces/IMapBuilder.cs" Link="Production/IMapBuilder.cs" />

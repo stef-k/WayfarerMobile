@@ -117,9 +117,13 @@ public class SegmentRenderingTests(ITestOutputHelper output)
 
     [Theory]
     [InlineData("walking")]
+    [InlineData("driving")]
+    [InlineData("train")]
+    [InlineData("cycling")]
+    [InlineData("unknown")]
     [InlineData("ferry")]
     [InlineData("flight")]
-    public void PreviouslyDashedModes_HaveAnUnbrokenBase(string mode)
+    public void AllModes_HaveAnUnbrokenBlueBase(string mode)
     {
         var (segment, _, viewport) = Train(10);
         segment.TransportMode = mode;
@@ -129,6 +133,7 @@ public class SegmentRenderingTests(ITestOutputHelper output)
         var style = Assert.IsType<VectorStyle>(Assert.Single(feature.Styles));
         Assert.NotNull(style.Line);
         Assert.Equal(PenStyle.Solid, style.Line.PenStyle);
+        Assert.Equal(Color.FromArgb(220, 13, 110, 253), style.Line.Color);
         using var bitmap = Render(viewport, [layer]);
         for (var x = 101; x < 539; x++) Assert.NotEqual(SKColors.White, bitmap.GetPixel(x, 200));
     }
@@ -210,7 +215,7 @@ public class SegmentRenderingTests(ITestOutputHelper output)
         Assert.NotNull(style.Line);
         Assert.Equal(2, geometry.NumPoints);
         Assert.Equal(4, style.Line.Width);
-        Assert.Equal(Color.FromArgb(220, 156, 39, 176), style.Line.Color);
+        Assert.Equal(Color.FromArgb(220, 13, 110, 253), style.Line.Color);
         using var ordinary = Render(viewport, [lines]);
         var start = viewport.WorldToScreen(geometry.StartPoint.X, geometry.StartPoint.Y);
         var end = viewport.WorldToScreen(geometry.EndPoint.X, geometry.EndPoint.Y);

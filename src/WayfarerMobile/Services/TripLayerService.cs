@@ -238,7 +238,7 @@ public class TripLayerService : ITripLayerService
                     })
                     .ToArray();
 
-                // Create line feature with transport mode style
+                // Create the ordinary blue line, retaining transport-mode width
                 var lineString = new LineString(mapCoordinates);
                 var style = CreateSegmentStyle(segment.TransportMode);
 
@@ -560,7 +560,7 @@ public class TripLayerService : ITripLayerService
     #region Segment Styles
 
     /// <summary>
-    /// Creates a style for a segment based on transport mode.
+    /// Creates the Web blue Segment palette with the existing transport-mode width.
     /// </summary>
     private static IStyle CreateSegmentStyle(string? transportMode)
     {
@@ -583,29 +583,13 @@ public class TripLayerService : ITripLayerService
     /// </summary>
     private static (Color color, double width) GetSegmentStyleParameters(string? mode)
     {
-        return mode switch
+        var width = mode switch
         {
-            // Driving - blue solid line
-            "driving" or "car" => (Color.FromArgb(220, 66, 133, 244), 4),
-
-            // Walking - green solid line
-            "walking" or "walk" or "foot" => (Color.FromArgb(220, 76, 175, 80), 3),
-
-            // Cycling - orange solid line
-            "cycling" or "bicycle" or "bike" => (Color.FromArgb(220, 255, 152, 0), 3),
-
-            // Transit/Public transport - purple solid line
-            "transit" or "bus" or "train" or "subway" => (Color.FromArgb(220, 156, 39, 176), 4),
-
-            // Ferry/Boat - teal solid line
-            "ferry" or "boat" => (Color.FromArgb(220, 0, 150, 136), 3),
-
-            // Flight - light blue solid line
-            "flight" or "plane" or "air" => (Color.FromArgb(180, 3, 169, 244), 2),
-
-            // Default - gray solid line
-            _ => (Color.FromArgb(200, 158, 158, 158), 3)
+            "driving" or "car" or "transit" or "bus" or "train" or "subway" => 4,
+            "flight" or "plane" or "air" => 2,
+            _ => 3
         };
+        return (Color.FromArgb(220, 13, 110, 253), width);
     }
 
     #endregion
