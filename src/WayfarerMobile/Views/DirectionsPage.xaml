@@ -35,6 +35,7 @@
             <Label Text="Load travel modes from your routing provider." />
             <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
             <Label Text="{Binding Status}" />
+            <Label Text="Route mode" IsVisible="{Binding HasModes}" FontAttributes="Bold" />
             <VerticalStackLayout BindableLayout.ItemsSource="{Binding Modes}" Spacing="8">
                 <BindableLayout.ItemTemplate>
                     <DataTemplate x:DataType="routing:HostedProviderMode">

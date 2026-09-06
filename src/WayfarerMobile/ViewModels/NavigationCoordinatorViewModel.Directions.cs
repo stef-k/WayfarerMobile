@@ -61,6 +61,11 @@ public partial class NavigationCoordinatorViewModel
                 if (catalog?.Choices?.Contains(mode!) != true) return;
                 selectedMode = mode;
             }
+            if (selectedMode == null)
+            {
+                catalog = null;
+                model.Modes = [];
+            }
             model.IsBusy = true;
             model.IsCalculating = selectedMode != null;
             model.CanRetry = false;
@@ -98,7 +103,7 @@ public partial class NavigationCoordinatorViewModel
                     catalog = response;
                     selectedMode = null;
                     model.Modes = response.Choices!;
-                    model.Status = "Route mode";
+                    model.Status = string.Empty;
                 }
                 else if (response.Outcome == HostedRoutingOutcome.Success)
                 {

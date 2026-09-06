@@ -6,6 +6,31 @@ namespace WayfarerMobile.Tests.Unit.ViewModels;
 public sealed partial class NavigationCoordinatorTripChooserTests
 {
     [Fact]
+    public async Task CancelDuringCapability_PreventsSubsequentRouteAndActivation()
+    {
+        var scenario = CreateScenario(null);
+        var capability = new TaskCompletionSource<HostedRoutingCapability>(TaskCreationOptions.RunContinuationsAsynchronously);
+        scenario.Api.Setup(api => api.GetCapabilityAsync(Guid.Empty, "walk", Identity, It.IsAny<CancellationToken>()))
+            .Returns(() => capability.Task);
+        Task? calculating = null;
+        scenario.Callbacks.Setup(callback => callback.ShowDirectionsAsync(It.IsAny<DirectionsViewModel>()))
+            .Returns<DirectionsViewModel>(async model =>
+            {
+                await model.LoadCommand.ExecuteAsync(null);
+                calculating = model.ChooseModeCommand.ExecuteAsync(model.Modes.Single());
+                model.Status.Should().Be("Calculating route…");
+                await model.CancelCommand.ExecuteAsync(null);
+            });
+
+        (await scenario.Coordinator.StartNavigationToPlaceAsync(scenario.Destination.Id.ToString())).Should().BeFalse();
+        capability.SetResult(HostedRoutingCapability.Available(Guid.Empty, Identity, Identity,
+            [new("Test", "https://example.test")]));
+        await calculating!;
+        scenario.Api.Verify(api => api.GetRouteAsync(It.IsAny<HostedRouteRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        scenario.Navigation.ActiveRoute.Should().BeNull();
+    }
+
+    [Fact]
     public async Task PinExternalMaps_WithoutLocation_RemainsExternalAndMakesZeroHostedCalls()
     {
         var scenario = CreateScenario("External Maps");

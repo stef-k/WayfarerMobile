@@ -28,10 +28,12 @@ public partial class DirectionsViewModel : ObservableObject
     [ObservableProperty] private string _status = string.Empty;
     public bool CanChoose => !IsBusy && !IsComplete;
     public bool CanChooseDirect => !IsCalculating && !IsComplete;
+    public bool HasModes => Modes.Count > 0;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(CanChoose))] private bool _isBusy;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(CanChooseDirect))] private bool _isCalculating;
     [ObservableProperty] private bool _canRetry;
-    [ObservableProperty] private IReadOnlyList<HostedProviderMode> _modes = [];
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(HasModes))]
+    private IReadOnlyList<HostedProviderMode> _modes = [];
 
     public void Complete()
     {

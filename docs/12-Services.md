@@ -569,10 +569,26 @@ See [#270 implementation and Android observation plan](releases/navigation-start
 
 Hosted routes are authenticated, provider-neutral results. Provider credentials and provider selection remain on
 Wayfarer. Every fresh online route first presents exactly the active provider's discovered native modes, with no
-preselection or inference from the Segment's independent manual-planning Transport Profile. Trip navigation offers
-an explicit local Direct choice before discovery; the dropped-pin picker also exposes Direct without network work.
+preselection or inference from the Segment's independent manual-planning Transport Profile. Trip Places and dropped pins
+use one **Directions** page. Initially, **Direct**, **Show route options**, and **Cancel** make no hosted calls.
+Direct means “Straight-line guidance. No internet needed.” Show route options means
+“Load travel modes from your routing provider.” Only that explicit action loads the catalog; selecting a returned
+**Route mode** then authorizes routing. Segment context appears in wrapping body text:
+“This choice does not change the Segment's Transport Profile.” There is no separate method picker or OK confirmation.
+The page uses the available viewport and safe area, with wrapping labels, vertical scrolling and font scaling.
+Group navigation keeps its existing method picker and Main handoff; choosing hosted there does not add another method choice.
 Choosing Direct before the hosted path makes no discovery, capability, or route contact. Direct remains an explicit
 option in subsequent hosted/retained choices, while Cancel, Back, and dismissal are separate cancellation results.
+During **Loading route options…**, Direct and Cancel remain usable and duplicate loads are rejected.
+During **Calculating route…**, Cancel remains usable. Cancellation detaches pending work, checks cancellation/freshness
+before subsequent requests, and rejects late completion. Already-issued requests cannot be undone.
+Catalog failure displays “Route options are unavailable. Try again or choose Direct.” Its **Try again** reloads only
+the catalog. Calculation failure displays “The route could not be calculated. Try again or choose Direct.” Its retry
+revalidates invocation and capability/catalog/provider authority before routing. Catalog changes require explicit
+reselection; neither failure silently selects Direct. Stale location/target/account feedback remains actionable.
+Dropped-pin **External Maps** remains an external handoff, even without a current location; it never counts as
+successful internal startup or triggers hosted discovery. Unavailable presentation reports startup failure.
+See [#271 evidence and combined acceptance record](releases/routing-choice-flow-271.md).
 The active route retains linked attribution plus safe provenance:
 optional Segment transport profile, provider mode, opaque personal-provider authority identity, provider, storage mode, and
 the normalized backend generation timestamp. It contains no bearer token, credentials, or provider endpoint and
@@ -602,8 +618,10 @@ opaque selected-authority identity, optional Segment transport-profile GUID, can
 sequence. Coordinates reuse #260's signed 10^-5-degree integer representation. Offline use performs no network work
 and displays retained/offline source, clamped age, linked attribution, and safe hosted provenance. An exact match
 offers **Use retained route**, **Refresh with Wayfarer**, and **Direct**. Refresh bypasses retained reuse only for that
-interaction while keeping retained guidance active; failure preserves it, success may replace it atomically, and the
-choice is not persisted.
+interaction while keeping existing guidance active; failure preserves it and success may replace it atomically.
+In the progressive Directions page, retained reuse and refresh are available in that same surface. A failed refresh
+keeps **Use retained route**, **Direct**, **Try again**, and **Cancel** available; accepting the retained route is explicit.
+The choice is not persisted.
 
 Chooser entries are scoped to the exact discovery catalog displayed. Mobile submits that catalog identity, the exact
 chosen provider-mode key, and the Segment's unchanged planning `TransportProfileId`; a `catalog-changed` capability

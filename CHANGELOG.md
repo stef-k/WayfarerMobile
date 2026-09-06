@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Directions (#271): Trip Places and dropped pins use one scrolling surface with
+  explicit Direct, provider-option loading and mode selection. Loading and route
+  failures offer separate explicit retries; cancellation rejects late work. Retained
+  routes and External Maps remain available. Combined device acceptance is pending.
 - Navigation (#270): offer Trip Direct before hosted discovery, keep dismissal separate,
   and use the current location for Direct after selection. Trip sheets and dropped pins
   remain until essential route/map/HUD startup succeeds. Stale hosted results offer an
