@@ -731,7 +731,7 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     async Task<Views.Controls.NavigationMethod?> IContextMenuCallbacks.ShowNavigationPickerAsync()
     {
         var page = Application.Current?.Windows.FirstOrDefault()?.Page;
-        if (page == null) return null;
+        if (page == null) throw new InvalidOperationException("Navigation selection is unavailable. Reopen the map and try again.");
 
         var mainPage = page as MainPage ?? (Shell.Current?.CurrentPage as MainPage);
 

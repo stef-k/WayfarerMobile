@@ -186,6 +186,45 @@ public sealed partial class NavigationCoordinatorTripChooserTests
         scenario.Coordinator.IsNavigating.Should().BeTrue();
         scenario.Hud.IsNavigating.Should().BeTrue();
         scenario.Api.Verify(api => api.DiscoverAsync(It.IsAny<CancellationToken>()), Times.Never);
+        if (change == "dismiss")
+            scenario.Dialogs.Verify(dialog => dialog.ShowInfoAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DroppedPin_UnavailablePicker_ReportsFailureAndPreservesGuidanceWithoutAPage()
+    {
+        var scenario = CreateScenario("Direct");
+        var prior = await scenario.Coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.02, 23.02, "Existing", direct: true);
+        await scenario.Coordinator.StartNavigationWithRouteAsync(prior!);
+        // Exercise Main's existing picker callback contract through the real context menu.
+        var context = CreateContext(scenario, null, () =>
+            throw new InvalidOperationException("Navigation selection is unavailable. Reopen the map and try again."));
+        Application.Current = null;
+        scenario.Dialogs.Setup(dialog => dialog.ShowInfoAsync("Navigation", It.IsAny<string>()))
+            .Returns<string, string>((title, message) => new DialogService().ShowInfoAsync(title, message));
+        scenario.WakeLock.Invocations.Clear();
+        scenario.VisitNotifications.Invocations.Clear();
+        scenario.Audio.Invocations.Clear();
+
+        await context.NavigateToContextLocationCommand.ExecuteAsync(null);
+
+        scenario.Dialogs.Verify(dialog => dialog.ShowInfoAsync("Navigation",
+            "Navigation could not start. Reopen the map and try Directions again."), Times.Once);
+        // The real DialogService safely returns without a page; no displayed dialog is claimed.
+        context.HasDroppedPin.Should().BeTrue();
+        context.DroppedPinLatitude.Should().Be(scenario.Destination.Latitude);
+        context.DroppedPinLongitude.Should().Be(scenario.Destination.Longitude);
+        scenario.Navigation.ActiveRoute.Should().BeSameAs(prior);
+        scenario.Coordinator.IsNavigating.Should().BeTrue();
+        scenario.Hud.IsNavigating.Should().BeTrue();
+        scenario.Hud.DestinationName.Should().Be("Existing");
+        scenario.Callbacks.Verify(callback => callback.ShowNavigationRoute(It.IsAny<NavigationRoute>()), Times.Once);
+        scenario.Callbacks.Verify(callback => callback.ClearNavigationRoute(), Times.Never);
+        scenario.WakeLock.Invocations.Should().BeEmpty();
+        scenario.VisitNotifications.Invocations.Should().BeEmpty();
+        scenario.Audio.Invocations.Should().BeEmpty();
+        scenario.Api.Verify(api => api.DiscoverAsync(It.IsAny<CancellationToken>()), Times.Never);
+        VerifyNoProviderRequest(scenario.Api);
     }
 
     private static ContextMenuViewModel CreateContext(Scenario scenario, NavigationMethod? choice, Action? whileChoosing = null)
