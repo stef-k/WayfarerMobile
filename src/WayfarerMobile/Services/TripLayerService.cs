@@ -340,31 +340,65 @@ public class TripLayerService : ITripLayerService
             badgeLayer.Add(feature);
         }
 
+        AddSelectedSegmentChevrons(chevronLayer, resolution, places, viewport);
+        badgeLayer.DataHasChanged();
+        chevronLayer.DataHasChanged();
+    }
+
+    private static void AddSelectedSegmentChevrons(
+        WritableLayer chevronLayer, SegmentAnchorResolution resolution,
+        IReadOnlyCollection<TripPlace> places, Viewport viewport)
+    {
         var projected = resolution.Geometry.Select(point =>
         {
             var world = SphericalMercator.FromLonLat(point.Longitude, point.Latitude);
             var screen = viewport.WorldToScreen(world.x, world.y);
             return new ProjectedRoutePoint(screen.X, screen.Y);
         }).ToList();
-        foreach (var chevron in SegmentChevronPlacer.Place(projected))
+        var markerPositions = places.Select(place =>
         {
-            var world = viewport.ScreenToWorld(chevron.X, chevron.Y);
-            chevronLayer.Add(new GeometryFeature(new Point(world.X, world.Y))
+            var world = SphericalMercator.FromLonLat(place.Longitude, place.Latitude);
+            return viewport.WorldToScreen(world.x, world.y);
+        }).ToList();
+        foreach (var chevron in SegmentChevronPlacer.Place(projected, Math.Sqrt(125) + 2))
+        {
+            // Open 10 x 10 logical-unit arms; round 4-unit casing bounds the rendered envelope.
+            var angle = chevron.AngleDegrees * Math.PI / 180;
+            var backX = chevron.X - Math.Cos(angle) * 10;
+            var backY = chevron.Y - Math.Sin(angle) * 10;
+            var normalX = -Math.Sin(angle) * 5;
+            var normalY = Math.Cos(angle) * 5;
+            var arm = new[]
             {
-                Styles = [new SymbolStyle
-                {
-                    SymbolType = SymbolType.Triangle,
-                    SymbolScale = 0.45,
-                    SymbolRotation = chevron.AngleDegrees + 90,
-                    RotateWithMap = false,
-                    Fill = new Brush(Color.White),
-                    Outline = new Pen(Color.Black, 2)
-                }]
+                new MPoint(backX + normalX, backY + normalY),
+                new MPoint(chevron.X, chevron.Y),
+                new MPoint(backX - normalX, backY - normalY)
+            };
+            // Include casing and 24-unit clearance around Place tips, also on folded routes.
+            // The upper envelope covers the 28 x 45 icon at scale 1.1 and offset Y=-16.
+            var left = arm.Min(p => p.X) - 2;
+            var right = arm.Max(p => p.X) + 2;
+            var top = arm.Min(p => p.Y) - 2;
+            var bottom = arm.Max(p => p.Y) + 2;
+            if (markerPositions.Any(p => left < p.X + 24 && right > p.X - 24 &&
+                    top < p.Y + 24 && bottom > p.Y - 48)) continue;
+            var coordinates = arm.Select(p =>
+            {
+                // Inverse projection lets Mapsui apply map rotation exactly once.
+                var world = viewport.ScreenToWorld(p.X, p.Y);
+                return new Coordinate(world.X, world.Y);
+            }).ToArray();
+            chevronLayer.Add(new GeometryFeature(new LineString(coordinates))
+            {
+                Styles = [CreateChevronStroke(Color.Black, 4), CreateChevronStroke(Color.White, 2)]
             });
         }
-        badgeLayer.DataHasChanged();
-        chevronLayer.DataHasChanged();
     }
+
+    private static VectorStyle CreateChevronStroke(Color color, double width) => new()
+    {
+        Line = new Pen(color, width) { PenStrokeCap = PenStrokeCap.Round, StrokeJoin = StrokeJoin.Round }
+    };
 
     private static LabelStyle CreateSegmentBadgeStyle(string label) => new()
     {
@@ -546,19 +580,13 @@ public class TripLayerService : ITripLayerService
     /// </summary>
     private static IStyle CreateSegmentStyle(string? transportMode)
     {
-        var (color, width, dashPattern) = GetSegmentStyleParameters(transportMode?.ToLowerInvariant());
+        var (color, width) = GetSegmentStyleParameters(transportMode?.ToLowerInvariant());
 
         var pen = new Pen(color, width)
         {
             PenStrokeCap = PenStrokeCap.Round,
             StrokeJoin = StrokeJoin.Round
         };
-
-        if (dashPattern != null)
-        {
-            pen.PenStyle = PenStyle.UserDefined;
-            pen.DashArray = dashPattern;
-        }
 
         return new VectorStyle
         {
@@ -569,30 +597,30 @@ public class TripLayerService : ITripLayerService
     /// <summary>
     /// Gets style parameters for a given transport mode.
     /// </summary>
-    private static (Color color, double width, float[]? dashPattern) GetSegmentStyleParameters(string? mode)
+    private static (Color color, double width) GetSegmentStyleParameters(string? mode)
     {
         return mode switch
         {
             // Driving - blue solid line
-            "driving" or "car" => (Color.FromArgb(220, 66, 133, 244), 4, null),
+            "driving" or "car" => (Color.FromArgb(220, 66, 133, 244), 4),
 
-            // Walking - green dashed line
-            "walking" or "walk" or "foot" => (Color.FromArgb(220, 76, 175, 80), 3, new float[] { 8, 4 }),
+            // Walking - green solid line
+            "walking" or "walk" or "foot" => (Color.FromArgb(220, 76, 175, 80), 3),
 
             // Cycling - orange solid line
-            "cycling" or "bicycle" or "bike" => (Color.FromArgb(220, 255, 152, 0), 3, null),
+            "cycling" or "bicycle" or "bike" => (Color.FromArgb(220, 255, 152, 0), 3),
 
             // Transit/Public transport - purple solid line
-            "transit" or "bus" or "train" or "subway" => (Color.FromArgb(220, 156, 39, 176), 4, null),
+            "transit" or "bus" or "train" or "subway" => (Color.FromArgb(220, 156, 39, 176), 4),
 
-            // Ferry/Boat - teal dashed line
-            "ferry" or "boat" => (Color.FromArgb(220, 0, 150, 136), 3, new float[] { 12, 6 }),
+            // Ferry/Boat - teal solid line
+            "ferry" or "boat" => (Color.FromArgb(220, 0, 150, 136), 3),
 
-            // Flight - light blue dotted line
-            "flight" or "plane" or "air" => (Color.FromArgb(180, 3, 169, 244), 2, new float[] { 4, 4 }),
+            // Flight - light blue solid line
+            "flight" or "plane" or "air" => (Color.FromArgb(180, 3, 169, 244), 2),
 
             // Default - gray solid line
-            _ => (Color.FromArgb(200, 158, 158, 158), 3, null)
+            _ => (Color.FromArgb(200, 158, 158, 158), 3)
         };
     }
 

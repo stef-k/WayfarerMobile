@@ -28,6 +28,11 @@ Malformed or missing geometry is skipped without inventing connections or reques
 The reported Android initial-visibility symptom remains pending combined device acceptance
 with the [Segment presentation correction (#273)](https://github.com/stef-k/WayfarerMobile/issues/273).
 
+Segments use continuous lines in their transport-mode colors, including walking,
+ferry and flight. Selecting a Segment adds compact open black/white direction chevrons
+and its existing anchor badges. Cues follow the saved route, stay clear of Place markers,
+and are suppressed on short routes or during navigation. Places remain above the decorations.
+
 The map uses the standard OpenStreetMap layer during ordinary interactive pan and zoom. Tiles requested by the renderer are saved in the bounded live cache as they are viewed. Previously viewed tiles may remain available while cached, but the live cache is not an offline-area package and does not promise complete coverage.
 
 The live cache can be inspected and cleared from **Settings** > **Map Cache**. Clearing it does not remove downloaded Trip data.
