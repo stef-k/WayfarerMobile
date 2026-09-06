@@ -109,6 +109,7 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
         scenario.Navigation.ActiveRoute!.IsDirectRoute.Should().BeTrue();
         scenario.Coordinator.IsNavigating.Should().BeTrue();
         scenario.Callbacks.Verify(value => value.ShowNavigationRoute(scenario.Navigation.ActiveRoute), Times.Once);
+        scenario.Api.Verify(client => client.DiscoverAsync(It.IsAny<CancellationToken>()), Times.Never);
         VerifyNoProviderRequest(scenario.Api);
     }
 
