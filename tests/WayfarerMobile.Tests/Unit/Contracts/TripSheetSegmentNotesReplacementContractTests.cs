@@ -11,7 +11,7 @@ public class TripSheetSegmentNotesReplacementContractTests
             "src", "WayfarerMobile", "ViewModels", "TripSheetViewModel.cs");
         var source = File.ReadAllText(Path.GetFullPath(sourcePath));
         var handlerStart = source.IndexOf("private void OnLoadedTripChanged", StringComparison.Ordinal);
-        var handlerEnd = source.IndexOf("private static IReadOnlyList<string> CreateSegmentTrail", handlerStart, StringComparison.Ordinal);
+        var handlerEnd = source.IndexOf("private async void OnSyncRejected", handlerStart, StringComparison.Ordinal);
         var handler = source[handlerStart..handlerEnd];
 
         handler.Should().Contain("var previouslySelectedSegment = SelectedTripSegment;");

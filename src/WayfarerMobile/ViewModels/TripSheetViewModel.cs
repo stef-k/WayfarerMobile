@@ -115,6 +115,7 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
     [NotifyPropertyChangedFor(nameof(TripSheetSubtitle))]
     [NotifyPropertyChangedFor(nameof(SelectedTripSegmentNotesHtml))]
     [NotifyPropertyChangedFor(nameof(SelectedTripSegmentTrail))]
+    [NotifyPropertyChangedFor(nameof(SelectedTripSegmentDetails))]
     private TripSegment? _selectedTripSegment;
 
     /// <summary>
@@ -327,17 +328,12 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
     /// </summary>
     public bool IsTripSheetShowingSegment => SelectedTripSegment != null;
 
-    public IReadOnlyList<string> SelectedTripSegmentTrail
-    {
-        get
-        {
-            var segment = SelectedTripSegment;
-            if (segment == null || !segment.HasWaypoints) return Array.Empty<string>();
-            if (segment.AnchorTrail.Count == 0 && LoadedTrip != null)
-                segment.AnchorTrail = CreateSegmentTrail(segment, LoadedTrip.AllPlaces);
-            return segment.AnchorTrail;
-        }
-    }
+    public SegmentDetailsPresentation? SelectedTripSegmentDetails => SelectedTripSegment is { } segment
+        ? SegmentPresentationProjector.Project(segment, LoadedTrip?.AllPlaces ?? [])
+        : null;
+
+    public IReadOnlyList<string> SelectedTripSegmentTrail =>
+        SelectedTripSegmentDetails?.Trail ?? Array.Empty<string>();
 
     /// <summary>
     /// Gets whether the trip sheet is showing any detail view (not overview).
@@ -408,9 +404,6 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
 
             if (IsTripSheetShowingArea && SelectedTripArea != null)
                 return "Tap to view on map";
-
-            if (IsTripSheetShowingSegment && SelectedTripSegment != null)
-                return $"{SelectedTripSegment.OriginName} → {SelectedTripSegment.DestinationName}";
 
             return null;
         }
@@ -591,15 +584,6 @@ public partial class TripSheetViewModel : BaseViewModel, ITripItemEditorCallback
         OnPropertyChanged(nameof(TripNotesHtml));
         OnPropertyChanged(nameof(TripSheetTitle));
         OnPropertyChanged(nameof(TripSheetSubtitle));
-    }
-
-    private static IReadOnlyList<string> CreateSegmentTrail(TripSegment segment, IReadOnlyCollection<TripPlace> places)
-    {
-        var parsed = TripSegmentGeometryParser.Parse(segment.Geometry);
-        IReadOnlyList<SegmentCoordinate>? geometry = parsed.IsSuccess
-            ? parsed.Coordinates.Select(point => new SegmentCoordinate(point.Latitude, point.Longitude)).ToList()
-            : parsed.Failure == SegmentGeometryFailure.Empty ? null : Array.Empty<SegmentCoordinate>();
-        return SegmentPresentationProjector.CreateTrail(segment, places, geometry);
     }
 
     /// <summary>

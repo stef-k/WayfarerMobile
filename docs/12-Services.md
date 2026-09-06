@@ -476,6 +476,17 @@ rendered bounds overlapping Place marker envelopes are suppressed, including way
 and folds. Badge measurement/coalescing, navigation suppression and tap routing are unchanged.
 See [renderer evidence and remaining physical acceptance](releases/segment-rendering-273.md).
 
+Drawer details use `SegmentPresentationProjector.Project` through `TripSheetViewModel`.
+It retains the existing anchor identity/order validation for nonempty waypoint data,
+while endpoint-only text remains independent of geometry validity. Presentation counts
+are separate: trusted intermediate Places versus actual parser-decoded geometry vertices
+(including repeats). Empty waypoint collections cannot prove zero after DTO/offline
+normalization and remain unavailable; failed anchor validation never yields a partial
+numeric count or Via trail. No fallback geometry contributes to the route-point count.
+The projector adds no routing authority or requests and leaves map ownership unchanged.
+See [drawer validation and limitations](releases/segment-drawer-274.md).
+
+
 **Features**:
 - Dynamic icon caching with colorization
 - Place selection highlighting

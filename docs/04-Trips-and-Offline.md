@@ -7,6 +7,22 @@ intermediate Segment Places online and offline. Earlier mobile versions retain
 the endpoints and effective route geometry, but do not provide full
 intermediate-Place navigation or Start/Via/End presentation.
 
+Selected **Segment** details show full Place names in one vertical **A — Start /
+B — Via 1 / … / End** trail. Start and End remain separate for closed loops and
+when there are no intermediate Places or geometry. Names retain commas and region
+suffixes; transport and measurements wrap or stack within the scrollable drawer.
+Notes and Edit Notes use the existing actions.
+
+**Waypoints** counts valid ordered intermediate saved Places, excluding endpoints.
+Empty collections display **Waypoint count unavailable**: the online/offline model
+currently loses the distinction between absent, malformed and explicitly empty data.
+Invalid waypoint data also stays unavailable, while independently known endpoint text
+remains visible. **Route points** counts vertices in geometry decoded by Mobile,
+including repeated coordinates. Missing, malformed or unsupported geometry displays
+**Route points unavailable**; Mobile does not generate a line for this count.
+Neither count nor the endpoint trail establishes navigability. Mounted wrapping,
+scrolling and action reachability await the single combined production candidate.
+
 ## Downloading a Trip
 
 Tap **Download** on a Trip to store its metadata and geographic content locally. Downloaded content includes:
