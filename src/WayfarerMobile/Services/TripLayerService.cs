@@ -206,7 +206,8 @@ public class TripLayerService : ITripLayerService
     }
 
     /// <inheritdoc />
-    public void UpdateTripSegments(WritableLayer layer, IEnumerable<TripSegment> segments)
+    public void UpdateTripSegments(WritableLayer layer, IEnumerable<TripSegment> segments,
+        IReadOnlyCollection<TripPlace>? places = null)
     {
         layer.Clear();
 
@@ -216,24 +217,23 @@ public class TripLayerService : ITripLayerService
         var segmentCount = 0;
         foreach (var segment in segmentList)
         {
-            if (string.IsNullOrEmpty(segment.Geometry))
-            {
-                _logger.LogWarning("Skipping segment {Id}: no geometry", segment.Id);
-                continue;
-            }
-
             var parseResult = TripSegmentGeometryParser.Parse(segment.Geometry);
+            var coordinates = parseResult.Coordinates;
             if (!parseResult.IsSuccess)
             {
-                if (parseResult.Failure != SegmentGeometryFailure.Empty)
+                var connection = SegmentDisplayGeometry.ResolveStraightConnection(segment, places ?? []);
+                if (connection is null)
+                {
                     _logger.LogWarning("Skipping segment {SegmentId}: geometry failure {Failure}", segment.Id, parseResult.Failure);
-                continue;
+                    continue;
+                }
+                coordinates = connection.Geometry.Select(p => (p.Latitude, p.Longitude)).ToList();
             }
 
             try
             {
                 // Convert to map coordinates
-                var mapCoordinates = parseResult.Coordinates
+                var mapCoordinates = coordinates
                     .Select(p =>
                     {
                         var (x, y) = SphericalMercator.FromLonLat(p.Longitude, p.Latitude);
@@ -302,10 +302,12 @@ public class TripLayerService : ITripLayerService
         var geometry = parsed.IsSuccess
             ? parsed.Coordinates.Select(point => new SegmentCoordinate(point.Latitude, point.Longitude)).ToList()
             : null;
-        var resolution = SegmentAnchorResolver.Resolve(segment, places, geometry);
-        if (!resolution.IsValid)
+        var resolution = parsed.IsSuccess
+            ? SegmentAnchorResolver.Resolve(segment, places, geometry)
+            : SegmentDisplayGeometry.ResolveStraightConnection(segment, places);
+        if (resolution is null || !resolution.IsValid)
         {
-            _logger.LogWarning("Skipping Segment decorations for {SegmentId}: {Failure}", segment.Id, resolution.Failure);
+            _logger.LogWarning("Skipping Segment decorations for {SegmentId}: {Failure}", segment.Id, resolution?.Failure);
             badgeLayer.DataHasChanged();
             chevronLayer.DataHasChanged();
             return;

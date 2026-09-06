@@ -60,7 +60,8 @@ public interface ITripLayerService
     /// </summary>
     /// <param name="layer">The layer to update.</param>
     /// <param name="segments">The list of trip segments with geometry.</param>
-    void UpdateTripSegments(WritableLayer layer, IEnumerable<TripSegment> segments);
+    void UpdateTripSegments(WritableLayer layer, IEnumerable<TripSegment> segments,
+        IReadOnlyCollection<TripPlace>? places = null);
 
     /// <summary>
     /// Clears all trip segments.
