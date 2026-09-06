@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Trips (#274): selected Segment details show one wrapping Start/Via/End Place trail,
+  with separate endpoint rows even without geometry. Remove repeated endpoint headings
+  and stack measurements. Waypoint and actual decoded route-point counts are independent;
+  empty or invalid waypoint data remains unavailable. Combined device acceptance is pending.
+
 - Trips (#273): give every eligible Segment a continuous mode-colored base stroke;
   selected direction cues use compact open black/white chevrons with Place clearance.
   Controlled Skia rendering passes, but does not reproduce or explain the original

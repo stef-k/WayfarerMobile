@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using WayfarerMobile.Core.Helpers;
 using WayfarerMobile.Core.Models;
 
