@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Segment investigation (#272/#273/#274): reproduced missing ordinary geometry with
+  selected endpoint-derived decorations and unavailable counts using synthetic data.
+  See [pending contract decision](docs/segment-visibility-contract-decision.md).
+  No runtime correction or physical acceptance is claimed by this investigation.
+
 - Location indicator (#275): invalidate retained Mapsui feature paths after updates so
   the accuracy circle and heading cone move with the dot and reflect current heading
   and radius. Controlled production rendering passes; combined physical acceptance is pending.

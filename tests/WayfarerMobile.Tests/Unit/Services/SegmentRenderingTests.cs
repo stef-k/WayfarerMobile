@@ -18,6 +18,37 @@ public class SegmentRenderingTests(ITestOutputHelper output)
 {
     private readonly TripLayerService _service = new(NullLogger<TripLayerService>.Instance);
 
+    [Fact]
+    public void MissingApiGeometry_AfterOfflineReconstruction_HasDecorationsButNoOrdinaryLineOrCounts()
+    {
+        // Characterizes the contract-decision boundary; this is not acceptance of line parity.
+        var (_, places, viewport) = Train(10);
+        var json = $$"""
+            {"id":"11111111-1111-1111-1111-111111111111","mode":"train",
+             "fromPlaceId":"{{places[0].Id}}","toPlaceId":"{{places[1].Id}}",
+             "routeJson":null,"waypoints":[],"hasCustomRoute":false}
+            """;
+        var downloaded = System.Text.Json.JsonSerializer.Deserialize<TripSegment>(json)!;
+        var restored = WayfarerMobile.Core.Helpers.OfflineSegmentWaypointMapper.Reconstruct(
+            downloaded.Id, downloaded.OriginId!.Value, downloaded.DestinationId!.Value,
+            downloaded.Geometry, SegmentWaypointJson.Serialize(downloaded.Waypoints), downloaded.HasCustomRoute);
+        Assert.Null(restored.Geometry);
+        Assert.Empty(restored.Waypoints);
+        using var lines = new WritableLayer { Style = null };
+        using var cues = new WritableLayer { Style = null };
+        using var badges = new WritableLayer { Style = null };
+        _service.UpdateTripSegments(lines, [restored]);
+        Assert.Empty(lines.GetFeatures());
+        _service.UpdateSelectedSegmentDecorations(badges, cues, restored, places, viewport, false);
+        Assert.Empty(lines.GetFeatures());
+        Assert.Equal(2, badges.GetFeatures().Count());
+        Assert.NotEmpty(cues.GetFeatures());
+        var details = WayfarerMobile.Core.Helpers.SegmentPresentationProjector.Project(restored, places);
+        Assert.Equal("Waypoint count unavailable", details.WaypointCountText);
+        Assert.Equal("Route points unavailable", details.RoutePointCountText);
+        Assert.Null(restored.Geometry);
+    }
+
     [Theory]
     [InlineData("walking")]
     [InlineData("ferry")]
