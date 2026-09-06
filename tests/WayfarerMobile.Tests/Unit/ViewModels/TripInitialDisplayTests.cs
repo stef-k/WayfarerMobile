@@ -99,11 +99,43 @@ public class TripInitialDisplayTests
         }
     }
 
+    [Fact]
+    public async Task ReplacementWaitingForReadiness_ImmediatelyRejectsInFlightPublication()
+    {
+        var (vm, state, builder) = Create();
+        vm.MapDisplay.EnsureMapInitialized();
+        var icon = new TaskCompletionSource<Stream>();
+        FileSystem.Current.Open.Value = _ => icon.Task;
+        try
+        {
+            var old = Trip();
+            var oldLoad = vm.LoadTripForNavigationAsync(old);
+            var next = Trip();
+            vm.QueueTripForNavigation(next);
+            builder.Invocations.Clear();
+            FileSystem.Current.Open.Value = null;
+            icon.SetException(new FileNotFoundException());
+            await oldLoad;
+
+            Assert.Same(old, state.LoadedTrip); // Replacement is not admitted yet.
+            AssertSegments(vm, null);
+            Assert.Empty(Layer(vm, "TripPlaces").GetFeatures());
+            Assert.Empty(builder.Invocations);
+            await vm.LoadPendingTripIfReadyAsync(Task.CompletedTask, default);
+            Assert.Same(next, state.LoadedTrip);
+            AssertSegments(vm, next);
+        }
+        finally
+        {
+            FileSystem.Current.Open.Value = null;
+        }
+    }
+
     private static (MainViewModel Vm, TripStateManager State, Mock<IMapBuilder> Builder) Create()
     {
         var builder = new Mock<IMapBuilder>();
         builder.Setup(b => b.CreateLayer(It.IsAny<string>()))
-            .Returns((string name) => new WritableLayer { Name = name });
+            .Returns((string name) => new WritableLayer { Name = name, Style = null });
         builder.Setup(b => b.CreateMap(It.IsAny<WritableLayer[]>())).Returns((WritableLayer[] layers) =>
         {
             var map = new Mapsui.Map();

@@ -21,6 +21,13 @@ Raster basemap tiles are not part of a Trip download. Downloading a Trip therefo
 
 ## Viewing the Map
 
+Loading a downloaded Trip uses the same stored content online and offline. Valid saved
+Segment geometry belongs to the ordinary Trip layer; selecting a drawer item adds
+decorations independently. Switching or unloading cancels older pending display work.
+Malformed or missing geometry is skipped without inventing connections or requesting routes.
+The reported Android initial-visibility symptom remains pending combined device acceptance
+with the [Segment presentation correction (#273)](https://github.com/stef-k/WayfarerMobile/issues/273).
+
 The map uses the standard OpenStreetMap layer during ordinary interactive pan and zoom. Tiles requested by the renderer are saved in the bounded live cache as they are viewed. Previously viewed tiles may remain available while cached, but the live cache is not an offline-area package and does not promise complete coverage.
 
 The live cache can be inspected and cleared from **Settings** > **Map Cache**. Clearing it does not remove downloaded Trip data.

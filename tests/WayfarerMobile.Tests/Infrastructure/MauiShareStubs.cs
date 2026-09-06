@@ -140,4 +140,3 @@ public sealed class Page
     public Task DisplayAlertAsync(string title, string message, string accept) => Task.CompletedTask;
     public Task<bool> DisplayAlertAsync(string title, string message, string accept, string cancel) => Task.FromResult(false);
 }
-

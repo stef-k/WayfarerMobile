@@ -6,49 +6,41 @@ namespace WayfarerMobile.ViewModels;
 public partial class MainViewModel
 {
     private TripDetails? _pendingTrip;
+    private long _tripLoadVersion;
 
-    public void QueueTripForNavigation(TripDetails trip) => _pendingTrip = trip;
+    /// <summary>
+    /// Queues the latest downloaded Trip and invalidates previous display work immediately.
+    /// Called on the UI thread, like readiness admission and unloading.
+    /// </summary>
+    public void QueueTripForNavigation(TripDetails trip)
+    {
+        ++_tripLoadVersion;
+        _pendingTrip = trip;
+        MapDisplay.InvalidateTripLayerWork();
+    }
 
+    /// <summary>
+    /// Admits the current request after the page's existing readiness gate completes.
+    /// Disappearance cancels this waiter; the pending Trip survives for the next appearance.
+    /// </summary>
     public async Task LoadPendingTripIfReadyAsync(Task readiness, CancellationToken cancellationToken)
     {
-        if (_pendingTrip == null)
-        {
-            _logger.LogDebug("LoadPendingTripIfReadyAsync: No pending trip");
-            return;
-        }
-
-        var trip = _pendingTrip;
-        _logger.LogDebug("LoadPendingTripIfReadyAsync: Waiting for readiness gate, trip={TripName}", trip.Name);
-
+        if (_pendingTrip == null) return;
         try
         {
-            // Wait for the deterministic readiness gate with cancellation support
-            // This will complete when TrySetPageReady() signals all conditions are met
-            using var reg = cancellationToken.Register(() =>
-                _logger.LogDebug("LoadPendingTripIfReadyAsync: Readiness gate cancelled (page disappeared)"));
-
             await readiness.WaitAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
         }
         catch (OperationCanceledException)
         {
-            // Page disappeared while waiting - keep pending trip for retry on next appear
-            _logger.LogDebug("LoadPendingTripIfReadyAsync: Cancelled, keeping pending trip for retry");
             return;
         }
 
-        // Re-check that pending trip is still set (another caller may have processed it)
-        if (_pendingTrip == null)
-        {
-            _logger.LogDebug("LoadPendingTripIfReadyAsync: Pending trip was cleared by another caller");
-            return;
-        }
-
-        // Clear pending trip now that we're committed to loading
+        // Read the current request after awaiting, rather than capturing an obsolete Trip.
+        var trip = _pendingTrip;
+        if (trip == null) return;
         _pendingTrip = null;
-
-        _logger.LogDebug("LoadPendingTripIfReadyAsync: Readiness gate passed, loading trip {TripName}", trip.Name);
         await LoadTripForNavigationAsync(trip);
-        _logger.LogDebug("LoadPendingTripIfReadyAsync: After load, HasLoadedTrip={HasLoaded}", HasLoadedTrip);
     }
 
     #region Trip Management
@@ -59,6 +51,9 @@ public partial class MainViewModel
     /// <param name="tripDetails">The trip details to load.</param>
     public async Task LoadTripForNavigationAsync(TripDetails tripDetails)
     {
+        var version = ++_tripLoadVersion;
+        _pendingTrip = null;
+
         // Issue #185 instrumentation: Log visibility state to help diagnose crashes
         _logger.LogDebug("Loading trip: {TripName} ({PlaceCount} places, {SegmentCount} segments, {AreaCount} areas), IsPageVisible={IsVisible}",
             tripDetails.Name, tripDetails.AllPlaces.Count, tripDetails.Segments.Count, tripDetails.AllAreas.Count, _isPageVisible);
@@ -85,10 +80,12 @@ public partial class MainViewModel
         _tripStateManager.SetLoadedTrip(tripDetails);
         _logger.LogDebug("After SetLoadedTrip: HasLoadedTrip={HasTrip}, TripSheet.HasLoadedTrip={TsHasTrip}",
             HasLoadedTrip, TripSheet.HasLoadedTrip);
+        if (version != _tripLoadVersion) return;
         _tripNavigationService.LoadTrip(tripDetails);
 
         // Show trip layers on map
         var placePoints = await MapDisplay.ShowTripLayersAsync(tripDetails);
+        if (version != _tripLoadVersion || placePoints == null) return;
         _logger.LogDebug("Updated {Count} places on map layer (from {Total} total)", placePoints.Count, tripDetails.AllPlaces.Count);
 
         // Zoom map to fit all trip places
@@ -136,6 +133,8 @@ public partial class MainViewModel
     /// </summary>
     public void UnloadTrip()
     {
+        ++_tripLoadVersion;
+        _pendingTrip = null;
         if (Navigation.IsNavigating)
         {
             Navigation.StopNavigation();

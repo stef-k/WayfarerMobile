@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Trips (#272): reject replaced/unloaded Trip readiness and delayed map-layer work,
+  including stale viewport and loaded-indicator updates. Ordinary Segment population
+  is covered before selection in both readiness orders. The reported device visibility
+  symptom and #273 presentation work still require combined candidate acceptance.
+
 - Directions (#271): Trip Places and dropped pins use one scrolling surface with
   explicit Direct, provider-option loading and mode selection. Loading and route
   failures offer separate explicit retries; cancellation rejects late work. Retained
