@@ -43,6 +43,18 @@ public partial class MainViewModel
         await LoadTripForNavigationAsync(trip);
     }
 
+    internal void UnloadTripFromMap()
+    {
+        MapDisplay.ClearTripLayers();
+
+        // Recenter map on user location at street level
+        var location = CurrentLocation ?? _locationBridge.LastLocation;
+        if (location != null)
+        {
+            MapDisplay.CenterOnLocation(location.Latitude, location.Longitude, zoomLevel: 16);
+        }
+    }
+
     #region Trip Management
 
     /// <summary>

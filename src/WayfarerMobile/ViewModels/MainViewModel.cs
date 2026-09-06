@@ -661,17 +661,7 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     }
 
     /// <inheritdoc/>
-    void ITripSheetCallbacks.UnloadTripFromMap()
-    {
-        MapDisplay.ClearTripLayers();
-
-        // Recenter map on user location at street level
-        var location = CurrentLocation ?? _locationBridge.LastLocation;
-        if (location != null)
-        {
-            MapDisplay.CenterOnLocation(location.Latitude, location.Longitude, zoomLevel: 16);
-        }
-    }
+    void ITripSheetCallbacks.UnloadTripFromMap() => UnloadTripFromMap();
 
     /// <inheritdoc/>
     Task<bool> ITripSheetCallbacks.StartNavigationToPlaceAsync(string placeId)

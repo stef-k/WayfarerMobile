@@ -100,6 +100,23 @@ public class TripInitialDisplayTests
     }
 
     [Fact]
+    public async Task TripSheetMapUnload_RejectsPendingReadiness()
+    {
+        var (vm, state, _) = Create();
+        vm.QueueTripForNavigation(Trip());
+        var ready = new TaskCompletionSource();
+        var load = vm.LoadPendingTripIfReadyAsync(ready.Task, default);
+        vm.UnloadTripFromMap();
+        vm.MapDisplay.EnsureMapInitialized();
+        ready.SetResult();
+        await load;
+
+        Assert.Null(state.LoadedTrip);
+        Assert.False(vm.HasLoadedTrip);
+        AssertSegments(vm, null);
+    }
+
+    [Fact]
     public async Task ReplacementWaitingForReadiness_ImmediatelyRejectsInFlightPublication()
     {
         var (vm, state, builder) = Create();
