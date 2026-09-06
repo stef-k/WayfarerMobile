@@ -114,6 +114,23 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task DroppedPinStartup_MapFailure_DoesNotLeavePartialNavigation()
+    {
+        var scenario = CreateScenario("Direct");
+        var route = await scenario.Coordinator.CalculateRouteToCoordinatesAsync(
+            37, 23, 38, 24, "Dropped Pin", direct: true);
+        scenario.Callbacks.Setup(value => value.ShowNavigationRoute(It.IsAny<NavigationRoute>()))
+            .Throws(new InvalidOperationException("map unavailable"));
+
+        try { await scenario.Coordinator.StartNavigationWithRouteAsync(route!); }
+        catch (InvalidOperationException) { }
+
+        scenario.Navigation.ActiveRoute.Should().BeNull();
+        scenario.Coordinator.IsNavigating.Should().BeFalse();
+        scenario.Hud.IsNavigating.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task WakeLockFailure_CommitsNavigationAndClosesTripSheetExactlyOnce()
     {
         var wakeLock = new Mock<IWakeLockService>(MockBehavior.Strict);
