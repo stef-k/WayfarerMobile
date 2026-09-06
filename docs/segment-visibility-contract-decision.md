@@ -1,3 +1,8 @@
+> Historical investigation preserved from checkpoint `8ed0ff4483021ab19966e19116fd7ac9b47845d5`.
+> The maintainer subsequently approved the bounded exception and #272/#273 were amended
+> before implementation. See [implementation and review evidence](releases/segment-map-visibility.md).
+> The pending/proposal statements below describe the original decision stop.
+
 # Segment visibility: contract decision pending
 
 Investigation for Mobile #272/#273/#274 and parent #269, 2026-09-06.

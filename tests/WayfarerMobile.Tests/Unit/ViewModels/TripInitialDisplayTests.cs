@@ -9,12 +9,21 @@ namespace WayfarerMobile.Tests.Unit.ViewModels;
 public class TripInitialDisplayTests
 {
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task FirstEligibleDisplay_PopulatesOrdinarySegmentsBeforeSelection(bool dataFirst)
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public async Task FirstEligibleDisplay_PopulatesOrdinarySegmentsBeforeSelection(bool dataFirst, bool straightConnection)
     {
         var (vm, state, builder) = Create();
         var trip = Trip();
+        if (straightConnection)
+        {
+            var end = new TripPlace { Id = Guid.NewGuid(), Latitude = 2, Longitude = 2 };
+            trip.Regions[0].Places.Add(end);
+            trip.Segments[0].Geometry = null;
+            trip.Segments[0].OriginId = trip.AllPlaces[0].Id;
+            trip.Segments[0].DestinationId = end.Id;
+        }
         var ready = new TaskCompletionSource();
         if (!dataFirst)
         {

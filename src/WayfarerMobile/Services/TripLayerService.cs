@@ -7,7 +7,6 @@ using Mapsui.Projections;
 using Mapsui.Styles;
 using Microsoft.Extensions.Logging;
 using NetTopologySuite.Geometries;
-using SkiaSharp;
 using WayfarerMobile.Core.Helpers;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
@@ -34,8 +33,6 @@ namespace WayfarerMobile.Services;
 /// </remarks>
 public class TripLayerService : ITripLayerService
 {
-    private const double SegmentBadgeFontSize = 16;
-    private const double SegmentBadgeRendererEnvelope = 6;
     private readonly ILogger<TripLayerService> _logger;
 
     /// <summary>
@@ -320,24 +317,22 @@ public class TripLayerService : ITripLayerService
             var screen = viewport.WorldToScreen(world.x, world.y);
             return (X: screen.X, Y: screen.Y - 34);
         });
-        using var badgeFont = new SKFont(SKTypeface.Default, (float)SegmentBadgeFontSize);
-        using var badgePaint = new SKPaint();
         var visibleBadges = SegmentDecorationProjector.RetainVisibleBadges(badges, badge =>
         {
             var screen = screenPositions[badge.PlaceId];
-            badgeFont.MeasureText(badge.Label, out var textBounds, badgePaint);
+            var size = SegmentBadgeImage.Measure(badge.Label);
             return (
                 screen.X,
                 screen.Y,
-                textBounds.Width + SegmentBadgeRendererEnvelope,
-                textBounds.Height + SegmentBadgeRendererEnvelope);
+                size.Width,
+                size.Height);
         });
         foreach (var badge in visibleBadges)
         {
             var (x, y) = SphericalMercator.FromLonLat(badge.Longitude, badge.Latitude);
             var feature = new GeometryFeature(new Point(x, y))
             {
-                Styles = [CreateSegmentBadgeStyle(badge.Label)]
+                Styles = [SegmentBadgeImage.Create(badge.Label)]
             };
             badgeLayer.Add(feature);
         }
@@ -392,7 +387,7 @@ public class TripLayerService : ITripLayerService
             }).ToArray();
             chevronLayer.Add(new GeometryFeature(new LineString(coordinates))
             {
-                Styles = [CreateChevronStroke(Color.Black, 4), CreateChevronStroke(Color.White, 2)]
+                Styles = [CreateChevronStroke(Color.White, 4), CreateChevronStroke(Color.FromString("#852D10"), 2)]
             });
         }
     }
@@ -400,19 +395,6 @@ public class TripLayerService : ITripLayerService
     private static VectorStyle CreateChevronStroke(Color color, double width) => new()
     {
         Line = new Pen(color, width) { PenStrokeCap = PenStrokeCap.Round, StrokeJoin = StrokeJoin.Round }
-    };
-
-    private static LabelStyle CreateSegmentBadgeStyle(string label) => new()
-    {
-        Text = label,
-        Font = new Mapsui.Styles.Font { Size = SegmentBadgeFontSize },
-        ForeColor = Color.White,
-        BackColor = new Brush(Color.FromArgb(235, 30, 60, 90)),
-        BorderColor = Color.White,
-        BorderThickness = 2,
-        CornerRounding = 8,
-        CollisionDetection = false,
-        Offset = new Offset(0, -34)
     };
 
     #region Priority Icons Validation

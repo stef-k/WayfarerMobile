@@ -2,9 +2,15 @@
 
 ## Unreleased
 
+- Segments (#272/#273): show an explicitly labelled, display-only straight endpoint
+  connection when geometry is absent and the approved endpoint conditions hold.
+  Selection retains the ordinary line; malformed/unsupported geometry and unavailable
+  counts are unchanged. Match Web's brown chevrons and blue/white bold badges while
+  preserving chevron size and placement. Physical acceptance remains pending.
+
 - Segment investigation (#272/#273/#274): reproduced missing ordinary geometry with
   selected endpoint-derived decorations and unavailable counts using synthetic data.
-  See [pending contract decision](docs/segment-visibility-contract-decision.md).
+  See [original contract investigation](docs/segment-visibility-contract-decision.md).
   No runtime correction or physical acceptance is claimed by this investigation.
 
 - Location indicator (#275): invalidate retained Mapsui feature paths after updates so
