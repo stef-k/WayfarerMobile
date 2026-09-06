@@ -470,13 +470,20 @@ not certify Android rendering or resolve the original screenshot discrepancy; se
 [the #272 investigation](releases/trip-initial-display-272.md) and
 [the separate #273 presentation scope](https://github.com/stef-k/WayfarerMobile/issues/273).
 
-All eligible ordinary Segment geometries now have a solid base, retaining mode colors,
-alpha, widths and fallback semantics. Selected chevrons are open three-point lines:
+All eligible ordinary Segment geometries use Web blue (`#0d6efd`), alpha 220,
+with existing mode widths and fallback eligibility. Selected chevrons are open three-point lines:
 10 logical units along the tangent, 10 across, with round opaque white width-4 casing
 and Web brown (`#852D10`) width-2 center strokes. The horizontal rendered envelope is 14 by 14;
 any rotation remains below 15.19 units per axis. Screen-to-world projection avoids
 double rotation; MainPage refreshes decorations on every viewport event so zoom cannot
 temporarily enlarge stale world-projected arms. Zoom-label updates remain throttled.
+
+`MapDisplayViewModel.SegmentRows` owns transient, stable-ID drawer choices and filters
+ordinary output plus selected decorations. Same-Trip publication reconciles these rows;
+removed IDs disappear, new IDs default visible, and unload/Trip switch clears choices.
+Detached row callbacks cannot affect replacement state. Visibility refresh rebuilds only
+ordinary Segments and selected decorations, leaving Places and navigation layers intact.
+The fallback explanation remains in details; there is no separate map fallback label.
 
 Placement retains the eight-cue cap and 72-unit pairwise separation. The existing
 24-unit endpoint inset is extended by the rendered radius (sqrt(125) + 2), and
