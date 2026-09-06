@@ -51,6 +51,18 @@ public sealed partial class NavigationCoordinatorTripChooserTests : IAsyncLifeti
     }
 
     [Fact]
+    public async Task TripDirections_DoesNotUseSeparateMethodConfirmation()
+    {
+        var scenario = CreateScenario("Direct");
+
+        (await scenario.Coordinator.StartNavigationToPlaceAsync(scenario.Destination.Id.ToString()))
+            .Should().BeTrue();
+
+        scenario.Dialogs.Verify(dialog => dialog.SelectAsync("Navigate by",
+            It.IsAny<IReadOnlyList<string>>(), "Cancel"), Times.Never);
+    }
+
+    [Fact]
     public async Task TripSheetWithoutParent_ReturnsFalseAndRemainsOpen()
     {
         var scenario = CreateScenario("Direct");
