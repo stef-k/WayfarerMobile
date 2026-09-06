@@ -530,6 +530,9 @@
                             </DataTemplate>
                         </BindableLayout.ItemTemplate>
                     </VerticalStackLayout>
+                    <Label Text="{Binding TripSheet.SelectedTripSegmentDetails.GeometryDescription}"
+                           IsVisible="{Binding TripSheet.SelectedTripSegmentDetails.HasGeometryDescription}"
+                           FontSize="13" LineBreakMode="WordWrap" />
                     <Label Text="{Binding TripSheet.SelectedTripSegmentDetails.WaypointCountText}"
                            FontSize="15" LineBreakMode="WordWrap" />
                     <Label Text="{Binding TripSheet.SelectedTripSegmentDetails.RoutePointCountText}"

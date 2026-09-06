@@ -472,8 +472,8 @@ not certify Android rendering or resolve the original screenshot discrepancy; se
 
 All eligible ordinary Segment geometries now have a solid base, retaining mode colors,
 alpha, widths and fallback semantics. Selected chevrons are open three-point lines:
-10 logical units along the tangent, 10 across, with round opaque black width-4 casing
-and white width-2 center strokes. The horizontal rendered envelope is 14 by 14;
+10 logical units along the tangent, 10 across, with round opaque white width-4 casing
+and Web brown (`#852D10`) width-2 center strokes. The horizontal rendered envelope is 14 by 14;
 any rotation remains below 15.19 units per axis. Screen-to-world projection avoids
 double rotation; MainPage refreshes decorations on every viewport event so zoom cannot
 temporarily enlarge stale world-projected arms. Zoom-label updates remain throttled.
@@ -481,7 +481,10 @@ temporarily enlarge stale world-projected arms. Zoom-label updates remain thrott
 Placement retains the eight-cue cap and 72-unit pairwise separation. The existing
 24-unit endpoint inset is extended by the rendered radius (sqrt(125) + 2), and
 rendered bounds overlapping Place marker envelopes are suppressed, including waypoints
-and folds. Badge measurement/coalescing, navigation suppression and tap routing are unchanged.
+and folds. Badges use Web blue (`#0057b8`), a white 2-unit outline and centered bold
+12-unit sans-serif text on a padded rounded image. Single labels occupy 24 by 24
+logical units; combined labels widen without truncation. Overlap checks use those
+same dimensions, retaining canonical-Place coalescing, navigation suppression and tap routing.
 See [renderer evidence and remaining physical acceptance](releases/segment-rendering-273.md).
 
 Drawer details use `SegmentPresentationProjector.Project` through `TripSheetViewModel`.
@@ -490,9 +493,20 @@ while endpoint-only text remains independent of geometry validity. Presentation 
 are separate: trusted intermediate Places versus actual parser-decoded geometry vertices
 (including repeats). Empty waypoint collections cannot prove zero after DTO/offline
 normalization and remain unavailable; failed anchor validation never yields a partial
-numeric count or Via trail. No fallback geometry contributes to the route-point count.
+numeric count or Via trail. No locally derived endpoint geometry contributes to the route-point count.
 The projector adds no routing authority or requests and leaves map ownership unchanged.
 See [drawer validation and limitations](releases/segment-drawer-274.md).
+
+The approved #272/#273 exception uses `SegmentDisplayGeometry.ResolveStraightConnection`
+only for null/blank geometry, no custom-route flag, no intermediate entries and endpoints
+accepted by the existing anchor resolver. Ordinary lines receive the current Trip Places;
+selected decorations and the drawer explanation share this eligibility decision. No
+parser, persistence or navigation code consumes the new display geometry. Rejected
+nonempty geometry is never repaired. Details explicitly label the straight connection
+while counts stay unavailable. Existing API-generated waypoint geometry can still be
+counted as decoded API vertices; that does not certify stored database vertices.
+See [implementation and review evidence](releases/segment-map-visibility.md).
+
 
 
 **Features**:
@@ -503,11 +517,11 @@ See [drawer validation and limitations](releases/segment-drawer-274.md).
 | Mode | Color | Style |
 |------|-------|-------|
 | Driving | Blue | Solid |
-| Walking | Green | Dashed |
+| Walking | Green | Solid |
 | Cycling | Orange | Solid |
 | Transit | Purple | Solid |
-| Ferry | Teal | Dashed |
-| Flight | Light Blue | Dotted |
+| Ferry | Teal | Solid |
+| Flight | Light Blue | Solid |
 
 ### GroupLayerService
 

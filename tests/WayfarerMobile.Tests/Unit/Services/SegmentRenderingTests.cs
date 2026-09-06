@@ -18,6 +18,103 @@ public class SegmentRenderingTests(ITestOutputHelper output)
 {
     private readonly TripLayerService _service = new(NullLogger<TripLayerService>.Instance);
 
+    [Fact]
+    public void MissingApiGeometry_AfterOfflineReconstruction_RetainsOrdinaryLineAndUnavailableCounts()
+    {
+        // Original missing-line evidence is retained at checkpoint 8ed0ff4; now prove the approved exception.
+        var (_, places, viewport) = Train(10);
+        var json = $$"""
+            {"id":"11111111-1111-1111-1111-111111111111","mode":"train",
+             "fromPlaceId":"{{places[0].Id}}","toPlaceId":"{{places[1].Id}}",
+             "routeJson":null,"waypoints":[],"hasCustomRoute":false}
+            """;
+        var downloaded = System.Text.Json.JsonSerializer.Deserialize<TripSegment>(json)!;
+        var restored = WayfarerMobile.Core.Helpers.OfflineSegmentWaypointMapper.Reconstruct(
+            downloaded.Id, downloaded.OriginId!.Value, downloaded.DestinationId!.Value,
+            downloaded.Geometry, SegmentWaypointJson.Serialize(downloaded.Waypoints), downloaded.HasCustomRoute);
+        Assert.Null(restored.Geometry);
+        Assert.Empty(restored.Waypoints);
+        using var lines = new WritableLayer { Style = null };
+        using var cues = new WritableLayer { Style = null };
+        using var badges = new WritableLayer { Style = null };
+        _service.UpdateTripSegments(lines, [restored], places);
+        var line = Assert.IsType<GeometryFeature>(Assert.Single(lines.GetFeatures()));
+        var geometry = Assert.IsType<LineString>(line.Geometry);
+        var start = viewport.WorldToScreen(geometry.StartPoint.X, geometry.StartPoint.Y);
+        var end = viewport.WorldToScreen(geometry.EndPoint.X, geometry.EndPoint.Y);
+        using var ordinary = Render(viewport, [lines]);
+        for (var x = (int)start.X + 3; x < (int)end.X - 3; x++)
+            Assert.NotEqual(SKColors.White, ordinary.GetPixel(x, 200));
+        _service.UpdateSelectedSegmentDecorations(badges, cues, restored, places, viewport, false);
+        Assert.Same(line, Assert.Single(lines.GetFeatures()));
+        using var selected = Render(viewport, [lines, cues, badges]);
+        Assert.Equal(SKColor.Parse("#0057b8"), selected.GetPixel((int)start.X + 7, 166));
+        Assert.Equal(ordinary.GetPixel(270, 200), selected.GetPixel(270, 200));
+        Assert.Equal(ordinary.GetPixel(270, 201), selected.GetPixel(270, 201));
+        Assert.Equal(2, badges.GetFeatures().Count());
+        foreach (var badge in badges.GetFeatures())
+        {
+            var style = Assert.IsType<ImageStyle>(Assert.Single(badge.Styles));
+            Assert.Equal(0.5, style.SymbolScale);
+            Assert.NotNull(style.Image);
+            using var image = SKBitmap.Decode(Convert.FromBase64String(style.Image.Source["base64-content://".Length..]));
+            Assert.Equal(48, image.Width);
+            Assert.Equal(48, image.Height);
+            Assert.Equal(SKColor.Parse("#0057b8"), image.GetPixel(24, 8));
+            Assert.Contains(image.Pixels, pixel => pixel == SKColors.White);
+        }
+        Assert.NotEmpty(cues.GetFeatures());
+        var details = WayfarerMobile.Core.Helpers.SegmentPresentationProjector.Project(restored, places);
+        Assert.Equal("Waypoint count unavailable", details.WaypointCountText);
+        Assert.Equal("Route points unavailable", details.RoutePointCountText);
+        Assert.Equal("Straight endpoint connection — route geometry unavailable", details.GeometryDescription);
+        Assert.Null(restored.Geometry);
+    }
+
+    [Theory]
+    [InlineData("missing endpoint")]
+    [InlineData("invalid endpoint")]
+    [InlineData("custom route")]
+    [InlineData("intermediate entries")]
+    public void AbsentGeometry_WithoutApprovedEndpointContract_HasNoConnection(string unavailable)
+    {
+        var (segment, places, viewport) = Train(10);
+        segment.Geometry = null;
+        segment.HasCustomRoute = unavailable == "custom route";
+        if (unavailable == "missing endpoint") segment.DestinationId = Guid.NewGuid();
+        if (unavailable == "invalid endpoint") places[1].Latitude = double.NaN;
+        if (unavailable == "intermediate entries")
+            segment.Waypoints = [new TripSegmentWaypoint { PlaceId = Guid.NewGuid(), Position = 0 }];
+        using var lines = new WritableLayer { Style = null };
+        using var cues = new WritableLayer { Style = null };
+        using var badges = new WritableLayer { Style = null };
+        _service.UpdateTripSegments(lines, [segment], places);
+        _service.UpdateSelectedSegmentDecorations(badges, cues, segment, places, viewport, false);
+        Assert.Empty(lines.GetFeatures());
+        Assert.Empty(cues.GetFeatures());
+        Assert.Null(WayfarerMobile.Core.Helpers.SegmentPresentationProjector.Project(segment, places).GeometryDescription);
+        Assert.Null(segment.Geometry);
+    }
+
+    [Theory]
+    [InlineData("{not json")]
+    [InlineData("{\"type\":\"MultiLineString\",\"coordinates\":[[[1,1],[1.04,1]]]}")]
+    public void RejectedGeometry_IsNeverReplacedByEndpointConnection(string geometry)
+    {
+        var (segment, places, viewport) = Train(10);
+        segment.HasCustomRoute = false;
+        segment.Geometry = geometry;
+        using var lines = new WritableLayer { Style = null };
+        using var cues = new WritableLayer { Style = null };
+        using var badges = new WritableLayer { Style = null };
+        _service.UpdateTripSegments(lines, [segment], places);
+        _service.UpdateSelectedSegmentDecorations(badges, cues, segment, places, viewport, false);
+        Assert.Empty(lines.GetFeatures());
+        Assert.Empty(cues.GetFeatures());
+        Assert.Null(WayfarerMobile.Core.Helpers.SegmentPresentationProjector.Project(segment, places).GeometryDescription);
+        Assert.Equal(geometry, segment.Geometry);
+    }
+
     [Theory]
     [InlineData("walking")]
     [InlineData("ferry")]
@@ -65,8 +162,8 @@ public class SegmentRenderingTests(ITestOutputHelper output)
             Assert.False(arm.IsClosed);
             var styles = feature.Styles.Cast<VectorStyle>().ToArray();
             Assert.Equal(2, styles.Length);
-            Assert.Equal(Color.Black, styles[0].Line!.Color);
-            Assert.Equal(Color.White, styles[1].Line!.Color);
+            Assert.Equal(Color.White, styles[0].Line!.Color);
+            Assert.Equal(Color.FromString("#852D10"), styles[1].Line!.Color);
             Assert.Equal(4, styles[0].Line!.Width);
             Assert.Equal(2, styles[1].Line!.Width);
             var screen = arm.Coordinates.Select(p => viewport.WorldToScreen(p.X, p.Y)).ToArray();
@@ -155,13 +252,18 @@ public class SegmentRenderingTests(ITestOutputHelper output)
         for (var x = (int)tipX - 11; x <= tipX; x++)
             for (var y = (int)tipY - 6; y <= (int)tipY + 6; y++)
                 pixels.Add(bitmap.GetPixel(x, y));
-        Assert.Contains(pixels, p => p.Red < 80 && p.Green < 80 && p.Blue < 80);
+        Assert.Contains(pixels, p => p.Red is > 100 and < 160 && p.Green is > 20 and < 70 && p.Blue < 40);
         Assert.Contains(pixels, p => p.Red > 230 && p.Green > 230 && p.Blue > 230);
     }
 
     private static SKBitmap Render(Viewport viewport, ILayer[] layers, Color? background = null)
     {
         using var map = new Mapsui.Map();
+        var sources = layers.OfType<WritableLayer>().SelectMany(layer => layer.GetFeatures())
+            .SelectMany(feature => feature.Styles).OfType<ImageStyle>().Select(style => style.Image!.Source).ToHashSet();
+        var images = new System.Collections.Concurrent.ConcurrentDictionary<string, string>(
+            Mapsui.Styles.Image.SourceToSourceId.Where(entry => sources.Contains(entry.Key)));
+        map.RenderService.ImageSourceCache.FetchAllImageDataAsync(images).GetAwaiter().GetResult();
         using var stream = new MapRenderer().RenderToBitmapStream(viewport, layers, map.RenderService, background ?? Color.White);
         return SKBitmap.Decode(stream.ToArray());
     }

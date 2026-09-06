@@ -364,7 +364,7 @@ public partial class MapDisplayViewModel : BaseViewModel
             _tripLayerService.UpdateTripAreas(_tripAreasLayer, trip.AllAreas);
 
         if (_tripSegmentsLayer != null)
-            _tripLayerService.UpdateTripSegments(_tripSegmentsLayer, trip.Segments);
+            _tripLayerService.UpdateTripSegments(_tripSegmentsLayer, trip.Segments, trip.AllPlaces);
 
         RefreshSelectedSegmentDecorations();
         return placePoints;

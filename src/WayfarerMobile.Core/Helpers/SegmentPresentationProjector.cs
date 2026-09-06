@@ -4,7 +4,11 @@ namespace WayfarerMobile.Core.Helpers;
 
 /// <summary>Drawer text only; counts and trail do not establish route navigability.</summary>
 public sealed record SegmentDetailsPresentation(
-    IReadOnlyList<string> Trail, string WaypointCountText, string RoutePointCountText);
+    IReadOnlyList<string> Trail, string WaypointCountText, string RoutePointCountText)
+{
+    public string? GeometryDescription { get; init; }
+    public bool HasGeometryDescription => GeometryDescription is not null;
+}
 
 public static class SegmentPresentationProjector
 {
@@ -19,7 +23,11 @@ public static class SegmentPresentationProjector
         var resolution = ResolveWaypoints(segment, places, geometry);
         return new(BuildTrail(segment, places, resolution),
             resolution?.IsValid == true ? $"Waypoints: {segment.Waypoints.Count}" : "Waypoint count unavailable",
-            parsed.IsSuccess ? $"Route points: {parsed.Coordinates.Count}" : "Route points unavailable");
+            parsed.IsSuccess ? $"Route points: {parsed.Coordinates.Count}" : "Route points unavailable")
+        {
+            GeometryDescription = SegmentDisplayGeometry.ResolveStraightConnection(segment, places) is not null
+                ? SegmentDisplayGeometry.StraightConnectionLabel : null
+        };
     }
 
     public static IReadOnlyList<string> CreateTrail(
