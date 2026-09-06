@@ -6,6 +6,7 @@ using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Interfaces;
+using WayfarerMobile.Services;
 using WayfarerMobile.Services.TileCache;
 using Map = Mapsui.Map;
 
@@ -719,14 +720,9 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         => MapDisplay.ClearDroppedPin();
 
     /// <inheritdoc/>
-    Task<NavigationRoute?> IContextMenuCallbacks.CalculateRouteToCoordinatesAsync(
-        double fromLat, double fromLon, double toLat, double toLon,
-        string destinationName, bool direct)
-        => Navigation.CalculateRouteToCoordinatesAsync(fromLat, fromLon, toLat, toLon, destinationName, direct);
-
-    /// <inheritdoc/>
-    Task IContextMenuCallbacks.StartNavigationWithRouteAsync(NavigationRoute route)
-        => Navigation.StartNavigationWithRouteAsync(route);
+    Task<bool> IContextMenuCallbacks.StartNavigationToCoordinatesAsync(double latitude, double longitude,
+        string name, Func<Task<bool?>> chooseDirect, Func<HostedRouteCoordinate?> currentTarget)
+        => Navigation.StartNavigationToCoordinatesAsync(latitude, longitude, name, chooseDirect, currentTarget);
 
     /// <inheritdoc/>
     IToastService IContextMenuCallbacks.ToastService => _toastService;
@@ -735,7 +731,7 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
     async Task<Views.Controls.NavigationMethod?> IContextMenuCallbacks.ShowNavigationPickerAsync()
     {
         var page = Application.Current?.Windows.FirstOrDefault()?.Page;
-        if (page == null) return null;
+        if (page == null) throw new InvalidOperationException("Navigation selection is unavailable. Reopen the map and try again.");
 
         var mainPage = page as MainPage ?? (Shell.Current?.CurrentPage as MainPage);
 

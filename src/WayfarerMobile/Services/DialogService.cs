@@ -82,7 +82,9 @@ public class DialogService : IDialogService
     public async Task<string?> SelectAsync(string title, IReadOnlyList<string> choices, string cancel = "Cancel")
     {
         var page = GetCurrentPage();
-        return page == null ? null : await page.DisplayActionSheetAsync(title, cancel, null, choices.ToArray());
+        if (page == null) throw new InvalidOperationException("Navigation selection is unavailable. Reopen the map and try again.");
+        var selected = await page.DisplayActionSheetAsync(title, cancel, null, choices.ToArray());
+        return selected == cancel || !choices.Contains(selected) ? null : selected;
     }
 
     private static Page? GetCurrentPage()

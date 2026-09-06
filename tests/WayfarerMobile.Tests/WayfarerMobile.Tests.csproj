@@ -30,6 +30,7 @@
     <Compile Include="..\..\src\WayfarerMobile\Interfaces\ITripMetadataBuilder.cs" Link="Production\ITripMetadataBuilder.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\GroupsService.cs" Link="Production\GroupsService.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\TripContentService.cs" Link="Production\TripContentService.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Services\DialogService.cs" Link="Production\DialogService.cs" />
     <!-- Test Framework -->
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.11" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
@@ -91,6 +92,10 @@
     <Compile Include="..\..\src\WayfarerMobile\Services\CommittedAuthenticationAuthority.cs" Link="Production\CommittedAuthenticationAuthority.cs" />
     <Compile Include="..\..\src\WayfarerMobile\ViewModels\BaseViewModel.cs" Link="Production\BaseViewModel.cs" />
     <Compile Include="..\..\src\WayfarerMobile\ViewModels\INavigationCallbacks.cs" Link="Production\INavigationCallbacks.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\ViewModels\NavigationCoordinatorViewModel.Startup.cs" Link="Production\NavigationCoordinatorViewModel.Startup.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\ViewModels\ContextMenuViewModel.cs" Link="Production\ContextMenuViewModel.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\ViewModels\IContextMenuCallbacks.cs" Link="Production\IContextMenuCallbacks.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Views\Controls\NavigationMethod.cs" Link="Production\NavigationMethod.cs" />
     <Compile Include="..\..\src\WayfarerMobile\ViewModels\NavigationCoordinatorViewModel.cs" Link="Production\NavigationCoordinatorViewModel.cs" />
     <Compile Include="..\..\src\WayfarerMobile\ViewModels\NavigationHudViewModel.cs" Link="Production\NavigationHudViewModel.cs" />
     <Compile Remove="Infrastructure\NavigationCoordinatorTestStubs.cs" />

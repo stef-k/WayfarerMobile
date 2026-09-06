@@ -10,7 +10,7 @@ using WayfarerMobile.ViewModels;
 namespace WayfarerMobile.Tests.Unit.ViewModels;
 
 [Collection("SQLite")]
-public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
+public sealed partial class NavigationCoordinatorTripChooserTests : IAsyncLifetime
 {
     private const string Identity = "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
     private readonly List<SQLite.SQLiteAsyncConnection> connections = [];
@@ -109,7 +109,25 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
         scenario.Navigation.ActiveRoute!.IsDirectRoute.Should().BeTrue();
         scenario.Coordinator.IsNavigating.Should().BeTrue();
         scenario.Callbacks.Verify(value => value.ShowNavigationRoute(scenario.Navigation.ActiveRoute), Times.Once);
+        scenario.Api.Verify(client => client.DiscoverAsync(It.IsAny<CancellationToken>()), Times.Never);
         VerifyNoProviderRequest(scenario.Api);
+    }
+
+    [Fact]
+    public async Task DroppedPinStartup_MapFailure_DoesNotLeavePartialNavigation()
+    {
+        var scenario = CreateScenario("Direct");
+        var route = await scenario.Coordinator.CalculateRouteToCoordinatesAsync(
+            37, 23, 38, 24, "Dropped Pin", direct: true);
+        scenario.Callbacks.Setup(value => value.ShowNavigationRoute(It.IsAny<NavigationRoute>()))
+            .Throws(new InvalidOperationException("map unavailable"));
+
+        try { await scenario.Coordinator.StartNavigationWithRouteAsync(route!); }
+        catch (InvalidOperationException) { }
+
+        scenario.Navigation.ActiveRoute.Should().BeNull();
+        scenario.Coordinator.IsNavigating.Should().BeFalse();
+        scenario.Hud.IsNavigating.Should().BeFalse();
     }
 
     [Fact]
@@ -180,7 +198,7 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
     }
 
     private Scenario CreateScenario(string? chooserResult, Mock<IWakeLockService>? wakeLock = null,
-        Mock<INavigationAudioService>? audio = null)
+        Mock<INavigationAudioService>? audio = null, Func<Task>? beforeRetainedConnection = null)
     {
         var origin = new TripPlace
         {
@@ -188,7 +206,7 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
         };
         var destination = new TripPlace
         {
-            Id = Guid.NewGuid(), Name = "Destination", Latitude = 38, Longitude = 24, SortOrder = 1
+            Id = Guid.NewGuid(), Name = "Destination", Latitude = 37.01, Longitude = 23.01, SortOrder = 1
         };
         var trip = new TripDetails
         {
@@ -207,9 +225,10 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
             .ReturnsAsync(new HostedRoutingCatalog(Identity, "available", "geoapify",
                 [new HostedProviderMode("walk", "Walk")]));
         var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
+        dialogs.Setup(service => service.ShowInfoAsync(It.IsAny<string>(), It.IsAny<string>())).Returns(Task.CompletedTask);
         dialogs.Setup(service => service.SelectAsync(
-                "Provider route mode (separate from the Segment Transport Profile)",
-                It.IsAny<IReadOnlyList<string>>(), "Direct"))
+                "Navigate by",
+                It.IsAny<IReadOnlyList<string>>(), "Cancel"))
             .ReturnsAsync(chooserResult);
         audio ??= new Mock<INavigationAudioService>();
         if (wakeLock == null)
@@ -221,17 +240,18 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
         var hud = new NavigationHudViewModel(navigation, audio.Object, wakeLock.Object,
             NullLogger<NavigationHudViewModel>.Instance);
         var visitNotifications = new Mock<IVisitNotificationService>();
+        var settings = new MockSettingsService();
         var coordinator = new NavigationCoordinatorViewModel(
             navigation, hud, visitNotifications.Object,
             new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance),
-            CreateRetainedRoutingService(), new MockSettingsService(), dialogs.Object, state,
+            CreateRetainedRoutingService(beforeRetainedConnection), settings, dialogs.Object, state,
             NullLogger<NavigationCoordinatorViewModel>.Instance);
         var callbacks = new Mock<INavigationCallbacks>();
         callbacks.SetupGet(value => value.CurrentLocation)
             .Returns(new LocationData { Latitude = origin.Latitude, Longitude = origin.Longitude });
         coordinator.SetCallbacks(callbacks.Object);
         return new(coordinator, navigation, hud, callbacks, api, destination, wakeLock, audio,
-            visitNotifications, state, CreateEditor(Mock.Of<ITripItemEditorCallbacks>()));
+            visitNotifications, state, CreateEditor(Mock.Of<ITripItemEditorCallbacks>()), dialogs, settings);
     }
 
     private static TripItemEditorViewModel CreateEditor(ITripItemEditorCallbacks callbacks)
@@ -250,14 +270,18 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
             new MockSettingsService(), Mock.Of<IWikipediaService>(), new MockToastService(),
             NullLogger<TripSheetViewModel>.Instance);
 
-    private RetainedWayfarerRoutingService CreateRetainedRoutingService()
+    private RetainedWayfarerRoutingService CreateRetainedRoutingService(Func<Task>? beforeConnection = null)
     {
         var path = Path.Combine(Path.GetTempPath(), $"wayfarer-navigation-trip-{Guid.NewGuid():N}.db3");
         var connection = new SQLite.SQLiteAsyncConnection(path);
         connections.Add(connection);
         databasePaths.Add(path);
         RetainedWayfarerRouteMigration.ApplyAsync(connection, CancellationToken.None).GetAwaiter().GetResult();
-        return new(new RetainedWayfarerRouteRepository(connection),
+        return new(new RetainedWayfarerRouteRepository(async () =>
+            {
+                if (beforeConnection != null) await beforeConnection();
+                return connection;
+            }),
             NullLogger<RetainedWayfarerRoutingService>.Instance);
     }
 
@@ -274,12 +298,12 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
         Mock<INavigationCallbacks> Callbacks, Mock<IHostedRoutingApiClient> Api,
         TripPlace Destination, Mock<IWakeLockService> WakeLock, Mock<INavigationAudioService> Audio,
         Mock<IVisitNotificationService> VisitNotifications, ITripStateManager State,
-        TripItemEditorViewModel Editor);
+        TripItemEditorViewModel Editor, Mock<IDialogService> Dialogs, MockSettingsService Settings);
 
     private sealed class NavigationCallbackBridge(NavigationCoordinatorViewModel coordinator)
         : INavigationCallbacks, ITripSheetCallbacks
     {
-        public LocationData? CurrentLocation => null;
+        public LocationData? CurrentLocation { get; set; }
         public TripPlace? SelectedTripPlace => null;
         public bool IsNavigating => coordinator.IsNavigating;
         public bool RouteShown { get; private set; }

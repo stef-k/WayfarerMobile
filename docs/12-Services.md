@@ -552,10 +552,28 @@ public async Task<NavigationRoute?> CalculateRouteToPlaceAsync(
 }
 ```
 
+Trip Place Directions and dropped-pin Directions complete only after `TripNavigationService`, the coordinator,
+visit notifications, map callbacks, and HUD agree. Dropped-pin selection and activation now share one coordinator
+attempt; calculation alone does not clear the pin. The Trip sheet closes only after successful essential startup.
+An unavailable map or essential display failure clears the failed replacement's route/map/HUD/visit state.
+Cancellation and stale rejection before replacement preserve existing guidance. Navigation wakefulness and initial
+speech remain best effort; Persistent wake-lock ownership and retryable release are independent.
+
+Selection captures the destination, account/session, and coordinator generation. Revalidate after awaited work,
+including retained persistence, before activation. Direct uses a usable current location after selection and does
+not inherit hosted origin validity. Hosted routing keeps its existing exact origin eligibility: an ineligible result
+reports the change and asks the user to try Directions again or choose Direct. There is no automatic retry or new
+tolerance. Missing prerequisites and unavailable routing also explain how to retry. The existing Main location
+callback advances `TripNavigationService` and its HUD state; the separate `NavigationService` is not started.
+See [#270 implementation and Android observation plan](releases/navigation-startup-270.md).
+
 Hosted routes are authenticated, provider-neutral results. Provider credentials and provider selection remain on
 Wayfarer. Every fresh online route first presents exactly the active provider's discovered native modes, with no
-preselection or inference from the Segment's independent manual-planning Transport Profile. Choosing Direct cancels
-the online path without capability or route contact. The active route retains linked attribution plus safe provenance:
+preselection or inference from the Segment's independent manual-planning Transport Profile. Trip navigation offers
+an explicit local Direct choice before discovery; the dropped-pin picker also exposes Direct without network work.
+Choosing Direct before the hosted path makes no discovery, capability, or route contact. Direct remains an explicit
+option in subsequent hosted/retained choices, while Cancel, Back, and dismissal are separate cancellation results.
+The active route retains linked attribution plus safe provenance:
 optional Segment transport profile, provider mode, opaque personal-provider authority identity, provider, storage mode, and
 the normalized backend generation timestamp. It contains no bearer token, credentials, or provider endpoint and
 clears through normal replacement or stop. Old servers, disabled routing, rejected requests, cancellation,

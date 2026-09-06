@@ -16,6 +16,7 @@ public partial class ContextMenuViewModel : BaseViewModel
 
     private readonly ILogger<ContextMenuViewModel> _logger;
     private IContextMenuCallbacks? _callbacks;
+    private long _pinRevision;
 
     #endregion
 
@@ -96,6 +97,7 @@ public partial class ContextMenuViewModel : BaseViewModel
     /// <param name="longitude">The longitude.</param>
     public void ShowContextMenu(double latitude, double longitude)
     {
+        _pinRevision++;
         ContextMenuLatitude = latitude;
         ContextMenuLongitude = longitude;
         IsContextMenuVisible = true;
@@ -172,6 +174,7 @@ public partial class ContextMenuViewModel : BaseViewModel
     private void ClearDroppedPin()
     {
         IsContextMenuVisible = false;
+        _pinRevision++;
         HasDroppedPin = false;
         DroppedPinLatitude = 0;
         DroppedPinLongitude = 0;
@@ -187,59 +190,40 @@ public partial class ContextMenuViewModel : BaseViewModel
     {
         if (_callbacks == null) return;
 
-        // Show navigation method picker
-        var navMethod = await _callbacks.ShowNavigationPickerAsync();
-
-        if (navMethod == null)
-            return;
-
-        HideContextMenu();
-
-        // Handle external maps
-        if (navMethod == NavigationMethod.ExternalMaps)
+        var latitude = ContextMenuLatitude;
+        var longitude = ContextMenuLongitude;
+        var revision = _pinRevision;
+        if (!HasDroppedPin)
         {
-            await OpenExternalMapsAsync(ContextMenuLatitude, ContextMenuLongitude);
+            await _callbacks.ToastService.ShowWarningAsync("Drop a pin and try Directions again.");
             return;
         }
-
-        // Get current location for internal navigation
-        var currentLocation = _callbacks.CurrentLocation ?? _callbacks.LocationBridge.LastLocation;
-        if (currentLocation == null)
-        {
-            await _callbacks.ToastService.ShowWarningAsync("Waiting for your location...");
-            return;
-        }
-
         try
         {
-            _callbacks.IsBusy = true;
-
-            var route = await _callbacks.CalculateRouteToCoordinatesAsync(
-                currentLocation.Latitude,
-                currentLocation.Longitude,
-                ContextMenuLatitude,
-                ContextMenuLongitude,
-                "Dropped Pin",
-                direct: navMethod == NavigationMethod.Direct);
-
-            if (route == null) return;
-
-            // Clear dropped pin and start navigation
-            ClearDroppedPin();
-
-            // Start navigation via coordinator
-            await _callbacks.StartNavigationWithRouteAsync(route);
-
-            _logger.LogInformation("Started navigation to dropped pin: {Distance:F1}km", route.TotalDistanceMeters / 1000);
+            var started = await _callbacks.StartNavigationToCoordinatesAsync(latitude, longitude, "Dropped Pin",
+                async () =>
+                {
+                    var method = await _callbacks.ShowNavigationPickerAsync();
+                    if (method == NavigationMethod.ExternalMaps)
+                    {
+                        if (revision == _pinRevision) await OpenExternalMapsAsync(latitude, longitude);
+                        return null;
+                    }
+                    return method switch
+                    {
+                        NavigationMethod.Direct => true,
+                        NavigationMethod.Wayfarer => false,
+                        _ => (bool?)null
+                    };
+                },
+                () => HasDroppedPin && revision == _pinRevision
+                    ? new(DroppedPinLongitude, DroppedPinLatitude) : null);
+            if (started && revision == _pinRevision) ClearDroppedPin();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to start navigation");
-            await _callbacks.ToastService.ShowErrorAsync("Failed to start navigation");
-        }
-        finally
-        {
-            _callbacks.IsBusy = false;
+            await _callbacks.ToastService.ShowErrorAsync("Navigation could not start. Try Directions again.");
         }
     }
 
@@ -252,7 +236,7 @@ public partial class ContextMenuViewModel : BaseViewModel
         var text = $"Location: {ContextMenuLatitude:F6}, {ContextMenuLongitude:F6}\n" +
                    $"https://maps.google.com/?q={ContextMenuLatitude},{ContextMenuLongitude}";
 
-        await Share.RequestAsync(new ShareTextRequest
+        await Share.Default.RequestAsync(new ShareTextRequest
         {
             Title = "Share Location",
             Text = text
@@ -268,7 +252,7 @@ public partial class ContextMenuViewModel : BaseViewModel
     private async Task SearchWikipediaAsync()
     {
         var url = $"https://en.wikipedia.org/wiki/Special:Nearby#/coord/{ContextMenuLatitude},{ContextMenuLongitude}";
-        await Launcher.OpenAsync(new Uri(url));
+        await Launcher.Default.OpenAsync(new Uri(url));
         HideContextMenu();
     }
 
@@ -279,7 +263,7 @@ public partial class ContextMenuViewModel : BaseViewModel
     private async Task OpenInGoogleMapsAsync()
     {
         var url = $"https://www.google.com/maps/search/?api=1&query={ContextMenuLatitude},{ContextMenuLongitude}";
-        await Launcher.OpenAsync(new Uri(url));
+        await Launcher.Default.OpenAsync(new Uri(url));
         HideContextMenu();
     }
 
@@ -305,7 +289,7 @@ public partial class ContextMenuViewModel : BaseViewModel
             try
             {
                 var url = $"https://www.google.com/maps/dir/?api=1&destination={lat},{lon}&travelmode=walking";
-                await Launcher.OpenAsync(new Uri(url));
+                await Launcher.Default.OpenAsync(new Uri(url));
             }
             catch (Exception fallbackEx)
             {
@@ -320,7 +304,7 @@ public partial class ContextMenuViewModel : BaseViewModel
             try
             {
                 var url = $"https://www.google.com/maps/dir/?api=1&destination={lat},{lon}&travelmode=walking";
-                await Launcher.OpenAsync(new Uri(url));
+                await Launcher.Default.OpenAsync(new Uri(url));
             }
             catch (Exception fallbackEx)
             {

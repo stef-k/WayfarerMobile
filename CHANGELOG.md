@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Navigation (#270): offer Trip Direct before hosted discovery, keep dismissal separate,
+  and use the current location for Direct after selection. Trip sheets and dropped pins
+  remain until essential route/map/HUD startup succeeds. Stale hosted results offer an
+  explicit retry; failed startup cleans navigation state. Android device acceptance is pending.
+- Tooling: adopt a LOC ratchet from the reviewed pre-#270 source, freezing existing
+  oversized files without exempting new growth or structural review findings.
 - Splash screen: center the lettering and add clearance so Android's circular
   mask does not clip the first and last letters of Wayfarer.
 - Android startup: remove the authentication preload's dependency on the UI
