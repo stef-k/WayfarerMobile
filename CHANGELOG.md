@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Segments (#273): match Web's blue line palette and add a separate **Show on map**
+  checkbox per Trip drawer row. Hidden Segments stay hidden through selection and map
+  refresh; same-Trip refresh retains choices by ID, while unload/Trip switch resets them.
+  Places, active navigation and saved geometry are unchanged. Final candidate palette
+  and checkbox acceptance remains pending under #269.
 - Segments (#272/#273): show an explicitly labelled, display-only straight endpoint
   connection when geometry is absent and the approved endpoint conditions hold.
   Selection retains the ordinary line; malformed/unsupported geometry and unavailable
@@ -22,7 +27,7 @@
   and stack measurements. Waypoint and actual decoded route-point counts are independent;
   empty or invalid waypoint data remains unavailable. Combined device acceptance is pending.
 
-- Trips (#273): give every eligible Segment a continuous mode-colored base stroke;
+- Trips (#273): give every eligible Segment a continuous base stroke (now Web blue);
   selected direction cues use compact open black/white chevrons with Place clearance.
   Controlled Skia rendering passes, but does not reproduce or explain the original
   Android visibility report. Combined candidate visual acceptance remains pending.

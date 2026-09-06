@@ -50,10 +50,18 @@ the original journey was complete.
 The reported Android initial-visibility symptom remains pending combined device acceptance
 with the [Segment presentation correction (#273)](https://github.com/stef-k/WayfarerMobile/issues/273).
 
-Segments use continuous lines in their transport-mode colors, including walking,
-ferry and flight. Selecting a Segment adds compact open brown/white direction chevrons
+Segments use continuous blue lines (`#0d6efd`) for every transport mode and eligible
+straight endpoint connection. Selecting a Segment adds compact open brown/white direction chevrons
 and its anchor badges. Cues follow the displayed geometry, stay clear of Place markers,
 and are suppressed on short routes or during navigation. Places remain above the decorations.
+
+Each Segment overview row has a **Show on map** checkbox, separate from opening its
+details. Segments start checked. Uncheck one to hide its ordinary line, chevrons and
+badges while keeping Place markers and active navigation. Opening hidden Segment details
+or moving the map does not show it again; rechecking restores eligible presentation.
+Choices last for the loaded Trip, including same-Trip refreshes and replacement objects.
+Removed Segments lose their choices and new Segments start checked. Unloading or loading
+a different Trip resets all choices. Nothing is saved to the database or server.
 
 The map uses the standard OpenStreetMap layer during ordinary interactive pan and zoom. Tiles requested by the renderer are saved in the bounded live cache as they are viewed. Previously viewed tiles may remain available while cached, but the live cache is not an offline-area package and does not promise complete coverage.
 

@@ -157,8 +157,10 @@ public class TripInitialDisplayTests
         }
     }
 
-    [Fact]
-    public async Task SegmentVisibility_HidesSelectionAndRestoresOnceWithoutChangingPlacesOrNavigation()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SegmentVisibility_HidesSelectionAndRestoresOnceWithoutChangingPlacesOrNavigation(bool straightConnection)
     {
         var (vm, _, _) = Create();
         vm.MapDisplay.EnsureMapInitialized();
@@ -169,6 +171,7 @@ public class TripInitialDisplayTests
         segment.OriginId = trip.AllPlaces[0].Id;
         segment.DestinationId = end.Id;
         segment.Geometry = """{"type":"LineString","coordinates":[[1,1],[1.04,1]]}""";
+        if (straightConnection) segment.Geometry = null;
         var center = Mapsui.Projections.SphericalMercator.FromLonLat(1.02, 1);
         vm.MapDisplay.Map.Navigator.SetSize(640, 400);
         vm.MapDisplay.Map.Navigator.CenterOn(new Mapsui.MPoint(center.x, center.y));
@@ -189,9 +192,13 @@ public class TripInitialDisplayTests
         row.ShowOnMap = false;
         vm.MapDisplay.UpdateSelectedSegmentDecorations(segment);
         vm.MapDisplay.RefreshSelectedSegmentDecorations();
+        await vm.MapDisplay.RefreshTripLayersAsync(trip);
+        row = vm.MapDisplay.SegmentRows[0];
+        Assert.False(row.ShowOnMap);
         Assert.Empty(Layer(vm, "TripSegments").GetFeatures());
         Assert.Empty(Layer(vm, "SelectedSegmentChevrons").GetFeatures());
         Assert.Empty(Layer(vm, "SelectedSegmentBadges").GetFeatures());
+        places = Layer(vm, "TripPlaces").GetFeatures().ToArray();
         row.ShowOnMap = true;
         row.ShowOnMap = true;
         vm.MapDisplay.RefreshSelectedSegmentDecorations();

@@ -39,6 +39,8 @@ public class SegmentRenderingTests(ITestOutputHelper output)
         using var badges = new WritableLayer { Style = null };
         _service.UpdateTripSegments(lines, [restored], places);
         var line = Assert.IsType<GeometryFeature>(Assert.Single(lines.GetFeatures()));
+        Assert.Equal(Color.FromArgb(220, 13, 110, 253),
+            Assert.IsType<VectorStyle>(Assert.Single(line.Styles)).Line!.Color);
         var geometry = Assert.IsType<LineString>(line.Geometry);
         var start = viewport.WorldToScreen(geometry.StartPoint.X, geometry.StartPoint.Y);
         var end = viewport.WorldToScreen(geometry.EndPoint.X, geometry.EndPoint.Y);

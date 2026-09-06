@@ -419,53 +419,53 @@
                                 <Border Padding="8,8" Margin="0,0,0,1" StrokeThickness="0"
                                         BackgroundColor="{AppThemeBinding Light={StaticResource Surface}, Dark={StaticResource SurfaceDark}}">
                                     <VerticalStackLayout>
-                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" MinimumHeightRequest="48">
-                                    <Grid.GestureRecognizers>
-                                        <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.SelectTripSegmentCommand}"
-                                                              CommandParameter="{Binding Segment}" />
-                                    </Grid.GestureRecognizers>
-                                        <Label Grid.Column="0" Text="━━" FontSize="14" VerticalOptions="Center" TextColor="#0d6efd" />
-                                        <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="2">
-                                            <Label Text="{Binding Segment.TransportMode, StringFormat='Segment: {0}'}" FontSize="14"
-                                                   LineBreakMode="WordWrap" />
-                                            <HorizontalStackLayout Spacing="6">
-                                                <Label Text="{Binding Segment.DistanceKm, StringFormat='{0:F1} km'}" FontSize="11"
+                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" MinimumHeightRequest="48">
+                                            <Grid.GestureRecognizers>
+                                                <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodels:MainViewModel}}, Path=TripSheet.SelectTripSegmentCommand}"
+                                                                      CommandParameter="{Binding Segment}" />
+                                            </Grid.GestureRecognizers>
+                                            <Label Grid.Column="0" Text="━━" FontSize="14" VerticalOptions="Center" TextColor="#0d6efd" />
+                                            <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="2">
+                                                <Label Text="{Binding Segment.TransportMode, StringFormat='Segment: {0}'}" FontSize="14"
+                                                       LineBreakMode="WordWrap" />
+                                                <HorizontalStackLayout Spacing="6">
+                                                    <Label Text="{Binding Segment.DistanceKm, StringFormat='{0:F1} km'}" FontSize="11"
+                                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
+                                                           IsVisible="{Binding Segment.DistanceKm, Converter={StaticResource IsNotNullConverter}}" />
+                                                    <Label Text="{Binding Segment.DurationMinutes, StringFormat='{0} min'}" FontSize="11"
+                                                           TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
+                                                           IsVisible="{Binding Segment.DurationMinutes, Converter={StaticResource IsNotNullConverter}}" />
+                                                </HorizontalStackLayout>
+                                                <!-- From → To -->
+                                                <Label FontSize="11" LineBreakMode="TailTruncation"
                                                        TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
-                                                       IsVisible="{Binding Segment.DistanceKm, Converter={StaticResource IsNotNullConverter}}" />
-                                                <Label Text="{Binding Segment.DurationMinutes, StringFormat='{0} min'}" FontSize="11"
-                                                       TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
-                                                       IsVisible="{Binding Segment.DurationMinutes, Converter={StaticResource IsNotNullConverter}}" />
-                                            </HorizontalStackLayout>
-                                            <!-- From → To -->
-                                            <Label FontSize="11" LineBreakMode="TailTruncation"
-                                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
-                                                   IsVisible="{Binding Segment.OriginName, Converter={StaticResource IsNotNullConverter}}">
-                                                <Label.FormattedText>
-                                                    <FormattedString>
-                                                        <Span Text="{Binding Segment.OriginName}" />
-                                                        <Span Text=" → " />
-                                                        <Span Text="{Binding Segment.DestinationName}" />
-                                                    </FormattedString>
-                                                </Label.FormattedText>
-                                            </Label>
-                                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Segment.AnchorTrail}"
-                                                                 IsVisible="{Binding Segment.HasWaypoints}" Spacing="1">
-                                                <BindableLayout.ItemTemplate>
-                                                    <DataTemplate x:DataType="x:String">
-                                                        <Label Text="{Binding .}" FontSize="11" LineBreakMode="WordWrap"
-                                                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
-                                                    </DataTemplate>
-                                                </BindableLayout.ItemTemplate>
+                                                       IsVisible="{Binding Segment.OriginName, Converter={StaticResource IsNotNullConverter}}">
+                                                    <Label.FormattedText>
+                                                        <FormattedString>
+                                                            <Span Text="{Binding Segment.OriginName}" />
+                                                            <Span Text=" → " />
+                                                            <Span Text="{Binding Segment.DestinationName}" />
+                                                        </FormattedString>
+                                                    </Label.FormattedText>
+                                                </Label>
+                                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Segment.AnchorTrail}"
+                                                                     IsVisible="{Binding Segment.HasWaypoints}" Spacing="1">
+                                                    <BindableLayout.ItemTemplate>
+                                                        <DataTemplate x:DataType="x:String">
+                                                            <Label Text="{Binding .}" FontSize="11" LineBreakMode="WordWrap"
+                                                                   TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
+                                                        </DataTemplate>
+                                                    </BindableLayout.ItemTemplate>
+                                                </VerticalStackLayout>
                                             </VerticalStackLayout>
-                                        </VerticalStackLayout>
-                                    </Grid>
-                                    <HorizontalStackLayout Spacing="4" MinimumHeightRequest="48">
-                                        <CheckBox IsChecked="{Binding ShowOnMap, Mode=TwoWay}"
-                                                  WidthRequest="48" HeightRequest="48"
-                                                  Color="{AppThemeBinding Light=#0d6efd, Dark=#8ab4ff}"
-                                                  SemanticProperties.Description="Show Segment on map" />
-                                        <Label Text="Show on map" FontSize="14" VerticalOptions="Center" />
-                                    </HorizontalStackLayout>
+                                        </Grid>
+                                        <HorizontalStackLayout Spacing="4" MinimumHeightRequest="48">
+                                            <CheckBox IsChecked="{Binding ShowOnMap, Mode=TwoWay}"
+                                                      WidthRequest="48" HeightRequest="48"
+                                                      Color="{AppThemeBinding Light=#0d6efd, Dark=#8ab4ff}"
+                                                      SemanticProperties.Description="Show Segment on map" />
+                                            <Label Text="Show on map" FontSize="14" VerticalOptions="Center" />
+                                        </HorizontalStackLayout>
                                     </VerticalStackLayout>
                                 </Border>
                             </DataTemplate>
