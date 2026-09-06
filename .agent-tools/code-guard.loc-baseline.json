@@ -1,0 +1,159 @@
+{
+  "version": 1,
+  "loc": {
+    "files": [
+      {
+        "path": "src/WayfarerMobile.Core/Models/TripModels.cs",
+        "allowedLoc": 1657
+      },
+      {
+        "path": "src/WayfarerMobile/Data/Repositories/LocationQueueRepository.cs",
+        "allowedLoc": 617
+      },
+      {
+        "path": "src/WayfarerMobile/MainPage.xaml.cs",
+        "allowedLoc": 729
+      },
+      {
+        "path": "src/WayfarerMobile/Platforms/Android/Services/LocationTrackingService.cs",
+        "allowedLoc": 1322
+      },
+      {
+        "path": "src/WayfarerMobile/Resources/Raw/quill/quill.js",
+        "allowedLoc": 9764
+      },
+      {
+        "path": "src/WayfarerMobile/Resources/Raw/quill/quill.snow.css",
+        "allowedLoc": 945
+      },
+      {
+        "path": "src/WayfarerMobile/Services/ApiClient.cs",
+        "allowedLoc": 1165
+      },
+      {
+        "path": "src/WayfarerMobile/Services/LocalTimelineStorageService.cs",
+        "allowedLoc": 604
+      },
+      {
+        "path": "src/WayfarerMobile/Services/PlaceOperationsHandler.cs",
+        "allowedLoc": 664
+      },
+      {
+        "path": "src/WayfarerMobile/Services/QueueDrainService.cs",
+        "allowedLoc": 1038
+      },
+      {
+        "path": "src/WayfarerMobile/Services/RegionOperationsHandler.cs",
+        "allowedLoc": 606
+      },
+      {
+        "path": "src/WayfarerMobile/Services/SseClient.cs",
+        "allowedLoc": 640
+      },
+      {
+        "path": "src/WayfarerMobile/Services/TimelineImportService.cs",
+        "allowedLoc": 626
+      },
+      {
+        "path": "src/WayfarerMobile/Services/TimelineSyncService.cs",
+        "allowedLoc": 1097
+      },
+      {
+        "path": "src/WayfarerMobile/Services/TripSyncService.cs",
+        "allowedLoc": 755
+      },
+      {
+        "path": "src/WayfarerMobile/Shared/Controls/ComboBox.xaml.cs",
+        "allowedLoc": 747
+      },
+      {
+        "path": "src/WayfarerMobile/Shared/Controls/TimelineEntrySheet.xaml.cs",
+        "allowedLoc": 602
+      },
+      {
+        "path": "src/WayfarerMobile/ViewModels/GroupsViewModel.cs",
+        "allowedLoc": 963
+      },
+      {
+        "path": "src/WayfarerMobile/ViewModels/MainViewModel.cs",
+        "allowedLoc": 1186
+      },
+      {
+        "path": "src/WayfarerMobile/ViewModels/MyTripsViewModel.cs",
+        "allowedLoc": 736
+      },
+      {
+        "path": "src/WayfarerMobile/ViewModels/TimelineViewModel.cs",
+        "allowedLoc": 1346
+      },
+      {
+        "path": "src/WayfarerMobile/ViewModels/TripItemEditorViewModel.cs",
+        "allowedLoc": 1303
+      },
+      {
+        "path": "src/WayfarerMobile/ViewModels/TripSheetViewModel.cs",
+        "allowedLoc": 1202
+      },
+      {
+        "path": "tests/WayfarerMobile.Tests/Unit/Algorithms/GeoMathTests.cs",
+        "allowedLoc": 858
+      },
+      {
+        "path": "tests/WayfarerMobile.Tests/Unit/Models/TripModelsTests.cs",
+        "allowedLoc": 912
+      },
+      {
+        "path": "tests/WayfarerMobile.Tests/Unit/Navigation/TripNavigationGraphTests.cs",
+        "allowedLoc": 1021
+      },
+      {
+        "path": "tests/WayfarerMobile.Tests/Unit/Services/DatabaseServiceTests.cs",
+        "allowedLoc": 1140
+      },
+      {
+        "path": "tests/WayfarerMobile.Tests/Unit/Services/GroupsServiceTests.cs",
+        "allowedLoc": 997
+      },
+      {
+        "path": "tests/WayfarerMobile.Tests/Unit/Services/LocationIndicatorServiceTests.cs",
+        "allowedLoc": 1176
+      },
+      {
+        "path": "tests/WayfarerMobile.Tests/Unit/Services/LocationLayerServiceTests.cs",
+        "allowedLoc": 884
+      },
+      {
+        "path": "tests/WayfarerMobile.Tests/Unit/Services/LocationSyncServiceTests.cs",
+        "allowedLoc": 806
+      },
+      {
+        "path": "tests/WayfarerMobile.Tests/Unit/Services/MapBuilderTests.cs",
+        "allowedLoc": 700
+      },
+      {
+        "path": "tests/WayfarerMobile.Tests/Unit/Services/TimelineSyncServiceTests.cs",
+        "allowedLoc": 1090
+      },
+      {
+        "path": "tests/WayfarerMobile.Tests/Unit/Services/TripSyncServiceTests.cs",
+        "allowedLoc": 690
+      },
+      {
+        "path": "tests/WayfarerMobile.Tests/Unit/Services/VisitNotificationServiceTests.cs",
+        "allowedLoc": 869
+      },
+      {
+        "path": "tests/WayfarerMobile.Tests/Unit/ViewModels/GroupsViewModelTests.cs",
+        "allowedLoc": 898
+      },
+      {
+        "path": "tests/WayfarerMobile.Tests/Unit/ViewModels/TripSheetViewModelTests.cs",
+        "allowedLoc": 667
+      },
+      {
+        "path": "tests/WayfarerMobile.Tests/Unit/ViewModels/TripsViewModelTests.cs",
+        "allowedLoc": 954
+      }
+    ]
+  }
+}
