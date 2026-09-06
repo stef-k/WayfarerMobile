@@ -43,8 +43,13 @@ public partial class MainViewModel
         await LoadTripForNavigationAsync(trip);
     }
 
+    /// <summary>
+    /// Clears display ownership for both page and Trip-sheet unload paths.
+    /// </summary>
     internal void UnloadTripFromMap()
     {
+        ++_tripLoadVersion;
+        _pendingTrip = null;
         MapDisplay.ClearTripLayers();
 
         // Recenter map on user location at street level
@@ -158,15 +163,7 @@ public partial class MainViewModel
         TripSheet.SelectedPlace = null;
         _tripNavigationService.UnloadTrip();
 
-        // Clear all trip layers
-        MapDisplay.ClearTripLayers();
-
-        // Recenter map on user location at street level
-        var location = CurrentLocation ?? _locationBridge.LastLocation;
-        if (location != null)
-        {
-            MapDisplay.CenterOnLocation(location.Latitude, location.Longitude, zoomLevel: 16);
-        }
+        UnloadTripFromMap();
     }
 
     #endregion

@@ -28,16 +28,18 @@ parses ordinary Segment geometry, adds line features and invalidates the layer. 
 Places (or the Trip bounding-box center); selecting a Segment only updates separate decorations
 and refreshes. No visibility setting or extra initialization call was added.
 
-Four controlled failures were reproduced through production code:
+Controlled failures were reproduced through production code:
 
 - A readiness waiter captured the old Trip, then consumed a replacement's pending request.
-- Unload left the pending request available, allowing readiness to reload it.
+- Page unload left the pending request available, allowing readiness to reload it.
+- The separate Trip-sheet map-unload callback also left a pending load available.
 - Delayed Place-icon completion after switching restored the old ordinary Segment features.
 - Delayed completion after unloading restored the loaded indicator and could republish layers/viewport.
 
 `MainViewModel.Trips.cs` now owns pending readiness requests, load versions, publication and
 unload. The original Trip-management methods were moved into this partial for direct testing;
-`MainPage` still owns the existing platform readiness gate and forwards it unchanged. Queueing
+`MainPage` still owns the existing platform readiness gate and forwards it unchanged.
+The page and Trip-sheet map-unload callback now share display invalidation. Queueing
 a replacement invalidates ongoing work without touching map controls before readiness. Unload
 also clears the pending request. Cancellation on disappearance retains pending data for reappearance.
 
@@ -55,15 +57,18 @@ The readiness failures were wrong/null Trip-state assertions; delayed failures w
 stale ordinary Segment membership and a restored loaded indicator. This checkpoint remains
 in history without rewriting. The first corrected run passed all six cases.
 
-The final selection adds one queued-replacement case: old icon work must be rejected even
-before the replacement reaches readiness. Final result: **53 passed, 0 failed, 0 skipped**.
+The final selection adds a queued-replacement case: old icon work must be rejected even
+before the replacement reaches readiness. A final unload-path audit also reproduced the
+Trip-sheet callback failure, retained at `9884d4d726b80bb21148e06892dccd2a607621f7`
+(1 failed). Sharing display invalidation corrects that callback as well.
+Final result: **54 passed, 0 failed, 0 skipped**.
 This is a focused selection, not a full-suite or mounted pass.
 
 ```powershell
-dotnet test tests/WayfarerMobile.Tests/WayfarerMobile.Tests.csproj -c Release --no-restore -p:CollectCoverage=false --filter 'FullyQualifiedName~TripInitialDisplayTests|FullyQualifiedName~TripContentServiceTests|FullyQualifiedName~TripSegmentGeometryParserTests|FullyQualifiedName~TripSheetSegmentNotesReplacementContractTests|FullyQualifiedName~TripItemEditorNavigationTests|FullyQualifiedName~TripStateManagerTests' --logger 'trx;LogFileName=trip-272-final.trx' --results-directory C:/Users/stef/AppData/Local/Temp/trip-272-evidence -v minimal
+dotnet test tests/WayfarerMobile.Tests/WayfarerMobile.Tests.csproj -c Release --no-restore -p:CollectCoverage=false --filter 'FullyQualifiedName~TripInitialDisplayTests|FullyQualifiedName~TripContentServiceTests|FullyQualifiedName~TripSegmentGeometryParserTests|FullyQualifiedName~TripSheetSegmentNotesReplacementContractTests|FullyQualifiedName~TripItemEditorNavigationTests|FullyQualifiedName~TripStateManagerTests' --logger 'trx;LogFileName=trip-272-reviewed-scope.trx' --results-directory C:/Users/stef/AppData/Local/Temp/trip-272-evidence -v minimal
 ```
 
-The seven new cases link the actual `MainViewModel.Trips`, `MapDisplayViewModel`,
+The eight new cases link the actual `MainViewModel.Trips`, `MapDisplayViewModel`,
 `TripStateManager` and `TripLayerService` code, using actual Mapsui writable layers and
 synthetic two-point geometry plus malformed/missing geometry. They assert ordinary Segment
 membership before selection and stale Trip/Place/Segment/indicator/viewport rejection.
@@ -73,7 +78,8 @@ the complete page, binding lifecycle, native renderer and platform readiness sig
 Existing test-local copies are not used as the new regression proof.
 
 Retained local TRX files are under `C:/Users/stef/AppData/Local/Temp/trip-272-evidence/`:
-`trip-272-red.trx`, `trip-272-green.trx`, `trip-272-focused.trx`, and `trip-272-final.trx`.
+`trip-272-red.trx`, `trip-272-green.trx`, `trip-272-focused.trx`, `trip-272-final.trx`,
+`trip-272-sheet-red.trx`, and `trip-272-reviewed-scope.trx`.
 Build/compile logs are `trip-272-test-build.log` and `trip-272-compile.log` in the same Temp parent.
 Initial test-linking compilation needed platform-stub name resolution and the app's existing
 Mapsui/Skia package versions; those setup errors were not product regression evidence.
@@ -94,7 +100,7 @@ artifacts were not replaced, and no Android workflow was dispatched.
 
 Working-change and complete-branch Code Guard checks accept these REVIEW findings after
 reading the named LOC and Markdown policies: MainPage (687 LOC, within 729 allowance),
-MainViewModel (1,075, within 1,186), MapDisplayViewModel (440), and the existing service
+MainViewModel (1,066, within 1,186), MapDisplayViewModel (440), and the existing service
 reference document (1,446 physical lines). The first two shrink as pending/load ownership
 moves together; map publication remains with its existing owner; the service reference
 retains its navigable per-service sections. No allowances, exclusions or policy changed.
