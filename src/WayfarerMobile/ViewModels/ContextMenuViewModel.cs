@@ -2,7 +2,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Helpers;
-using WayfarerMobile.Views.Controls;
 
 namespace WayfarerMobile.ViewModels;
 
@@ -203,18 +202,8 @@ public partial class ContextMenuViewModel : BaseViewModel
             var started = await _callbacks.StartNavigationToCoordinatesAsync(latitude, longitude, "Dropped Pin",
                 async () =>
                 {
-                    var method = await _callbacks.ShowNavigationPickerAsync();
-                    if (method == NavigationMethod.ExternalMaps)
-                    {
-                        if (revision == _pinRevision) await OpenExternalMapsAsync(latitude, longitude);
-                        return null;
-                    }
-                    return method switch
-                    {
-                        NavigationMethod.Direct => true,
-                        NavigationMethod.Wayfarer => false,
-                        _ => (bool?)null
-                    };
+                    if (HasDroppedPin && revision == _pinRevision)
+                        await OpenExternalMapsAsync(latitude, longitude);
                 },
                 () => HasDroppedPin && revision == _pinRevision
                     ? new(DroppedPinLongitude, DroppedPinLatitude) : null);

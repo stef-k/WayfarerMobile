@@ -1,6 +1,5 @@
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
-using WayfarerMobile.Views.Controls;
 
 namespace WayfarerMobile.ViewModels;
 
@@ -42,7 +41,7 @@ public interface IContextMenuCallbacks
 
     /// <summary>Owns selection and startup, returning true only after guidance is active.</summary>
     Task<bool> StartNavigationToCoordinatesAsync(double latitude, double longitude,
-        string name, Func<Task<bool?>> chooseDirect, Func<WayfarerMobile.Services.HostedRouteCoordinate?> currentTarget);
+        string name, Func<Task> externalMaps, Func<WayfarerMobile.Services.HostedRouteCoordinate?> currentTarget);
 
     #endregion
 
@@ -53,10 +52,6 @@ public interface IContextMenuCallbacks
     /// </summary>
     IToastService ToastService { get; }
 
-    /// <summary>
-    /// Shows the navigation method picker and returns the selected method.
-    /// </summary>
-    Task<NavigationMethod?> ShowNavigationPickerAsync();
 
     /// <summary>
     /// Sets the busy state indicator.

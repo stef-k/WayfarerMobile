@@ -8,6 +8,9 @@ namespace WayfarerMobile.ViewModels;
 /// </summary>
 public interface INavigationCallbacks
 {
+    /// <summary>Presents one progressive Directions surface until completion or dismissal.</summary>
+    Task ShowDirectionsAsync(DirectionsViewModel directions);
+
     #region State Queries
 
     /// <summary>

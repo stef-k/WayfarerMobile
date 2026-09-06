@@ -92,6 +92,8 @@
     <Compile Include="..\..\src\WayfarerMobile\Services\CommittedAuthenticationAuthority.cs" Link="Production\CommittedAuthenticationAuthority.cs" />
     <Compile Include="..\..\src\WayfarerMobile\ViewModels\BaseViewModel.cs" Link="Production\BaseViewModel.cs" />
     <Compile Include="..\..\src\WayfarerMobile\ViewModels\INavigationCallbacks.cs" Link="Production\INavigationCallbacks.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\ViewModels\DirectionsViewModel.cs" Link="Production\DirectionsViewModel.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\ViewModels\NavigationCoordinatorViewModel.Directions.cs" Link="Production\NavigationCoordinatorViewModel.Directions.cs" />
     <Compile Include="..\..\src\WayfarerMobile\ViewModels\NavigationCoordinatorViewModel.Startup.cs" Link="Production\NavigationCoordinatorViewModel.Startup.cs" />
     <Compile Include="..\..\src\WayfarerMobile\ViewModels\ContextMenuViewModel.cs" Link="Production\ContextMenuViewModel.cs" />
     <Compile Include="..\..\src\WayfarerMobile\ViewModels\IContextMenuCallbacks.cs" Link="Production\IContextMenuCallbacks.cs" />

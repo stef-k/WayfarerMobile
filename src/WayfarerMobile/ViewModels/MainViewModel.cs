@@ -721,38 +721,15 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
 
     /// <inheritdoc/>
     Task<bool> IContextMenuCallbacks.StartNavigationToCoordinatesAsync(double latitude, double longitude,
-        string name, Func<Task<bool?>> chooseDirect, Func<HostedRouteCoordinate?> currentTarget)
-        => Navigation.StartNavigationToCoordinatesAsync(latitude, longitude, name, chooseDirect, currentTarget);
+        string name, Func<Task> externalMaps, Func<HostedRouteCoordinate?> currentTarget)
+        => Navigation.StartNavigationToCoordinatesAsync(latitude, longitude, name, externalMaps, currentTarget);
 
     /// <inheritdoc/>
     IToastService IContextMenuCallbacks.ToastService => _toastService;
 
     /// <inheritdoc/>
-    async Task<Views.Controls.NavigationMethod?> IContextMenuCallbacks.ShowNavigationPickerAsync()
-    {
-        var page = Application.Current?.Windows.FirstOrDefault()?.Page;
-        if (page == null) throw new InvalidOperationException("Navigation selection is unavailable. Reopen the map and try again.");
-
-        var mainPage = page as MainPage ?? (Shell.Current?.CurrentPage as MainPage);
-
-        if (mainPage != null)
-        {
-            return await mainPage.ShowNavigationPickerAsync();
-        }
-
-        // Fallback to action sheet if page reference not available
-        var result = await page.DisplayActionSheetAsync(
-            "Navigate by", "Cancel", null,
-            "🧭 Wayfarer route", "📏 Direct", "📍 External Maps");
-
-        return result switch
-        {
-            "🧭 Wayfarer route" => Views.Controls.NavigationMethod.Wayfarer,
-            "📏 Direct" => Views.Controls.NavigationMethod.Direct,
-            "📍 External Maps" => Views.Controls.NavigationMethod.ExternalMaps,
-            _ => null
-        };
-    }
+    Task INavigationCallbacks.ShowDirectionsAsync(DirectionsViewModel directions)
+        => Views.DirectionsPage.ShowAsync(directions);
 
     /// <inheritdoc/>
     bool IContextMenuCallbacks.IsBusy

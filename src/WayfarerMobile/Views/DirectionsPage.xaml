@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:WayfarerMobile.ViewModels"
+             xmlns:routing="clr-namespace:WayfarerMobile.Services"
+             x:Class="WayfarerMobile.Views.DirectionsPage"
+             x:DataType="vm:DirectionsViewModel"
+             x:Name="Directions"
+             Title="Directions" SafeAreaEdges="All"
+             BackgroundColor="{AppThemeBinding Light=White, Dark=#1C1C1E}">
+    <ContentPage.Resources>
+        <Style TargetType="Button">
+            <Setter Property="LineBreakMode" Value="WordWrap" />
+            <Setter Property="FontAutoScalingEnabled" Value="True" />
+            <Setter Property="HorizontalOptions" Value="Fill" />
+            <Setter Property="Padding" Value="16,12" />
+            <Setter Property="MinimumHeightRequest" Value="48" />
+        </Style>
+        <Style TargetType="Label">
+            <Setter Property="LineBreakMode" Value="WordWrap" />
+            <Setter Property="FontAutoScalingEnabled" Value="True" />
+            <Setter Property="TextColor" Value="{AppThemeBinding Light=Black, Dark=White}" />
+        </Style>
+    </ContentPage.Resources>
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="12">
+            <Label Text="Directions" FontSize="Title" FontAttributes="Bold" />
+            <Label Text="This choice does not change the Segment's Transport Profile."
+                   IsVisible="{Binding HasSegmentContext}" />
+            <Button Text="Direct" IsEnabled="{Binding CanChooseDirect}" Command="{Binding DirectCommand}" />
+            <Label Text="Straight-line guidance. No internet needed." />
+            <Button Text="Use retained route" IsEnabled="{Binding CanChoose}" Command="{Binding UseRetainedCommand}"
+                    IsVisible="{Binding HasRetainedRoute}" />
+            <Button Text="{Binding LoadLabel}" IsEnabled="{Binding CanChoose}" Command="{Binding LoadCommand}" />
+            <Label Text="Load travel modes from your routing provider." />
+            <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
+            <Label Text="{Binding Status}" />
+            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Modes}" Spacing="8">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="routing:HostedProviderMode">
+                        <Button Text="{Binding Label}" CommandParameter="{Binding .}"
+                                IsEnabled="{Binding Source={x:Reference Directions}, Path=BindingContext.CanChoose, x:DataType=ContentPage}"
+                                Command="{Binding Source={x:Reference Directions}, Path=BindingContext.ChooseModeCommand, x:DataType=ContentPage}" />
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+            </VerticalStackLayout>
+            <Button Text="Try again" IsVisible="{Binding CanRetry}" IsEnabled="{Binding CanChoose}" Command="{Binding RetryCommand}" />
+            <Button Text="External Maps" IsVisible="{Binding HasExternalMaps}" IsEnabled="{Binding CanChoose}" Command="{Binding ExternalMapsCommand}" />
+            <Button Text="Cancel" Command="{Binding CancelCommand}" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

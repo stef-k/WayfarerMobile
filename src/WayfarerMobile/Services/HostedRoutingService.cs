@@ -28,16 +28,20 @@ public sealed class HostedRoutingService
 
     public async Task<HostedRoutingResult> RequestRouteAsync(HostedRouteRequestContext context,
         HostedProviderMode? explicitChoice = null, CancellationToken cancellationToken = default,
-        bool allowCatalogRediscovery = true)
+        bool allowCatalogRediscovery = true, Func<bool>? isRequestCurrent = null)
     {
         if (!Begin(context)) return new(HostedRoutingOutcome.Stale);
+        var rediscovering = false;
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (isRequestCurrent?.Invoke() == false) return new(HostedRoutingOutcome.Stale);
             HostedProviderMode selectedMode;
             string catalogIdentity;
             if (explicitChoice == null)
             {
                 var catalog = await api.DiscoverAsync(cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!AvailableCatalog(catalog)) return new(HostedRoutingOutcome.Unavailable);
                 return new(HostedRoutingOutcome.RequiresChoice, Choices: catalog.Modes,
                     DiscoveryCatalogIdentity: catalog.DiscoveryCatalogIdentity, Provider: catalog.Provider);
@@ -54,10 +58,16 @@ public sealed class HostedRoutingService
             var profileId = context.SavedTransportProfileId ?? Guid.Empty;
             var capability = await api.GetCapabilityAsync(
                 profileId, selectedMode.Key, catalogIdentity, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (isRequestCurrent?.Invoke() == false || !IsCurrentGeneration(context.Generation))
+                return new(HostedRoutingOutcome.Stale);
             if (capability.Outcome == "catalog-changed")
+            {
+                rediscovering = allowCatalogRediscovery;
                 return allowCatalogRediscovery
                     ? await RefreshCatalogAsync(cancellationToken)
-                    : new(HostedRoutingOutcome.Unavailable);
+                    : new(HostedRoutingOutcome.CatalogChanged);
+            }
             if (!ValidCapability(capability, profileId, selectedMode.Key,
                     context.ExpectedProvider!, catalogIdentity))
                 return new(HostedRoutingOutcome.Unavailable);
@@ -65,6 +75,7 @@ public sealed class HostedRoutingService
                 context.Destination, context.Anchors, capability.SelectedProfileAuthorityIdentity!,
                 selectedMode.Key);
             var response = await api.GetRouteAsync(request, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             if (!ValidResponse(response, request, capability)) return new(HostedRoutingOutcome.InvalidResponse);
             if (!IsCurrentGeneration(context.Generation)) return new(HostedRoutingOutcome.Stale);
             var metadata = new HostedRouteCapabilityMetadata(capability.Provider!, capability.StorageMode!);
@@ -80,7 +91,7 @@ public sealed class HostedRoutingService
         catch (Exception)
         {
             logger.LogWarning("Hosted routing failed locally: transport-or-contract-error");
-            return new(HostedRoutingOutcome.Unavailable);
+            return new(rediscovering ? HostedRoutingOutcome.CatalogUnavailable : HostedRoutingOutcome.Unavailable);
         }
         finally
         {
@@ -144,7 +155,7 @@ public sealed class HostedRoutingService
         return AvailableCatalog(catalog)
             ? new(HostedRoutingOutcome.CatalogChanged, Choices: catalog.Modes,
                 DiscoveryCatalogIdentity: catalog.DiscoveryCatalogIdentity, Provider: catalog.Provider)
-            : new(HostedRoutingOutcome.Unavailable);
+            : new(HostedRoutingOutcome.CatalogUnavailable);
     }
 
     private static bool AvailableCatalog(HostedRoutingCatalog value) => value.Outcome == "available"
