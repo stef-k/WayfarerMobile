@@ -126,6 +126,7 @@
   <ItemGroup>
     <PackageReference Include="SkiaSharp" Version="3.119.2" />
     <PackageReference Include="Mapsui.Nts" Version="5.1.0" />
+    <PackageReference Include="Mapsui.Rendering.Skia" Version="5.1.0" />
     <Compile Include="../../src/WayfarerMobile/ViewModels/MainViewModel.Trips.cs" Link="Production/MainViewModel.Trips.cs" />
     <Compile Include="../../src/WayfarerMobile/ViewModels/MapDisplayViewModel.cs" Link="Production/MapDisplayViewModel.cs" />
     <Compile Include="../../src/WayfarerMobile/ViewModels/IMapDisplayCallbacks.cs" Link="Production/IMapDisplayCallbacks.cs" />
