@@ -115,6 +115,56 @@ Whitespace checks cover the complete diff from the verified base, not only the
 last checkpoint. Independent review should focus on native picker closure ordering,
 HUD mounting, the two real caller forwarding boundaries, and freshness/cleanup.
 
+## Focused missing-page correction after review
+
+Continued from clean reviewed HEAD `1d8048c2b485a139769dc38470b17466c22d5cd9`
+on the same branch after rereading live #270. Checkpoint `5fe4780` preserves the
+correction; all earlier reviewed checkpoints remain ancestors.
+
+Main's `IContextMenuCallbacks.ShowNavigationPickerAsync` returned null before
+reaching either picker when the application page was absent. ContextMenu mapped
+that null to quiet dismissal, so the coordinator returned false without feedback.
+The missing-page branch now throws the same existing InvalidOperationException
+used by DialogService selection. ContextMenu propagates it through `chooseDirect`
+to the coordinator's existing logged startup failure and actionable message:
+"Navigation could not start. Reopen the map and try Directions again."
+No selection framework, layout, Direct mapping or lifecycle correction was needed.
+
+One new behavioral regression injects this unavailable-picker exception at the
+existing Main/ContextMenu callback seam and executes the production context-menu
+command and coordinator. It verifies the exact feedback request, unchanged pin
+coordinates, existing route/HUD, no map replacement/clear, no wake-lock, audio or
+visit-notification calls, and zero discovery/capability/route calls. The feedback
+mock delegates to the real DialogService with no application page: its established
+safe behavior is a completed no-op, not a displayed dialog. The coordinator logs
+the primary exception by the existing source path. The existing dismissal case
+now explicitly verifies zero feedback requests; its cancellation matrix is reused.
+
+This is callback-seam proof, not execution of MainViewModel or a native picker.
+The one-line Main branch is source-inspected and compiled. The injected exception
+test does not independently detect reverting that Main line to null; no broad
+MainViewModel harness was introduced for this correction.
+
+```powershell
+dotnet test tests/WayfarerMobile.Tests/WayfarerMobile.Tests.csproj -c Release --filter 'FullyQualifiedName~DroppedPin_UnavailablePicker|FullyQualifiedName~DroppedPin_RejectedSelection|FullyQualifiedName~DialogServiceSelectionTests' -p:CollectCoverage=false --logger 'trx;LogFileName=270-picker-correction.trx'
+```
+
+Result: 8 passed, zero failed/skipped; existing compiler/analyzer warnings remain.
+The compilation-only command recorded above was rerun successfully: 10 existing
+package-constraint warnings, zero errors. This is incremental Compile-target
+evidence using previously generated Android resources, not a clean resource build
+or device observation. No default Android build, APK generation or signing was run
+during this correction.
+
+Complete-branch Code Guard against `7f0ddcbf0ad733b2c90f4a62a196b9a87a7ae7fb`
+reports 21 selected files, 19 analyzed and two inapplicable, with REVIEW only.
+The findings and accepted ownership justifications above are unchanged; Main stays
+at 1,186 counted LOC and the authorized ratchet is unchanged. Working-change and
+complete-branch whitespace checks pass. Stop at the local evidence checkpoint for
+focused independent re-review of the missing-page callback and reporting behavior.
+No PR, installation, publication, production access or provider contact occurred.
+Mounted acceptance remains pending as described below.
+
 ## Bounded Android observation plan — pending separate coordination
 
 No installation or device operation is part of this implementation handoff.
