@@ -50,9 +50,10 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
             .ReturnsAsync(HostedRouteResponse.ValidForTest(Guid.Empty, IdentityB));
         var presentations = new List<IReadOnlyList<string>>();
         var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
+        dialogs.Setup(service => service.ShowInfoAsync(It.IsAny<string>(), It.IsAny<string>())).Returns(Task.CompletedTask);
         dialogs.Setup(service => service.SelectAsync(
                 "Provider route mode (separate from the Segment Transport Profile)",
-                It.IsAny<IReadOnlyList<string>>(), "Direct"))
+                It.IsAny<IReadOnlyList<string>>(), "Cancel"))
             .Callback<string, IReadOnlyList<string>, string>((_, choices, _) => presentations.Add(choices))
             .ReturnsAsync(() => presentations.Count == 1
                 ? "Walk"
@@ -65,8 +66,8 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         route.Should().BeNull();
         navigation.ActiveRoute.Should().BeNull();
         presentations.Should().HaveCount(2);
-        presentations[0].Should().Equal("Walk", "Bicycle");
-        presentations[1].Should().Equal("On foot");
+        presentations[0].Should().Equal("Walk", "Bicycle", "Direct");
+        presentations[1].Should().Equal("On foot", "Direct");
         api.Verify(client => client.GetCapabilityAsync(Guid.Empty, "walk", IdentityA,
             It.IsAny<CancellationToken>()), Times.Once);
         api.Verify(client => client.GetCapabilityAsync(It.IsAny<Guid>(), It.IsAny<string>(), IdentityB,
@@ -93,9 +94,10 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
                 null, null, null, null, null));
         var presentations = new List<IReadOnlyList<string>>();
         var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
+        dialogs.Setup(service => service.ShowInfoAsync(It.IsAny<string>(), It.IsAny<string>())).Returns(Task.CompletedTask);
         dialogs.Setup(service => service.SelectAsync(
                 "Provider route mode (separate from the Segment Transport Profile)",
-                It.IsAny<IReadOnlyList<string>>(), "Direct"))
+                It.IsAny<IReadOnlyList<string>>(), "Cancel"))
             .Callback<string, IReadOnlyList<string>, string>((_, choices, _) => presentations.Add(choices))
             .ReturnsAsync(() => presentations.Count == 1
                 ? "Walk"
@@ -177,9 +179,10 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         var (_, retainedService, settings) = await CreateRetainedScenarioAsync();
         var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
         var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
+        dialogs.Setup(service => service.ShowInfoAsync(It.IsAny<string>(), It.IsAny<string>())).Returns(Task.CompletedTask);
         dialogs.Setup(service => service.SelectAsync("Wayfarer retained route",
                 It.Is<IReadOnlyList<string>>(options => options.SequenceEqual(
-                    new[] { "Use retained route", "Refresh with Wayfarer" })), "Direct"))
+                    new[] { "Use retained route", "Refresh with Wayfarer", "Direct" })), "Cancel"))
             .ReturnsAsync("Use retained route");
         var (coordinator, navigation, _, callbacks) = CreateCoordinator(
             api.Object, dialogs.Object, retainedService, settings);
@@ -210,13 +213,14 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
                 { Succeeded = false, Outcome = "invalid-response" });
         }
         var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
+        dialogs.Setup(service => service.ShowInfoAsync(It.IsAny<string>(), It.IsAny<string>())).Returns(Task.CompletedTask);
         dialogs.Setup(service => service.SelectAsync("Wayfarer retained route",
                 It.Is<IReadOnlyList<string>>(options => options.SequenceEqual(
-                    new[] { "Use retained route", "Refresh with Wayfarer" })), "Direct"))
+                    new[] { "Use retained route", "Refresh with Wayfarer", "Direct" })), "Cancel"))
             .ReturnsAsync("Refresh with Wayfarer");
         dialogs.Setup(service => service.SelectAsync(
                 "Provider route mode (separate from the Segment Transport Profile)",
-                It.Is<IReadOnlyList<string>>(options => options.SequenceEqual(new[] { "Walk" })), "Direct"))
+                It.Is<IReadOnlyList<string>>(options => options.SequenceEqual(new[] { "Walk", "Direct" })), "Cancel"))
             .ReturnsAsync("Walk");
         var (coordinator, navigation, _, callbacks) = CreateCoordinator(
             api.Object, dialogs.Object, retainedService, settings);
@@ -426,7 +430,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         var dialogs = new Mock<IDialogService>();
         dialogs.Setup(service => service.SelectAsync(
                 "Provider route mode (separate from the Segment Transport Profile)",
-                It.IsAny<IReadOnlyList<string>>(), "Direct"))
+                It.IsAny<IReadOnlyList<string>>(), "Cancel"))
             .ReturnsAsync("Walk");
         return dialogs.Object;
     }
@@ -443,10 +447,11 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         api.Setup(client => client.DiscoverAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(Catalog(IdentityA, modes));
         var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
+        dialogs.Setup(service => service.ShowInfoAsync(It.IsAny<string>(), It.IsAny<string>())).Returns(Task.CompletedTask);
         dialogs.Setup(service => service.SelectAsync(
                 "Provider route mode (separate from the Segment Transport Profile)",
                 It.Is<IReadOnlyList<string>>(choices => choices.SequenceEqual(
-                    new[] { "Walk", "Bicycle", "Motorcycle", "Drive", "Bus" })), "Direct"))
+                    new[] { "Walk", "Bicycle", "Motorcycle", "Drive", "Bus", "Direct" })), "Cancel"))
             .ReturnsAsync((string?)null);
         var (coordinator, navigation, _, callbacks) = CreateCoordinator(api.Object, dialogs.Object);
         callbacks.SetupGet(value => value.CurrentLocation)
@@ -489,9 +494,10 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
             .ReturnsAsync(HostedRouteResponse.ValidForTest(Guid.Empty, IdentityA));
         var presentation = 0;
         var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
+        dialogs.Setup(service => service.ShowInfoAsync(It.IsAny<string>(), It.IsAny<string>())).Returns(Task.CompletedTask);
         dialogs.Setup(service => service.SelectAsync(
                 "Provider route mode (separate from the Segment Transport Profile)",
-                It.IsAny<IReadOnlyList<string>>(), "Direct"))
+                It.IsAny<IReadOnlyList<string>>(), "Cancel"))
             .Returns(() =>
             {
                 if (Interlocked.Increment(ref presentation) == 1)
@@ -532,9 +538,10 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         api.Setup(client => client.DiscoverAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(Catalog(IdentityA, new HostedProviderMode("walk", "Walk")));
         var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
+        dialogs.Setup(service => service.ShowInfoAsync(It.IsAny<string>(), It.IsAny<string>())).Returns(Task.CompletedTask);
         dialogs.Setup(service => service.SelectAsync(
                 "Provider route mode (separate from the Segment Transport Profile)",
-                It.IsAny<IReadOnlyList<string>>(), "Direct"))
+                It.IsAny<IReadOnlyList<string>>(), "Cancel"))
             .Callback(() =>
             {
                 settings.ApiToken = "replacement-token";
@@ -563,9 +570,10 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         api.Setup(client => client.DiscoverAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(Catalog(IdentityA, new HostedProviderMode("walk", "Walk")));
         var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
+        dialogs.Setup(service => service.ShowInfoAsync(It.IsAny<string>(), It.IsAny<string>())).Returns(Task.CompletedTask);
         dialogs.Setup(service => service.SelectAsync(
                 "Provider route mode (separate from the Segment Transport Profile)",
-                It.Is<IReadOnlyList<string>>(choices => choices.SequenceEqual(new[] { "Walk" })), "Direct"))
+                It.Is<IReadOnlyList<string>>(choices => choices.SequenceEqual(new[] { "Walk", "Direct" })), "Cancel"))
             .ReturnsAsync("Direct");
         var (coordinator, navigation, _, callbacks) = CreateCoordinator(api.Object, dialogs.Object);
         callbacks.SetupGet(value => value.CurrentLocation)
@@ -587,6 +595,7 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
     {
         var api = new Mock<IHostedRoutingApiClient>(MockBehavior.Strict);
         var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
+        dialogs.Setup(service => service.ShowInfoAsync(It.IsAny<string>(), It.IsAny<string>())).Returns(Task.CompletedTask);
         var (coordinator, _, _, _) = CreateCoordinator(api.Object, dialogs.Object);
 
         var route = await coordinator.CalculateRouteToCoordinatesAsync(
@@ -605,9 +614,10 @@ public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
         api.Setup(client => client.DiscoverAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(Catalog(IdentityA, new HostedProviderMode("walk", "Walk")));
         var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
+        dialogs.Setup(service => service.ShowInfoAsync(It.IsAny<string>(), It.IsAny<string>())).Returns(Task.CompletedTask);
         dialogs.Setup(service => service.SelectAsync(
                 "Provider route mode (separate from the Segment Transport Profile)",
-                It.IsAny<IReadOnlyList<string>>(), "Direct"))
+                It.IsAny<IReadOnlyList<string>>(), "Cancel"))
             .Callback(() => settings.ApiToken = "replacement-token")
             .ReturnsAsync("Walk");
         var (coordinator, navigation, _, callbacks) = CreateCoordinator(

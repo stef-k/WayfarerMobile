@@ -6,6 +6,7 @@ using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Interfaces;
+using WayfarerMobile.Services;
 using WayfarerMobile.Services.TileCache;
 using Map = Mapsui.Map;
 
@@ -719,14 +720,9 @@ public partial class MainViewModel : BaseViewModel, IMapDisplayCallbacks, INavig
         => MapDisplay.ClearDroppedPin();
 
     /// <inheritdoc/>
-    Task<NavigationRoute?> IContextMenuCallbacks.CalculateRouteToCoordinatesAsync(
-        double fromLat, double fromLon, double toLat, double toLon,
-        string destinationName, bool direct)
-        => Navigation.CalculateRouteToCoordinatesAsync(fromLat, fromLon, toLat, toLon, destinationName, direct);
-
-    /// <inheritdoc/>
-    Task IContextMenuCallbacks.StartNavigationWithRouteAsync(NavigationRoute route)
-        => Navigation.StartNavigationWithRouteAsync(route);
+    Task<bool> IContextMenuCallbacks.StartNavigationToCoordinatesAsync(double latitude, double longitude,
+        string name, Func<Task<bool?>> chooseDirect, Func<HostedRouteCoordinate?> currentTarget)
+        => Navigation.StartNavigationToCoordinatesAsync(latitude, longitude, name, chooseDirect, currentTarget);
 
     /// <inheritdoc/>
     IToastService IContextMenuCallbacks.ToastService => _toastService;

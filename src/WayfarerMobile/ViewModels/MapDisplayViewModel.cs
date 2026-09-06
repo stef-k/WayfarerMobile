@@ -285,7 +285,7 @@ public partial class MapDisplayViewModel : BaseViewModel
     public void ShowNavigationRoute(NavigationRoute route)
     {
         if (_navigationRouteLayer == null || _navigationRouteCompletedLayer == null || _map == null)
-            return;
+            throw new InvalidOperationException("The map is not ready. Reopen the map and try Directions again.");
 
         _mapBuilder.UpdateNavigationRoute(_navigationRouteLayer, _navigationRouteCompletedLayer, route);
     }

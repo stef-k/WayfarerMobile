@@ -225,6 +225,13 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
     /// <param name="route">The navigation route.</param>
     public async Task StartNavigationAsync(NavigationRoute route)
     {
+        StartNavigationDisplay(route);
+        await AnnounceNavigationStartAsync(route);
+    }
+
+    /// <summary>Commits essential display state synchronously before ancillary audio.</summary>
+    public void StartNavigationDisplay(NavigationRoute route)
+    {
         IsNavigating = true;
         IsExpanded = true;
         DestinationName = route.DestinationName;
@@ -245,17 +252,20 @@ public partial class NavigationHudViewModel : ObservableObject, IDisposable
         // Navigation state is already committed; device wakefulness is best effort.
         try
         {
-            _navigationWakeLockHeld = _wakeLockService.TryAcquireWakeLock(
+            _navigationWakeLockHeld |= _wakeLockService.TryAcquireWakeLock(
                 WakeLockOwner.Navigation, keepScreenOn: true);
         }
         catch (Exception ex)
         {
-            _navigationWakeLockHeld = false;
             _logger.LogWarning(ex, "Could not acquire the navigation wake lock");
         }
 
         _logger.LogInformation("Navigation HUD started for destination: {Destination}", route.DestinationName);
+    }
 
+    /// <summary>Announces an already committed route without delaying caller completion.</summary>
+    public async Task AnnounceNavigationStartAsync(NavigationRoute route)
+    {
         // The initial announcement is ancillary and must not undo visible navigation state.
         try
         {

@@ -40,19 +40,9 @@ public interface IContextMenuCallbacks
 
     #region Navigation Operations
 
-    /// <summary>
-    /// Calculates a route to the specified coordinates.
-    /// </summary>
-    Task<NavigationRoute?> CalculateRouteToCoordinatesAsync(
-        double fromLat, double fromLon,
-        double toLat, double toLon,
-        string destinationName,
-        bool direct);
-
-    /// <summary>
-    /// Starts navigation with the calculated route.
-    /// </summary>
-    Task StartNavigationWithRouteAsync(NavigationRoute route);
+    /// <summary>Owns selection and startup, returning true only after guidance is active.</summary>
+    Task<bool> StartNavigationToCoordinatesAsync(double latitude, double longitude,
+        string name, Func<Task<bool?>> chooseDirect, Func<WayfarerMobile.Services.HostedRouteCoordinate?> currentTarget);
 
     #endregion
 

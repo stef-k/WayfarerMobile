@@ -128,58 +128,44 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
     [RelayCommand]
     public async Task<bool> StartNavigationToPlaceAsync(string placeId)
     {
-        var currentLocation = _callbacks?.CurrentLocation;
-        if (currentLocation == null)
+        var trip = _tripState.LoadedTrip;
+        var destination = trip?.AllPlaces.FirstOrDefault(place => place.Id.ToString() == placeId);
+        if (!_tripNavigationService.IsTripLoaded || destination == null
+            || !UsableCoordinate(destination.Latitude, destination.Longitude))
+            return await StartupFeedbackAsync("Reload the Trip and select a valid Place, then try Directions again.");
+        var selectedId = _callbacks?.SelectedTripPlace?.Id;
+        var target = new HostedRouteCoordinate(destination.Longitude, destination.Latitude);
+        var generation = BeginStartup();
+        var current = CaptureStartup(generation, target, () =>
         {
-            _logger.LogDebug("Cannot start navigation: no current location");
-            return false;
-        }
-
-        if (!_tripNavigationService.IsTripLoaded)
+            if (!ReferenceEquals(_tripState.LoadedTrip, trip)
+                || _callbacks?.SelectedTripPlace?.Id != selectedId) return null;
+            var place = trip!.AllPlaces.FirstOrDefault(item => item.Id == destination.Id);
+            return place == null ? null : new(place.Longitude, place.Latitude);
+        });
+        try
         {
-            _logger.LogDebug("Cannot start navigation: no trip loaded");
-            return false;
-        }
-
-        var route = _tripNavigationService.CalculateRouteToPlace(
-            currentLocation.Latitude,
-            currentLocation.Longitude,
-            placeId,
-            activate: false);
-
-        var hostedAttempted = false;
-        if (route?.IsDirectRoute == true && Guid.TryParse(placeId, out var destinationId))
-        {
-            var authority = HostedTripTargetAuthority.Resolve(_tripState.LoadedTrip, destinationId,
-                currentLocation.Latitude, currentLocation.Longitude);
-            if (authority != null)
+            var location = _callbacks?.CurrentLocation;
+            if (!UsableLocation(location)) return await MissingLocationAsync();
+            var route = _tripNavigationService.CalculateRouteToPlace(
+                location!.Latitude, location.Longitude, placeId, activate: false);
+            if (route == null) return await StartupFeedbackAsync("This Place is unavailable. Reload the Trip and try Directions again.");
+            if (route.IsDirectRoute)
             {
-                hostedAttempted = true;
-                route = await TryHostedAsync(route, currentLocation.Latitude, currentLocation.Longitude,
-                    authority.Destination.Latitude, authority.Destination.Longitude, route.DestinationName,
-                    authority, HostedRouteTargetOwner.Trip(destinationId));
+                var authority = HostedTripTargetAuthority.Resolve(trip, destination.Id,
+                    location.Latitude, location.Longitude);
+                route = await TryHostedAsync(route, location.Latitude, location.Longitude,
+                    destination.Latitude, destination.Longitude, destination.Name,
+                    authority, HostedRouteTargetOwner.Trip(destination.Id), generation, current, hostedChosen: false);
             }
+            if (route == null) return false;
+            if (!current()) return await StaleStartupAsync();
+            return await CommitStartupAsync(route, destination.Id);
         }
-
-        if (route != null)
+        catch (Exception exception)
         {
-            if (!hostedAttempted) CancelHostedRouting();
-            _tripNavigationService.ActivateRoute(route);
-            // Track navigation destination for visit notification conflict detection
-            _currentNavigationPlaceId = Guid.TryParse(placeId, out var guid) ? guid : null;
-            _visitNotificationService.UpdateNavigationState(true, _currentNavigationPlaceId);
-
-            IsNavigating = true;
-            _callbacks?.ShowNavigationRoute(route);
-            _callbacks?.ZoomToNavigationRoute();
-            await _navigationHudViewModel.StartNavigationAsync(route);
-            _callbacks?.SetFollowingLocation(false); // Don't auto-center during navigation
-
-            _logger.LogInformation("Started navigation to place {PlaceId}", placeId);
-            return true;
+            return await StartupFailedAsync(exception);
         }
-
-        return false;
     }
 
     /// <summary>
@@ -188,57 +174,17 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
     [RelayCommand]
     public async Task StartNavigationToNextAsync()
     {
-        var currentLocation = _callbacks?.CurrentLocation;
-        if (currentLocation == null || !_tripNavigationService.IsTripLoaded)
+        var location = _callbacks?.CurrentLocation;
+        if (!UsableLocation(location)) { await MissingLocationAsync(); return; }
+        var route = _tripNavigationService.CalculateRouteToNextPlace(
+            location!.Latitude, location.Longitude, activate: false);
+        var placeId = route?.Waypoints.LastOrDefault()?.PlaceId;
+        if (placeId == null)
         {
-            _logger.LogDebug("Cannot start navigation to next: no location or trip");
+            await StartupFeedbackAsync("No next Place is available. Select a Place and try Directions again.");
             return;
         }
-
-        var route = _tripNavigationService.CalculateRouteToNextPlace(
-            currentLocation.Latitude,
-            currentLocation.Longitude,
-            activate: false);
-        Guid? destinationPlaceId = null;
-
-        var hostedAttempted = false;
-        if (route?.IsDirectRoute == true && route.Waypoints.Count > 0)
-        {
-            var destination = route.Waypoints[^1];
-            destinationPlaceId = Guid.TryParse(destination.PlaceId, out var parsedId) ? parsedId : null;
-            var authority = destinationPlaceId is { } exactId
-                ? HostedTripTargetAuthority.Resolve(_tripState.LoadedTrip, exactId,
-                    currentLocation.Latitude, currentLocation.Longitude)
-                : null;
-            if (authority != null)
-            {
-                hostedAttempted = true;
-                route = await TryHostedAsync(route, currentLocation.Latitude, currentLocation.Longitude,
-                    authority.Destination.Latitude, authority.Destination.Longitude, route.DestinationName,
-                    authority, HostedRouteTargetOwner.Trip(authority.DestinationPlaceId));
-            }
-        }
-        else if (route?.Waypoints.Count > 0)
-        {
-            destinationPlaceId = Guid.TryParse(route.Waypoints[^1].PlaceId, out var parsedId) ? parsedId : null;
-        }
-
-        if (route != null)
-        {
-            if (!hostedAttempted) CancelHostedRouting();
-            _tripNavigationService.ActivateRoute(route);
-            // Track navigation destination for visit notification conflict detection
-            _currentNavigationPlaceId = destinationPlaceId;
-            _visitNotificationService.UpdateNavigationState(true, destinationPlaceId);
-
-            IsNavigating = true;
-            _callbacks?.ShowNavigationRoute(route);
-            _callbacks?.ZoomToNavigationRoute();
-            await _navigationHudViewModel.StartNavigationAsync(route);
-            _callbacks?.SetFollowingLocation(false);
-
-            _logger.LogInformation("Started navigation to next place");
-        }
+        await StartNavigationToPlaceAsync(placeId);
     }
 
     /// <summary>
@@ -355,9 +301,10 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
 
     private async Task<NavigationRoute?> TryHostedAsync(NavigationRoute direct, double fromLat, double fromLon,
         double toLat, double toLon, string destinationName,
-        HostedTripTargetAuthority? tripAuthority, HostedRouteTargetOwner targetOwner)
+        HostedTripTargetAuthority? tripAuthority, HostedRouteTargetOwner targetOwner,
+        long? startupGeneration = null, Func<bool>? startupCurrent = null, bool hostedChosen = true)
     {
-        var generation = Interlocked.Increment(ref _hostedRoutingGeneration);
+        var generation = startupGeneration ?? Interlocked.Increment(ref _hostedRoutingGeneration);
         CancelHostedRouting(incrementGeneration: false);
         _hostedRoutingCancellation = new CancellationTokenSource();
         var context = CreateHostedContext(fromLat, fromLon, toLat, toLon, destinationName,
@@ -365,24 +312,41 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
         _hostedRequest = context;
         _hostedTargetOwner = targetOwner;
         var partition = _settings.RoutingAccountPartition;
+        var cancellation = _hostedRoutingCancellation;
         var retainedDecision = await ResolveRetainedChoiceAsync(direct, context, partition);
+        if (startupCurrent?.Invoke() == false) { await StaleStartupAsync(); return null; }
         if (retainedDecision.Dismissed) return null;
-        if (retainedDecision.RouteComplete) return direct;
+        if (retainedDecision.RouteComplete)
+            return direct.IsDirectRoute ? await CurrentDirectAsync(direct, context, partition) : direct;
+        // This local choice must precede discovery. Retained/saved geometry keeps its priority.
+        if (retainedDecision.RefreshFallback == null && !hostedChosen)
+        {
+            var choice = await _dialogs.SelectAsync("Navigate by", ["Wayfarer route", "Direct"], "Cancel");
+            if (choice == null || choice == "Cancel") return null;
+            if (startupCurrent?.Invoke() == false || !IsIntentCurrent(context, partition))
+            { await StaleStartupAsync(); return null; }
+            if (choice == "Direct") return await CurrentDirectAsync(direct, context, partition);
+            if (choice != "Wayfarer route") return null;
+            if (!IsRequestCurrent(context, partition)) { await StaleStartupAsync(); return null; }
+        }
         var retainedFallback = retainedDecision.RefreshFallback;
         var expectedSelection = _hostedRouting.CurrentSelection;
-        var cancellation = _hostedRoutingCancellation;
         var result = await RequestFreshRouteAsync(context, generation, partition, retainedFallback, cancellation);
         if (result == null) return null;
+        if (startupCurrent?.Invoke() == false) { await StaleStartupAsync(); return null; }
         if (result.Outcome != HostedRoutingOutcome.Success || result.Candidate == null)
         {
-            if (!IsInvocationCurrent(context, partition, cancellation)) return null;
-            if (result.Outcome == HostedRoutingOutcome.Cancelled) return direct;
+            if (result.Outcome == HostedRoutingOutcome.Cancelled)
+                return await CurrentDirectAsync(direct, context, partition);
+            if (!IsInvocationCurrent(context, partition, cancellation))
+            { await StaleStartupAsync(); return null; }
+            await StartupFeedbackAsync("Wayfarer routing is unavailable. Try Directions again or choose Direct.");
             if (retainedFallback != null)
                 RestoreRetainedSelection(context, partition, retainedFallback);
             else return null;
             return direct;
         }
-        if (!IsInvocationCurrent(_hostedRequest!, partition, cancellation)) return null;
+        if (!IsInvocationCurrent(context, partition, cancellation)) { await StaleStartupAsync(); return null; }
         var published = false;
         await MainThread.InvokeOnMainThreadAsync(() =>
         {
@@ -394,9 +358,11 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
                 && _hostedRouting.TrySelectCandidate(result.Candidate, expectedSelection))
                 published = HostedRoutePublication.TryPublish(result.Candidate, live, direct);
         });
-        if (!published) return null;
+        if (!published) { await StaleStartupAsync(); return null; }
         await _retainedRouting.SaveAsync(result.Candidate, partition, DateTimeOffset.UtcNow,
             () => IsCandidateCurrent(result.Candidate, partition), cancellation.Token);
+        if (startupCurrent?.Invoke() == false || !IsCandidateCurrent(result.Candidate, partition))
+        { await StaleStartupAsync(); return null; }
         return direct;
     }
 
@@ -423,17 +389,17 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
                 || !HostedOpaqueIdentity.IsValid(result.DiscoveryCatalogIdentity))
                 return new(HostedRoutingOutcome.Unavailable);
             var options = result.Choices.Select(item =>
-                item.Label).ToArray();
+                item.Label).Append("Direct").ToArray();
             var selected = await _dialogs.SelectAsync(
-                "Provider route mode (separate from the Segment Transport Profile)", options, "Direct");
-            if (selected == null)
+                "Provider route mode (separate from the Segment Transport Profile)", options, "Cancel");
+            if (selected == null || selected == "Cancel")
             {
                 ReleaseDismissedInvocation(context, partition, cancellation);
                 return null;
             }
             if (selected == "Direct")
             {
-                if (IsInvocationCurrent(context, partition, cancellation))
+                if (IsIntentCurrent(context, partition))
                     _hostedRouting.SelectDirect(generation);
                 return new(HostedRoutingOutcome.Cancelled);
             }
@@ -465,13 +431,19 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
         if (retained?.HostedProvenance is not { } provenance)
             return new(false, false, null);
         var choice = await _dialogs.SelectAsync("Wayfarer retained route",
-            ["Use retained route", "Refresh with Wayfarer"], "Direct");
-        if (!IsRequestCurrent(context, partition)) return new(true, false, null);
-        if (choice == null)
+            ["Use retained route", "Refresh with Wayfarer", "Direct"], "Cancel");
+        if (choice == null || choice == "Cancel")
         {
             ReleaseDismissedInvocation(context, partition, _hostedRoutingCancellation!);
             return new(false, true, null);
         }
+        if (choice == "Direct" && IsIntentCurrent(context, partition))
+        {
+            _hostedRouting.SelectDirect(context.Generation);
+            return new(true, false, null);
+        }
+        if (!IsRequestCurrent(context, partition))
+        { await StaleStartupAsync(); return new(false, true, null); }
         if (choice == "Use retained route")
         {
             if (HostedRoutePublication.TryPublishRetained(retained, target))
@@ -479,11 +451,7 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
                     provenance.ProviderMode ?? string.Empty, provenance.SelectedProfileAuthorityIdentity);
             return new(true, false, null);
         }
-        if (choice != "Refresh with Wayfarer")
-        {
-            _hostedRouting.SelectDirect(context.Generation);
-            return new(true, false, null);
-        }
+        if (choice != "Refresh with Wayfarer") return new(false, true, null);
         if (!HostedRoutePublication.TryPublishRetained(retained, target)) return new(true, false, null);
         _hostedRouting.SelectRetained(context.Generation, provenance.TransportProfileId,
             provenance.ProviderMode ?? string.Empty, provenance.SelectedProfileAuthorityIdentity);
@@ -520,7 +488,7 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
     }
 
     private HostedRouteLiveAuthority? CreateLiveAuthority(bool requireSelection = true,
-        HostedRouteSelection? selectionOverride = null)
+        HostedRouteSelection? selectionOverride = null, HostedRouteCoordinate? intentOrigin = null)
     {
         var request = _hostedRequest;
         var owner = _hostedTargetOwner;
@@ -534,7 +502,7 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
         if (owner.TripPlaceId is { } tripPlaceId)
         {
             tripAuthority = HostedTripTargetAuthority.Resolve(_tripState.LoadedTrip, tripPlaceId,
-                location.Latitude, location.Longitude);
+                (intentOrigin?.Latitude ?? location.Latitude), (intentOrigin?.Longitude ?? location.Longitude));
             destination = tripAuthority?.Destination;
         }
         else
@@ -544,7 +512,7 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
         if (destination == null) return null;
 
         return new(_hostedRoutingGeneration, _settings.AuthenticationSessionRevision,
-            HostedRouteServerIdentity.Normalize(_settings.ServerUrl), new(location.Longitude, location.Latitude), destination,
+            HostedRouteServerIdentity.Normalize(_settings.ServerUrl), intentOrigin ?? new(location.Longitude, location.Latitude), destination,
             tripAuthority?.Anchors ?? [], owner.Association, tripAuthority?.SegmentId,
             tripAuthority?.SavedTransportProfileId, selection?.TransportProfileId,
             selection?.SelectedProfileAuthorityIdentity, "hosted", selection?.ProviderMode);
@@ -607,20 +575,11 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
     /// <summary>
     /// Starts navigation with a pre-calculated route (for non-trip navigation).
     /// </summary>
-    public async Task StartNavigationWithRouteAsync(NavigationRoute route)
+    public Task<bool> StartNavigationWithRouteAsync(NavigationRoute route)
     {
+        // Group handoffs already calculated their route. Installation still belongs to startup.
         CancelHostedRouting();
-        _currentNavigationPlaceId = null;
-        _visitNotificationService.UpdateNavigationState(true, null);
-
-        IsNavigating = true;
-        _callbacks?.ShowNavigationRoute(route);
-        _callbacks?.ZoomToNavigationRoute();
-        await _navigationHudViewModel.StartNavigationAsync(route);
-        _callbacks?.SetFollowingLocation(false);
-
-        _logger.LogInformation("Started navigation to {Destination}: {Distance:F1}km",
-            route.DestinationName, route.TotalDistanceMeters / 1000);
+        return CommitStartupAsync(route, null);
     }
 
     #endregion

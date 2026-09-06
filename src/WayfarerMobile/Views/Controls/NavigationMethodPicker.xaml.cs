@@ -3,16 +3,6 @@ using Syncfusion.Maui.Toolkit.Picker;
 namespace WayfarerMobile.Views.Controls;
 
 /// <summary>
-/// Navigation method options.
-/// </summary>
-public enum NavigationMethod
-{
-    Wayfarer,
-    Direct,
-    ExternalMaps
-}
-
-/// <summary>
 /// A picker control for selecting navigation method with large fonts.
 /// </summary>
 public partial class NavigationMethodPicker : ContentView
@@ -33,6 +23,7 @@ public partial class NavigationMethodPicker : ContentView
     public NavigationMethodPicker()
     {
         InitializeComponent();
+        NavPicker.Closed += (_, _) => _tcs?.TrySetResult(null);
 
         // Add column with navigation methods
         _column = new PickerColumn
@@ -145,7 +136,8 @@ public partial class NavigationMethodPicker : ContentView
     /// <returns>The selected navigation method, or null if cancelled.</returns>
     public Task<NavigationMethod?> ShowAsync()
     {
-        _tcs = new TaskCompletionSource<NavigationMethod?>();
+        _tcs?.TrySetResult(null);
+        _tcs = new TaskCompletionSource<NavigationMethod?>(TaskCreationOptions.RunContinuationsAsynchronously);
         _column.SelectedIndex = 0; // Default to the Wayfarer provider flow
         NavPicker.IsOpen = true;
         return _tcs.Task;
@@ -157,16 +149,16 @@ public partial class NavigationMethodPicker : ContentView
     private void OnOkClicked(object? sender, EventArgs e)
     {
         var selectedIndex = _column.SelectedIndex;
-        var method = selectedIndex switch
+        NavigationMethod? method = selectedIndex switch
         {
             0 => NavigationMethod.Wayfarer,
             1 => NavigationMethod.Direct,
             2 => NavigationMethod.ExternalMaps,
-            _ => NavigationMethod.Direct
+            _ => null
         };
 
-        NavPicker.IsOpen = false;
         _tcs?.TrySetResult(method);
+        NavPicker.IsOpen = false;
     }
 
     /// <summary>

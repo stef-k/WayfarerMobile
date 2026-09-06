@@ -10,7 +10,7 @@ using WayfarerMobile.ViewModels;
 namespace WayfarerMobile.Tests.Unit.ViewModels;
 
 [Collection("SQLite")]
-public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
+public sealed partial class NavigationCoordinatorTripChooserTests : IAsyncLifetime
 {
     private const string Identity = "v1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
     private readonly List<SQLite.SQLiteAsyncConnection> connections = [];
@@ -206,7 +206,7 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
         };
         var destination = new TripPlace
         {
-            Id = Guid.NewGuid(), Name = "Destination", Latitude = 38, Longitude = 24, SortOrder = 1
+            Id = Guid.NewGuid(), Name = "Destination", Latitude = 37.01, Longitude = 23.01, SortOrder = 1
         };
         var trip = new TripDetails
         {
@@ -225,9 +225,10 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
             .ReturnsAsync(new HostedRoutingCatalog(Identity, "available", "geoapify",
                 [new HostedProviderMode("walk", "Walk")]));
         var dialogs = new Mock<IDialogService>(MockBehavior.Strict);
+        dialogs.Setup(service => service.ShowInfoAsync(It.IsAny<string>(), It.IsAny<string>())).Returns(Task.CompletedTask);
         dialogs.Setup(service => service.SelectAsync(
-                "Provider route mode (separate from the Segment Transport Profile)",
-                It.IsAny<IReadOnlyList<string>>(), "Direct"))
+                "Navigate by",
+                It.IsAny<IReadOnlyList<string>>(), "Cancel"))
             .ReturnsAsync(chooserResult);
         audio ??= new Mock<INavigationAudioService>();
         if (wakeLock == null)
@@ -239,17 +240,18 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
         var hud = new NavigationHudViewModel(navigation, audio.Object, wakeLock.Object,
             NullLogger<NavigationHudViewModel>.Instance);
         var visitNotifications = new Mock<IVisitNotificationService>();
+        var settings = new MockSettingsService();
         var coordinator = new NavigationCoordinatorViewModel(
             navigation, hud, visitNotifications.Object,
             new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance),
-            CreateRetainedRoutingService(), new MockSettingsService(), dialogs.Object, state,
+            CreateRetainedRoutingService(), settings, dialogs.Object, state,
             NullLogger<NavigationCoordinatorViewModel>.Instance);
         var callbacks = new Mock<INavigationCallbacks>();
         callbacks.SetupGet(value => value.CurrentLocation)
             .Returns(new LocationData { Latitude = origin.Latitude, Longitude = origin.Longitude });
         coordinator.SetCallbacks(callbacks.Object);
         return new(coordinator, navigation, hud, callbacks, api, destination, wakeLock, audio,
-            visitNotifications, state, CreateEditor(Mock.Of<ITripItemEditorCallbacks>()));
+            visitNotifications, state, CreateEditor(Mock.Of<ITripItemEditorCallbacks>()), dialogs, settings);
     }
 
     private static TripItemEditorViewModel CreateEditor(ITripItemEditorCallbacks callbacks)
@@ -292,12 +294,12 @@ public sealed class NavigationCoordinatorTripChooserTests : IAsyncLifetime
         Mock<INavigationCallbacks> Callbacks, Mock<IHostedRoutingApiClient> Api,
         TripPlace Destination, Mock<IWakeLockService> WakeLock, Mock<INavigationAudioService> Audio,
         Mock<IVisitNotificationService> VisitNotifications, ITripStateManager State,
-        TripItemEditorViewModel Editor);
+        TripItemEditorViewModel Editor, Mock<IDialogService> Dialogs, MockSettingsService Settings);
 
     private sealed class NavigationCallbackBridge(NavigationCoordinatorViewModel coordinator)
         : INavigationCallbacks, ITripSheetCallbacks
     {
-        public LocationData? CurrentLocation => null;
+        public LocationData? CurrentLocation { get; set; }
         public TripPlace? SelectedTripPlace => null;
         public bool IsNavigating => coordinator.IsNavigating;
         public bool RouteShown { get; private set; }

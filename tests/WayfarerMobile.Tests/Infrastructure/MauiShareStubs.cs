@@ -86,8 +86,9 @@ public interface IConnectivity
 public static class Connectivity { public static IConnectivity Current { get; set; } = new ConnectivityStub(); private sealed class ConnectivityStub : IConnectivity { public NetworkAccess NetworkAccess => NetworkAccess.Internet; public event EventHandler<ConnectivityChangedEventArgs>? ConnectivityChanged; } }
 namespace Microsoft.Maui.ApplicationModel
 {
-    public static class Map
+    public sealed class Map
     {
+        public static global::Map Default { get; } = global::Map.Default;
         public static Task OpenAsync(global::Location location, global::MapLaunchOptions options) =>
             Task.CompletedTask;
     }
@@ -116,3 +117,5 @@ namespace WayfarerMobile.Helpers
             string html, string? backendBaseUrl, bool isDark) => new() { Html = html };
     }
 }
+
+public sealed class FeatureNotSupportedException : Exception { }
