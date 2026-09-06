@@ -123,4 +123,18 @@
     <Exclude>[WayfarerMobile.Tests]*</Exclude>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" Version="3.119.2" />
+    <PackageReference Include="Mapsui.Nts" Version="5.1.0" />
+    <Compile Include="../../src/WayfarerMobile/ViewModels/MainViewModel.Trips.cs" Link="Production/MainViewModel.Trips.cs" />
+    <Compile Include="../../src/WayfarerMobile/ViewModels/MapDisplayViewModel.cs" Link="Production/MapDisplayViewModel.cs" />
+    <Compile Include="../../src/WayfarerMobile/ViewModels/IMapDisplayCallbacks.cs" Link="Production/IMapDisplayCallbacks.cs" />
+    <Compile Include="../../src/WayfarerMobile/Interfaces/IMapBuilder.cs" Link="Production/IMapBuilder.cs" />
+    <Compile Include="../../src/WayfarerMobile/Interfaces/ITripLayerService.cs" Link="Production/ITripLayerService.cs" />
+    <Compile Include="../../src/WayfarerMobile/Interfaces/ILocationLayerService.cs" Link="Production/ILocationLayerService.cs" />
+    <Compile Include="../../src/WayfarerMobile/Interfaces/IDroppedPinLayerService.cs" Link="Production/IDroppedPinLayerService.cs" />
+    <Compile Include="../../src/WayfarerMobile/Services/TripLayerService.cs" Link="Production/TripLayerService.cs" />
+    <Compile Include="../../src/WayfarerMobile/Services/TripStateManager.cs" Link="Production/TripStateManager.cs" />
+    <Compile Include="../../src/WayfarerMobile/Shared/Utilities/MapsuiColorHelper.cs" Link="Production/MapsuiColorHelper.cs" />
+  </ItemGroup>
 </Project>

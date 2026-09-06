@@ -25,7 +25,6 @@ public partial class MainPage : ContentPage, IQueryAttributable
     private const string TempMarkerLayerName = "PlaceCoordinateEditTempMarker";
     private readonly MainViewModel _viewModel;
     private readonly ILogger<MainPage> _logger;
-    private TripDetails? _pendingTrip;
     private WritableLayer? _tempMarkerLayer;
 
     // Issue #191: Track the last processed LoadTripToken to detect Shell re-applying cached params.
@@ -404,47 +403,8 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// The gate requires: Loaded fired, OnAppearingAsync complete, all critical handlers non-null.
     /// No magic delays - uses concrete platform readiness signals.
     /// </summary>
-    private async Task LoadPendingTripIfReadyAsync()
-    {
-        if (_pendingTrip == null)
-        {
-            _logger.LogDebug("LoadPendingTripIfReadyAsync: No pending trip");
-            return;
-        }
-
-        var trip = _pendingTrip;
-        _logger.LogDebug("LoadPendingTripIfReadyAsync: Waiting for readiness gate, trip={TripName}", trip.Name);
-
-        try
-        {
-            // Wait for the deterministic readiness gate with cancellation support
-            // This will complete when TrySetPageReady() signals all conditions are met
-            using var reg = _pageReadyCts.Token.Register(() =>
-                _logger.LogDebug("LoadPendingTripIfReadyAsync: Readiness gate cancelled (page disappeared)"));
-
-            await _pageReadyTcs.Task.WaitAsync(_pageReadyCts.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            // Page disappeared while waiting - keep pending trip for retry on next appear
-            _logger.LogDebug("LoadPendingTripIfReadyAsync: Cancelled, keeping pending trip for retry");
-            return;
-        }
-
-        // Re-check that pending trip is still set (another caller may have processed it)
-        if (_pendingTrip == null)
-        {
-            _logger.LogDebug("LoadPendingTripIfReadyAsync: Pending trip was cleared by another caller");
-            return;
-        }
-
-        // Clear pending trip now that we're committed to loading
-        _pendingTrip = null;
-
-        _logger.LogDebug("LoadPendingTripIfReadyAsync: Readiness gate passed, loading trip {TripName}", trip.Name);
-        await _viewModel.LoadTripForNavigationAsync(trip);
-        _logger.LogDebug("LoadPendingTripIfReadyAsync: After load, HasLoadedTrip={HasLoaded}", _viewModel.HasLoadedTrip);
-    }
+    private Task LoadPendingTripIfReadyAsync() =>
+        _viewModel.LoadPendingTripIfReadyAsync(_pageReadyTcs.Task, _pageReadyCts.Token);
 
     /// <summary>
     /// Handles navigation query attributes.
@@ -477,7 +437,7 @@ public partial class MainPage : ContentPage, IQueryAttributable
             }
 
             _logger.LogDebug("ApplyQueryAttributes: Setting pending trip {TripName} ({TripId})", trip.Name, trip.Id);
-            _pendingTrip = trip;
+            _viewModel.QueueTripForNavigation(trip);
 
             // D5: Edge case - If both flags already true (re-navigation), trigger load immediately
             // This handles the case where ApplyQueryAttributes is called after page is fully ready

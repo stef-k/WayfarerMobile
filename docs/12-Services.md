@@ -445,6 +445,23 @@ public interface ILocationLayerService
 
 Manages trip place markers and segment polylines.
 
+`MainPage` supplies its existing handler/appearance readiness gate to the Trip-management
+partial of `MainViewModel`. The view model owns the latest pending Trip, consumes it only
+after readiness, and clears it on unload. Queueing a replacement invalidates in-flight
+display work immediately; page disappearance cancels the waiter but retains the pending
+Trip for the next appearance. `ITripStateManager` remains the loaded-Trip source of truth.
+
+`MapDisplayViewModel` stages Place markers during asynchronous icon reads, then publishes
+only if its display version remains current. Initial load and edit refresh share that
+publication path. Switch/unload invalidates it, and the parent rejects stale viewport and
+loaded-indicator updates. Ordinary Segment features still use the existing parser and
+layer invalidation, independently of selected badges/chevrons. These are UI-thread operations.
+
+Both readiness orders pass production-code membership tests before selection. This does
+not certify Android rendering or resolve the original screenshot discrepancy; see
+[the #272 investigation](releases/trip-initial-display-272.md) and
+[the separate #273 presentation scope](https://github.com/stef-k/WayfarerMobile/issues/273).
+
 **Features**:
 - Dynamic icon caching with colorization
 - Place selection highlighting

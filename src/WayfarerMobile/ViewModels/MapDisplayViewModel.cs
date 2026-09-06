@@ -48,6 +48,7 @@ public partial class MapDisplayViewModel : BaseViewModel
     private WritableLayer? _segmentBadgesLayer;
     private WritableLayer? _segmentChevronsLayer;
     private TripDetails? _displayedTrip;
+    private long _tripLayerVersion;
     private TripSegment? _selectedSegment;
 
     #endregion
@@ -335,17 +336,29 @@ public partial class MapDisplayViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// Shows trip layers on the map.
+    /// Shows trip layers on the map. UI-thread publication rejects superseded icon reads.
+    /// Returns null when a newer display or unload owns the layers.
     /// </summary>
-    public async Task<List<MPoint>> ShowTripLayersAsync(TripDetails trip)
+    public async Task<List<MPoint>?> ShowTripLayersAsync(TripDetails trip)
     {
-        if (_selectedSegment != null && !trip.Segments.Any(segment => segment.Id == _selectedSegment.Id))
-            _selectedSegment = null;
+        var version = ++_tripLayerVersion;
+        _selectedSegment = _selectedSegment == null
+            ? null
+            : trip.Segments.FirstOrDefault(segment => segment.Id == _selectedSegment.Id);
         _displayedTrip = trip;
         var placePoints = new List<MPoint>();
 
         if (_tripPlacesLayer != null)
-            placePoints = await _tripLayerService.UpdateTripPlacesAsync(_tripPlacesLayer, trip.AllPlaces);
+        {
+            // Icon reads may yield. Build privately so obsolete work cannot mutate live layers.
+            using var places = new WritableLayer();
+            placePoints = await _tripLayerService.UpdateTripPlacesAsync(places, trip.AllPlaces);
+            if (version != _tripLayerVersion) return null;
+            _tripPlacesLayer.Clear();
+            foreach (var feature in places.GetFeatures())
+                _tripPlacesLayer.Add(feature);
+            _tripPlacesLayer.DataHasChanged();
+        }
 
         if (_tripAreasLayer != null)
             _tripLayerService.UpdateTripAreas(_tripAreasLayer, trip.AllAreas);
@@ -371,10 +384,16 @@ public partial class MapDisplayViewModel : BaseViewModel
     public void RefreshSelectedSegmentDecorations() => UpdateSelectedSegmentDecorations(_selectedSegment);
 
     /// <summary>
+    /// Rejects in-flight publication without touching map controls before page readiness.
+    /// </summary>
+    public void InvalidateTripLayerWork() => ++_tripLayerVersion;
+
+    /// <summary>
     /// Clears trip layers from the map.
     /// </summary>
     public void ClearTripLayers()
     {
+        InvalidateTripLayerWork();
         _displayedTrip = null;
         _selectedSegment = null;
         _tripPlacesLayer?.Clear();
@@ -426,19 +445,7 @@ public partial class MapDisplayViewModel : BaseViewModel
     /// </summary>
     public async Task RefreshTripLayersAsync(TripDetails trip)
     {
-        _selectedSegment = _selectedSegment == null
-            ? null
-            : trip.Segments.FirstOrDefault(segment => segment.Id == _selectedSegment.Id);
-        _displayedTrip = trip;
-        if (_tripPlacesLayer != null)
-            await _tripLayerService.UpdateTripPlacesAsync(_tripPlacesLayer, trip.AllPlaces);
-
-        if (_tripAreasLayer != null)
-            _tripLayerService.UpdateTripAreas(_tripAreasLayer, trip.AllAreas);
-
-        if (_tripSegmentsLayer != null)
-            _tripLayerService.UpdateTripSegments(_tripSegmentsLayer, trip.Segments);
-        RefreshSelectedSegmentDecorations();
+        await ShowTripLayersAsync(trip);
     }
 
     /// <summary>
@@ -495,10 +502,7 @@ public partial class MapDisplayViewModel : BaseViewModel
     protected override void Cleanup()
     {
         _locationLayerService.StopAnimation();
-        _segmentBadgesLayer?.Clear();
-        _segmentChevronsLayer?.Clear();
-        _displayedTrip = null;
-        _selectedSegment = null;
+        ClearTripLayers();
         base.Cleanup();
     }
 
