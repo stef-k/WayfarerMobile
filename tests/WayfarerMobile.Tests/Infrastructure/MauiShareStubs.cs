@@ -1,5 +1,13 @@
 public static class FileSystem
 {
+    public static PackageFiles Current { get; } = new();
+    public sealed class PackageFiles
+    {
+        public AsyncLocal<Func<string, Task<Stream>>?> Open { get; } = new();
+        public Task<Stream> OpenAppPackageFileAsync(string path) => Open.Value?.Invoke(path)
+            ?? Task.FromException<Stream>(new FileNotFoundException());
+    }
+
     // Per-async-flow isolation prevents migration cleanup from touching another test's files.
     public static AsyncLocal<string?> DatabaseTestRoot { get; } = new();
     public static string AppDataDirectory => DatabaseTestRoot.Value
@@ -42,9 +50,9 @@ public sealed class MapLaunchOptions
 
 public enum NavigationMode { None, Walking }
 
-public sealed class Map
+public sealed class PlatformMap
 {
-    public static Map Default { get; } = new();
+    public static PlatformMap Default { get; } = new();
 
     public Task OpenAsync(Location location, MapLaunchOptions options) => Task.CompletedTask;
 }
@@ -90,13 +98,14 @@ namespace Microsoft.Maui.ApplicationModel
 {
     public sealed class Map
     {
-        public static global::Map Default { get; } = global::Map.Default;
+        public static global::PlatformMap Default { get; } = global::PlatformMap.Default;
         public static Task OpenAsync(global::Location location, global::MapLaunchOptions options) =>
             Task.CompletedTask;
     }
 
     public static class MainThread
     {
+        public static bool IsMainThread => true;
         public static void BeginInvokeOnMainThread(Action action) => action();
 
         public static Task InvokeOnMainThreadAsync(Action action)
@@ -131,3 +140,4 @@ public sealed class Page
     public Task DisplayAlertAsync(string title, string message, string accept) => Task.CompletedTask;
     public Task<bool> DisplayAlertAsync(string title, string message, string accept, string cancel) => Task.FromResult(false);
 }
+
