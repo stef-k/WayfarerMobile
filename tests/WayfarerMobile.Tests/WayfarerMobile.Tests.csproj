@@ -30,6 +30,7 @@
     <Compile Include="..\..\src\WayfarerMobile\Interfaces\ITripMetadataBuilder.cs" Link="Production\ITripMetadataBuilder.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\GroupsService.cs" Link="Production\GroupsService.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\TripContentService.cs" Link="Production\TripContentService.cs" />
+    <Compile Include="..\..\src\WayfarerMobile\Services\DialogService.cs" Link="Production\DialogService.cs" />
     <!-- Test Framework -->
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.11" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />

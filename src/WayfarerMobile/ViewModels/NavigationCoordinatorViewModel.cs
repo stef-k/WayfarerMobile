@@ -128,14 +128,15 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
     [RelayCommand]
     public async Task<bool> StartNavigationToPlaceAsync(string placeId)
     {
+        var generation = BeginStartup();
         var trip = _tripState.LoadedTrip;
-        var destination = trip?.AllPlaces.FirstOrDefault(place => place.Id.ToString() == placeId);
+        var destination = Guid.TryParse(placeId, out var destinationId)
+            ? trip?.AllPlaces.FirstOrDefault(place => place.Id == destinationId) : null;
         if (!_tripNavigationService.IsTripLoaded || destination == null
             || !UsableCoordinate(destination.Latitude, destination.Longitude))
             return await StartupFeedbackAsync("Reload the Trip and select a valid Place, then try Directions again.");
         var selectedId = _callbacks?.SelectedTripPlace?.Id;
         var target = new HostedRouteCoordinate(destination.Longitude, destination.Latitude);
-        var generation = BeginStartup();
         var current = CaptureStartup(generation, target, () =>
         {
             if (!ReferenceEquals(_tripState.LoadedTrip, trip)
@@ -322,7 +323,11 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
         if (retainedDecision.RefreshFallback == null && !hostedChosen)
         {
             var choice = await _dialogs.SelectAsync("Navigate by", ["Wayfarer route", "Direct"], "Cancel");
-            if (choice == null || choice == "Cancel") return null;
+            if (choice == null || choice == "Cancel")
+            {
+                ReleaseDismissedInvocation(context, cancellation);
+                return null;
+            }
             if (startupCurrent?.Invoke() == false || !IsIntentCurrent(context, partition))
             { await StaleStartupAsync(); return null; }
             if (choice == "Direct") return await CurrentDirectAsync(direct, context, partition);
@@ -341,6 +346,7 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
             if (!IsInvocationCurrent(context, partition, cancellation))
             { await StaleStartupAsync(); return null; }
             await StartupFeedbackAsync("Wayfarer routing is unavailable. Try Directions again or choose Direct.");
+            if (!IsInvocationCurrent(context, partition, cancellation)) return null;
             if (retainedFallback != null)
                 RestoreRetainedSelection(context, partition, retainedFallback);
             else return null;
@@ -394,7 +400,7 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
                 "Provider route mode (separate from the Segment Transport Profile)", options, "Cancel");
             if (selected == null || selected == "Cancel")
             {
-                ReleaseDismissedInvocation(context, partition, cancellation);
+                ReleaseDismissedInvocation(context, cancellation);
                 return null;
             }
             if (selected == "Direct")
@@ -434,7 +440,7 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
             ["Use retained route", "Refresh with Wayfarer", "Direct"], "Cancel");
         if (choice == null || choice == "Cancel")
         {
-            ReleaseDismissedInvocation(context, partition, _hostedRoutingCancellation!);
+            ReleaseDismissedInvocation(context, _hostedRoutingCancellation!);
             return new(false, true, null);
         }
         if (choice == "Direct" && IsIntentCurrent(context, partition))
@@ -488,7 +494,7 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
     }
 
     private HostedRouteLiveAuthority? CreateLiveAuthority(bool requireSelection = true,
-        HostedRouteSelection? selectionOverride = null, HostedRouteCoordinate? intentOrigin = null)
+        HostedRouteSelection? selectionOverride = null)
     {
         var request = _hostedRequest;
         var owner = _hostedTargetOwner;
@@ -502,7 +508,7 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
         if (owner.TripPlaceId is { } tripPlaceId)
         {
             tripAuthority = HostedTripTargetAuthority.Resolve(_tripState.LoadedTrip, tripPlaceId,
-                (intentOrigin?.Latitude ?? location.Latitude), (intentOrigin?.Longitude ?? location.Longitude));
+                location.Latitude, location.Longitude);
             destination = tripAuthority?.Destination;
         }
         else
@@ -512,7 +518,7 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
         if (destination == null) return null;
 
         return new(_hostedRoutingGeneration, _settings.AuthenticationSessionRevision,
-            HostedRouteServerIdentity.Normalize(_settings.ServerUrl), intentOrigin ?? new(location.Longitude, location.Latitude), destination,
+            HostedRouteServerIdentity.Normalize(_settings.ServerUrl), new(location.Longitude, location.Latitude), destination,
             tripAuthority?.Anchors ?? [], owner.Association, tripAuthority?.SegmentId,
             tripAuthority?.SavedTransportProfileId, selection?.TransportProfileId,
             selection?.SelectedProfileAuthorityIdentity, "hosted", selection?.ProviderMode);
@@ -533,10 +539,10 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
         CancellationTokenSource cancellation) => ReferenceEquals(_hostedRoutingCancellation, cancellation)
         && !cancellation.IsCancellationRequested && IsRequestCurrent(context, partition);
 
-    private void ReleaseDismissedInvocation(HostedRouteRequestContext context, Guid partition,
+    private void ReleaseDismissedInvocation(HostedRouteRequestContext context,
         CancellationTokenSource cancellation)
     {
-        if (!IsInvocationCurrent(context, partition, cancellation)) return;
+        if (_hostedRoutingGeneration != context.Generation) return;
         if (ReferenceEquals(Interlocked.CompareExchange(
                 ref _hostedRoutingCancellation, null, cancellation), cancellation))
             cancellation.Dispose();

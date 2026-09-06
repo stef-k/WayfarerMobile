@@ -72,7 +72,9 @@ public enum AppTheme { Unspecified, Light, Dark }
 
 public class Application
 {
-    public static Application? Current { get; set; }
+    private static readonly AsyncLocal<Application?> current = new();
+    public static Application? Current { get => current.Value; set => current.Value = value; }
+    public List<Window> Windows { get; } = [];
     public AppTheme RequestedTheme { get; set; }
 }
 
@@ -119,3 +121,13 @@ namespace WayfarerMobile.Helpers
 }
 
 public sealed class FeatureNotSupportedException : Exception { }
+
+public sealed class Window { public Page? Page { get; set; } }
+public sealed class Page
+{
+    public Func<string, string, string?, string[], Task<string>>? ActionSheet { get; set; }
+    public Task<string> DisplayActionSheetAsync(string title, string cancel, string? destruction, params string[] choices) =>
+        ActionSheet!(title, cancel, destruction, choices);
+    public Task DisplayAlertAsync(string title, string message, string accept) => Task.CompletedTask;
+    public Task<bool> DisplayAlertAsync(string title, string message, string accept, string cancel) => Task.FromResult(false);
+}

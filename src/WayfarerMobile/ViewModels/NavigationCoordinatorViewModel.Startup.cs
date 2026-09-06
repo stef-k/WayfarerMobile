@@ -69,9 +69,19 @@ public partial class NavigationCoordinatorViewModel
     private bool IsIntentCurrent(HostedRouteRequestContext context, Guid partition)
     {
         if (_settings.RoutingAccountPartition != partition
-            || _hostedRequest?.Generation != context.Generation) return false;
-        var live = CreateLiveAuthority(requireSelection: false, intentOrigin: context.Origin);
-        return live != null && HostedRoutePublication.CurrentRequest(context, live);
+            || _hostedRequest?.Generation != context.Generation
+            || _hostedRoutingGeneration != context.Generation
+            || _settings.AuthenticationSessionRevision != context.AuthenticationSessionRevision
+            || HostedRouteServerIdentity.Normalize(_settings.ServerUrl) != context.NormalizedServer)
+            return false;
+        var owner = _hostedTargetOwner;
+        if (owner?.Association != context.TargetAssociation) return false;
+        if (owner.TripPlaceId is { } placeId)
+        {
+            var place = _tripState.LoadedTrip?.AllPlaces.FirstOrDefault(item => item.Id == placeId);
+            return place != null && new HostedRouteCoordinate(place.Longitude, place.Latitude) == context.Destination;
+        }
+        return owner.ResolveDestination() == context.Destination;
     }
 
     private async Task<NavigationRoute?> CurrentDirectAsync(NavigationRoute original,

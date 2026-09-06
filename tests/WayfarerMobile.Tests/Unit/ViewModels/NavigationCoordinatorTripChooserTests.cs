@@ -198,7 +198,7 @@ public sealed partial class NavigationCoordinatorTripChooserTests : IAsyncLifeti
     }
 
     private Scenario CreateScenario(string? chooserResult, Mock<IWakeLockService>? wakeLock = null,
-        Mock<INavigationAudioService>? audio = null)
+        Mock<INavigationAudioService>? audio = null, Func<Task>? beforeRetainedConnection = null)
     {
         var origin = new TripPlace
         {
@@ -244,7 +244,7 @@ public sealed partial class NavigationCoordinatorTripChooserTests : IAsyncLifeti
         var coordinator = new NavigationCoordinatorViewModel(
             navigation, hud, visitNotifications.Object,
             new HostedRoutingService(api.Object, NullLogger<HostedRoutingService>.Instance),
-            CreateRetainedRoutingService(), settings, dialogs.Object, state,
+            CreateRetainedRoutingService(beforeRetainedConnection), settings, dialogs.Object, state,
             NullLogger<NavigationCoordinatorViewModel>.Instance);
         var callbacks = new Mock<INavigationCallbacks>();
         callbacks.SetupGet(value => value.CurrentLocation)
@@ -270,14 +270,18 @@ public sealed partial class NavigationCoordinatorTripChooserTests : IAsyncLifeti
             new MockSettingsService(), Mock.Of<IWikipediaService>(), new MockToastService(),
             NullLogger<TripSheetViewModel>.Instance);
 
-    private RetainedWayfarerRoutingService CreateRetainedRoutingService()
+    private RetainedWayfarerRoutingService CreateRetainedRoutingService(Func<Task>? beforeConnection = null)
     {
         var path = Path.Combine(Path.GetTempPath(), $"wayfarer-navigation-trip-{Guid.NewGuid():N}.db3");
         var connection = new SQLite.SQLiteAsyncConnection(path);
         connections.Add(connection);
         databasePaths.Add(path);
         RetainedWayfarerRouteMigration.ApplyAsync(connection, CancellationToken.None).GetAwaiter().GetResult();
-        return new(new RetainedWayfarerRouteRepository(connection),
+        return new(new RetainedWayfarerRouteRepository(async () =>
+            {
+                if (beforeConnection != null) await beforeConnection();
+                return connection;
+            }),
             NullLogger<RetainedWayfarerRoutingService>.Instance);
     }
 

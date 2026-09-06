@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Services;
 using WayfarerMobile.ViewModels;
 using WayfarerMobile.Views.Controls;
@@ -88,6 +89,60 @@ public sealed partial class NavigationCoordinatorTripChooserTests
         scenario.Navigation.ActiveRoute.Waypoints[0].Longitude.Should().Be(moved.Longitude);
         scenario.Api.Verify(api => api.DiscoverAsync(It.IsAny<CancellationToken>()), Times.Never);
         VerifyNoProviderRequest(scenario.Api);
+    }
+
+    [Fact]
+    public async Task EssentialFailureAfterWakeAcquisition_CleansStateAndAllowsReleaseRetry()
+    {
+        var scenario = CreateScenario("Direct");
+        scenario.WakeLock.SetupSequence(service => service.ReleaseWakeLock(WakeLockOwner.Navigation))
+            .Throws(new InvalidOperationException("release unavailable"))
+            .Pass();
+        scenario.Coordinator.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(scenario.Coordinator.IsNavigating) && scenario.Coordinator.IsNavigating)
+                throw new InvalidOperationException("display binding failed");
+        };
+
+        var started = await scenario.Coordinator.StartNavigationToPlaceAsync(scenario.Destination.Id.ToString());
+
+        started.Should().BeFalse();
+        scenario.Navigation.ActiveRoute.Should().BeNull();
+        scenario.Coordinator.IsNavigating.Should().BeFalse();
+        scenario.Hud.IsNavigating.Should().BeFalse();
+        scenario.WakeLock.Verify(service => service.ReleaseWakeLock(WakeLockOwner.Navigation), Times.Once);
+        scenario.Coordinator.StopNavigation();
+        scenario.WakeLock.Verify(service => service.ReleaseWakeLock(WakeLockOwner.Navigation), Times.Exactly(2));
+        scenario.WakeLock.Verify(service => service.ReleaseWakeLock(WakeLockOwner.Persistent), Times.Never);
+    }
+
+    [Fact]
+    public async Task DroppedPin_AccountChangesDuringPersistence_DoesNotActivateSavedResult()
+    {
+        var saving = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        var scenario = CreateScenario("Wayfarer route", beforeRetainedConnection: async () =>
+        {
+            if (++calls != 2) return; // First connection is retained lookup; second is save.
+            saving.SetResult();
+            await resume.Task;
+        });
+        ConfigureHosted(scenario);
+        var prior = await scenario.Coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.02, 23.02, "Existing", direct: true);
+        await scenario.Coordinator.StartNavigationWithRouteAsync(prior!);
+        var context = CreateContext(scenario, NavigationMethod.Wayfarer);
+
+        var pending = context.NavigateToContextLocationCommand.ExecuteAsync(null);
+        await saving.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        scenario.Settings.ApiToken = "changed-test-session";
+        resume.SetResult();
+        await pending;
+
+        context.HasDroppedPin.Should().BeTrue();
+        scenario.Navigation.ActiveRoute.Should().BeSameAs(prior);
+        scenario.Hud.DestinationName.Should().Be("Existing");
+        scenario.Callbacks.Verify(callback => callback.ShowNavigationRoute(It.IsAny<NavigationRoute>()), Times.Once);
     }
 
     [Fact]
