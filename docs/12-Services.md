@@ -426,6 +426,14 @@ The map uses separate layer services for each feature domain, following the sing
 
 Manages the current user location indicator on the map.
 
+Each synchronous update constructs the dot, accuracy circle and heading cone from
+one projected location snapshot. The cone's anchor is its construction origin, not
+its centroid or inner arc. Reused features call `Modified()` after geometry/style
+updates and before `DataHasChanged()` so Mapsui's retained polygon cache uses the
+current position, heading and radius even when the viewport is unchanged.
+Heading selection, smoothing, accuracy scaling and styles are preserved; the
+main-map pulse timer remains unwired. See [controlled rendering evidence](releases/location-indicator-275.md).
+
 **Components**:
 - **Accuracy Circle**: Semi-transparent circle showing GPS accuracy
 - **Heading Cone**: Direction indicator (30-90 degrees based on calibration)
