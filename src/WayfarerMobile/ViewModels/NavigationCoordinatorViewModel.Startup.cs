@@ -11,7 +11,7 @@ public partial class NavigationCoordinatorViewModel
     /// resolver must return null when the caller's pin has been replaced or removed.
     /// </summary>
     public async Task<bool> StartNavigationToCoordinatesAsync(double latitude, double longitude,
-        string name, Func<Task<bool?>> chooseDirect, Func<HostedRouteCoordinate?> currentTarget)
+        string name, Func<Task> externalMaps, Func<HostedRouteCoordinate?> currentTarget)
     {
         var generation = BeginStartup();
         var current = CaptureStartup(generation, new(longitude, latitude), currentTarget);
@@ -19,21 +19,19 @@ public partial class NavigationCoordinatorViewModel
         {
             if (!UsableCoordinate(latitude, longitude))
                 return await StartupFeedbackAsync("Select a valid destination and try Directions again.");
-            var direct = await chooseDirect();
-            if (direct == null) return false;
             if (!current()) return await StaleStartupAsync();
             var location = _callbacks?.CurrentLocation;
-            if (!UsableLocation(location)) return await MissingLocationAsync();
-            NavigationRoute? route = await _tripNavigationService.CalculateRouteToCoordinatesAsync(
-                location!.Latitude, location.Longitude, latitude, longitude, name, activate: false);
+            // External Maps needs only the target. An empty draft cannot activate;
+            // internal choices still require a usable current location.
+            NavigationRoute? route = UsableLocation(location)
+                ? await _tripNavigationService.CalculateRouteToCoordinatesAsync(
+                    location!.Latitude, location.Longitude, latitude, longitude, name, activate: false)
+                : new NavigationRoute { DestinationName = name, IsDirectRoute = true };
             if (!current()) return await StaleStartupAsync();
-            if (!direct.Value)
-                route = await TryHostedAsync(route, location.Latitude, location.Longitude,
-                    latitude, longitude, name, null,
-                    HostedRouteTargetOwner.Member(latitude, longitude, "dropped-pin", currentTarget),
-                    generation, current, hostedChosen: true);
-            else
-                _hostedRouting.SelectDirect(generation);
+            route = await TryHostedAsync(route, location?.Latitude ?? double.NaN,
+                location?.Longitude ?? double.NaN, latitude, longitude, name, null,
+                HostedRouteTargetOwner.Member(latitude, longitude, "dropped-pin", currentTarget),
+                generation, current, hostedChosen: false, externalMaps);
             if (route == null) return false;
             if (!current()) return await StaleStartupAsync();
             return await CommitStartupAsync(route, null);

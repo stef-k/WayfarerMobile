@@ -80,9 +80,12 @@ public sealed partial class NavigationCoordinatorTripChooserTests
         }
         else
         {
-            scenario.Dialogs.Setup(dialog => dialog.SelectAsync("Navigate by", It.IsAny<IReadOnlyList<string>>(), "Cancel"))
-                .Callback(() => scenario.Callbacks.SetupGet(callback => callback.CurrentLocation).Returns(moved))
-                .ReturnsAsync("Direct");
+            scenario.Callbacks.Setup(callback => callback.ShowDirectionsAsync(It.IsAny<DirectionsViewModel>()))
+                .Returns<DirectionsViewModel>(async model =>
+                {
+                    scenario.Callbacks.SetupGet(callback => callback.CurrentLocation).Returns(moved);
+                    await model.DirectCommand.ExecuteAsync(null);
+                });
             (await scenario.Coordinator.StartNavigationToPlaceAsync(scenario.Destination.Id.ToString())).Should().BeTrue();
         }
         scenario.Navigation.ActiveRoute!.Waypoints[0].Latitude.Should().Be(moved.Latitude);
@@ -196,7 +199,7 @@ public sealed partial class NavigationCoordinatorTripChooserTests
         var scenario = CreateScenario("Direct");
         var prior = await scenario.Coordinator.CalculateRouteToCoordinatesAsync(37, 23, 37.02, 23.02, "Existing", direct: true);
         await scenario.Coordinator.StartNavigationWithRouteAsync(prior!);
-        // Exercise Main's existing picker callback contract through the real context menu.
+        // Exercise unavailable Directions presentation through the real context menu.
         var context = CreateContext(scenario, null, () =>
             throw new InvalidOperationException("Navigation selection is unavailable. Reopen the map and try again."));
         Application.Current = null;
@@ -232,14 +235,21 @@ public sealed partial class NavigationCoordinatorTripChooserTests
         var callbacks = new Mock<IContextMenuCallbacks>(MockBehavior.Strict);
         callbacks.Setup(callback => callback.ShowDroppedPin(It.IsAny<double>(), It.IsAny<double>()));
         callbacks.Setup(callback => callback.ClearDroppedPinFromMap());
-        callbacks.Setup(callback => callback.ShowNavigationPickerAsync()).Returns(() =>
-        {
-            whileChoosing?.Invoke();
-            return Task.FromResult(choice);
-        });
+        scenario.Callbacks.Setup(callback => callback.ShowDirectionsAsync(It.IsAny<DirectionsViewModel>()))
+            .Returns<DirectionsViewModel>(model =>
+            {
+                whileChoosing?.Invoke();
+                return ChooseDirectionsAsync(model, choice switch
+                {
+                    NavigationMethod.Direct => "Direct",
+                    NavigationMethod.Wayfarer => "Wayfarer route",
+                    NavigationMethod.ExternalMaps => "External Maps",
+                    _ => null
+                });
+            });
         callbacks.Setup(callback => callback.StartNavigationToCoordinatesAsync(It.IsAny<double>(), It.IsAny<double>(),
-                It.IsAny<string>(), It.IsAny<Func<Task<bool?>>>(), It.IsAny<Func<HostedRouteCoordinate?>>()))
-            .Returns<double, double, string, Func<Task<bool?>>, Func<HostedRouteCoordinate?>>(
+                It.IsAny<string>(), It.IsAny<Func<Task>>(), It.IsAny<Func<HostedRouteCoordinate?>>()))
+            .Returns<double, double, string, Func<Task>, Func<HostedRouteCoordinate?>>(
                 scenario.Coordinator.StartNavigationToCoordinatesAsync);
         var context = new ContextMenuViewModel(NullLogger<ContextMenuViewModel>.Instance);
         context.SetCallbacks(callbacks.Object);

@@ -9,7 +9,7 @@ using WayfarerMobile.ViewModels;
 namespace WayfarerMobile.Tests.Unit.ViewModels;
 
 [Collection("SQLite")]
-public sealed class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
+public sealed partial class NavigationCoordinatorHostedRoutingTests : IAsyncLifetime
 {
     private static readonly Guid WalkingProfile = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid HikingProfile = Guid.Parse("22222222-2222-2222-2222-222222222222");

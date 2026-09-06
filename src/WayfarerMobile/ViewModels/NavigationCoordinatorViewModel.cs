@@ -303,7 +303,7 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
     private async Task<NavigationRoute?> TryHostedAsync(NavigationRoute direct, double fromLat, double fromLon,
         double toLat, double toLon, string destinationName,
         HostedTripTargetAuthority? tripAuthority, HostedRouteTargetOwner targetOwner,
-        long? startupGeneration = null, Func<bool>? startupCurrent = null, bool hostedChosen = true)
+        long? startupGeneration = null, Func<bool>? startupCurrent = null, bool hostedChosen = true, Func<Task>? externalMaps = null)
     {
         var generation = startupGeneration ?? Interlocked.Increment(ref _hostedRoutingGeneration);
         CancelHostedRouting(incrementGeneration: false);
@@ -314,26 +314,14 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
         _hostedTargetOwner = targetOwner;
         var partition = _settings.RoutingAccountPartition;
         var cancellation = _hostedRoutingCancellation;
+        if (!hostedChosen)
+            return await TryProgressiveDirectionsAsync(direct, context, partition, cancellation,
+                startupCurrent, externalMaps);
         var retainedDecision = await ResolveRetainedChoiceAsync(direct, context, partition);
         if (startupCurrent?.Invoke() == false) { await StaleStartupAsync(); return null; }
         if (retainedDecision.Dismissed) return null;
         if (retainedDecision.RouteComplete)
             return direct.IsDirectRoute ? await CurrentDirectAsync(direct, context, partition) : direct;
-        // This local choice must precede discovery. Retained/saved geometry keeps its priority.
-        if (retainedDecision.RefreshFallback == null && !hostedChosen)
-        {
-            var choice = await _dialogs.SelectAsync("Navigate by", ["Wayfarer route", "Direct"], "Cancel");
-            if (choice == null || choice == "Cancel")
-            {
-                ReleaseDismissedInvocation(context, cancellation);
-                return null;
-            }
-            if (startupCurrent?.Invoke() == false || !IsIntentCurrent(context, partition))
-            { await StaleStartupAsync(); return null; }
-            if (choice == "Direct") return await CurrentDirectAsync(direct, context, partition);
-            if (choice != "Wayfarer route") return null;
-            if (!IsRequestCurrent(context, partition)) { await StaleStartupAsync(); return null; }
-        }
         var retainedFallback = retainedDecision.RefreshFallback;
         var expectedSelection = _hostedRouting.CurrentSelection;
         var result = await RequestFreshRouteAsync(context, generation, partition, retainedFallback, cancellation);
@@ -341,7 +329,7 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
         if (startupCurrent?.Invoke() == false) { await StaleStartupAsync(); return null; }
         if (result.Outcome != HostedRoutingOutcome.Success || result.Candidate == null)
         {
-            if (result.Outcome == HostedRoutingOutcome.Cancelled)
+            if (result.Outcome == HostedRoutingOutcome.DirectSelected)
                 return await CurrentDirectAsync(direct, context, partition);
             if (!IsInvocationCurrent(context, partition, cancellation))
             { await StaleStartupAsync(); return null; }
@@ -352,11 +340,20 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
             else return null;
             return direct;
         }
+        return await PublishHostedRouteAsync(direct, context, partition, cancellation,
+            startupCurrent, result, expectedSelection);
+    }
+
+    private async Task<NavigationRoute?> PublishHostedRouteAsync(NavigationRoute direct,
+        HostedRouteRequestContext context, Guid partition, CancellationTokenSource cancellation,
+        Func<bool>? startupCurrent, HostedRoutingResult result, HostedRouteSelection? expectedSelection)
+    {
+        if (result.Candidate == null) return null;
         if (!IsInvocationCurrent(context, partition, cancellation)) { await StaleStartupAsync(); return null; }
         var published = false;
         await MainThread.InvokeOnMainThreadAsync(() =>
         {
-            var candidateSelection = new HostedRouteSelection(result.Candidate.Context.Generation,
+            var candidateSelection = new HostedRouteSelection(result.Candidate!.Context.Generation,
                 result.Candidate.SelectedProfileId, result.Candidate.SelectedProviderMode,
                 result.Candidate.SelectedProfileAuthorityIdentity);
             var live = CreateLiveAuthority(selectionOverride: candidateSelection);
@@ -378,7 +375,8 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
     {
         var catalogRediscoveryAvailable = true;
         var result = await _hostedRouting.RequestRouteAsync(context,
-            cancellationToken: cancellation.Token);
+            cancellationToken: cancellation.Token,
+            isRequestCurrent: () => IsInvocationCurrent(context, partition, cancellation));
         if (result.Outcome == HostedRoutingOutcome.CatalogChanged) catalogRediscoveryAvailable = false;
         var maximumPresentations = result.Outcome switch
         {
@@ -407,7 +405,7 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
             {
                 if (IsIntentCurrent(context, partition))
                     _hostedRouting.SelectDirect(generation);
-                return new(HostedRoutingOutcome.Cancelled);
+                return new(HostedRoutingOutcome.DirectSelected);
             }
             var index = Array.IndexOf(options, selected);
             if (index < 0) return new(HostedRoutingOutcome.Unavailable);
@@ -421,7 +419,7 @@ public partial class NavigationCoordinatorViewModel : BaseViewModel
             _hostedRequest = choiceContext;
             result = await _hostedRouting.RequestRouteAsync(
                 choiceContext, result.Choices[index], cancellation.Token,
-                catalogRediscoveryAvailable);
+                catalogRediscoveryAvailable, () => IsInvocationCurrent(context, partition, cancellation));
             if (result.Outcome == HostedRoutingOutcome.CatalogChanged) catalogRediscoveryAvailable = false;
         }
         if (result.Outcome != HostedRoutingOutcome.CatalogChanged) return result;

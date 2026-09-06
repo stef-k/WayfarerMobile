@@ -410,10 +410,6 @@
                                    HorizontalOptions="Center"
                                    ZIndex="20" />
 
-        <!-- Navigation Method Picker (overlay, doesn't affect layout) -->
-        <controls:NavigationMethodPicker x:Name="NavigationMethodPicker"
-                                         IsVisible="False"
-                                         InputTransparent="True" />
     </Grid>
 
 </ContentPage>

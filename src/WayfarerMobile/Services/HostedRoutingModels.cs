@@ -44,7 +44,7 @@ public sealed record HostedRouteResponse(bool Succeeded, string Outcome, IReadOn
         "persistent", selectedAuthorityIdentity, "walk");
 }
 
-public enum HostedRoutingOutcome { Success, Unavailable, RequiresChoice, CatalogChanged, InvalidResponse, Stale, Cancelled }
+public enum HostedRoutingOutcome { Success, Unavailable, RequiresChoice, CatalogChanged, InvalidResponse, Stale, Cancelled, DirectSelected, CatalogUnavailable }
 public sealed record HostedRoutingResult(HostedRoutingOutcome Outcome, NavigationRoute? Route = null,
     IReadOnlyList<HostedProviderMode>? Choices = null, HostedRouteCandidate? Candidate = null,
     string? DiscoveryCatalogIdentity = null, string? Provider = null);

@@ -827,12 +827,4 @@ public partial class MainPage : ContentPage, IQueryAttributable
 
     #endregion
 
-    /// <summary>
-    /// Shows the navigation method picker and returns the selected method.
-    /// </summary>
-    /// <returns>The selected navigation method, or null if cancelled.</returns>
-    public Task<NavigationMethod?> ShowNavigationPickerAsync()
-    {
-        return NavigationMethodPicker.ShowAsync();
-    }
 }

@@ -51,6 +51,18 @@ public sealed partial class NavigationCoordinatorTripChooserTests : IAsyncLifeti
     }
 
     [Fact]
+    public async Task TripDirections_DoesNotUseSeparateMethodConfirmation()
+    {
+        var scenario = CreateScenario("Direct");
+
+        (await scenario.Coordinator.StartNavigationToPlaceAsync(scenario.Destination.Id.ToString()))
+            .Should().BeTrue();
+
+        scenario.Dialogs.Verify(dialog => dialog.SelectAsync("Navigate by",
+            It.IsAny<IReadOnlyList<string>>(), "Cancel"), Times.Never);
+    }
+
+    [Fact]
     public async Task TripSheetWithoutParent_ReturnsFalseAndRemainsOpen()
     {
         var scenario = CreateScenario("Direct");
@@ -249,6 +261,8 @@ public sealed partial class NavigationCoordinatorTripChooserTests : IAsyncLifeti
         var callbacks = new Mock<INavigationCallbacks>();
         callbacks.SetupGet(value => value.CurrentLocation)
             .Returns(new LocationData { Latitude = origin.Latitude, Longitude = origin.Longitude });
+        callbacks.Setup(callback => callback.ShowDirectionsAsync(It.IsAny<DirectionsViewModel>()))
+            .Returns<DirectionsViewModel>(model => ChooseDirectionsAsync(model, chooserResult));
         coordinator.SetCallbacks(callbacks.Object);
         return new(coordinator, navigation, hud, callbacks, api, destination, wakeLock, audio,
             visitNotifications, state, CreateEditor(Mock.Of<ITripItemEditorCallbacks>()), dialogs, settings);
@@ -303,6 +317,7 @@ public sealed partial class NavigationCoordinatorTripChooserTests : IAsyncLifeti
     private sealed class NavigationCallbackBridge(NavigationCoordinatorViewModel coordinator)
         : INavigationCallbacks, ITripSheetCallbacks
     {
+        public Task ShowDirectionsAsync(DirectionsViewModel model) => ChooseDirectionsAsync(model, "Direct");
         public LocationData? CurrentLocation { get; set; }
         public TripPlace? SelectedTripPlace => null;
         public bool IsNavigating => coordinator.IsNavigating;
