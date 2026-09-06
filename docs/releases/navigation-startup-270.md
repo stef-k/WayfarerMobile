@@ -96,8 +96,24 @@ The final `Compile` run was verified not to change those APK hashes. No dependen
 upgrade is included.
 
 Code Guard uses the maintainer-authorized [legacy LOC ratchet](../../.agent-tools/README.md),
-generated from the reviewed base. Final branch checks must include all committed
-changes, plus any uncommitted work, and `git diff --check`.
+generated from the reviewed base. Complete-branch analysis reports REVIEW, with no
+FAIL/INCOMPLETE or tool/configuration errors. Accepted findings:
+
+- MainViewModel (1,186 LOC) is within its lowered legacy allowance; its change is
+  the direct forwarding boundary, without new presentation responsibilities.
+- MapDisplay (435 LOC) and HUD (462 LOC) retain their existing map/display ownership;
+  the narrow readiness and essential/ancillary split does not justify broad extraction.
+- Coordinator (555 LOC), including `TryHostedAsync` complexity 21, owns the sequential
+  retained/Direct/hosted selection and publication protocol. The conditions explicitly
+  fence each awaited boundary; hiding them would make freshness harder to inspect.
+- Hosted-routing tests (579 LOC) remain one controlled authority/retained-route
+  regression fixture, with updated explicit cancellation expectations.
+- Services documentation (1,411 lines) remains the established service reference;
+  the changed navigation material stays in its existing section with a focused handoff link.
+
+Whitespace checks cover the complete diff from the verified base, not only the
+last checkpoint. Independent review should focus on native picker closure ordering,
+HUD mounting, the two real caller forwarding boundaries, and freshness/cleanup.
 
 ## Bounded Android observation plan — pending separate coordination
 

@@ -9,4 +9,3 @@ public enum NavigationMethod
     Direct,
     ExternalMaps
 }
-
