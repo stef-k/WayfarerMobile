@@ -45,11 +45,3 @@ namespace WayfarerMobile.ViewModels
     }
 }
 
-namespace WayfarerMobile.Services
-{
-    public sealed class LocationIndicatorService
-    {
-        public double CurrentHeading => -1;
-        public bool HasValidHeading => false;
-    }
-}
