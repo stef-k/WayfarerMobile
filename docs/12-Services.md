@@ -462,6 +462,20 @@ not certify Android rendering or resolve the original screenshot discrepancy; se
 [the #272 investigation](releases/trip-initial-display-272.md) and
 [the separate #273 presentation scope](https://github.com/stef-k/WayfarerMobile/issues/273).
 
+All eligible ordinary Segment geometries now have a solid base, retaining mode colors,
+alpha, widths and fallback semantics. Selected chevrons are open three-point lines:
+10 logical units along the tangent, 10 across, with round opaque black width-4 casing
+and white width-2 center strokes. The horizontal rendered envelope is 14 by 14;
+any rotation remains below 15.19 units per axis. Screen-to-world projection avoids
+double rotation; MainPage refreshes decorations on every viewport event so zoom cannot
+temporarily enlarge stale world-projected arms. Zoom-label updates remain throttled.
+
+Placement retains the eight-cue cap and 72-unit pairwise separation. The existing
+24-unit endpoint inset is extended by the rendered radius (sqrt(125) + 2), and
+rendered bounds overlapping Place marker envelopes are suppressed, including waypoints
+and folds. Badge measurement/coalescing, navigation suppression and tap routing are unchanged.
+See [renderer evidence and remaining physical acceptance](releases/segment-rendering-273.md).
+
 **Features**:
 - Dynamic icon caching with colorization
 - Place selection highlighting

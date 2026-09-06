@@ -549,6 +549,8 @@ public partial class MainPage : ContentPage, IQueryAttributable
     /// </summary>
     private void OnViewportChanged(object? sender, Mapsui.ViewportChangedEventArgs e)
     {
+        // World-projected cue arms must retain their logical size during zoom and rotation.
+        _viewModel.MapDisplay.RefreshSelectedSegmentDecorations();
         var now = DateTime.UtcNow;
         if ((now - _lastViewportUpdate).TotalMilliseconds < ViewportUpdateThrottleMs)
         {
@@ -565,7 +567,6 @@ public partial class MainPage : ContentPage, IQueryAttributable
         var bounds = _viewModel.MapDisplay.GetViewportBounds();
         if (bounds.HasValue)
             _viewModel.UpdateZoomLevel(bounds.Value.ZoomLevel);
-        _viewModel.MapDisplay.RefreshSelectedSegmentDecorations();
     }
 
     private async void ScheduleTrailingViewportRefresh()

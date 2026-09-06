@@ -48,16 +48,19 @@ public static class SegmentChevronPlacer
     public const double MinimumSpacing = 72;
     public const int MaximumCount = 8;
 
-    public static IReadOnlyList<SegmentChevronProjection> Place(IReadOnlyList<ProjectedRoutePoint> points)
+    public static IReadOnlyList<SegmentChevronProjection> Place(
+        IReadOnlyList<ProjectedRoutePoint> points, double renderedRadius = 0)
     {
-        if (points.Count < 2 || points.Any(point => !double.IsFinite(point.X) || !double.IsFinite(point.Y)))
+        if (!double.IsFinite(renderedRadius) || renderedRadius < 0 ||
+            points.Count < 2 || points.Any(point => !double.IsFinite(point.X) || !double.IsFinite(point.Y)))
             return Array.Empty<SegmentChevronProjection>();
 
         var cumulative = new double[points.Count];
         for (var index = 1; index < points.Count; index++)
             cumulative[index] = cumulative[index - 1] + Distance(points[index - 1], points[index]);
         var total = cumulative[^1];
-        var usable = total - (2 * EndpointClearance);
+        var clearance = EndpointClearance + renderedRadius;
+        var usable = total - (2 * clearance);
         if (usable < MinimumSpacing) return Array.Empty<SegmentChevronProjection>();
 
         var count = Math.Min(MaximumCount, Math.Max(1, (int)Math.Floor(usable / MinimumSpacing)));
@@ -66,8 +69,8 @@ public static class SegmentChevronPlacer
         for (var placement = 1; placement <= count; placement++)
         {
             var target = count == 1
-                ? EndpointClearance + (usable / 2)
-                : EndpointClearance + ((placement - 1) * spacing);
+                ? clearance + (usable / 2)
+                : clearance + ((placement - 1) * spacing);
             var segmentIndex = 1;
             while (segmentIndex < cumulative.Length && cumulative[segmentIndex] < target) segmentIndex++;
             if (segmentIndex >= cumulative.Length) break;

@@ -47,6 +47,9 @@ public class SegmentRenderingTests(ITestOutputHelper output)
             ? """{"type":"LineString","coordinates":[[1.04,1],[1.02,1.01],[1,1]]}"""
             : """{"type":"LineString","coordinates":[[1,1],[1.02,1.01],[1.04,1]]}""";
         if (reversed) (segment.OriginId, segment.DestinationId) = (segment.DestinationId, segment.OriginId);
+        var via = new TripPlace { Id = Guid.NewGuid(), Latitude = 1.01, Longitude = 1.02 };
+        places = [.. places, via];
+        segment.Waypoints = [new TripSegmentWaypoint { PlaceId = via.Id, Position = 0, RouteVertexIndex = 1 }];
         using var lines = new WritableLayer { Style = null };
         using var cues = new WritableLayer { Style = null };
         using var badges = new WritableLayer { Style = null };
@@ -69,6 +72,13 @@ public class SegmentRenderingTests(ITestOutputHelper output)
             var screen = arm.Coordinates.Select(p => viewport.WorldToScreen(p.X, p.Y)).ToArray();
             Assert.InRange(screen.Max(p => p.X) - screen.Min(p => p.X) + 4, 0, 24);
             Assert.InRange(screen.Max(p => p.Y) - screen.Min(p => p.Y) + 4, 0, 24);
+            foreach (var place in places)
+            {
+                var world = SphericalMercator.FromLonLat(place.Longitude, place.Latitude);
+                var marker = viewport.WorldToScreen(world.x, world.y);
+                Assert.False(screen.Min(p => p.X) - 2 < marker.X + 24 && screen.Max(p => p.X) + 2 > marker.X - 24 &&
+                    screen.Min(p => p.Y) - 2 < marker.Y + 24 && screen.Max(p => p.Y) + 2 > marker.Y - 48);
+            }
             var tip = arm.GetPointN(1);
             Assert.True(route.Distance(tip) < 0.000001, "Tip must stay on its own route");
             var edge = Enumerable.Range(1, route.NumPoints - 1)
@@ -115,6 +125,14 @@ public class SegmentRenderingTests(ITestOutputHelper output)
         Assert.NotEmpty(cues.GetFeatures());
         using var selected = Render(viewport, [lines, cues, badges]);
         SaveObservation(selected, $"selected-{resolution}");
+        using var dark = Render(viewport, [lines, cues, badges], Color.FromArgb(255, 32, 32, 32));
+        SaveObservation(dark, $"selected-dark-{resolution}");
+        var cue = Assert.IsType<LineString>(Assert.IsType<GeometryFeature>(cues.GetFeatures().First()).Geometry);
+        var projected = cue.Coordinates.Select(p => viewport.WorldToScreen(p.X, p.Y)).ToArray();
+        Assert.Equal(10, projected.Max(p => p.X) - projected.Min(p => p.X), 6);
+        Assert.Equal(10, projected.Max(p => p.Y) - projected.Min(p => p.Y), 6);
+        AssertCueContrast(selected, projected[1].X, projected[1].Y);
+        AssertCueContrast(dark, projected[1].X, projected[1].Y);
         output.WriteLine($"Selected layer order: TripSegments, SelectedSegmentChevrons, SelectedSegmentBadges; cue count {cues.GetFeatures().Count()}. Production Places remain above these layers.");
     }
 
@@ -131,10 +149,20 @@ public class SegmentRenderingTests(ITestOutputHelper output)
         }, [start, end], new Viewport(center.x, center.y, resolution, 0, 640, 400));
     }
 
-    private static SKBitmap Render(Viewport viewport, ILayer[] layers)
+    private static void AssertCueContrast(SKBitmap bitmap, double tipX, double tipY)
+    {
+        var pixels = new List<SKColor>();
+        for (var x = (int)tipX - 11; x <= tipX; x++)
+            for (var y = (int)tipY - 6; y <= (int)tipY + 6; y++)
+                pixels.Add(bitmap.GetPixel(x, y));
+        Assert.Contains(pixels, p => p.Red < 80 && p.Green < 80 && p.Blue < 80);
+        Assert.Contains(pixels, p => p.Red > 230 && p.Green > 230 && p.Blue > 230);
+    }
+
+    private static SKBitmap Render(Viewport viewport, ILayer[] layers, Color? background = null)
     {
         using var map = new Mapsui.Map();
-        using var stream = new MapRenderer().RenderToBitmapStream(viewport, layers, map.RenderService, Color.White);
+        using var stream = new MapRenderer().RenderToBitmapStream(viewport, layers, map.RenderService, background ?? Color.White);
         return SKBitmap.Decode(stream.ToArray());
     }
 

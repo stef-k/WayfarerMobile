@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Trips (#273): give every eligible Segment a continuous mode-colored base stroke;
+  selected direction cues use compact open black/white chevrons with Place clearance.
+  Controlled Skia rendering passes, but does not reproduce or explain the original
+  Android visibility report. Combined candidate visual acceptance remains pending.
+
 - Trips (#272): reject replaced/unloaded Trip readiness and delayed map-layer work,
   including stale viewport and loaded-indicator updates. Ordinary Segment population
   is covered before selection in both readiness orders. The reported device visibility
