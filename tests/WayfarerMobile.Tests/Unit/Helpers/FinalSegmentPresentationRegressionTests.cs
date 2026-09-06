@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using WayfarerMobile.Core.Helpers;
 using WayfarerMobile.Core.Models;
 
@@ -51,7 +51,8 @@ public class FinalSegmentPresentationRegressionTests
         remapped = PrepareReplacement(invalidReplacement, remapped);
 
         remapped.Should().BeSameAs(invalidReplacement.Segments.Single());
-        remapped!.AnchorTrail.Should().Equal(SegmentPresentationProjector.UnavailableMessage);
+        remapped!.AnchorTrail.Should().Equal(
+            "A — Start — Invalid start", SegmentPresentationProjector.UnavailableMessage, "B — End — Invalid end");
     }
 
     [Fact]

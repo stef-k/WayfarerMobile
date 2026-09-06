@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:viewmodels="clr-namespace:WayfarerMobile.ViewModels"
@@ -514,36 +514,26 @@
                         <Label Grid.Column="1" Text="{Binding TripSheet.SelectedTripSegment.TransportMode}" FontSize="20" FontAttributes="Bold"
                                LineBreakMode="WordWrap" />
                     </Grid>
-                    <HorizontalStackLayout Spacing="16">
+                    <VerticalStackLayout Spacing="4">
                         <Label Text="{Binding TripSheet.SelectedTripSegment.DistanceKm, StringFormat='{0:F1} km'}" FontSize="15"
                                TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
                                IsVisible="{Binding TripSheet.SelectedTripSegment.DistanceKm, Converter={StaticResource IsNotNullConverter}}" />
                         <Label Text="{Binding TripSheet.SelectedTripSegment.DurationMinutes, StringFormat='{0} minutes'}" FontSize="15"
                                TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}"
                                IsVisible="{Binding TripSheet.SelectedTripSegment.DurationMinutes, Converter={StaticResource IsNotNullConverter}}" />
-                    </HorizontalStackLayout>
+                    </VerticalStackLayout>
                     <VerticalStackLayout BindableLayout.ItemsSource="{Binding TripSheet.SelectedTripSegmentTrail}"
-                                         IsVisible="{Binding TripSheet.SelectedTripSegment.HasWaypoints}" Spacing="6">
+                                         Spacing="6">
                         <BindableLayout.ItemTemplate>
                             <DataTemplate x:DataType="x:String">
                                 <Label Text="{Binding .}" FontSize="15" LineBreakMode="WordWrap" />
                             </DataTemplate>
                         </BindableLayout.ItemTemplate>
                     </VerticalStackLayout>
-                    <!-- From -->
-                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8"
-                          IsVisible="{Binding TripSheet.SelectedTripSegment.HasWaypoints, Converter={StaticResource InvertedBoolConverter}}">
-                        <Label Grid.Column="0" Text="From:" FontSize="15" FontAttributes="Bold"
-                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
-                        <Label Grid.Column="1" Text="{Binding TripSheet.SelectedTripSegment.OriginName}" FontSize="15" LineBreakMode="WordWrap" />
-                    </Grid>
-                    <!-- To -->
-                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8"
-                          IsVisible="{Binding TripSheet.SelectedTripSegment.HasWaypoints, Converter={StaticResource InvertedBoolConverter}}">
-                        <Label Grid.Column="0" Text="To:" FontSize="15" FontAttributes="Bold"
-                               TextColor="{AppThemeBinding Light={StaticResource TextSecondary}, Dark={StaticResource TextSecondaryDark}}" />
-                        <Label Grid.Column="1" Text="{Binding TripSheet.SelectedTripSegment.DestinationName}" FontSize="15" LineBreakMode="WordWrap" />
-                    </Grid>
+                    <Label Text="{Binding TripSheet.SelectedTripSegmentDetails.WaypointCountText}"
+                           FontSize="15" LineBreakMode="WordWrap" />
+                    <Label Text="{Binding TripSheet.SelectedTripSegmentDetails.RoutePointCountText}"
+                           FontSize="15" LineBreakMode="WordWrap" />
                     <!-- Segment Notes (tappable to open detail view) -->
                     <Border StrokeThickness="0"
                             BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}"
