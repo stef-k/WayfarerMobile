@@ -136,6 +136,8 @@
     <Compile Include="../../src/WayfarerMobile/Interfaces/ILocationLayerService.cs" Link="Production/ILocationLayerService.cs" />
     <Compile Include="../../src/WayfarerMobile/Interfaces/IDroppedPinLayerService.cs" Link="Production/IDroppedPinLayerService.cs" />
     <Compile Include="../../src/WayfarerMobile/Services/TripLayerService.cs" Link="Production/TripLayerService.cs" />
+    <Compile Include="../../src/WayfarerMobile/Services/LocationLayerService.cs" Link="Production/LocationLayerService.cs" />
+    <Compile Include="../../src/WayfarerMobile/Services/LocationIndicatorService.cs" Link="Production/LocationIndicatorService.cs" />
     <Compile Include="../../src/WayfarerMobile/Services/TripStateManager.cs" Link="Production/TripStateManager.cs" />
     <Compile Include="../../src/WayfarerMobile/Shared/Utilities/MapsuiColorHelper.cs" Link="Production/MapsuiColorHelper.cs" />
   </ItemGroup>

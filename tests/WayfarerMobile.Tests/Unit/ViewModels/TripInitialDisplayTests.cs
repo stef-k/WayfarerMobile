@@ -162,7 +162,7 @@ public class TripInitialDisplayTests
         var location = Mock.Of<ILocationBridge>();
         var display = new MapDisplayViewModel(builder.Object, location, Mock.Of<ILocationLayerService>(),
             new TripLayerService(NullLogger<TripLayerService>.Instance), Mock.Of<IDroppedPinLayerService>(),
-            new WayfarerMobile.Services.LocationIndicatorService(), Mock.Of<IToastService>(),
+            new WayfarerMobile.Services.LocationIndicatorService(NullLogger<WayfarerMobile.Services.LocationIndicatorService>.Instance), Mock.Of<IToastService>(),
             NullLogger<MapDisplayViewModel>.Instance);
         var state = new TripStateManager(NullLogger<TripStateManager>.Instance);
         return (new MainViewModel(display, state, Mock.Of<ITripNavigationService>(), location), state, builder);

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Location indicator (#275): invalidate retained Mapsui feature paths after updates so
+  the accuracy circle and heading cone move with the dot and reflect current heading
+  and radius. Controlled production rendering passes; combined physical acceptance is pending.
+
 - Trips (#274): selected Segment details show one wrapping Start/Via/End Place trail,
   with separate endpoint rows even without geometry. Remove repeated endpoint headings
   and stack measurements. Waypoint and actual decoded route-point counts are independent;

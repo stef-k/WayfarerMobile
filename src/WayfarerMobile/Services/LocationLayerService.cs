@@ -128,6 +128,8 @@ public class LocationLayerService : ILocationLayerService
             {
                 _accuracyFeature.Geometry = accuracyCircle;
                 _accuracyFeature.Styles = new[] { CreateAccuracyCircleStyle(indicatorColor, pulseScale) };
+                // Geometry replacement alone does not invalidate Mapsui's cached polygon path.
+                _accuracyFeature.Modified();
             }
         }
         else if (_accuracyFeature != null)
@@ -153,6 +155,7 @@ public class LocationLayerService : ILocationLayerService
             else
             {
                 _headingFeature.Geometry = headingCone;
+                _headingFeature.Modified();
             }
         }
         else if (_headingFeature != null)
@@ -176,6 +179,7 @@ public class LocationLayerService : ILocationLayerService
         {
             _markerFeature.Geometry = markerPoint;
             _markerFeature.Styles = new[] { CreateLocationMarkerStyle(indicatorColor) };
+            _markerFeature.Modified();
         }
     }
 
@@ -245,6 +249,7 @@ public class LocationLayerService : ILocationLayerService
         {
             _markerFeature.Geometry = markerPoint;
             _markerFeature.Styles = new[] { CreateLocationMarkerStyle(grayColor) };
+            _markerFeature.Modified();
         }
 
         layer.DataHasChanged();
