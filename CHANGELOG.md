@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- SSE (Wayfarer #674): reconnect group and visit streams after remote EOF or body I/O
+  failure using the existing 1s/2s/5s backoff. Explicit Stop and caller cancellation
+  remain terminal; authentication, events, routes and lifecycle ownership are unchanged.
+
 - Segments (#273): match Web's blue line palette and add a separate **Show on map**
   checkbox per Trip drawer row. Hidden Segments stay hidden through selection and map
   refresh; same-Trip refresh retains choices by ID, while unload/Trip switch resets them.

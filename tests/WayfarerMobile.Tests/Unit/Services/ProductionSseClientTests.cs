@@ -121,7 +121,7 @@ public class ProductionSseClientTests
     {
         const string frames = """
             : heartbeat
-            data: {"type":"location","userName":"walker","latitude":37.9,"longitude":23.7}
+            data: {"type":"location","userName":"walker","locationId":42,"isLive":true}
 
             data: {"type":"member-joined","userId":"member"}
 
@@ -136,7 +136,8 @@ public class ProductionSseClientTests
         client.LocationReceived += (_, e) =>
         {
             Assert.Equal("walker", e.Location.UserName);
-            Assert.Equal(37.9, e.Location.Latitude);
+            Assert.Equal(42, e.Location.LocationId);
+            Assert.True(e.Location.IsLive);
             events.Add("location");
         };
         client.MembershipReceived += (_, e) =>

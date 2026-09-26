@@ -93,7 +93,22 @@ public interface IConnectivity
     NetworkAccess NetworkAccess { get; }
     event EventHandler<ConnectivityChangedEventArgs>? ConnectivityChanged;
 }
-public static class Connectivity { public static IConnectivity Current { get; set; } = new ConnectivityStub(); private sealed class ConnectivityStub : IConnectivity { public NetworkAccess NetworkAccess => NetworkAccess.Internet; public event EventHandler<ConnectivityChangedEventArgs>? ConnectivityChanged; } }
+/// <summary>Mirrors MAUI's static event forwarding for the linked production SSE client.</summary>
+public static class Connectivity
+{
+    public static IConnectivity Current { get; set; } = new ConnectivityStub();
+    public static event EventHandler<ConnectivityChangedEventArgs>? ConnectivityChanged
+    {
+        add => Current.ConnectivityChanged += value;
+        remove => Current.ConnectivityChanged -= value;
+    }
+
+    private sealed class ConnectivityStub : IConnectivity
+    {
+        public NetworkAccess NetworkAccess => NetworkAccess.Internet;
+        public event EventHandler<ConnectivityChangedEventArgs>? ConnectivityChanged;
+    }
+}
 namespace Microsoft.Maui.ApplicationModel
 {
     public sealed class Map
