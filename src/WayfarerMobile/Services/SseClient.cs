@@ -65,6 +65,9 @@ public class SseClient : ISseClient
 
     #endregion
 
+    /// <summary>Allows transport tests to observe backoff without wall-clock waits.</summary>
+    internal Func<int, CancellationToken, Task> ReconnectDelayAsync { get; set; } = Task.Delay;
+
     #region Events
 
     /// <inheritdoc />
@@ -240,7 +243,7 @@ public class SseClient : ISseClient
 
                     Reconnecting?.Invoke(this, new SseReconnectEventArgs(reconnectAttempt, delayMs));
 
-                    await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
+                    await ReconnectDelayAsync(delayMs, cancellationToken).ConfigureAwait(false);
                 }
 
                 _logger.LogDebug("Connecting to SSE channel: {Channel}", channelName);
