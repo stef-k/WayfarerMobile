@@ -10,6 +10,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Exercise the shared SSE transport itself, using the existing platform stubs. -->
+    <Compile Include="../../src/WayfarerMobile/Services/SseClient.cs" Link="Production/SseClient.cs" />
     <Compile Remove="Infrastructure\Entities\LiveTileEntity.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Data\Services\DatabaseService.cs" Link="Production\DatabaseService.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Data\Entities\LiveTile.cs" Link="Production\LiveTile.cs" />

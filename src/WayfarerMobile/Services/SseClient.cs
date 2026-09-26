@@ -65,6 +65,9 @@ public class SseClient : ISseClient
 
     #endregion
 
+    /// <summary>Allows transport tests to observe backoff without wall-clock waits.</summary>
+    internal Func<int, CancellationToken, Task> ReconnectDelayAsync { get; set; } = Task.Delay;
+
     #region Events
 
     /// <inheritdoc />
@@ -175,22 +178,8 @@ public class SseClient : ISseClient
             _isConnected = false;
         }
 
-        // Force-close stream FIRST - this is what unblocks ReadLineAsync immediately
-        // CancellationToken.Cancel() does NOT interrupt active stream reads in .NET
-        if (streamToClose != null)
-        {
-            try
-            {
-                streamToClose.Close();
-                _logger.LogDebug("SSE stream force-closed");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug("SSE stream close error (expected): {Message}", ex.Message);
-            }
-        }
-
-        // Then cancel token (triggers registered callbacks in background tasks)
+        // Mark cancellation before closing: a read may resume inline from Close().
+        // The registered callback also force-closes the active stream.
         if (ctsToCancel != null && !ctsToCancel.IsCancellationRequested)
         {
             try
@@ -201,6 +190,20 @@ public class SseClient : ISseClient
             catch (Exception ex)
             {
                 _logger.LogDebug("SSE cancellation error: {Message}", ex.Message);
+            }
+        }
+
+        // Retain direct force-close to unblock reads even if a callback fails.
+        if (streamToClose != null)
+        {
+            try
+            {
+                streamToClose.Close();
+                _logger.LogDebug("SSE stream force-closed");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug("SSE stream close error (expected): {Message}", ex.Message);
             }
         }
     }
@@ -240,14 +243,21 @@ public class SseClient : ISseClient
 
                     Reconnecting?.Invoke(this, new SseReconnectEventArgs(reconnectAttempt, delayMs));
 
-                    await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
+                    await ReconnectDelayAsync(delayMs, cancellationToken).ConfigureAwait(false);
                 }
 
                 _logger.LogDebug("Connecting to SSE channel: {Channel}", channelName);
                 await ConnectAndStreamAsync(url, cancellationToken).ConfigureAwait(false);
 
-                // If we reach here, stream ended normally (not an error)
-                break;
+                // No established stream (missing token), or locally stopped: remain terminal.
+                if (!_isConnected || cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                // Remote clean EOF follows the same retry state as transient failures.
+                _isConnected = false;
+                reconnectAttempt++;
             }
             catch (OperationCanceledException)
             {
@@ -255,7 +265,7 @@ public class SseClient : ISseClient
                 _logger.LogInformation("SSE subscription cancelled: {Channel}", channelName);
                 break;
             }
-            catch (Exception ex) when (IsCancellationException(ex))
+            catch (Exception ex) when (IsCancellationException(ex, cancellationToken))
             {
                 // HttpClient sometimes wraps cancellation in other exception types
                 _logger.LogInformation("SSE subscription stopped: {Message}", ex.Message);
@@ -342,7 +352,7 @@ public class SseClient : ISseClient
             _logger.LogInformation("SSE connection cancelled during request");
             throw;
         }
-        catch (Exception ex) when (IsCancellationException(ex))
+        catch (Exception ex) when (IsCancellationException(ex, cancellationToken))
         {
             _logger.LogInformation("SSE connection stopped: {Message}", ex.Message);
             throw new OperationCanceledException("SSE connection was cancelled", ex);
@@ -441,9 +451,9 @@ public class SseClient : ISseClient
                 catch (OperationCanceledException)
                 {
                     _logger.LogInformation("SSE stream reading cancelled");
-                    return;
+                    throw;
                 }
-                catch (Exception ex) when (IsCancellationException(ex))
+                catch (Exception ex) when (IsCancellationException(ex, cancellationToken))
                 {
                     _logger.LogInformation("SSE stream stopped: {Message}", ex.Message);
                     return;
@@ -481,7 +491,7 @@ public class SseClient : ISseClient
                 }
             }
         }
-        catch (Exception ex) when (!IsCancellationException(ex))
+        catch (Exception ex) when (!IsCancellationException(ex, cancellationToken))
         {
             _logger.LogError(ex, "Error parsing SSE stream");
             throw;
@@ -633,38 +643,13 @@ public class SseClient : ISseClient
     }
 
     /// <summary>
-    /// Check if an exception is related to cancellation/disconnection (not a real error).
-    /// Includes stream force-close exceptions which are expected during Stop().
+    /// Recognizes standard cancellation and token-confirmed force-close errors.
+    /// A remote IOException must remain transient; exception messages are not cancellation evidence.
     /// </summary>
-    private static bool IsCancellationException(Exception ex)
+    private static bool IsCancellationException(Exception ex, CancellationToken cancellationToken)
     {
-        // Standard cancellation exceptions
-        if (ex is OperationCanceledException or TaskCanceledException)
-        {
-            return true;
-        }
-
-        // ObjectDisposedException occurs when stream is force-closed during read
-        if (ex is ObjectDisposedException)
-        {
-            return true;
-        }
-
-        // IOException with "closed" typically means stream was force-closed
-        if (ex is IOException)
-        {
-            return true;
-        }
-
-        string message = ex.Message.ToLowerInvariant();
-        return message.Contains("canceled") ||
-               message.Contains("cancelled") ||
-               message.Contains("socket closed") ||
-               message.Contains("connection closed") ||
-               message.Contains("request was canceled") ||
-               message.Contains("the request was aborted") ||
-               message.Contains("closed") ||
-               message.Contains("disposed");
+        return ex is OperationCanceledException ||
+               (cancellationToken.IsCancellationRequested && ex is IOException or ObjectDisposedException);
     }
 
     /// <summary>
