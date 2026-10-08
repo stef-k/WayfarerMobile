@@ -4,6 +4,7 @@ using Moq;
 using WayfarerMobile.Core.Enums;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
+using WayfarerMobile.Data.Repositories;
 using WayfarerMobile.Services;
 using WayfarerMobile.Shared.Controls;
 using WayfarerMobile.Tests.Infrastructure;
@@ -139,6 +140,9 @@ public sealed class ProductionTimelineSelectionTests
         viewModel.ShowLocationDetails(stale);
         viewModel.SelectedLocation!.CanEdit.Should().BeFalse();
         viewModel.SetPendingLocationToReopen(stale);
+        var queue = new LocationQueueRepository(() => Task.FromResult(context.Database),
+            new WayfarerMobile.Tests.Infrastructure.Mocks.MockSettingsService());
+        await queue.MarkServerConfirmedAsync(queuedCapture.Id, 99);
         await context.Repository.UpdateServerIdByQueuedLocationIdAsync(queuedCapture.Id, 99);
         await viewModel.OnAppearingAsync();
         viewModel.SelectedLocation.Should().BeNull();

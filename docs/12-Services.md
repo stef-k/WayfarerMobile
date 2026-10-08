@@ -1394,6 +1394,26 @@ Manages local timeline storage by filtering and persisting location data.
 - Applies AND filter logic (matching server behavior)
 - Both time AND distance thresholds must be exceeded
 
+### Capture Linkage and Recovery
+
+Restart reconciliation and sync completion link only the exact originating Timeline
+row through `LocalTimelineEntry.QueuedLocationId` → `QueuedLocation.Id`, with the same
+positive server ID confirmed on that queue record. The repository applies this as
+one atomic update, requires exactly one originating row and never overwrites an
+existing server link. Timestamp and coordinate equality do not prove origin.
+
+Skip callbacks remove only an unambiguous pending queue-linked row. Imported rows,
+unrelated history, existing server links and confirmed captures are retained.
+Callbacks without an originating queue ID leave entries untouched and read-only;
+legacy captures without that provenance are not automatically promoted.
+
+Backfill creates a separate row from an identified queue record, retains its queue
+ID and copies a server ID only when confirmed. Deduplication uses existing queue or
+confirmed server identities, while the existing time/distance filters still apply.
+It never adopts an imported row with matching location values. Direct accepted
+submissions and actual server responses retain their explicit server authority.
+Capture upload delivery and the held historical mutation policy are unchanged.
+
 ---
 
 ## MutationQueueService

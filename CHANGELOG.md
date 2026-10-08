@@ -8,6 +8,10 @@
   for mutation replay, merging and replacement; hold unconfirmed legacy mutations
   with payload and rollback data intact, even when old bindings match, while newly
   confirmed queued work continues.
+  Link confirmed captures only to their exact queue-originated Timeline row, retain
+  queue provenance during backfill and leave matching imports read-only. Sync and
+  skip callbacks no longer link or delete approximate matches; ambiguous bindings
+  and existing server links are retained.
 
 - SSE (Wayfarer #674): reconnect group and visit streams after remote EOF or body I/O
   failure using the existing 1s/2s/5s backoff. Explicit Stop and caller cancellation

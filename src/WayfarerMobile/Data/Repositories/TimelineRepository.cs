@@ -42,23 +42,6 @@ public class TimelineRepository : RepositoryBase, ITimelineRepository
         await db.ExecuteAsync("DELETE FROM LocalTimelineEntries WHERE Id = ?", id);
     }
 
-    /// <inheritdoc />
-    public async Task<int> DeleteLocalTimelineEntryByTimestampAsync(
-        DateTime timestamp,
-        double latitude,
-        double longitude,
-        int toleranceSeconds = 2)
-    {
-        var db = await GetConnectionAsync();
-
-        var minTime = timestamp.AddSeconds(-toleranceSeconds);
-        var maxTime = timestamp.AddSeconds(toleranceSeconds);
-
-        return await db.ExecuteAsync(
-            "DELETE FROM LocalTimelineEntries WHERE Timestamp >= ? AND Timestamp <= ? AND Latitude = ? AND Longitude = ?",
-            minTime, maxTime, latitude, longitude);
-    }
-
     #endregion
 
     #region Query Operations
@@ -174,26 +157,6 @@ public class TimelineRepository : RepositoryBase, ITimelineRepository
     #region Sync Operations
 
     /// <inheritdoc />
-    public async Task<bool> UpdateLocalTimelineServerIdAsync(
-        DateTime timestamp,
-        double latitude,
-        double longitude,
-        int serverId,
-        int toleranceSeconds = 2)
-    {
-        var db = await GetConnectionAsync();
-
-        var minTime = timestamp.AddSeconds(-toleranceSeconds);
-        var maxTime = timestamp.AddSeconds(toleranceSeconds);
-
-        var affected = await db.ExecuteAsync(
-            "UPDATE LocalTimelineEntries SET ServerId = ? WHERE Timestamp >= ? AND Timestamp <= ? AND Latitude = ? AND Longitude = ? AND ServerId IS NULL",
-            serverId, minTime, maxTime, latitude, longitude);
-
-        return affected > 0;
-    }
-
-    /// <inheritdoc />
     public async Task<int> GetLocalTimelineEntryCountAsync()
     {
         var db = await GetConnectionAsync();
@@ -222,26 +185,38 @@ public class TimelineRepository : RepositoryBase, ITimelineRepository
     /// <inheritdoc />
     public async Task<bool> UpdateServerIdByQueuedLocationIdAsync(int queuedLocationId, int serverId)
     {
-        var db = await GetConnectionAsync();
-        var entry = await db.Table<LocalTimelineEntry>()
-            .Where(e => e.QueuedLocationId == queuedLocationId)
-            .FirstOrDefaultAsync();
-
-        if (entry == null)
+        if (queuedLocationId <= 0 || serverId <= 0)
             return false;
 
-        entry.ServerId = serverId;
-        await db.UpdateAsync(entry);
-        return true;
+        var db = await GetConnectionAsync();
+        // Resolve exactly one originating row and confirm authority in the same atomic statement.
+        var affected = await db.ExecuteAsync("""
+            UPDATE LocalTimelineEntries SET ServerId = ?
+            WHERE Id = (
+                SELECT MIN(Id) FROM LocalTimelineEntries WHERE QueuedLocationId = ? HAVING COUNT(*) = 1
+            ) AND ServerId IS NULL
+            AND EXISTS (
+                SELECT 1 FROM QueuedLocations WHERE Id = ? AND ServerConfirmed = 1 AND ServerId = ?
+            )
+            """, serverId, queuedLocationId, queuedLocationId, serverId);
+        return affected == 1;
     }
 
     /// <inheritdoc />
     public async Task<int> DeleteByQueuedLocationIdAsync(int queuedLocationId)
     {
+        if (queuedLocationId <= 0)
+            return 0;
+
         var db = await GetConnectionAsync();
-        return await db.ExecuteAsync(
-            "DELETE FROM LocalTimelineEntries WHERE QueuedLocationId = ?",
-            queuedLocationId);
+        // A late skip must not remove confirmed history or choose among duplicate queue bindings.
+        return await db.ExecuteAsync("""
+            DELETE FROM LocalTimelineEntries
+            WHERE Id = (
+                SELECT MIN(Id) FROM LocalTimelineEntries WHERE QueuedLocationId = ? HAVING COUNT(*) = 1
+            ) AND ServerId IS NULL
+            AND NOT EXISTS (SELECT 1 FROM QueuedLocations WHERE Id = ? AND ServerConfirmed = 1)
+            """, queuedLocationId, queuedLocationId);
     }
 
     /// <inheritdoc />
