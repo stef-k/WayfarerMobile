@@ -1,3 +1,5 @@
+using WayfarerMobile.Core.Models;
+
 namespace WayfarerMobile.Core.Interfaces;
 
 /// <summary>
@@ -31,7 +33,7 @@ public interface ITimelineSyncService : IDisposable
     /// <summary>
     /// Update a timeline location with optimistic UI pattern.
     /// </summary>
-    /// <param name="locationId">The location ID to update.</param>
+    /// <param name="identity">The selected record's proven identity, revalidated before any side effect.</param>
     /// <param name="latitude">New latitude (optional).</param>
     /// <param name="longitude">New longitude (optional).</param>
     /// <param name="localTimestamp">New timestamp (optional).</param>
@@ -41,7 +43,7 @@ public interface ITimelineSyncService : IDisposable
     /// <param name="clearActivity">Whether to clear the activity.</param>
     /// <param name="activityTypeName">Activity name for optimistic local update (optional).</param>
     Task UpdateLocationAsync(
-        int locationId,
+        TimelineEntryIdentity identity,
         double? latitude = null,
         double? longitude = null,
         DateTime? localTimestamp = null,
@@ -54,7 +56,8 @@ public interface ITimelineSyncService : IDisposable
     /// <summary>
     /// Delete a timeline location with optimistic UI pattern.
     /// </summary>
-    Task DeleteLocationAsync(int locationId);
+    /// <param name="identity">The selected record's proven identity, revalidated before any side effect.</param>
+    Task DeleteLocationAsync(TimelineEntryIdentity identity);
 
     /// <summary>
     /// Get count of pending mutations.

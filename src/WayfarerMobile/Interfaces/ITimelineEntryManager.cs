@@ -1,4 +1,5 @@
 using WayfarerMobile.Shared.Controls;
+using WayfarerMobile.Core.Models;
 
 namespace WayfarerMobile.Interfaces;
 
@@ -10,10 +11,10 @@ public interface ITimelineEntryManager
     /// <summary>
     /// Saves notes for a location.
     /// </summary>
-    /// <param name="locationId">The location ID.</param>
+    /// <param name="identity">The selected record's proven identity.</param>
     /// <param name="notesHtml">The notes HTML content.</param>
     /// <returns>True if save succeeded (or queued for offline), false on error.</returns>
-    Task<bool> SaveNotesAsync(int locationId, string? notesHtml);
+    Task<bool> SaveNotesAsync(TimelineEntryIdentity identity, string? notesHtml);
 
     /// <summary>
     /// Saves entry changes (coordinates, timestamp, notes).

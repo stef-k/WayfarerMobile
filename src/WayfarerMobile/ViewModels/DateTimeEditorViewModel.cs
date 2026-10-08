@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Models;
 using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 
@@ -17,6 +18,8 @@ public partial class DateTimeEditorViewModel : ObservableObject
     private readonly ITimelineSyncService _timelineSyncService;
     private readonly IToastService _toastService;
     private readonly ILogger<DateTimeEditorViewModel> _logger;
+
+    private TimelineEntryIdentity? _editingIdentity;
 
     #region Observable Properties
 
@@ -76,7 +79,8 @@ public partial class DateTimeEditorViewModel : ObservableObject
     private void OpenEditDateTimePicker()
     {
         var selectedLocation = _callbacks.SelectedLocation;
-        if (selectedLocation == null) return;
+        if (selectedLocation?.CanEdit != true) return;
+        _editingIdentity = selectedLocation.Identity;
 
         // Set the picker to the current location's datetime
         EditDateTime = selectedLocation.LocalTimestamp;
@@ -90,10 +94,10 @@ public partial class DateTimeEditorViewModel : ObservableObject
     private async Task SaveEditDateTimeAsync()
     {
         var selectedLocation = _callbacks.SelectedLocation;
-        if (selectedLocation == null) return;
+        if (selectedLocation?.CanEdit != true || selectedLocation.Identity != _editingIdentity) return;
 
         // Store locationId before any changes (reference becomes stale after reload)
-        var locationId = selectedLocation.LocationId;
+        var identity = selectedLocation.Identity;
 
         // Check online status
         if (!_callbacks.IsOnline)
@@ -110,7 +114,7 @@ public partial class DateTimeEditorViewModel : ObservableObject
             var utcDateTime = DateTime.SpecifyKind(EditDateTime, DateTimeKind.Local).ToUniversalTime();
 
             await _timelineSyncService.UpdateLocationAsync(
-                locationId,
+                identity,
                 latitude: null,
                 longitude: null,
                 localTimestamp: utcDateTime,
@@ -127,7 +131,7 @@ public partial class DateTimeEditorViewModel : ObservableObject
             await _callbacks.ReloadTimelineAsync();
 
             // Re-select the location to show updated details in bottom sheet
-            _callbacks.ShowLocationDetails(locationId);
+            _callbacks.ShowLocationDetails(identity);
             _callbacks.OpenLocationSheet();
         }
         catch (HttpRequestException ex)

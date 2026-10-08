@@ -38,6 +38,18 @@ public class PendingTimelineMutation
     /// </summary>
     public int? LocalEntryId { get; set; }
 
+    /// <summary>
+    /// Gets or sets whether the mutation was accepted with proven server identity.
+    /// Legacy rows default to false and require an independently verifiable source binding.
+    /// </summary>
+    public bool ServerIdentityConfirmed { get; set; }
+
+    /// <summary>
+    /// Gets or sets the inspectable reason a mutation is held without remote delivery.
+    /// Held records retain their payload and rollback data and are not server rejections.
+    /// </summary>
+    public string? AuthorityError { get; set; }
+
     #region New Values (what we're changing to)
 
     /// <summary>
@@ -163,7 +175,7 @@ public class PendingTimelineMutation
     /// Gets whether this mutation can be synced.
     /// </summary>
     [Ignore]
-    public bool CanSync => !IsRejected && SyncAttempts < MaxSyncAttempts;
+    public bool CanSync => !IsRejected && AuthorityError == null && SyncAttempts < MaxSyncAttempts;
 
     /// <summary>
     /// Gets whether this mutation has rollback data available.

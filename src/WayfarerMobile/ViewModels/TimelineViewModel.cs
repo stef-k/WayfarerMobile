@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Mapsui;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.ApplicationModel;
 using SQLite;
 using Mapsui.Layers;
 using Mapsui.Nts;
@@ -84,7 +85,8 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     private WritableLayer? _timelineLayer;
     private WritableLayer? _tempMarkerLayer;
     private List<TimelineLocation> _allLocations = new();
-    private int? _pendingLocationIdToReopen;
+    private TimelineEntryIdentity? _pendingIdentityToReopen;
+    private TimelineEntryIdentity? _activityEditingIdentity;
     private DateTime? _dateBeforePickerOpened;
     private int _loadDataGuard; // Atomic guard to prevent concurrent LoadDataAsync calls
     private CancellationTokenSource? _fetchCts; // Cancels stale background server fetches on date change
@@ -409,10 +411,17 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
             // If server returned data, merge it with local display
             if (response.Data != null && response.Data.Any())
             {
-                _allLocations = response.Data;
+                // Only actual server results grant server authority. Preserve local selection provenance.
+                foreach (var location in response.Data)
+                {
+                    location.Identity = _allLocations.FirstOrDefault(l => l.Identity.ServerId == location.Id)?.Identity
+                        ?? TimelineEntryIdentity.FromServer(location.Id);
+                }
+                var localOnly = _allLocations.Where(l => l.Identity.LocalEntryId.HasValue && !l.Identity.CanMutate);
+                _allLocations = response.Data.Concat(localOnly).ToList();
 
-                // Group by hour for better organization (use LocalTimestamp for grouping)
-                var groups = response.Data
+                // Group the merged display, retaining local-only browsing while online.
+                var groups = _allLocations
                     .GroupBy(l => l.LocalTimestamp.Hour)
                     .OrderByDescending(g => g.Key)
                     .Select(g => new TimelineGroup(
@@ -421,7 +430,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
                     .ToList();
 
                 TimelineGroups = new ObservableCollection<TimelineGroup>(groups);
-                TotalCount = response.TotalItems;
+                TotalCount = _allLocations.Count;
                 IsEmpty = !groups.Any();
 
                 // Update stats
@@ -506,6 +515,9 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     /// </summary>
     private void UpdateMapLocations()
     {
+        if (SelectedLocation != null)
+            ShowLocationDetails(SelectedLocation.Identity);
+
         if (_timelineLayer == null || _map == null)
             return;
 
@@ -627,12 +639,15 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     /// <summary>
     /// Shows location details in the bottom sheet.
     /// </summary>
-    /// <param name="locationId">The location ID to show.</param>
-    public void ShowLocationDetails(int locationId)
+    /// <param name="identity">The originating record identity to select; never a fallback display ID.</param>
+    public void ShowLocationDetails(TimelineEntryIdentity identity)
     {
-        var location = _allLocations.FirstOrDefault(l => l.Id == locationId);
+        var location = _allLocations.FirstOrDefault(l => l.Identity == identity && identity != TimelineEntryIdentity.Unknown);
         if (location == null)
+        {
+            CloseLocationSheet();
             return;
+        }
 
         SelectedLocation = new TimelineLocationDisplay(location, _settingsService.ServerUrl);
         IsLocationSheetOpen = true;
@@ -778,7 +793,8 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     [RelayCommand]
     private void OpenActivityPicker()
     {
-        if (SelectedLocation == null) return;
+        if (SelectedLocation?.CanEdit != true) return;
+        _activityEditingIdentity = SelectedLocation.Identity;
 
         // Pre-select current activity if any
         SelectedActivityForEdit = ActivityTypes.FirstOrDefault(a => a.Name == SelectedLocation.ActivityType);
@@ -801,7 +817,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     [RelayCommand]
     private async Task SaveActivityAsync()
     {
-        if (SelectedLocation == null) return;
+        if (SelectedLocation?.CanEdit != true || SelectedLocation.Identity != _activityEditingIdentity) return;
 
         var activityChanged = SelectedActivityForEdit?.Name != SelectedLocation.ActivityType;
         if (activityChanged)
@@ -819,7 +835,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     [RelayCommand]
     private async Task ClearActivityAsync()
     {
-        if (SelectedLocation == null) return;
+        if (SelectedLocation?.CanEdit != true || SelectedLocation.Identity != _activityEditingIdentity) return;
 
         await UpdateActivityAsync(null, clearActivity: true);
         IsActivityPickerOpen = false;
@@ -835,7 +851,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     {
         // Capture reference to avoid race condition during async call
         var locationToUpdate = SelectedLocation;
-        if (locationToUpdate == null) return;
+        if (locationToUpdate?.CanEdit != true) return;
 
         // Look up activity name for optimistic local update
         var activityName = activityTypeId.HasValue
@@ -847,7 +863,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
             IsBusy = true;
 
             await _timelineSyncService.UpdateLocationAsync(
-                locationToUpdate.LocationId,
+                locationToUpdate.Identity,
                 activityTypeId: activityTypeId,
                 clearActivity: clearActivity,
                 activityTypeName: activityName);
@@ -866,7 +882,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to update activity for location {LocationId}", locationToUpdate.LocationId);
+            _logger.LogError(ex, "Failed to update activity for location {LocationId}", locationToUpdate.Identity);
             await _toastService.ShowErrorAsync("Failed to update activity");
         }
         finally
@@ -878,9 +894,15 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     /// <summary>
     /// Deletes a timeline location.
     /// </summary>
-    /// <param name="locationId">The location ID to delete.</param>
-    public async Task DeleteLocationAsync(int locationId)
+    /// <param name="identity">The originating record identity to delete.</param>
+    public async Task DeleteLocationAsync(TimelineEntryIdentity identity)
     {
+        if (!identity.CanMutate || !_allLocations.Any(l => l.Identity == identity))
+        {
+            await _toastService.ShowWarningAsync(TimelineEntryIdentity.ReadOnlyExplanation);
+            return;
+        }
+
         // Check online status
         if (!IsOnline)
         {
@@ -891,12 +913,15 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
         {
             IsBusy = true;
 
+            // The shared boundary verifies linkage before any optimistic display change.
+            await _timelineSyncService.DeleteLocationAsync(identity);
+
             // Close the location sheet first
             IsLocationSheetOpen = false;
             SelectedLocation = null;
 
             // Update UI immediately (optimistic delete)
-            var locationToRemove = _allLocations.FirstOrDefault(l => l.Id == locationId);
+            var locationToRemove = _allLocations.FirstOrDefault(l => l.Identity == identity);
             if (locationToRemove != null)
             {
                 _allLocations.Remove(locationToRemove);
@@ -928,9 +953,6 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
                 UpdateMapLocations();
             }
 
-            // Delete via sync service (handles offline queueing)
-            await _timelineSyncService.DeleteLocationAsync(locationId);
-
             await _toastService.ShowSuccessAsync("Location deleted");
         }
         catch (HttpRequestException ex)
@@ -942,7 +964,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting location {LocationId}", locationId);
+            _logger.LogError(ex, "Error deleting location {LocationId}", identity.ServerId);
             await _toastService.ShowErrorAsync($"Failed to delete: {ex.Message}");
             // Reload to restore UI state
             await LoadDataAsync();
@@ -959,7 +981,8 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     /// <param name="notesHtml">The notes HTML content.</param>
     public async Task SaveNotesAsync(string? notesHtml)
     {
-        if (SelectedLocation == null) return;
+        var selected = SelectedLocation;
+        if (selected?.CanEdit != true) return;
 
         // Check online status
         if (!IsOnline)
@@ -971,14 +994,14 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
         {
             IsBusy = true;
 
-            var locationId = SelectedLocation.LocationId;
-            await _entryManager.SaveNotesAsync(locationId, notesHtml);
+            var identity = selected.Identity;
+            if (!await _entryManager.SaveNotesAsync(identity, notesHtml)) return;
 
             // Reload data to reflect changes
             await LoadDataAsync();
 
             // Re-select the location to show updated details
-            ShowLocationDetails(locationId);
+            ShowLocationDetails(identity);
         }
         finally
         {
@@ -992,8 +1015,8 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     /// <param name="e">The timeline entry update event args.</param>
     public async Task SaveEntryChangesAsync(TimelineEntryUpdateEventArgs e)
     {
-        // Sync to server (handles offline queueing automatically)
-        await _entryManager.SaveEntryChangesAsync(e);
+        if (!e.Identity.CanMutate) return;
+        if (!await _entryManager.SaveEntryChangesAsync(e)) return;
 
         // Reload data to reflect changes
         await LoadDataAsync();
@@ -1091,14 +1114,13 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
         _ = _activitySyncService.AutoSyncIfNeededAsync();
 
         // Check if we need to reopen a location sheet (returning from notes editor)
-        if (_pendingLocationIdToReopen.HasValue)
+        if (_pendingIdentityToReopen != null)
         {
-            var locationId = _pendingLocationIdToReopen.Value;
-            _pendingLocationIdToReopen = null;
+            var identity = _pendingIdentityToReopen;
+            _pendingIdentityToReopen = null;
 
             // Reopen the location details sheet with fresh data
-            ShowLocationDetails(locationId);
-            IsLocationSheetOpen = true;
+            ShowLocationDetails(identity);
         }
 
         await base.OnAppearingAsync();
@@ -1129,10 +1151,23 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     /// Sets a location ID to reopen when returning to this page.
     /// Used when navigating to notes editor and back.
     /// </summary>
-    /// <param name="locationId">The location ID to reopen.</param>
-    public void SetPendingLocationToReopen(int locationId)
+    /// <param name="identity">The originating record identity to reopen.</param>
+    public void SetPendingLocationToReopen(TimelineEntryIdentity identity)
     {
-        _pendingLocationIdToReopen = locationId;
+        _pendingIdentityToReopen = identity;
+    }
+
+    /// <summary>Captures the selected identity for notes navigation and safe re-selection on return.</summary>
+    public Dictionary<string, object>? PrepareNotesEditorNavigation()
+    {
+        var selected = SelectedLocation;
+        if (selected?.CanEdit != true) return null;
+        SetPendingLocationToReopen(selected.Identity);
+        return new Dictionary<string, object>
+        {
+            ["timelineIdentity"] = selected.Identity,
+            ["notes"] = selected.Notes ?? string.Empty
+        };
     }
 
     /// <summary>
@@ -1238,16 +1273,16 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     bool ICoordinateEditorCallbacks.IsOnline => IsOnline;
     bool ICoordinateEditorCallbacks.IsBusy { get => IsBusy; set => IsBusy = value; }
     Task ICoordinateEditorCallbacks.ReloadTimelineAsync() => LoadDataAsync();
-    void ICoordinateEditorCallbacks.ShowLocationDetails(int locationId) => ShowLocationDetails(locationId);
-    void ICoordinateEditorCallbacks.OpenLocationSheet() => IsLocationSheetOpen = true;
+    void ICoordinateEditorCallbacks.ShowLocationDetails(TimelineEntryIdentity identity) => ShowLocationDetails(identity);
+    void ICoordinateEditorCallbacks.OpenLocationSheet() => IsLocationSheetOpen = SelectedLocation != null;
 
     // IDateTimeEditorCallbacks implementation
     TimelineLocationDisplay? IDateTimeEditorCallbacks.SelectedLocation => SelectedLocation;
     bool IDateTimeEditorCallbacks.IsOnline => IsOnline;
     bool IDateTimeEditorCallbacks.IsBusy { get => IsBusy; set => IsBusy = value; }
     Task IDateTimeEditorCallbacks.ReloadTimelineAsync() => LoadDataAsync();
-    void IDateTimeEditorCallbacks.ShowLocationDetails(int locationId) => ShowLocationDetails(locationId);
-    void IDateTimeEditorCallbacks.OpenLocationSheet() => IsLocationSheetOpen = true;
+    void IDateTimeEditorCallbacks.ShowLocationDetails(TimelineEntryIdentity identity) => ShowLocationDetails(identity);
+    void IDateTimeEditorCallbacks.OpenLocationSheet() => IsLocationSheetOpen = SelectedLocation != null;
 
     /// <summary>
     /// Delegates coordinate setting to the child ViewModel.
@@ -1261,301 +1296,4 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     }
 
     #endregion
-}
-
-/// <summary>
-/// Represents a group of timeline items (e.g., by hour).
-/// </summary>
-public class TimelineGroup : List<TimelineItem>
-{
-    /// <summary>
-    /// Gets the group header text.
-    /// </summary>
-    public string Header { get; }
-
-    /// <summary>
-    /// Creates a new timeline group from server locations.
-    /// </summary>
-    /// <param name="header">The group header text.</param>
-    /// <param name="locations">The locations in this group.</param>
-    public TimelineGroup(string header, IEnumerable<TimelineLocation> locations) : base()
-    {
-        Header = header;
-        AddRange(locations.Select(l => new TimelineItem(l)));
-    }
-}
-
-/// <summary>
-/// Represents a single timeline item for display.
-/// </summary>
-public class TimelineItem
-{
-    /// <summary>
-    /// Gets the underlying location data from server.
-    /// </summary>
-    public TimelineLocation Location { get; }
-
-    /// <summary>
-    /// Gets the location ID.
-    /// </summary>
-    public int LocationId => Location.Id;
-
-    /// <summary>
-    /// Gets the formatted time.
-    /// </summary>
-    public string TimeText => Location.LocalTimestamp.ToString("HH:mm:ss");
-
-    /// <summary>
-    /// Gets the formatted coordinates.
-    /// </summary>
-    public string CoordinatesText => Location.Coordinates != null
-        ? $"{Location.Coordinates.Y:F6}, {Location.Coordinates.X:F6}"
-        : "Unknown";
-
-    /// <summary>
-    /// Gets the latitude.
-    /// </summary>
-    public double? Latitude => Location.Coordinates?.Y;
-
-    /// <summary>
-    /// Gets the longitude.
-    /// </summary>
-    public double? Longitude => Location.Coordinates?.X;
-
-    /// <summary>
-    /// Gets the local timestamp.
-    /// </summary>
-    public DateTime LocalTimestamp => Location.LocalTimestamp;
-
-    /// <summary>
-    /// Gets the notes.
-    /// </summary>
-    public string? Notes => Location.Notes;
-
-    /// <summary>
-    /// Gets the accuracy text.
-    /// </summary>
-    public string AccuracyText => Location.Accuracy.HasValue
-        ? $"~{Location.Accuracy.Value:F0}m"
-        : "Unknown";
-
-    /// <summary>
-    /// Gets the accuracy indicator color.
-    /// </summary>
-    public Microsoft.Maui.Graphics.Color AccuracyColor => Location.Accuracy switch
-    {
-        null => Colors.Gray,
-        <= 10 => Colors.Green,
-        <= 30 => Colors.Orange,
-        _ => Colors.Red
-    };
-
-    /// <summary>
-    /// Gets the sync status icon (always synced for server data).
-    /// </summary>
-    public string SyncStatusIcon => "check";
-
-    /// <summary>
-    /// Gets the provider text.
-    /// </summary>
-    public string ProviderText => Location.LocationType ?? "Unknown";
-
-    /// <summary>
-    /// Gets the speed text if available.
-    /// </summary>
-    public string? SpeedText => Location.Speed.HasValue
-        ? $"{Location.Speed.Value * 3.6:F1} km/h"
-        : null;
-
-    /// <summary>
-    /// Creates a new timeline item from server location.
-    /// </summary>
-    /// <param name="location">The server location data.</param>
-    public TimelineItem(TimelineLocation location)
-    {
-        Location = location;
-    }
-}
-
-/// <summary>
-/// Display model for timeline location details in the bottom sheet.
-/// </summary>
-public class TimelineLocationDisplay
-{
-    private readonly TimelineLocation _location;
-    private readonly string? _serverUrl;
-
-    /// <summary>
-    /// Creates a new display model from a timeline location.
-    /// </summary>
-    /// <param name="location">The timeline location.</param>
-    /// <param name="serverUrl">The server URL for image proxy conversion.</param>
-    public TimelineLocationDisplay(TimelineLocation location, string? serverUrl = null)
-    {
-        _location = location;
-        _serverUrl = serverUrl;
-    }
-
-    /// <summary>
-    /// Gets the location ID.
-    /// </summary>
-    public int LocationId => _location.Id;
-
-    /// <summary>
-    /// Gets the formatted time text.
-    /// </summary>
-    public string TimeText => _location.LocalTimestamp.ToString("HH:mm:ss");
-
-    /// <summary>
-    /// Gets the formatted date text.
-    /// </summary>
-    public string DateText => _location.LocalTimestamp.ToString("dddd, MMMM d, yyyy");
-
-    /// <summary>
-    /// Gets the local timestamp.
-    /// </summary>
-    public DateTime LocalTimestamp => _location.LocalTimestamp;
-
-    /// <summary>
-    /// Gets the coordinates text.
-    /// </summary>
-    public string CoordinatesText => $"{Latitude:F6}, {Longitude:F6}";
-
-    /// <summary>
-    /// Gets the latitude.
-    /// </summary>
-    public double Latitude => _location.Latitude;
-
-    /// <summary>
-    /// Gets the longitude.
-    /// </summary>
-    public double Longitude => _location.Longitude;
-
-    /// <summary>
-    /// Gets the activity name.
-    /// </summary>
-    public string? ActivityName => _location.ActivityType;
-
-    /// <summary>
-    /// Gets or sets the activity type (used for updates).
-    /// </summary>
-    public string? ActivityType
-    {
-        get => _location.ActivityType;
-        set => _location.ActivityType = value;
-    }
-
-    /// <summary>
-    /// Gets whether an activity is set.
-    /// </summary>
-    public bool HasActivity => !string.IsNullOrEmpty(_location.ActivityType);
-
-    /// <summary>
-    /// Gets the address.
-    /// </summary>
-    public string? Address => _location.FullAddress ?? _location.Address;
-
-    /// <summary>
-    /// Gets whether an address is available.
-    /// </summary>
-    public bool HasAddress => !string.IsNullOrEmpty(Address);
-
-    /// <summary>
-    /// Gets the accuracy text.
-    /// </summary>
-    public string AccuracyText => _location.Accuracy.HasValue
-        ? $"~{_location.Accuracy.Value:F0}m"
-        : "Unknown";
-
-    /// <summary>
-    /// Gets whether speed is available.
-    /// </summary>
-    public bool HasSpeed => _location.Speed.HasValue;
-
-    /// <summary>
-    /// Gets the speed text.
-    /// </summary>
-    public string SpeedText => _location.Speed.HasValue
-        ? $"{_location.Speed.Value * 3.6:F1} km/h"
-        : "N/A";
-
-    /// <summary>
-    /// Gets whether altitude is available.
-    /// </summary>
-    public bool HasAltitude => _location.Altitude.HasValue;
-
-    /// <summary>
-    /// Gets the altitude text.
-    /// </summary>
-    public string AltitudeText => _location.Altitude.HasValue
-        ? $"{_location.Altitude.Value:F0}m"
-        : "N/A";
-
-    /// <summary>
-    /// Gets whether notes contain actual visible content.
-    /// Returns false for empty notes or Quill's empty markup (e.g., &lt;p&gt;&lt;br&gt;&lt;/p&gt;).
-    /// </summary>
-    public bool HasNotes
-    {
-        get
-        {
-            if (string.IsNullOrEmpty(_location.Notes))
-                return false;
-
-            // Strip HTML tags and check for actual text content
-            var plainText = Regex.Replace(_location.Notes, "<[^>]+>", " ");
-            var hasText = !string.IsNullOrWhiteSpace(plainText);
-
-            // Also check for images (content even without text)
-            var hasImages = Regex.IsMatch(_location.Notes, @"<img\s", RegexOptions.IgnoreCase);
-
-            return hasText || hasImages;
-        }
-    }
-
-    /// <summary>
-    /// Gets the raw notes HTML.
-    /// </summary>
-    public string? Notes => _location.Notes;
-
-    /// <summary>
-    /// Gets the notes HTML source for WebView.
-    /// </summary>
-    public HtmlWebViewSource? NotesHtmlSource
-    {
-        get
-        {
-            if (!HasNotes)
-                return null;
-
-            // Convert images to proxy URLs for WebView display
-            var notesContent = ImageProxyHelper.ConvertImagesToProxyUrls(
-                _location.Notes,
-                _serverUrl);
-
-            // Wrap notes in basic HTML structure
-            var html = $@"
-<!DOCTYPE html>
-<html>
-<head>
-    <meta name='viewport' content='width=device-width, initial-scale=1'>
-    <style>
-        body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            font-size: 17px;
-            line-height: 1.5;
-            padding: 8px;
-            margin: 0;
-            color: #333;
-        }}
-        img {{ max-width: 100%; height: auto; }}
-    </style>
-</head>
-<body>
-    {notesContent}
-</body>
-</html>";
-            return new HtmlWebViewSource { Html = html };
-        }
-    }
 }

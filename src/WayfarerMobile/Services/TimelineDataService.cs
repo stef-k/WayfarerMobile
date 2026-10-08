@@ -360,7 +360,8 @@ public class TimelineDataService
     {
         return new TimelineLocation
         {
-            Id = entry.ServerId ?? entry.Id,
+            Id = entry.ServerId ?? 0,
+            Identity = TimelineEntryIdentity.FromLocal(entry.Id, entry.ServerId),
             Timestamp = entry.Timestamp,
             LocalTimestamp = ConvertToLocalTime(entry.Timestamp, entry.TimeZoneId),
             Coordinates = new TimelineCoordinates { X = entry.Longitude, Y = entry.Latitude },

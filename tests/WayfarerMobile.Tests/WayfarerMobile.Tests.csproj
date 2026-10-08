@@ -76,7 +76,22 @@
     <Compile Include="../../src/WayfarerMobile/Data/Entities/PendingTimelineMutation.cs" Link="Production/PendingTimelineMutation.cs" />
     <Compile Include="../../src/WayfarerMobile/Data/Repositories/TimelineRepository.cs" Link="Production/TimelineRepository.cs" />
     <Compile Include="../../src/WayfarerMobile/Services/TimelineSyncService.cs" Link="Production/TimelineSyncService.cs" />
+    <Compile Include="../../src/WayfarerMobile/Services/TimelineSyncService.Mutations.cs" Link="Production/TimelineSyncService.Mutations.cs" />
+    <Compile Include="../../src/WayfarerMobile/Services/TimelineSyncService.Queue.cs" Link="Production/TimelineSyncService.Queue.cs" />
     <Compile Include="../../src/WayfarerMobile/Services/TimelineDataService.cs" Link="Production/TimelineDataService.cs" />
+    <Compile Include="../../src/WayfarerMobile/Services/TimelineLayerService.cs" Link="Production/TimelineLayerService.cs" />
+    <Compile Include="../../src/WayfarerMobile/Services/TimelineEntryManager.cs" Link="Production/TimelineEntryManager.cs" />
+    <Compile Include="../../src/WayfarerMobile/Interfaces/ITimelineLayerService.cs" Link="Production/ITimelineLayerService.cs" />
+    <Compile Include="../../src/WayfarerMobile/Interfaces/ITimelineEntryManager.cs" Link="Production/ITimelineEntryManager.cs" />
+    <Compile Include="../../src/WayfarerMobile/Interfaces/ITripEditingService.cs" Link="Production/ITripEditingService.cs" />
+    <Compile Include="../../src/WayfarerMobile/Shared/Controls/TimelineEntryUpdateEventArgs.cs" Link="Production/TimelineEntryUpdateEventArgs.cs" />
+    <Compile Include="../../src/WayfarerMobile/ViewModels/TimelineViewModel.cs" Link="Production/TimelineViewModel.cs" />
+    <Compile Include="../../src/WayfarerMobile/ViewModels/TimelineDisplayModels.cs" Link="Production/TimelineDisplayModels.cs" />
+    <Compile Include="../../src/WayfarerMobile/ViewModels/CoordinateEditorViewModel.cs" Link="Production/CoordinateEditorViewModel.cs" />
+    <Compile Include="../../src/WayfarerMobile/ViewModels/DateTimeEditorViewModel.cs" Link="Production/DateTimeEditorViewModel.cs" />
+    <Compile Include="../../src/WayfarerMobile/ViewModels/ICoordinateEditorCallbacks.cs" Link="Production/ICoordinateEditorCallbacks.cs" />
+    <Compile Include="../../src/WayfarerMobile/ViewModels/IDateTimeEditorCallbacks.cs" Link="Production/IDateTimeEditorCallbacks.cs" />
+    <Compile Include="../../src/WayfarerMobile/ViewModels/NotesEditorViewModel.cs" Link="Production/NotesEditorViewModel.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\QueueExportService.cs" Link="Production\QueueExportService.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\QueueDrainService.cs" Link="Production\QueueDrainService.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\QueueRecoveryOperationCoordinator.cs" Link="Production\QueueRecoveryOperationCoordinator.cs" />

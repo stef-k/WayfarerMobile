@@ -267,6 +267,12 @@
                                 </VerticalStackLayout>
                             </Frame>
 
+                            <!-- Local-only records remain readable without unsupported mutation actions. -->
+                            <Label Text="{Binding SelectedLocation.ReadOnlyExplanation}"
+                                   IsVisible="{Binding SelectedLocation.IsReadOnly}"
+                                   Style="{StaticResource Caption}"
+                                   TextColor="{StaticResource TextSecondary}" />
+
                             <!-- Notes Section -->
                             <Frame Padding="12"
                                    BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
@@ -316,6 +322,7 @@
                                      BackgroundColor="{StaticResource Gray900}" />
                         <ImageButton Source="edit.png"
                                      Clicked="OnEditLocationClicked"
+                                     IsEnabled="{Binding SelectedLocation.CanEdit}"
                                      WidthRequest="44"
                                      HeightRequest="44"
                                      CornerRadius="22"

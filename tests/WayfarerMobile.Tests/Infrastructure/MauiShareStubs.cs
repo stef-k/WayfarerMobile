@@ -78,6 +78,18 @@ public sealed class HtmlWebViewSource
 
 public enum AppTheme { Unspecified, Light, Dark }
 
+/// <summary>Exposes navigation parameters to the linked notes ViewModel without a mounted MAUI shell.</summary>
+public interface IQueryAttributable
+{
+    void ApplyQueryAttributes(IDictionary<string, object> query);
+}
+
+public sealed class Shell
+{
+    public static Shell Current { get; } = new();
+    public Task GoToAsync(string route) => Task.CompletedTask;
+}
+
 public class Application
 {
     private static readonly AsyncLocal<Application?> current = new();
@@ -133,6 +145,18 @@ namespace Microsoft.Maui.ApplicationModel
 
 namespace Microsoft.Maui.ApplicationModel.DataTransfer
 {
+}
+
+namespace Microsoft.Maui.Graphics
+{
+    public sealed class Color { }
+    public static class Colors
+    {
+        public static Color Gray { get; } = new();
+        public static Color Green { get; } = new();
+        public static Color Orange { get; } = new();
+        public static Color Red { get; } = new();
+    }
 }
 
 namespace WayfarerMobile.Helpers

@@ -64,7 +64,8 @@ public class TimelineLayerService : ITimelineLayerService
             };
 
             // Add properties for tap identification
-            feature["LocationId"] = location.Id;
+            feature["TimelineIdentity"] = location.Identity;
+            feature["ServerId"] = location.Identity.ServerId;
             feature["Timestamp"] = location.LocalTimestamp.ToString("g");
 
             layer.Add(feature);

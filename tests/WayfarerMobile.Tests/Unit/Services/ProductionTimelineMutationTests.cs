@@ -37,10 +37,10 @@ public sealed class ProductionTimelineMutationTests
         var selected = TimelineDataService.ToTimelineLocation(localOnly);
 
         if (delete)
-            await context.Service.DeleteLocationAsync(selected.Id);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => context.Service.DeleteLocationAsync(selected.Identity));
         else
-            await context.Service.UpdateLocationAsync(selected.Id, 1, 2, DateTime.UtcNow.AddDays(-1),
-                "Changed notes", true, 1, activityTypeName: "Cycle");
+            await Assert.ThrowsAsync<InvalidOperationException>(() => context.Service.UpdateLocationAsync(selected.Identity,
+                1, 2, DateTime.UtcNow.AddDays(-1), "Changed notes", true, 1, activityTypeName: "Cycle"));
 
         var retained = await context.Repository.GetLocalTimelineEntryAsync(linked.Id);
         retained.Should().NotBeNull();

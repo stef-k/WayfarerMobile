@@ -3,6 +3,7 @@ using Mapsui;
 using Mapsui.Projections;
 using Mapsui.UI.Maui;
 using Syncfusion.Maui.Toolkit.BottomSheet;
+using WayfarerMobile.Core.Models;
 using WayfarerMobile.ViewModels;
 
 namespace WayfarerMobile.Views;
@@ -60,16 +61,19 @@ public partial class TimelinePage : ContentPage
         var feature = mapInfo?.Feature;
         if (feature == null) return;
 
-        if (feature["LocationId"] is int locationId)
+        if (feature["TimelineIdentity"] is TimelineEntryIdentity identity)
         {
-            _viewModel.ShowLocationDetails(locationId);
-            BottomSheet.State = BottomSheetState.FullExpanded;
+            _viewModel.ShowLocationDetails(identity);
+            if (_viewModel.SelectedLocation != null)
+                BottomSheet.State = BottomSheetState.FullExpanded;
         }
     }
 
     private async void OnEditLocationClicked(object? sender, EventArgs e)
     {
-        if (_viewModel.SelectedLocation == null) return;
+        if (_viewModel.SelectedLocation?.CanEdit != true) return;
+
+        var identity = _viewModel.SelectedLocation.Identity;
 
         var action = await DisplayActionSheetAsync(
             "Edit Location",
@@ -79,6 +83,8 @@ public partial class TimelinePage : ContentPage
             "Edit Date/Time",
             "Edit Activity",
             "Edit Notes");
+
+        if (_viewModel.SelectedLocation?.Identity != identity) return;
 
         switch (action)
         {
@@ -102,7 +108,8 @@ public partial class TimelinePage : ContentPage
 
     private async Task DeleteLocationAsync()
     {
-        if (_viewModel.SelectedLocation == null) return;
+        if (_viewModel.SelectedLocation?.CanEdit != true) return;
+        var identity = _viewModel.SelectedLocation.Identity;
 
         var confirm = await DisplayAlertAsync(
             "Delete Location",
@@ -110,9 +117,9 @@ public partial class TimelinePage : ContentPage
             "Delete",
             "Cancel");
 
-        if (confirm)
+        if (confirm && _viewModel.SelectedLocation?.Identity == identity)
         {
-            await _viewModel.DeleteLocationAsync(_viewModel.SelectedLocation.LocationId);
+            await _viewModel.DeleteLocationAsync(identity);
         }
     }
 
@@ -151,19 +158,8 @@ public partial class TimelinePage : ContentPage
 
     private async Task NavigateToNotesEditor()
     {
-        if (_viewModel.SelectedLocation == null) return;
-
-        // Store location ID to reopen sheet when returning
-        var locationId = _viewModel.SelectedLocation.LocationId;
-        _viewModel.SetPendingLocationToReopen(locationId);
-
-        // Navigate to notes editor page with location ID and current notes
-        var navParams = new Dictionary<string, object>
-        {
-            { "locationId", locationId },
-            { "notes", _viewModel.SelectedLocation.Notes ?? string.Empty }
-        };
-
+        var navParams = _viewModel.PrepareNotesEditorNavigation();
+        if (navParams == null) return;
         await Shell.Current.GoToAsync("notesEditor", navParams);
     }
 

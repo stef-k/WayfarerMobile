@@ -42,6 +42,7 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     private readonly IToastService _toastService;
     private readonly ISettingsService _settingsService;
     private string? _originalNotesHtml;
+    private TimelineEntryIdentity _timelineIdentity = TimelineEntryIdentity.Unknown;
 
     /// <summary>
     /// Gets or sets the entity type being edited.
@@ -117,6 +118,9 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     /// <param name="query">The query parameters.</param>
     public void ApplyQueryAttributes(IDictionary<string, object> query)
     {
+        // A raw locationId (including an old navigation link) never grants edit authority.
+        _timelineIdentity = query.TryGetValue("timelineIdentity", out var identityObject)
+            && identityObject is TimelineEntryIdentity identity ? identity : TimelineEntryIdentity.Unknown;
         // Debug: Log all received query parameters
         Console.WriteLine($"[NotesEditorViewModel] ApplyQueryAttributes received {query.Count} parameters:");
         foreach (var kvp in query)
@@ -234,6 +238,12 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     [RelayCommand]
     private async Task SaveAsync()
     {
+        if (EntityType == NotesEntityType.Timeline && !_timelineIdentity.CanMutate)
+        {
+            await _toastService.ShowWarningAsync(TimelineEntryIdentity.ReadOnlyExplanation);
+            return;
+        }
+
         // Validate we have required IDs for the entity type
         if (!ValidateEntityIds())
         {
@@ -301,7 +311,7 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     {
         return EntityType switch
         {
-            NotesEntityType.Timeline => LocationId != 0,
+            NotesEntityType.Timeline => _timelineIdentity.CanMutate,
             NotesEntityType.Trip => EntityId != Guid.Empty,
             NotesEntityType.Region => EntityId != Guid.Empty && TripId != Guid.Empty,
             NotesEntityType.Place => EntityId != Guid.Empty && TripId != Guid.Empty,
@@ -339,7 +349,7 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
     private async Task SaveTimelineNotesAsync(string? notes)
     {
         await _timelineSyncService.UpdateLocationAsync(
-            LocationId,
+            _timelineIdentity,
             latitude: null,
             longitude: null,
             localTimestamp: null,
