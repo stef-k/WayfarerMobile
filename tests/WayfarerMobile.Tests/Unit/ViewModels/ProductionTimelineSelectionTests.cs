@@ -125,19 +125,21 @@ public sealed class ProductionTimelineSelectionTests
     {
         await using var context = await TimelineMutationContext.CreateAsync(online: false);
         var (localOnly, linked) = await context.SeedCollisionAsync();
-        await context.Database.InsertAsync(new QueuedLocation
+        var queuedCapture = new QueuedLocation
         {
-            Id = 91, Latitude = localOnly.Latitude, Longitude = localOnly.Longitude,
+            Latitude = localOnly.Latitude, Longitude = localOnly.Longitude,
             Timestamp = localOnly.Timestamp, SyncStatus = SyncStatus.Pending
-        });
-        localOnly.QueuedLocationId = 91;
+        };
+        await context.Database.InsertAsync(queuedCapture);
+        localOnly.QueuedLocationId = queuedCapture.Id;
         await context.Repository.UpdateLocalTimelineEntryAsync(localOnly);
         using var viewModel = context.CreateViewModel(online: false);
         await viewModel.LoadDataCommand.ExecuteAsync(null);
         var stale = TimelineDataService.ToTimelineLocation(localOnly).Identity;
         viewModel.ShowLocationDetails(stale);
+        viewModel.SelectedLocation!.CanEdit.Should().BeFalse();
         viewModel.SetPendingLocationToReopen(stale);
-        await context.Repository.UpdateServerIdByQueuedLocationIdAsync(91, 99);
+        await context.Repository.UpdateServerIdByQueuedLocationIdAsync(queuedCapture.Id, 99);
         await viewModel.OnAppearingAsync();
         viewModel.SelectedLocation.Should().BeNull();
         viewModel.IsLocationSheetOpen.Should().BeFalse();
