@@ -121,6 +121,7 @@ public partial class NotesEditorViewModel : BaseViewModel, IQueryAttributable
         // A raw locationId (including an old navigation link) never grants edit authority.
         _timelineIdentity = query.TryGetValue("timelineIdentity", out var identityObject)
             && identityObject is TimelineEntryIdentity identity ? identity : TimelineEntryIdentity.Unknown;
+        LocationId = _timelineIdentity.ServerId ?? 0;
         // Debug: Log all received query parameters
         Console.WriteLine($"[NotesEditorViewModel] ApplyQueryAttributes received {query.Count} parameters:");
         foreach (var kvp in query)

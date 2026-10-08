@@ -882,7 +882,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to update activity for location {LocationId}", locationToUpdate.Identity);
+            _logger.LogError(ex, "Failed to update activity for location {LocationId}", locationToUpdate.Identity.ServerId);
             await _toastService.ShowErrorAsync("Failed to update activity");
         }
         finally
@@ -920,7 +920,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
             IsLocationSheetOpen = false;
             SelectedLocation = null;
 
-            // Update UI immediately (optimistic delete)
+            // Remove the authorized display row after the sync boundary accepts the action.
             var locationToRemove = _allLocations.FirstOrDefault(l => l.Identity == identity);
             if (locationToRemove != null)
             {
@@ -1148,7 +1148,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     }
 
     /// <summary>
-    /// Sets a location ID to reopen when returning to this page.
+    /// Sets an originating record identity to reopen when returning to this page.
     /// Used when navigating to notes editor and back.
     /// </summary>
     /// <param name="identity">The originating record identity to reopen.</param>

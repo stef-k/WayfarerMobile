@@ -1049,6 +1049,31 @@ See [API Integration](13-API.md) for complete endpoint documentation.
 
 Manages optimistic UI updates for timeline mutations with offline queue, rollback support, and background processing.
 
+### Record Identity and Mutation Authority
+
+`TimelineEntryIdentity` carries the originating SQLite `LocalEntryId` and a separate
+nullable `ServerId`. Local conversion supplies both from the same row; actual API
+responses supply server identity explicitly. Numeric display IDs grant no authority.
+Markers, details, editor callbacks, notes navigation and reload selection carry this
+identity. A stale identity cannot select a different row with a coincident ID.
+
+`UpdateLocationAsync` and `DeleteLocationAsync` require this identity. They reject
+unlinked/unknown entries and revalidate the same local row's linkage before optimistic
+storage changes, server requests or enqueue. Local-only entries remain read-only;
+the original `QueuedLocations` capture/upload queue continues independently.
+
+New `PendingTimelineMutation` rows persist `ServerIdentityConfirmed`, including
+server-origin selections without a local copy. Replay also verifies every available
+`LocalEntryId` binding and deletion snapshot against the claimed server ID. Legacy
+updates with a matching local binding and deletes with a valid snapshot remain
+deliverable. Unprovable or contradictory rows are held with an inspectable
+`AuthorityError` and `LastError`, without a request or retry-attempt increment.
+Held payloads and rollback data remain in SQLite, are excluded from delivery counts,
+and survive `ClearRejectedMutationsAsync`. They do not block subsequent safe rows.
+Merging/replacement requires matching proven source bindings, not numeric ID equality.
+The existing SQLite table initialization adds the two columns without dropping queue
+data; no location-capture queue migration or server API change is involved.
+
 ### Background Processing
 
 Timeline mutations now sync automatically without requiring the Timeline page to be open:
@@ -1061,7 +1086,7 @@ Timeline mutations now sync automatically without requiring the Timeline page to
 
 ### Sync Strategy
 
-1. Apply optimistic UI update immediately
+1. Validate originating identity before applying optimistic changes
 2. Save to local database (both `PendingTimelineMutation` and `LocalTimelineEntry`)
 3. Attempt server sync in background (immediately if online, or via timer)
 4. On 4xx error: Server rejected → revert changes, notify caller

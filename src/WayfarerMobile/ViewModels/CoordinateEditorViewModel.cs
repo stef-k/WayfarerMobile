@@ -143,7 +143,7 @@ public partial class CoordinateEditorViewModel : ObservableObject
         var selectedLocation = _callbacks.SelectedLocation;
         if (selectedLocation?.CanEdit != true || !HasPendingCoordinates || selectedLocation.Identity != _editingIdentity) return;
 
-        // Store locationId before any changes (reference becomes stale after reload)
+        // Capture the initiating identity before reload replaces the display object.
         var identity = selectedLocation.Identity;
 
         // Check online status

@@ -3,12 +3,13 @@ using System.Text.Json.Serialization;
 namespace WayfarerMobile.Core.Models;
 
 /// <summary>
-/// Location from the timeline API with full details.
+/// Timeline location details for API responses and local display, with explicit originating identity.
 /// </summary>
 public class TimelineLocation
 {
     /// <summary>
-    /// Gets or sets the location ID.
+    /// Gets or sets the API's server ID, or zero for an unlinked local display entry.
+    /// Selection and mutation authority come from <see cref="Identity"/>.
     /// </summary>
     public int Id { get; set; }
 

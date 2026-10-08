@@ -95,6 +95,12 @@ Tap any entry to see:
 
 ### Editing Timeline Entries
 
+Editing and deletion are available for entries linked to Wayfarer. Entries stored
+only on this device, including imported history and captures awaiting server linkage,
+show “Stored only on this device; editing and deletion are unavailable.” You can
+still view their details, browse their map locations, share them and export CSV or
+GeoJSON. The existing edit actions become available after genuine server linkage.
+
 1. Tap an entry to open details
 2. Tap **Edit** to modify:
    - **Date/Time**: Adjust the timestamp

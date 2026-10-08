@@ -140,6 +140,8 @@ namespace Microsoft.Maui.ApplicationModel
             action();
             return Task.CompletedTask;
         }
+
+        public static Task InvokeOnMainThreadAsync(Func<Task> action) => action();
     }
 }
 
