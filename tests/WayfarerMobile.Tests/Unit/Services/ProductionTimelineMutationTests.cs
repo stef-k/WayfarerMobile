@@ -28,11 +28,15 @@ public sealed class ProductionTimelineMutationTests
         localOnly.ServerId = 42;
         localOnly.LastEnrichedAt = DateTime.UtcNow;
         await context.Repository.UpdateLocalTimelineEntryAsync(localOnly);
+        await context.Database.ExecuteAsync("ALTER TABLE LocalTimelineEntries DROP COLUMN ServerLinkageConfirmed");
+        await context.RestartAsync(online);
         var syncEvents = 0;
         context.Service.SyncCompleted += (_, _) => syncEvents++;
         context.Service.SyncQueued += (_, _) => syncEvents++;
         context.Service.SyncRejected += (_, _) => syncEvents++;
-        var selected = TimelineDataService.ToTimelineLocation(localOnly);
+        var selected = TimelineDataService.ToTimelineLocation(
+            (await context.Repository.GetLocalTimelineEntryAsync(localOnly.Id))!);
+        selected.Identity.CanMutate.Should().BeFalse();
 
         if (delete)
             await Assert.ThrowsAsync<InvalidOperationException>(() => context.Service.DeleteLocationAsync(selected.Identity));
@@ -109,7 +113,7 @@ public sealed class ProductionTimelineMutationTests
     {
         await using var context = await TimelineMutationContext.CreateAsync(online: true);
         await context.SeedCollisionAsync();
-        var identities = new[] { new TimelineLocation { Id = 42 }.Identity, TimelineEntryIdentity.FromLocal(42, 42) };
+        var identities = new[] { new TimelineLocation { Id = 42 }.Identity, TimelineEntryIdentity.FromLocal(42, 42, true) };
         foreach (var identity in identities)
         {
             await Assert.ThrowsAsync<InvalidOperationException>(() => context.Service.UpdateLocationAsync(identity,

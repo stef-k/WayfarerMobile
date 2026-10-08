@@ -1347,12 +1347,12 @@ public class LocationTrackingService : Service, global::Android.Locations.ILocat
             {
                 // Get queue limit from settings (Preferences accessed directly since platform service can't use DI)
                 var maxQueuedLocations = Preferences.Get(SettingsService.QueueLimitMaxLocationsKey, 25000);
-                await _databaseService.QueueLocationAsync(location, maxQueuedLocations);
+                var queuedId = await _databaseService.QueueLocationAsync(location, maxQueuedLocations);
                 Log.Debug(LogTag, $"Queued via DatabaseService (headless fallback): {location}");
 
                 // Notify that location was queued - used by LocalTimelineStorageService
                 // to store with correct coordinates (may differ from broadcast when using best-wake-sample)
-                LocationServiceCallbacks.NotifyLocationQueued(location);
+                LocationServiceCallbacks.NotifyLocationQueued(location, queuedId);
 
                 // Start drain loop to process queue while backgrounded
                 StartDrainLoopSafely();

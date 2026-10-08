@@ -103,6 +103,7 @@ public sealed class ProductionTimelineLinkageTests
         // Simulate a crash after queue confirmation but before the Timeline callback persisted linkage.
         storage.Dispose();
         linked.ServerId = null;
+        linked.ServerLinkageConfirmed = false;
         await context.Repository.UpdateLocalTimelineEntryAsync(linked);
         await context.RestartOnlineAsync();
         using var recoveredStorage = CreateStorage(context, queue);
@@ -163,7 +164,7 @@ public sealed class ProductionTimelineLinkageTests
             // An unconfirmed persisted server ID must not grant authority to a backfilled row.
             await context.Database.ExecuteAsync("UPDATE QueuedLocations SET ServerId = 42 WHERE Id = ?", queuedId);
         using var storage = CreateStorage(context, queue, settings);
-        await storage.InitializeAsync();
+        await Task.WhenAll(storage.InitializeAsync(), storage.AddPendingLocationAsync(location, queuedId));
 
         var backfilled = (await context.Repository.GetByQueuedLocationIdAsync(queuedId))!;
         backfilled.Should().NotBeNull();
@@ -210,8 +211,12 @@ public sealed class ProductionTimelineLinkageTests
         var queuedId = await queue.QueueLocationAsync(location);
         using var storage = CreateStorage(context, queue);
         await storage.AddPendingLocationAsync(location, queuedId);
-        storage.ResetFilter();
-        await storage.AddPendingLocationAsync(location, queuedId);
+        // Reproduce a pre-existing duplicate binding rather than asking current capture storage to create one.
+        await context.Database.InsertAsync(new LocalTimelineEntry
+        {
+            Latitude = location.Latitude, Longitude = location.Longitude,
+            Timestamp = location.Timestamp, QueuedLocationId = queuedId
+        });
         await queue.MarkServerConfirmedAsync(queuedId, 42);
 
         (await context.Repository.UpdateServerIdByQueuedLocationIdAsync(queuedId, 42)).Should().BeFalse();
@@ -275,7 +280,7 @@ public sealed class ProductionTimelineLinkageTests
         var location = CreateLocation();
         var queuedId = await context.DatabaseService.QueueLocationAsync(location, 25000);
 
-        await NotifyAndWaitAsync(logger, () => LocationServiceCallbacks.NotifyLocationQueued(location));
+        await NotifyAndWaitAsync(logger, () => LocationServiceCallbacks.NotifyLocationQueued(location, queuedId));
 
         var capture = (await context.Repository.GetByQueuedLocationIdAsync(queuedId))!;
         capture.Should().NotBeNull();
@@ -284,12 +289,143 @@ public sealed class ProductionTimelineLinkageTests
             queuedId, 42, location.Timestamp, location.Latitude, location.Longitude));
         storage.Dispose();
         await context.RestartOnlineAsync();
-        using var recoveredStorage = CreateStorage(context, queue, settings);
+        using var recoveredStorage = CreateStorage(context, queue, settings, logger.Object);
         await recoveredStorage.InitializeAsync();
         var recovered = (await context.Repository.GetAllLocalTimelineEntriesAsync()).Single();
         recovered.Id.Should().Be(capture.Id);
         recovered.QueuedLocationId.Should().Be(queuedId);
         recovered.ServerId.Should().Be(42);
+        recovered.ServerLinkageConfirmed.Should().BeTrue();
+        // A delayed delivery after startup backfill cannot create a second pending copy.
+        await NotifyAndWaitAsync(logger, () => LocationServiceCallbacks.NotifyLocationQueued(location, queuedId));
+        await Task.WhenAll(recoveredStorage.AddPendingLocationAsync(location, queuedId),
+            recoveredStorage.AddPendingLocationAsync(location, queuedId));
+        (await context.Repository.GetLocalTimelineEntryCountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task FallbackTimelineFiltering_DoesNotPreventIndependentQueueDelivery()
+    {
+        await using var context = await TimelineMutationContext.CreateAsync(online: false);
+        var queue = CreateQueue(context);
+        var logger = new Mock<ILogger<LocalTimelineStorageService>>();
+        using var storage = CreateStorage(context, queue, logger: logger.Object);
+        await storage.InitializeAsync();
+        var location = CreateLocation();
+        location.Accuracy = 10000;
+        var queuedId = await context.DatabaseService.QueueLocationAsync(location, 25000, isUserInvoked: true);
+        await NotifyAndWaitAsync(logger, () => LocationServiceCallbacks.NotifyLocationQueued(location, queuedId));
+        (await context.Repository.GetLocalTimelineEntryCountAsync()).Should().Be(0);
+        context.Api.Setup(x => x.CheckInAsync(It.IsAny<LocationLogRequest>(), It.IsAny<string?>(),
+            It.IsAny<CancellationToken>())).ReturnsAsync(new ApiResult { Success = true, LocationId = 42 });
+        var connectivity = new Mock<IConnectivity>();
+        connectivity.SetupGet(x => x.NetworkAccess).Returns(NetworkAccess.Internet);
+        using var drain = new QueueDrainService(context.Api.Object, queue, new MockSettingsService(),
+            connectivity.Object, NullLogger<QueueDrainService>.Instance);
+        await drain.StartAsync();
+        await NotifyAndWaitAsync(logger, () => drain.TriggerDrainAsync());
+
+        (await context.Database.GetAsync<QueuedLocation>(queuedId)).ServerConfirmed.Should().BeTrue();
+        (await context.Repository.GetLocalTimelineEntryCountAsync()).Should().Be(0);
+        context.Api.Verify(x => x.CheckInAsync(It.IsAny<LocationLogRequest>(), It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DirectApiSelectionAndAcceptance_NeverMutateFalseLinkedHistory()
+    {
+        await using var context = await TimelineMutationContext.CreateAsync(online: true);
+        var suspicious = new LocalTimelineEntry { ServerId = 42, Notes = "Imported false linkage" };
+        await context.Repository.InsertLocalTimelineEntryAsync(suspicious);
+        var failure = new HttpRequestException("Rejected", null, System.Net.HttpStatusCode.BadRequest);
+        context.Api.Setup(x => x.UpdateTimelineLocationAsync(42, It.IsAny<TimelineLocationUpdateRequest>(),
+            It.IsAny<CancellationToken>())).ThrowsAsync(failure);
+        context.Api.Setup(x => x.DeleteTimelineLocationAsync(42, It.IsAny<CancellationToken>())).ThrowsAsync(failure);
+        var apiIdentity = TimelineEntryIdentity.FromServer(42);
+        await context.Service.UpdateLocationAsync(apiIdentity, notes: "Rejected API edit", includeNotes: true);
+        await context.Service.DeleteLocationAsync(apiIdentity);
+        (await context.Repository.GetLocalTimelineEntryAsync(suspicious.Id)).Should().BeEquivalentTo(suspicious);
+        using var storage = CreateStorage(context, CreateQueue(context));
+        await storage.AddAcceptedLocationAsync(CreateLocation(), 42);
+        var accepted = (await context.Repository.GetLocalTimelineEntryByServerIdAsync(42))!;
+        accepted.Id.Should().NotBe(suspicious.Id);
+        accepted.ServerLinkageConfirmed.Should().BeTrue();
+        context.Api.Setup(x => x.UpdateTimelineLocationAsync(42, It.IsAny<TimelineLocationUpdateRequest>(),
+            It.IsAny<CancellationToken>())).ReturnsAsync(new TimelineUpdateResponse { Success = true });
+        await context.Service.UpdateLocationAsync(TimelineDataService.ToTimelineLocation(accepted).Identity,
+            notes: "Direct online edit", includeNotes: true);
+        (await context.Repository.GetLocalTimelineEntryAsync(accepted.Id))!.Notes.Should().Be("Direct online edit");
+        (await context.Repository.GetLocalTimelineEntryAsync(suspicious.Id)).Should().BeEquivalentTo(suspicious);
+    }
+
+    [Fact]
+    public async Task LegacyQueueBindings_ConfirmOnlyUniqueAgreementAndRetainEveryRowAcrossUpgrade()
+    {
+        await using var context = await TimelineMutationContext.CreateAsync(online: false);
+        var queue = CreateQueue(context);
+        var queuedId = await queue.QueueLocationAsync(CreateLocation());
+        var conflictingId = await queue.QueueLocationAsync(CreateLocation());
+        var duplicateId = await queue.QueueLocationAsync(CreateLocation());
+        await queue.MarkServerConfirmedAsync(queuedId, 42);
+        await queue.MarkServerConfirmedAsync(conflictingId, 43);
+        await queue.MarkServerConfirmedAsync(duplicateId, 44);
+        await context.Database.ExecuteAsync("UPDATE QueuedLocations SET Timestamp = ?", DateTime.UtcNow.AddDays(-30));
+        var recovered = new LocalTimelineEntry
+        {
+            ServerId = 42, QueuedLocationId = queuedId, Timestamp = DateTime.UtcNow.AddDays(-20),
+            Latitude = 1, Longitude = 2, Notes = "Captured history"
+        };
+        var retained = new[]
+        {
+            new LocalTimelineEntry { ServerId = 99, QueuedLocationId = conflictingId, Notes = "Conflicting ID" },
+            new LocalTimelineEntry { ServerId = 42, QueuedLocationId = 999, Notes = "Missing queue" },
+            new LocalTimelineEntry { ServerId = 44, QueuedLocationId = duplicateId, Notes = "Duplicate one" },
+            new LocalTimelineEntry { ServerId = 44, QueuedLocationId = duplicateId, Notes = "Duplicate two" }
+        };
+        await context.Database.InsertAllAsync(retained.Prepend(recovered));
+        // Reopen an actual older SQLite table with no entry confirmation column.
+        await context.Database.ExecuteAsync("ALTER TABLE LocalTimelineEntries DROP COLUMN ServerLinkageConfirmed");
+        await context.RestartOnlineAsync();
+        using var storage = CreateStorage(context, queue);
+        await storage.InitializeAsync();
+
+        var confirmed = (await context.Repository.GetLocalTimelineEntryAsync(recovered.Id))!;
+        confirmed.IsSynced.Should().BeTrue();
+        confirmed.Should().BeEquivalentTo(recovered, options => options
+            .Excluding(e => e.ServerLinkageConfirmed).Excluding(e => e.IsSynced));
+        foreach (var entry in retained)
+            (await context.Repository.GetLocalTimelineEntryAsync(entry.Id)).Should().BeEquivalentTo(entry);
+        (await context.Repository.GetLocalTimelineEntryCountAsync()).Should().Be(5);
+        storage.Dispose();
+        await context.RestartOnlineAsync();
+        confirmed = (await context.Repository.GetLocalTimelineEntryAsync(recovered.Id))!;
+        confirmed.ServerLinkageConfirmed.Should().BeTrue();
+        await context.Service.UpdateLocationAsync(TimelineDataService.ToTimelineLocation(confirmed).Identity,
+            notes: "Recovered capture edit", includeNotes: true);
+        context.Api.Verify(x => x.UpdateTimelineLocationAsync(42, It.IsAny<TimelineLocationUpdateRequest>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Imports_CannotGrantAuthorityThroughFileFields()
+    {
+        await using var context = await TimelineMutationContext.CreateAsync(online: false);
+        var importer = new TimelineImportService(context.Repository, NullLogger<TimelineImportService>.Instance);
+        using var csv = new MemoryStream(Encoding.UTF8.GetBytes(
+            "TimestampUtc,Latitude,Longitude,Source,ServerId,ServerLinkageConfirmed,QueuedLocationId\n"
+            + "2026-08-19T07:00:00Z,1,2,api-log,42,true,1"));
+        using var geoJson = new MemoryStream(Encoding.UTF8.GetBytes("""
+            { "type": "FeatureCollection", "features": [{ "type": "Feature",
+              "geometry": { "type": "Point", "coordinates": [3,4] },
+              "properties": { "TimestampUtc": "2026-08-20T07:00:00Z", "Source": "api-log",
+                "ServerId": 42, "ServerLinkageConfirmed": true, "QueuedLocationId": 1 } }] }
+            """));
+        (await importer.ImportFromCsvAsync(csv)).Imported.Should().Be(1);
+        (await importer.ImportFromGeoJsonAsync(geoJson)).Imported.Should().Be(1);
+
+        (await context.Repository.GetAllLocalTimelineEntriesAsync()).Should().HaveCount(2)
+            .And.OnlyContain(e => e.ServerId == null && !e.ServerLinkageConfirmed && e.QueuedLocationId == null);
+        context.VerifyNoRemoteMutations();
     }
 
     private static LocationData CreateLocation() => new()

@@ -44,12 +44,15 @@ internal sealed class TimelineMutationContext : IAsyncDisposable
     }
 
     /// <summary>Reopens the on-disk database with a fresh production service, then enables explicit replay.</summary>
-    public async Task RestartOnlineAsync()
+    public Task RestartOnlineAsync() => RestartAsync(online: true);
+
+    /// <summary>Reopens the persisted database and production services with the requested connectivity.</summary>
+    public async Task RestartAsync(bool online)
     {
         Service.Dispose();
         await _databaseService.DisposeAsync();
         _databaseService = new DatabaseService();
-        await OpenAsync(online: true);
+        await OpenAsync(online);
         await Service.StartAsync();
     }
 
@@ -76,7 +79,7 @@ internal sealed class TimelineMutationContext : IAsyncDisposable
         };
         var linked = new LocalTimelineEntry
         {
-            Id = 43, ServerId = 42, Latitude = 38, Longitude = 24,
+            Id = 43, ServerId = 42, ServerLinkageConfirmed = true, Latitude = 38, Longitude = 24,
             Timestamp = timestamp.AddHours(1), Notes = "Linked notes", ActivityType = "Run"
         };
         await Repository.InsertLocalTimelineEntryAsync(localOnly);

@@ -149,9 +149,11 @@ public sealed class ProductionTimelineQueueTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ServerOriginWithoutLocalCopy_RetainsAuthorityAcrossRestart(bool delete)
+    public async Task ServerOriginWithoutConfirmedLocalCopy_RetainsAuthorityAcrossRestart(bool delete)
     {
         await using var context = await TimelineMutationContext.CreateAsync(online: false);
+        var suspicious = new LocalTimelineEntry { ServerId = 42, Notes = "Imported false linkage" };
+        await context.Repository.InsertLocalTimelineEntryAsync(suspicious);
         var identity = TimelineEntryIdentity.FromServer(42);
         if (delete)
             await context.Service.DeleteLocationAsync(identity);
@@ -165,6 +167,7 @@ public sealed class ProductionTimelineQueueTests
         await context.RestartOnlineAsync();
         await context.Service.TriggerDrainAsync();
         (await context.Service.GetPendingCountAsync()).Should().Be(0);
+        (await context.Repository.GetLocalTimelineEntryAsync(suspicious.Id)).Should().BeEquivalentTo(suspicious);
         if (delete)
             context.Api.Verify(x => x.DeleteTimelineLocationAsync(42, It.IsAny<CancellationToken>()), Times.Once);
         else
@@ -210,6 +213,12 @@ public sealed class ProductionTimelineQueueTests
             OperationType = delete ? "Delete" : "Update", Notes = "Unsafe queued edit",
             OriginalNotes = "Unsafe rollback", DeletedEntryJson = delete ? JsonSerializer.Serialize(imported) : null
         };
+        if (delete)
+        {
+            var oldSnapshot = JsonSerializer.SerializeToNode(imported)!.AsObject();
+            oldSnapshot.Remove(nameof(LocalTimelineEntry.ServerLinkageConfirmed));
+            mutation.DeletedEntryJson = oldSnapshot.ToJsonString();
+        }
         await context.Database.InsertAsync(mutation);
         if (delete)
             await context.Repository.DeleteLocalTimelineEntryAsync(imported.Id);
@@ -224,6 +233,41 @@ public sealed class ProductionTimelineQueueTests
         held.Notes.Should().Be(mutation.Notes);
         held.DeletedEntryJson.Should().Be(mutation.DeletedEntryJson);
         (await context.Repository.GetLocalTimelineEntryAsync(linked.Id)).Should().BeEquivalentTo(linked);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ConfirmedLocalMutation_RestartRejectionPreservesEntryAuthorityAndRollback(bool delete)
+    {
+        await using var context = await TimelineMutationContext.CreateAsync(online: false);
+        var (suspicious, linked) = await context.SeedCollisionAsync();
+        suspicious.ServerId = 42;
+        await context.Repository.UpdateLocalTimelineEntryAsync(suspicious);
+        var identity = TimelineDataService.ToTimelineLocation(linked).Identity;
+        if (delete)
+            await context.Service.DeleteLocationAsync(identity);
+        else
+            await context.Service.UpdateLocationAsync(identity, notes: "Offline edit", includeNotes: true);
+        var pending = (await context.Database.Table<PendingTimelineMutation>().ToListAsync()).Single();
+        if (delete)
+            JsonSerializer.Deserialize<LocalTimelineEntry>(pending.DeletedEntryJson!)!
+                .ServerLinkageConfirmed.Should().BeTrue();
+        var failure = new HttpRequestException("Rejected", null, System.Net.HttpStatusCode.BadRequest);
+        context.Api.Setup(x => x.UpdateTimelineLocationAsync(42, It.IsAny<TimelineLocationUpdateRequest>(),
+            It.IsAny<CancellationToken>())).ThrowsAsync(failure);
+        context.Api.Setup(x => x.DeleteTimelineLocationAsync(42, It.IsAny<CancellationToken>())).ThrowsAsync(failure);
+
+        await context.RestartOnlineAsync();
+        await context.Service.TriggerDrainAsync();
+
+        var restored = (await context.Repository.GetLocalTimelineEntryByServerIdAsync(42))!;
+        restored.ServerLinkageConfirmed.Should().BeTrue();
+        restored.Notes.Should().Be(linked.Notes);
+        (await context.Repository.GetLocalTimelineEntryAsync(suspicious.Id)).Should().BeEquivalentTo(suspicious);
+        (await context.Database.GetAsync<PendingTimelineMutation>(pending.Id)).IsRejected.Should().BeTrue();
+        await context.RestartOnlineAsync();
+        (await context.Repository.GetLocalTimelineEntryAsync(restored.Id))!.IsSynced.Should().BeTrue();
     }
 
     /// <summary>Creates the pre-285 table shape, intentionally lacking the two new provenance columns.</summary>

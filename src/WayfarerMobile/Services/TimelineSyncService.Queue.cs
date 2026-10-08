@@ -22,7 +22,7 @@ public sealed partial class TimelineSyncService
             return await _timelineRepository.GetLocalTimelineEntryByServerIdAsync(identity.ServerId!.Value);
 
         var entry = await _timelineRepository.GetLocalTimelineEntryAsync(identity.LocalEntryId.Value);
-        if (entry == null || entry.ServerId != identity.ServerId)
+        if (entry == null || !entry.IsSynced || entry.ServerId != identity.ServerId)
             throw new InvalidOperationException("Timeline linkage changed; reload this entry before editing or deleting.");
 
         return entry;
@@ -53,7 +53,8 @@ public sealed partial class TimelineSyncService
                 return "Mutation held: deletion snapshot is unreadable.";
             }
 
-            if (mutation.OperationType != "Delete" || snapshot?.Id is not > 0 || snapshot.ServerId != mutation.LocationId)
+            if (mutation.OperationType != "Delete" || snapshot?.Id is not > 0
+                || !snapshot.IsSynced || snapshot.ServerId != mutation.LocationId)
                 return "Mutation held: deletion snapshot does not prove this server identity.";
             if (mutation.LocalEntryId.HasValue && mutation.LocalEntryId != snapshot.Id)
                 return "Mutation held: deletion snapshot and local source disagree.";
@@ -68,7 +69,7 @@ public sealed partial class TimelineSyncService
             var source = await _timelineRepository.GetLocalTimelineEntryAsync(sourceId.Value);
             if (source == null && deletedSource?.Id == sourceId)
                 source = deletedSource;
-            if (source != null && source.ServerId != mutation.LocationId)
+            if (source != null && (!source.IsSynced || source.ServerId != mutation.LocationId))
                 return "Mutation held: the originating local row is not linked to this server identity.";
             if (source == null && snapshot == null)
                 return "Mutation held: the originating local row is unavailable.";
@@ -129,7 +130,7 @@ public sealed partial class TimelineSyncService
         string? activityTypeName,
         bool clearActivity)
     {
-        if (localEntry == null) return;
+        if (localEntry?.IsSynced != true) return;
 
         // Apply optimistic update
         if (latitude.HasValue) localEntry.Latitude = latitude.Value;
@@ -222,7 +223,7 @@ public sealed partial class TimelineSyncService
         if (!originalValues.localEntryId.HasValue) return;
 
         var localEntry = await _timelineRepository.GetLocalTimelineEntryAsync(originalValues.localEntryId.Value);
-        if (localEntry?.ServerId != locationId) return;
+        if (localEntry?.IsSynced != true || localEntry.ServerId != locationId) return;
 
         if (originalValues.lat.HasValue) localEntry.Latitude = originalValues.lat.Value;
         if (originalValues.lng.HasValue) localEntry.Longitude = originalValues.lng.Value;
@@ -244,7 +245,7 @@ public sealed partial class TimelineSyncService
     /// </summary>
     private async Task ApplyLocalEntryDeleteAsync(LocalTimelineEntry? localEntry)
     {
-        if (localEntry == null) return;
+        if (localEntry?.IsSynced != true) return;
 
         await _timelineRepository.DeleteLocalTimelineEntryAsync(localEntry.Id);
     }
@@ -282,7 +283,7 @@ public sealed partial class TimelineSyncService
         try
         {
             var entry = JsonSerializer.Deserialize<LocalTimelineEntry>(deletedEntryJson);
-            if (entry == null) return;
+            if (entry?.IsSynced != true) return;
 
             entry.Id = 0; // Reset ID for new insert
             await _timelineRepository.InsertLocalTimelineEntryAsync(entry);
@@ -311,7 +312,7 @@ public sealed partial class TimelineSyncService
             var localEntry = mutation.LocalEntryId.HasValue
                 ? await _timelineRepository.GetLocalTimelineEntryAsync(mutation.LocalEntryId.Value)
                 : await _timelineRepository.GetLocalTimelineEntryByServerIdAsync(mutation.LocationId);
-            if (localEntry?.ServerId != mutation.LocationId) return;
+            if (localEntry?.IsSynced != true || localEntry.ServerId != mutation.LocationId) return;
 
             if (mutation.OriginalLatitude.HasValue) localEntry.Latitude = mutation.OriginalLatitude.Value;
             if (mutation.OriginalLongitude.HasValue) localEntry.Longitude = mutation.OriginalLongitude.Value;

@@ -12,6 +12,12 @@
   queue provenance during backfill and leave matching imports read-only. Sync and
   skip callbacks no longer link or delete approximate matches; ambiguous bindings
   and existing server links are retained.
+  Persist entry-level server linkage confirmation separately from mutation authority.
+  Older rows with an unexplained server ID remain preserved and read-only; only unique,
+  agreeing confirmed queue bindings recover authority. Server enrichment preserves
+  unconfirmed history and stores genuine API records separately. Android/iOS fallback
+  captures now retain their originating queue ID through callbacks and restart recovery,
+  with atomic insertion preventing duplicate pending rows during startup overlap.
 
 - SSE (Wayfarer #674): reconnect group and visit streams after remote EOF or body I/O
   failure using the existing 1s/2s/5s backoff. Explicit Stop and caller cancellation

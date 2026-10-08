@@ -24,6 +24,28 @@ public class TimelineRepository : RepositoryBase, ITimelineRepository
     public async Task<int> InsertLocalTimelineEntryAsync(LocalTimelineEntry entry)
     {
         var db = await GetConnectionAsync();
+        if (entry.QueuedLocationId is > 0)
+        {
+            // Backfill and a delayed platform callback may both insert the same originating capture.
+            // Preserve any existing bindings, including ambiguous historical ones, without adopting their data.
+            await db.RunInTransactionAsync(connection =>
+            {
+                if (connection.Table<LocalTimelineEntry>().Where(e => e.QueuedLocationId == entry.QueuedLocationId).Count() > 0)
+                    return;
+                var queued = connection.Find<QueuedLocation>(entry.QueuedLocationId.Value);
+                if (queued?.IsRejected == true && !entry.IsSynced)
+                    return;
+                // Confirmation may arrive before the callback or startup backfill inserts this row.
+                if (queued?.ServerConfirmed == true && queued.ServerId is > 0
+                    && (entry.ServerId == null || entry.ServerId == queued.ServerId))
+                {
+                    entry.ServerId = queued.ServerId;
+                    entry.ServerLinkageConfirmed = true;
+                }
+                connection.Insert(entry);
+            });
+            return entry.Id;
+        }
         await db.InsertAsync(entry);
         return entry.Id;
     }
@@ -59,7 +81,7 @@ public class TimelineRepository : RepositoryBase, ITimelineRepository
     {
         var db = await GetConnectionAsync();
         return await db.Table<LocalTimelineEntry>()
-            .FirstOrDefaultAsync(e => e.ServerId == serverId);
+            .FirstOrDefaultAsync(e => e.ServerId == serverId && e.ServerLinkageConfirmed);
     }
 
     /// <inheritdoc />
@@ -191,14 +213,14 @@ public class TimelineRepository : RepositoryBase, ITimelineRepository
         var db = await GetConnectionAsync();
         // Resolve exactly one originating row and confirm authority in the same atomic statement.
         var affected = await db.ExecuteAsync("""
-            UPDATE LocalTimelineEntries SET ServerId = ?
+            UPDATE LocalTimelineEntries SET ServerId = ?, ServerLinkageConfirmed = 1
             WHERE Id = (
                 SELECT MIN(Id) FROM LocalTimelineEntries WHERE QueuedLocationId = ? HAVING COUNT(*) = 1
-            ) AND ServerId IS NULL
+            ) AND (ServerId IS NULL OR ServerId = ?) AND COALESCE(ServerLinkageConfirmed, 0) = 0
             AND EXISTS (
                 SELECT 1 FROM QueuedLocations WHERE Id = ? AND ServerConfirmed = 1 AND ServerId = ?
             )
-            """, serverId, queuedLocationId, queuedLocationId, serverId);
+            """, serverId, queuedLocationId, serverId, queuedLocationId, serverId);
         return affected == 1;
     }
 

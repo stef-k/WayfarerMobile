@@ -11,10 +11,10 @@ public interface ITimelineRepository
     #region CRUD Operations
 
     /// <summary>
-    /// Inserts a new local timeline entry.
+    /// Inserts a new local timeline entry, atomically skipping an already-bound originating queue ID.
     /// </summary>
     /// <param name="entry">The entry to insert.</param>
-    /// <returns>The inserted entry's ID.</returns>
+    /// <returns>The inserted entry's ID, or zero when its queue ID is already bound.</returns>
     Task<int> InsertLocalTimelineEntryAsync(LocalTimelineEntry entry);
 
     /// <summary>
@@ -41,7 +41,7 @@ public interface ITimelineRepository
     Task<LocalTimelineEntry?> GetLocalTimelineEntryAsync(int id);
 
     /// <summary>
-    /// Gets a local timeline entry by server ID.
+    /// Gets a confirmed local timeline entry by server ID. Unconfirmed historical identities are excluded.
     /// </summary>
     /// <param name="serverId">The server ID.</param>
     /// <returns>The entry or null if not found.</returns>
@@ -125,9 +125,9 @@ public interface ITimelineRepository
     Task<List<LocalTimelineEntry>> GetEntriesMissingServerIdAsync(DateTime? sinceTimestamp = null);
 
     /// <summary>
-    /// Links exactly one unlinked local row through its positive QueuedLocationId.
+    /// Confirms exactly one local row through its positive QueuedLocationId.
     /// Requires that queue record to confirm the same positive server ID.
-    /// Missing or ambiguous provenance and existing server linkage are left unchanged.
+    /// An existing server ID must agree. Missing, conflicting or ambiguous provenance is left unchanged.
     /// </summary>
     /// <param name="queuedLocationId">The queued location ID.</param>
     /// <param name="serverId">The server-assigned ID.</param>

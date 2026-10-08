@@ -194,7 +194,7 @@ public sealed class ProductionTimelineSelectionTests
         viewModel.ShowLocationDetails(serverLocation.Identity);
         viewModel.SelectedLocation!.CanEdit.Should().BeTrue();
         viewModel.SelectedLocation.Notes.Should().Be("Server response");
-        collidingServerLocation.Identity.Should().Be(TimelineEntryIdentity.FromLocal(linked.Id, 42));
+        collidingServerLocation.Identity.Should().Be(TimelineEntryIdentity.FromLocal(linked.Id, 42, true));
         context.VerifyNoRemoteMutations();
         viewModel.CoordinateEditor.EnterCoordinatePickingModeCommand.Execute(null);
         viewModel.CoordinateEditor.PendingLatitude = 1;

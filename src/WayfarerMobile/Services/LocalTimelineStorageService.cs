@@ -135,10 +135,8 @@ public class LocalTimelineStorageService : IDisposable
     {
         try
         {
-            var backfillSince = DateTime.UtcNow.AddDays(-BackfillWindowDays);
-
-            // Get confirmed queue entries with ServerId
-            var confirmedEntries = await _locationQueue.GetConfirmedEntriesWithServerIdAsync(backfillSince);
+            // Recover authority for every retained confirmed queue binding, even older captured rows.
+            var confirmedEntries = await _locationQueue.GetConfirmedEntriesWithServerIdAsync();
             if (confirmedEntries.Count == 0)
             {
                 _logger.LogDebug("No confirmed queue entries with ServerId for reconciliation");
@@ -201,7 +199,7 @@ public class LocalTimelineStorageService : IDisposable
             // Imports can have identical location values without originating from this queue.
             var existingQueueIds = existingEntries.Where(e => e.QueuedLocationId is > 0)
                 .Select(e => e.QueuedLocationId!.Value).ToHashSet();
-            var existingServerIds = existingEntries.Where(e => e.ServerId is > 0)
+            var existingServerIds = existingEntries.Where(e => e.IsSynced)
                 .Select(e => e.ServerId!.Value).ToHashSet();
 
             // ISOLATED FILTER STATE: Don't modify main filter during backfill
@@ -258,11 +256,13 @@ public class LocalTimelineStorageService : IDisposable
                     Bearing = queued.Bearing,
                     Provider = queued.Provider,
                     ServerId = confirmedServerId,
+                    ServerLinkageConfirmed = confirmedServerId.HasValue,
                     QueuedLocationId = queued.Id,
                     CreatedAt = DateTime.UtcNow
                 };
 
-                await _timelineRepository.InsertLocalTimelineEntryAsync(entry);
+                if (await _timelineRepository.InsertLocalTimelineEntryAsync(entry) == 0)
+                    continue; // A callback already inserted this originating queue record.
 
                 // Update isolated filter state (not main filter)
                 lastBackfillLocation = new LocationData
@@ -355,53 +355,11 @@ public class LocalTimelineStorageService : IDisposable
 
     /// <summary>
     /// Handles queued locations by filtering and storing to local timeline.
-    /// Uses queued coordinates to ensure matching with sync callbacks.
+    /// Retains the exact originating queue ID through the existing pending-storage path.
     /// </summary>
-    private async void OnLocationQueued(object? sender, LocationData location)
+    private async void OnLocationQueued(object? sender, LocationQueuedEventArgs e)
     {
-        try
-        {
-            if (!_filter.ShouldStore(location))
-            {
-                _logger.LogDebug(
-                    "Location at {Timestamp:u} filtered out (thresholds: {TimeMin}min, {DistM}m)",
-                    location.Timestamp,
-                    _filter.TimeThresholdMinutes,
-                    _filter.DistanceThresholdMeters);
-                return;
-            }
-
-            // Create local entry (ServerId = null until sync confirms)
-            var entry = new LocalTimelineEntry
-            {
-                Latitude = location.Latitude,
-                Longitude = location.Longitude,
-                Timestamp = location.Timestamp,
-                Accuracy = location.Accuracy,
-                Altitude = location.Altitude,
-                Speed = location.Speed,
-                Bearing = location.Bearing,
-                Provider = location.Provider,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            await _timelineRepository.InsertLocalTimelineEntryAsync(entry);
-            _filter.MarkAsStored(location);
-
-            _logger.LogDebug(
-                "Stored local timeline entry: ({Lat:F4}, {Lon:F4}) at {Timestamp:u}",
-                location.Latitude,
-                location.Longitude,
-                location.Timestamp);
-        }
-        catch (SQLiteException ex)
-        {
-            _logger.LogError(ex, "Database error storing location to local timeline");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error storing location to local timeline");
-        }
+        await AddPendingLocationAsync(e.Location, e.QueuedLocationId);
     }
 
     /// <summary>
@@ -530,6 +488,8 @@ public class LocalTimelineStorageService : IDisposable
     /// <param name="serverId">The server-assigned location ID.</param>
     public async Task AddAcceptedLocationAsync(LocationData location, int serverId)
     {
+        if (serverId <= 0)
+            return;
         try
         {
             var entry = new LocalTimelineEntry
@@ -543,6 +503,7 @@ public class LocalTimelineStorageService : IDisposable
                 Bearing = location.Bearing,
                 Provider = location.Provider,
                 ServerId = serverId,
+                ServerLinkageConfirmed = true,
                 QueuedLocationId = null, // Direct online path - not from queue
                 CreatedAt = DateTime.UtcNow
             };
@@ -571,6 +532,8 @@ public class LocalTimelineStorageService : IDisposable
     /// <param name="queuedLocationId">The ID of the queued location for stable mapping.</param>
     public async Task AddPendingLocationAsync(LocationData location, int queuedLocationId)
     {
+        if (queuedLocationId <= 0)
+            return;
         try
         {
             // Apply filter - pending entries also need to meet thresholds
@@ -597,7 +560,11 @@ public class LocalTimelineStorageService : IDisposable
                 CreatedAt = DateTime.UtcNow
             };
 
-            await _timelineRepository.InsertLocalTimelineEntryAsync(entry);
+            if (await _timelineRepository.InsertLocalTimelineEntryAsync(entry) == 0)
+            {
+                _logger.LogDebug("Originating queue record {QueuedId} already stored or skipped", queuedLocationId);
+                return;
+            }
             _filter.MarkAsStored(location);
 
             _logger.LogDebug(

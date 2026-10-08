@@ -1052,7 +1052,8 @@ Manages optimistic UI updates for timeline mutations with offline queue, rollbac
 ### Record Identity and Mutation Authority
 
 `TimelineEntryIdentity` carries the originating SQLite `LocalEntryId` and a separate
-nullable `ServerId`. Local conversion supplies both from the same row; actual API
+nullable `ServerId`. Local conversion supplies a server ID only when that same row's
+persisted `ServerLinkageConfirmed` is true and its server ID is positive. Actual API
 responses supply server identity explicitly. Numeric display IDs grant no authority.
 Markers, details, editor callbacks, notes navigation and reload selection carry this
 identity. A stale identity cannot select a different row with a coincident ID.
@@ -1067,7 +1068,10 @@ the original `QueuedLocations` capture/upload queue continues independently.
 New `PendingTimelineMutation` rows persist `ServerIdentityConfirmed`, including
 server-origin selections without a local copy. Replay, update merging and delete
 replacement require this confirmation, then verify every available `LocalEntryId`
-binding and deletion snapshot against the claimed server ID. Unconfirmed legacy
+binding and deletion snapshot against the claimed server ID and entry-level confirmation.
+The mutation's flag cannot authorize an unconfirmed row or old deletion snapshot.
+Server-origin mutations use only confirmed local copies for optimistic changes and rollback.
+Unconfirmed legacy
 rows remain held even when bindings or snapshots match: historical ID collisions
 could produce that same evidence. They are never automatically confirmed.
 Unconfirmed or contradictory rows are held with an inspectable `AuthorityError`
@@ -1380,6 +1384,11 @@ Task EnrichFromServerAsync(DateOnly date, CancellationToken ct);
 - Offline-first with server enrichment
 - Merges server data into local entries
 
+Enrichment merges and deduplicates only confirmed cached server records. An older
+unconfirmed row with the same numeric server ID is preserved with all its data;
+the actual API response creates a separate confirmed cache entry. Server-ID equality,
+matching location values and enrichment metadata never confirm historical linkage.
+
 ---
 
 ## LocalTimelineStorageService
@@ -1399,8 +1408,12 @@ Manages local timeline storage by filtering and persisting location data.
 Restart reconciliation and sync completion link only the exact originating Timeline
 row through `LocalTimelineEntry.QueuedLocationId` → `QueuedLocation.Id`, with the same
 positive server ID confirmed on that queue record. The repository applies this as
-one atomic update, requires exactly one originating row and never overwrites an
-existing server link. Timestamp and coordinate equality do not prove origin.
+one atomic update and requires exactly one originating row. A previously stored
+server ID must agree; conflicting IDs and duplicate bindings remain unchanged.
+Existing rows start unconfirmed when SQLite adds the entry-level
+`ServerLinkageConfirmed` column. Reconciliation can confirm older captured history
+only while its exact, confirmed queue record is retained. It checks all retained
+confirmed queue records, without a timestamp/coordinate association or arbitrary identity repair.
 
 Skip callbacks remove only an unambiguous pending queue-linked row. Imported rows,
 unrelated history, existing server links and confirmed captures are retained.
@@ -1413,6 +1426,14 @@ confirmed server identities, while the existing time/distance filters still appl
 It never adopts an imported row with matching location values. Direct accepted
 submissions and actual server responses retain their explicit server authority.
 Capture upload delivery and the held historical mutation policy are unchanged.
+
+Android/iOS bare-database fallbacks carry the positive returned queue ID in
+`LocationQueuedEventArgs`; the callback reuses `AddPendingLocationAsync` and its filters.
+Repository insertion atomically skips any existing queue binding, including when
+callback delivery overlaps startup backfill. Confirmation already persisted on that
+queue record is retained if insertion runs after the sync callback. Filtered captures
+remain independently deliverable by the upload queue. Imports do not read authority
+or queue-link fields from CSV/GeoJSON, and import/export formats remain unchanged.
 
 ---
 

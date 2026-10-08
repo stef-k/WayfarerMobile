@@ -29,8 +29,8 @@ public sealed record TimelineEntryIdentity
     public const string ReadOnlyExplanation = "Stored only on this device; editing and deletion are unavailable.";
 
     /// <summary>Creates an identity from the selected SQLite row, never from a display fallback.</summary>
-    public static TimelineEntryIdentity FromLocal(int localEntryId, int? serverId) =>
-        localEntryId > 0 ? new(localEntryId, serverId is > 0 ? serverId : null) : Unknown;
+    public static TimelineEntryIdentity FromLocal(int localEntryId, int? serverId, bool serverLinkageConfirmed) =>
+        localEntryId > 0 ? new(localEntryId, serverLinkageConfirmed && serverId is > 0 ? serverId : null) : Unknown;
 
     /// <summary>Creates an identity from a location returned by the server API.</summary>
     public static TimelineEntryIdentity FromServer(int serverId) =>

@@ -194,7 +194,7 @@ public class TimelineDataService
             // Keep the most recently created entry and delete duplicates
             var duplicatesToDelete = new List<int>();
             var localByServerId = localEntries
-                .Where(e => e.ServerId.HasValue)
+                .Where(e => e.IsSynced)
                 .GroupBy(e => e.ServerId!.Value)
                 .ToDictionary(g => g.Key, g =>
                 {
@@ -232,6 +232,8 @@ public class TimelineDataService
 
             foreach (var serverLocation in serverData.Data)
             {
+                if (serverLocation.Id <= 0)
+                    continue;
                 if (localByServerId.TryGetValue(serverLocation.Id, out var existing))
                 {
                     // EXISTS locally - update enrichment fields
@@ -259,6 +261,7 @@ public class TimelineDataService
                     var newEntry = new LocalTimelineEntry
                     {
                         ServerId = serverLocation.Id,
+                        ServerLinkageConfirmed = true,
                         Latitude = serverLocation.Latitude,
                         Longitude = serverLocation.Longitude,
                         Timestamp = serverLocation.Timestamp,
@@ -279,6 +282,7 @@ public class TimelineDataService
                     };
 
                     await _timelineRepository.InsertLocalTimelineEntryAsync(newEntry);
+                    localByServerId[serverLocation.Id] = newEntry;
                     insertedCount++;
                 }
             }
@@ -360,8 +364,8 @@ public class TimelineDataService
     {
         return new TimelineLocation
         {
-            Id = entry.ServerId ?? 0,
-            Identity = TimelineEntryIdentity.FromLocal(entry.Id, entry.ServerId),
+            Id = entry.IsSynced ? entry.ServerId!.Value : 0,
+            Identity = TimelineEntryIdentity.FromLocal(entry.Id, entry.ServerId, entry.ServerLinkageConfirmed),
             Timestamp = entry.Timestamp,
             LocalTimestamp = ConvertToLocalTime(entry.Timestamp, entry.TimeZoneId),
             Coordinates = new TimelineCoordinates { X = entry.Longitude, Y = entry.Latitude },
