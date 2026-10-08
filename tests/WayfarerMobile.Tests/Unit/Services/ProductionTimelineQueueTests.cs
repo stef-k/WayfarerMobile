@@ -20,18 +20,21 @@ public sealed class ProductionTimelineQueueTests
     [InlineData("Delete", true)]
     public async Task LegacyUpgrade_HoldsUnprovableOldestWithoutStarvingSafeWork(string operation, bool sourceEvidence)
     {
-        await using var context = await TimelineMutationContext.CreateAsync(online: true, initializeQueue: false);
+        await using var context = await TimelineMutationContext.CreateAsync(online: false, initializeQueue: false);
         var (localOnly, linked) = await context.SeedCollisionAsync();
+        localOnly.Id.Should().Be(42);
+        linked.Id.Should().Be(43);
         await CreateLegacyQueueAsync(context.Database);
         var ambiguousSnapshot = operation == "Delete" && sourceEvidence ? JsonSerializer.Serialize(localOnly) : null;
-        var safeSnapshot = operation == "Delete" ? JsonSerializer.Serialize(linked) : null;
+        // Historical ID collisions could bind another row or save its apparently consistent snapshot.
+        var falselyBoundSnapshot = operation == "Delete" ? JsonSerializer.Serialize(linked) : null;
         if (operation == "Delete")
             await context.Repository.DeleteLocalTimelineEntryAsync(linked.Id);
 
         await InsertLegacyAsync(context.Database, 1, operation, 42,
             operation == "Update" && sourceEvidence ? localOnly.Id : null, ambiguousSnapshot, "Ambiguous payload");
         await InsertLegacyAsync(context.Database, 2, operation, 42,
-            operation == "Update" ? linked.Id : null, safeSnapshot, "Safe payload");
+            operation == "Update" ? linked.Id : null, falselyBoundSnapshot, "Falsely bound payload");
         await InsertLegacyAsync(context.Database, 3, "Update", 99, null, null, "Unrelated queued payload");
 
         // Production initialization adds provenance columns without replacing the old table or payloads.
@@ -40,29 +43,71 @@ public sealed class ProductionTimelineQueueTests
         upgraded.Should().HaveCount(3);
         upgraded.Should().OnlyContain(m => !m.ServerIdentityConfirmed && m.AuthorityError == null);
         upgraded.Single(m => m.Id == 1).Notes.Should().Be("Ambiguous payload");
-        await context.Service.StartAsync();
-        await context.Service.TriggerDrainAsync();
+        upgraded.Single(m => m.Id == 2).OriginalNotes.Should().Be("Legacy rollback notes");
+
+        // Only newly authorized work is safe; all historical bindings remain unconfirmed.
+        var confirmedIdentity = TimelineEntryIdentity.FromServer(99);
+        if (operation == "Delete")
+            await context.Service.DeleteLocationAsync(confirmedIdentity);
+        else
+            await context.Service.UpdateLocationAsync(confirmedIdentity, notes: "Confirmed payload", includeNotes: true);
+
+        await context.RestartOnlineAsync();
+        foreach (var _ in upgraded)
+            await context.Service.TriggerDrainAsync();
         context.VerifyNoRemoteMutations();
         await context.Service.TriggerDrainAsync();
 
         var retained = await context.Database.Table<PendingTimelineMutation>().OrderBy(m => m.Id).ToListAsync();
-        retained.Select(m => m.Id).Should().Equal(1, 3);
-        retained[0].AuthorityError.Should().Contain("held");
-        retained[0].SyncAttempts.Should().Be(0);
-        retained[0].IsRejected.Should().BeFalse();
-        retained[0].Notes.Should().Be("Ambiguous payload");
-        retained[0].DeletedEntryJson.Should().Be(ambiguousSnapshot);
-        retained[1].Notes.Should().Be("Unrelated queued payload");
-        retained[1].AuthorityError.Should().BeNull();
+        retained.Should().BeEquivalentTo(upgraded, options => options
+            .Excluding(m => m.AuthorityError).Excluding(m => m.LastError).Excluding(m => m.CanSync));
+        retained.Should().OnlyContain(m => m.AuthorityError != null && m.AuthorityError.Contains("legacy")
+            && m.LastError == m.AuthorityError && !m.CanSync);
         (await context.Repository.GetLocalTimelineEntryAsync(localOnly.Id))!.Notes.Should().Be("Imported notes");
+
+        await context.RestartOnlineAsync();
+        await context.Service.TriggerDrainAsync();
+        (await context.Service.GetPendingCountAsync()).Should().Be(0);
         await context.Service.ClearRejectedMutationsAsync();
-        (await context.Database.Table<PendingTimelineMutation>().CountAsync()).Should().Be(2);
+        (await context.Database.Table<PendingTimelineMutation>().OrderBy(m => m.Id).ToListAsync())
+            .Should().BeEquivalentTo(retained);
         if (operation == "Delete")
-            context.Api.Verify(x => x.DeleteTimelineLocationAsync(42, It.IsAny<CancellationToken>()), Times.Once);
+            context.Api.Verify(x => x.DeleteTimelineLocationAsync(99, It.IsAny<CancellationToken>()), Times.Once);
         else
-            context.Api.Verify(x => x.UpdateTimelineLocationAsync(42,
-                It.Is<TimelineLocationUpdateRequest>(r => r.Notes == "Safe payload"),
+            context.Api.Verify(x => x.UpdateTimelineLocationAsync(99,
+                It.Is<TimelineLocationUpdateRequest>(r => r.Notes == "Confirmed payload"),
                 It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ConfirmedMutation_DoesNotMergeOrReplaceFalselyBoundLegacyUpdate(bool delete)
+    {
+        await using var context = await TimelineMutationContext.CreateAsync(online: false);
+        var (_, linked) = await context.SeedCollisionAsync();
+        var legacy = new PendingTimelineMutation
+        {
+            LocationId = 42, LocalEntryId = linked.Id, ServerIdentityConfirmed = false,
+            Notes = "Legacy payload", IncludeNotes = true, Latitude = 12,
+            OriginalNotes = "Legacy rollback notes", OriginalLatitude = 38,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-1)
+        };
+        await context.Database.InsertAsync(legacy);
+        var identity = TimelineDataService.ToTimelineLocation(linked).Identity;
+        if (delete)
+            await context.Service.DeleteLocationAsync(identity);
+        else
+            await context.Service.UpdateLocationAsync(identity, notes: "Confirmed notes", includeNotes: true);
+
+        var remaining = await context.Database.Table<PendingTimelineMutation>().ToListAsync();
+        remaining.Should().HaveCount(2);
+        remaining.Single(m => m.Id == legacy.Id).Should().BeEquivalentTo(legacy);
+        var confirmed = remaining.Single(m => m.Id != legacy.Id);
+        confirmed.ServerIdentityConfirmed.Should().BeTrue();
+        confirmed.LocalEntryId.Should().Be(linked.Id);
+        confirmed.OperationType.Should().Be(delete ? "Delete" : "Update");
+        context.VerifyNoRemoteMutations();
     }
 
     [Fact]
@@ -74,7 +119,8 @@ public sealed class ProductionTimelineQueueTests
         var different = new PendingTimelineMutation { LocationId = 42, LocalEntryId = 42, Notes = "Different source" };
         var safe = new PendingTimelineMutation
         {
-            LocationId = 42, LocalEntryId = linked.Id, Notes = "Safe pending notes", IncludeNotes = true,
+            LocationId = 42, LocalEntryId = linked.Id, ServerIdentityConfirmed = true,
+            Notes = "Safe pending notes", IncludeNotes = true,
             OriginalNotes = "Original linked notes"
         };
         await context.Database.InsertAllAsync(new[] { unknown, different, safe });
@@ -177,10 +223,11 @@ public sealed class ProductionTimelineQueueTests
             RejectionReason TEXT)
         """);
 
+    /// <summary>Seeds historical payload and rollback data older than subsequently authorized work.</summary>
     private static Task<int> InsertLegacyAsync(SQLiteAsyncConnection database, int id, string operation,
         int locationId, int? localEntryId, string? snapshot, string notes) => database.ExecuteAsync("""
         INSERT INTO PendingTimelineMutations
-        (Id, OperationType, LocationId, LocalEntryId, DeletedEntryJson, Notes, IncludeNotes, CreatedAt, SyncAttempts, IsRejected)
-        VALUES (?, ?, ?, ?, ?, ?, 1, ?, 0, 0)
-        """, id, operation, locationId, localEntryId, snapshot, notes, DateTime.UtcNow.AddMinutes(id));
+        (Id, OperationType, LocationId, LocalEntryId, DeletedEntryJson, Notes, IncludeNotes, OriginalNotes, CreatedAt, SyncAttempts, IsRejected)
+        VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, 0, 0)
+        """, id, operation, locationId, localEntryId, snapshot, notes, "Legacy rollback notes", DateTime.UtcNow.AddMinutes(id - 10));
 }
