@@ -71,6 +71,12 @@
     <Compile Include="..\..\src\WayfarerMobile\Data\Repositories\ITimelineRepository.cs" Link="Production\ITimelineRepository.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\TimelineExportService.cs" Link="Production\TimelineExportService.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\TimelineImportService.cs" Link="Production\TimelineImportService.cs" />
+    <!-- Exercise Timeline mutation authority against the production service and SQLite repository. -->
+    <Compile Remove="Infrastructure\Entities\PendingTimelineMutation.cs" />
+    <Compile Include="../../src/WayfarerMobile/Data/Entities/PendingTimelineMutation.cs" Link="Production/PendingTimelineMutation.cs" />
+    <Compile Include="../../src/WayfarerMobile/Data/Repositories/TimelineRepository.cs" Link="Production/TimelineRepository.cs" />
+    <Compile Include="../../src/WayfarerMobile/Services/TimelineSyncService.cs" Link="Production/TimelineSyncService.cs" />
+    <Compile Include="../../src/WayfarerMobile/Services/TimelineDataService.cs" Link="Production/TimelineDataService.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\QueueExportService.cs" Link="Production\QueueExportService.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\QueueDrainService.cs" Link="Production\QueueDrainService.cs" />
     <Compile Include="..\..\src\WayfarerMobile\Services\QueueRecoveryOperationCoordinator.cs" Link="Production\QueueRecoveryOperationCoordinator.cs" />

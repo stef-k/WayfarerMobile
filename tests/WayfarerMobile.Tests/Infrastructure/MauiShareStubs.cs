@@ -86,7 +86,7 @@ public class Application
     public AppTheme RequestedTheme { get; set; }
 }
 
-public enum NetworkAccess { None, Internet }
+public enum NetworkAccess { None, Internet, ConstrainedInternet }
 public sealed class ConnectivityChangedEventArgs(NetworkAccess networkAccess) : EventArgs { public NetworkAccess NetworkAccess { get; } = networkAccess; }
 public interface IConnectivity
 {
