@@ -75,6 +75,10 @@
     <Compile Remove="Infrastructure\Entities\PendingTimelineMutation.cs" />
     <Compile Include="../../src/WayfarerMobile/Data/Entities/PendingTimelineMutation.cs" Link="Production/PendingTimelineMutation.cs" />
     <Compile Include="../../src/WayfarerMobile/Data/Repositories/TimelineRepository.cs" Link="Production/TimelineRepository.cs" />
+    <!-- Verify capture provenance and recovery through production storage and queue repositories. -->
+    <Compile Include="../../src/WayfarerMobile/Data/Repositories/LocationQueueRepository.cs" Link="Production/LocationQueueRepository.cs" />
+    <Compile Include="../../src/WayfarerMobile/Services/LocalTimelineStorageService.cs" Link="Production/LocalTimelineStorageService.cs" />
+    <Compile Include="../../src/WayfarerMobile/Services/LocationServiceCallbacks.cs" Link="Production/LocationServiceCallbacks.cs" />
     <Compile Include="../../src/WayfarerMobile/Services/TimelineSyncService.cs" Link="Production/TimelineSyncService.cs" />
     <Compile Include="../../src/WayfarerMobile/Services/TimelineSyncService.Mutations.cs" Link="Production/TimelineSyncService.Mutations.cs" />
     <Compile Include="../../src/WayfarerMobile/Services/TimelineSyncService.Queue.cs" Link="Production/TimelineSyncService.Queue.cs" />
