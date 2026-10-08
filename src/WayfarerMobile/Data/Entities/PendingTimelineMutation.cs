@@ -40,7 +40,8 @@ public class PendingTimelineMutation
 
     /// <summary>
     /// Gets or sets whether the mutation was accepted with proven server identity.
-    /// Legacy rows default to false and require an independently verifiable source binding.
+    /// Required for replay, merging and replacement, even when source bindings match.
+    /// Legacy rows default to false and remain held; bindings alone cannot establish authority.
     /// </summary>
     public bool ServerIdentityConfirmed { get; set; }
 

@@ -1065,14 +1065,16 @@ storage changes, server requests or enqueue. Local-only entries remain read-only
 the original `QueuedLocations` capture/upload queue continues independently.
 
 New `PendingTimelineMutation` rows persist `ServerIdentityConfirmed`, including
-server-origin selections without a local copy. Replay also verifies every available
-`LocalEntryId` binding and deletion snapshot against the claimed server ID. Legacy
-updates with a matching local binding and deletes with a valid snapshot remain
-deliverable. Unprovable or contradictory rows are held with an inspectable
-`AuthorityError` and `LastError`, without a request or retry-attempt increment.
+server-origin selections without a local copy. Replay, update merging and delete
+replacement require this confirmation, then verify every available `LocalEntryId`
+binding and deletion snapshot against the claimed server ID. Unconfirmed legacy
+rows remain held even when bindings or snapshots match: historical ID collisions
+could produce that same evidence. They are never automatically confirmed.
+Unconfirmed or contradictory rows are held with an inspectable `AuthorityError`
+and `LastError`, without a request or retry-attempt increment.
 Held payloads and rollback data remain in SQLite, are excluded from delivery counts,
-and survive `ClearRejectedMutationsAsync`. They do not block subsequent safe rows.
-Merging/replacement requires matching proven source bindings, not numeric ID equality.
+and survive `ClearRejectedMutationsAsync`. They do not block subsequent confirmed work.
+Merging/replacement also requires matching source bindings, not numeric ID equality.
 The existing SQLite table initialization adds the two columns without dropping queue
 data; no location-capture queue migration or server API change is involved.
 

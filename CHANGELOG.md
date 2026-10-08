@@ -4,8 +4,10 @@
 
 - Timeline (#285): keep device-only entries readable, shareable and exportable while
   disabling edit and delete with an explanation. Preserve record provenance through
-  map selection, editors and offline retries; hold unprovable legacy mutations with
-  their data intact while safely linked queued work continues.
+  map selection, editors and offline retries. Require explicit server confirmation
+  for mutation replay, merging and replacement; hold unconfirmed legacy mutations
+  with payload and rollback data intact, even when old bindings match, while newly
+  confirmed queued work continues.
 
 - SSE (Wayfarer #674): reconnect group and visit streams after remote EOF or body I/O
   failure using the existing 1s/2s/5s backoff. Explicit Stop and caller cancellation

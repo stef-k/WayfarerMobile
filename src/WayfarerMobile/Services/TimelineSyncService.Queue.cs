@@ -29,7 +29,8 @@ public sealed partial class TimelineSyncService
     }
 
     /// <summary>
-    /// Verifies persisted provenance without inferring authority from another row's numeric server ID.
+    /// Requires explicit server confirmation, then verifies every available source binding.
+    /// Historical bindings and snapshots may be consistent despite originating from an ID collision.
     /// A freshly authorized deletion source may validate updates replaced after its optimistic removal.
     /// </summary>
     private async Task<string?> GetMutationAuthorityErrorAsync(
@@ -37,6 +38,8 @@ public sealed partial class TimelineSyncService
     {
         if (mutation.LocationId <= 0 || mutation.OperationType is not ("Update" or "Delete"))
             return "Mutation held: invalid server identity or operation.";
+        if (!mutation.ServerIdentityConfirmed)
+            return "Mutation held: legacy record has no confirmed server provenance; retained for inspection.";
 
         LocalTimelineEntry? snapshot = null;
         if (mutation.DeletedEntryJson != null)
@@ -76,9 +79,7 @@ public sealed partial class TimelineSyncService
             return null;
         }
 
-        return mutation.ServerIdentityConfirmed
-            ? null
-            : "Mutation held: legacy record has no provable server provenance; retained for inspection.";
+        return null;
     }
 
     /// <summary>Finds only deliverable work with the same source binding for merging or replacement.</summary>
