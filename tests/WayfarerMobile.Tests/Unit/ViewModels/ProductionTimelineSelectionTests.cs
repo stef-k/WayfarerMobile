@@ -190,6 +190,28 @@ public sealed class ProductionTimelineSelectionTests
         viewModel.SelectedLocation.Notes.Should().Be("Server response");
         collidingServerLocation.Identity.Should().Be(TimelineEntryIdentity.FromLocal(linked.Id, 42));
         context.VerifyNoRemoteMutations();
+        viewModel.CoordinateEditor.EnterCoordinatePickingModeCommand.Execute(null);
+        viewModel.CoordinateEditor.PendingLatitude = 1;
+        viewModel.CoordinateEditor.PendingLongitude = 2;
+
+        // Notes navigation starts with API provenance; enrichment has since created its local copy.
+        var navigation = viewModel.PrepareNotesEditorNavigation()!;
+        using var notes = context.CreateNotesEditor();
+        notes.ApplyQueryAttributes(navigation);
+        notes.SetCurrentContent("Edited server-origin notes");
+        await notes.SaveCommand.ExecuteAsync(null);
+        viewModel.IsOnline = false;
+        await viewModel.LoadDataCommand.ExecuteAsync(null);
+        viewModel.ShowLocationDetails((TimelineEntryIdentity)navigation["timelineIdentity"]);
+        viewModel.SelectedLocation!.Identity.ServerId.Should().Be(77);
+        viewModel.SelectedLocation.Identity.LocalEntryId.Should().NotBeNull();
+        viewModel.SelectedLocation.Notes.Should().Be("Edited server-origin notes");
+        await viewModel.CoordinateEditor.SaveCoordinatesCommand.ExecuteAsync(null);
+        viewModel.SelectedLocation!.Identity.ServerId.Should().Be(77);
+        viewModel.SelectedLocation.Latitude.Should().Be(1);
+        (await context.Repository.GetLocalTimelineEntryAsync(linked.Id))!.Notes.Should().Be("Linked notes");
+        context.Api.Verify(x => x.UpdateTimelineLocationAsync(77, It.IsAny<TimelineLocationUpdateRequest>(),
+            It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     [Fact]

@@ -1056,6 +1056,8 @@ nullable `ServerId`. Local conversion supplies both from the same row; actual AP
 responses supply server identity explicitly. Numeric display IDs grant no authority.
 Markers, details, editor callbacks, notes navigation and reload selection carry this
 identity. A stale identity cannot select a different row with a coincident ID.
+API-origin selections can reselect a newly cached copy of the same proven server
+record; local selections require their original row and unchanged linkage.
 
 `UpdateLocationAsync` and `DeleteLocationAsync` require this identity. They reject
 unlinked/unknown entries and revalidate the same local row's linkage before optimistic

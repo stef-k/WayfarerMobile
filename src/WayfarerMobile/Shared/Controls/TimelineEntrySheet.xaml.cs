@@ -466,7 +466,7 @@ public partial class TimelineEntrySheet : ContentView
 
     private async void OnSaveEditClicked(object? sender, EventArgs e)
     {
-        if (Entry?.Identity.CanMutate != true || Entry.Identity != _editingIdentity) return;
+        if (Entry?.Identity.CanMutate != true || _editingIdentity?.MatchesSelection(Entry.Identity) != true) return;
 
         // Validate inputs
         if (!double.TryParse(EditLatitude, out var lat) || lat < -90 || lat > 90)

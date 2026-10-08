@@ -642,7 +642,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     /// <param name="identity">The originating record identity to select; never a fallback display ID.</param>
     public void ShowLocationDetails(TimelineEntryIdentity identity)
     {
-        var location = _allLocations.FirstOrDefault(l => l.Identity == identity && identity != TimelineEntryIdentity.Unknown);
+        var location = _allLocations.FirstOrDefault(l => identity.MatchesSelection(l.Identity));
         if (location == null)
         {
             CloseLocationSheet();
@@ -817,7 +817,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     [RelayCommand]
     private async Task SaveActivityAsync()
     {
-        if (SelectedLocation?.CanEdit != true || SelectedLocation.Identity != _activityEditingIdentity) return;
+        if (SelectedLocation?.CanEdit != true || _activityEditingIdentity?.MatchesSelection(SelectedLocation.Identity) != true) return;
 
         var activityChanged = SelectedActivityForEdit?.Name != SelectedLocation.ActivityType;
         if (activityChanged)
@@ -835,7 +835,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     [RelayCommand]
     private async Task ClearActivityAsync()
     {
-        if (SelectedLocation?.CanEdit != true || SelectedLocation.Identity != _activityEditingIdentity) return;
+        if (SelectedLocation?.CanEdit != true || _activityEditingIdentity?.MatchesSelection(SelectedLocation.Identity) != true) return;
 
         await UpdateActivityAsync(null, clearActivity: true);
         IsActivityPickerOpen = false;
@@ -897,7 +897,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
     /// <param name="identity">The originating record identity to delete.</param>
     public async Task DeleteLocationAsync(TimelineEntryIdentity identity)
     {
-        if (!identity.CanMutate || !_allLocations.Any(l => l.Identity == identity))
+        if (!identity.CanMutate || !_allLocations.Any(l => identity.MatchesSelection(l.Identity)))
         {
             await _toastService.ShowWarningAsync(TimelineEntryIdentity.ReadOnlyExplanation);
             return;
@@ -921,7 +921,7 @@ public partial class TimelineViewModel : BaseViewModel, ICoordinateEditorCallbac
             SelectedLocation = null;
 
             // Remove the authorized display row after the sync boundary accepts the action.
-            var locationToRemove = _allLocations.FirstOrDefault(l => l.Identity == identity);
+            var locationToRemove = _allLocations.FirstOrDefault(l => identity.MatchesSelection(l.Identity));
             if (locationToRemove != null)
             {
                 _allLocations.Remove(locationToRemove);

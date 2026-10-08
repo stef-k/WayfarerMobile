@@ -94,7 +94,7 @@ public partial class DateTimeEditorViewModel : ObservableObject
     private async Task SaveEditDateTimeAsync()
     {
         var selectedLocation = _callbacks.SelectedLocation;
-        if (selectedLocation?.CanEdit != true || selectedLocation.Identity != _editingIdentity) return;
+        if (selectedLocation?.CanEdit != true || _editingIdentity?.MatchesSelection(selectedLocation.Identity) != true) return;
 
         // Capture the initiating identity before reload replaces the display object.
         var identity = selectedLocation.Identity;

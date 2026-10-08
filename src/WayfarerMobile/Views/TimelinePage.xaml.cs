@@ -84,7 +84,7 @@ public partial class TimelinePage : ContentPage
             "Edit Activity",
             "Edit Notes");
 
-        if (_viewModel.SelectedLocation?.Identity != identity) return;
+        if (_viewModel.SelectedLocation == null || !identity.MatchesSelection(_viewModel.SelectedLocation.Identity)) return;
 
         switch (action)
         {
@@ -117,7 +117,7 @@ public partial class TimelinePage : ContentPage
             "Delete",
             "Cancel");
 
-        if (confirm && _viewModel.SelectedLocation?.Identity == identity)
+        if (confirm && _viewModel.SelectedLocation != null && identity.MatchesSelection(_viewModel.SelectedLocation.Identity))
         {
             await _viewModel.DeleteLocationAsync(identity);
         }

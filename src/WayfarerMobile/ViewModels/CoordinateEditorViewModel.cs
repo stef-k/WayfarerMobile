@@ -141,7 +141,7 @@ public partial class CoordinateEditorViewModel : ObservableObject
     private async Task SaveCoordinatesAsync()
     {
         var selectedLocation = _callbacks.SelectedLocation;
-        if (selectedLocation?.CanEdit != true || !HasPendingCoordinates || selectedLocation.Identity != _editingIdentity) return;
+        if (selectedLocation?.CanEdit != true || !HasPendingCoordinates || _editingIdentity?.MatchesSelection(selectedLocation.Identity) != true) return;
 
         // Capture the initiating identity before reload replaces the display object.
         var identity = selectedLocation.Identity;

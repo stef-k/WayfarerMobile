@@ -35,4 +35,14 @@ public sealed record TimelineEntryIdentity
     /// <summary>Creates an identity from a location returned by the server API.</summary>
     public static TimelineEntryIdentity FromServer(int serverId) =>
         serverId > 0 ? new(null, serverId) : Unknown;
+
+    /// <summary>
+    /// Matches a display selection after reload. API-origin selections may gain a local cache copy
+    /// of the same proven server record; local selections require their exact original row and linkage.
+    /// This presentation match does not replace mutation-source revalidation.
+    /// </summary>
+    public bool MatchesSelection(TimelineEntryIdentity candidate) =>
+        this != Unknown && (LocalEntryId.HasValue
+            ? this == candidate
+            : CanMutate && candidate.ServerId == ServerId);
 }
