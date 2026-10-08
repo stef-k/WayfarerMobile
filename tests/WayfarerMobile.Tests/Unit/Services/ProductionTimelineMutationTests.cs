@@ -20,10 +20,14 @@ public sealed class ProductionTimelineMutationTests
     [InlineData(false, false)]
     [InlineData(true, true)]
     [InlineData(false, true)]
-    public async Task LocalOnlyCollision_CannotUpdateOrDeleteAnotherServerRecord(bool online, bool delete)
+    public async Task LegacyFalseServerLink_CannotUpdateOrDeleteAnotherServerRecord(bool online, bool delete)
     {
         await using var context = await TimelineMutationContext.CreateAsync(online);
         var (localOnly, linked) = await context.SeedCollisionAsync();
+        // Older linkage heuristics could assign an imported row the ID of a different owned location.
+        localOnly.ServerId = 42;
+        localOnly.LastEnrichedAt = DateTime.UtcNow;
+        await context.Repository.UpdateLocalTimelineEntryAsync(localOnly);
         var syncEvents = 0;
         context.Service.SyncCompleted += (_, _) => syncEvents++;
         context.Service.SyncQueued += (_, _) => syncEvents++;

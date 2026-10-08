@@ -195,6 +195,37 @@ public sealed class ProductionTimelineQueueTests
         (await context.Repository.GetLocalTimelineEntryAsync(linked.Id))!.Notes.Should().Be("Linked notes");
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ConfirmedFlag_CannotAuthorizeAnUnconfirmedRowOrDeletionSnapshot(bool delete)
+    {
+        await using var context = await TimelineMutationContext.CreateAsync(online: false);
+        var (imported, linked) = await context.SeedCollisionAsync();
+        imported.ServerId = 42;
+        await context.Repository.UpdateLocalTimelineEntryAsync(imported);
+        var mutation = new PendingTimelineMutation
+        {
+            LocationId = 42, LocalEntryId = imported.Id, ServerIdentityConfirmed = true,
+            OperationType = delete ? "Delete" : "Update", Notes = "Unsafe queued edit",
+            OriginalNotes = "Unsafe rollback", DeletedEntryJson = delete ? JsonSerializer.Serialize(imported) : null
+        };
+        await context.Database.InsertAsync(mutation);
+        if (delete)
+            await context.Repository.DeleteLocalTimelineEntryAsync(imported.Id);
+
+        await context.RestartOnlineAsync();
+        await context.Service.TriggerDrainAsync();
+
+        context.VerifyNoRemoteMutations();
+        var held = await context.Database.GetAsync<PendingTimelineMutation>(mutation.Id);
+        held.AuthorityError.Should().NotBeNullOrEmpty();
+        held.SyncAttempts.Should().Be(0);
+        held.Notes.Should().Be(mutation.Notes);
+        held.DeletedEntryJson.Should().Be(mutation.DeletedEntryJson);
+        (await context.Repository.GetLocalTimelineEntryAsync(linked.Id)).Should().BeEquivalentTo(linked);
+    }
+
     /// <summary>Creates the pre-285 table shape, intentionally lacking the two new provenance columns.</summary>
     private static Task<int> CreateLegacyQueueAsync(SQLiteAsyncConnection database) => database.ExecuteAsync("""
         CREATE TABLE PendingTimelineMutations (

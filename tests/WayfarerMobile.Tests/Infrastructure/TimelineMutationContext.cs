@@ -25,6 +25,7 @@ internal sealed class TimelineMutationContext : IAsyncDisposable
     public TimelineRepository Repository { get; private set; } = null!;
     public TimelineSyncService Service { get; private set; } = null!;
     public TimelineDataService Data { get; private set; } = null!;
+    public DatabaseService DatabaseService => _databaseService;
 
     public static async Task<TimelineMutationContext> CreateAsync(bool online, bool initializeQueue = true)
     {

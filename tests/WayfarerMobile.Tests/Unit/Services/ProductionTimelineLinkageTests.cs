@@ -222,6 +222,76 @@ public sealed class ProductionTimelineLinkageTests
         context.VerifyNoRemoteMutations();
     }
 
+    [Fact]
+    public async Task Enrichment_PreservesFalseLinkedHistoryAndCreatesAnEditableApiCopy()
+    {
+        await using var context = await TimelineMutationContext.CreateAsync(online: true);
+        var location = CreateLocation();
+        var suspicious = await ImportAsync(context, location.Timestamp, includeNearby: true);
+        foreach (var entry in suspicious)
+        {
+            entry.ServerId = 42;
+            entry.Address = "Historical address";
+            entry.LastEnrichedAt = DateTime.UtcNow.AddDays(-1);
+            await context.Repository.UpdateLocalTimelineEntryAsync(entry);
+        }
+        context.Api.Setup(x => x.GetTimelineLocationsAsync("day", It.IsAny<int>(), It.IsAny<int?>(),
+            It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(new TimelineResponse
+        {
+            Data = [new TimelineLocation
+            {
+                Id = 42, Timestamp = location.Timestamp,
+                Coordinates = new TimelineCoordinates { X = 24, Y = 38 },
+                Address = "Owned server address", Notes = "Owned server notes"
+            }]
+        });
+
+        (await context.Data.EnrichFromServerAsync(location.Timestamp.ToLocalTime().Date)).Should().BeTrue();
+        (await context.Data.EnrichFromServerAsync(location.Timestamp.ToLocalTime().Date)).Should().BeTrue();
+
+        foreach (var entry in suspicious)
+        {
+            (await context.Repository.GetLocalTimelineEntryAsync(entry.Id)).Should().BeEquivalentTo(entry);
+            TimelineDataService.ToTimelineLocation(entry).Identity.CanMutate.Should().BeFalse();
+        }
+        var apiCopy = (await context.Repository.GetAllLocalTimelineEntriesAsync())
+            .Single(e => suspicious.All(old => old.Id != e.Id));
+        apiCopy.Notes.Should().Be("Owned server notes");
+        await context.Service.UpdateLocationAsync(TimelineDataService.ToTimelineLocation(apiCopy).Identity,
+            notes: "API copy edit", includeNotes: true);
+        context.Api.Verify(x => x.UpdateTimelineLocationAsync(42, It.IsAny<TimelineLocationUpdateRequest>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task BareDatabaseFallback_CallbackRetainsQueueIdentityThroughConfirmationAndRestart()
+    {
+        await using var context = await TimelineMutationContext.CreateAsync(online: false);
+        var queue = CreateQueue(context);
+        var logger = new Mock<ILogger<LocalTimelineStorageService>>();
+        var settings = new MockSettingsService { LocationTimeThresholdMinutes = 0, LocationDistanceThresholdMeters = 0 };
+        using var storage = CreateStorage(context, queue, settings, logger.Object);
+        await storage.InitializeAsync();
+        var location = CreateLocation();
+        var queuedId = await context.DatabaseService.QueueLocationAsync(location, 25000);
+
+        await NotifyAndWaitAsync(logger, () => LocationServiceCallbacks.NotifyLocationQueued(location));
+
+        var capture = (await context.Repository.GetByQueuedLocationIdAsync(queuedId))!;
+        capture.Should().NotBeNull();
+        await queue.MarkServerConfirmedAsync(queuedId, 42);
+        await NotifyAndWaitAsync(logger, () => LocationSyncCallbacks.NotifyLocationSynced(
+            queuedId, 42, location.Timestamp, location.Latitude, location.Longitude));
+        storage.Dispose();
+        await context.RestartOnlineAsync();
+        using var recoveredStorage = CreateStorage(context, queue, settings);
+        await recoveredStorage.InitializeAsync();
+        var recovered = (await context.Repository.GetAllLocalTimelineEntriesAsync()).Single();
+        recovered.Id.Should().Be(capture.Id);
+        recovered.QueuedLocationId.Should().Be(queuedId);
+        recovered.ServerId.Should().Be(42);
+    }
+
     private static LocationData CreateLocation() => new()
     {
         Latitude = 37.98, Longitude = 23.72,
