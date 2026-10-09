@@ -143,6 +143,7 @@ public sealed class ProductionTimelineMutationTests
             await context.Service.UpdateLocationAsync(identity, notes: "Rejected notes", includeNotes: true);
 
         (await context.Repository.GetLocalTimelineEntryByServerIdAsync(42))!.Notes.Should().Be("Linked notes");
+        (await context.Repository.GetLocalTimelineEntryAsync(linked.Id)).Should().BeEquivalentTo(linked);
         (await context.Repository.GetLocalTimelineEntryAsync(localOnly.Id))!.Notes.Should().Be("Imported notes");
         (await context.Database.Table<PendingTimelineMutation>().CountAsync()).Should().Be(0);
     }

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using SQLite;
 using WayfarerMobile.Core.Interfaces;
@@ -15,9 +14,9 @@ namespace WayfarerMobile.Services;
 /// Provides autonomous background processing via timer and drain loop.
 ///
 /// Sync Strategy:
-/// 1. Apply optimistic UI update immediately (caller responsibility)
-/// 2. Save to local database (both PendingTimelineMutation and LocalTimelineEntry)
-/// 3. Attempt server sync in background
+/// 1. Revalidate the originating local source and capture persisted rollback values
+/// 2. Commit PendingTimelineMutation and the optimistic LocalTimelineEntry change atomically
+/// 3. Attempt immediate or background delivery under the service's processing gate
 /// 4. On 4xx error: Server rejected - revert changes in LocalTimelineEntry, notify caller
 /// 5. On 5xx/network error: Queue for retry when online (LocalTimelineEntry keeps optimistic values)
 ///
@@ -99,6 +98,8 @@ public sealed partial class TimelineSyncService : ITimelineSyncService
     private readonly IConnectivity _connectivity;
     private readonly ILogger<TimelineSyncService> _logger;
 
+    // Covers mutation creation/merging and delivery through acknowledgement or retry persistence.
+    // SQLite transactions remain short; this service gate may span the HTTP request.
     private readonly SemaphoreSlim _drainLock = new(1, 1);
 
     private SQLiteAsyncConnection? _database;
@@ -639,14 +640,15 @@ public sealed partial class TimelineSyncService : ITimelineSyncService
             return DrainAttemptResult.Skipped;
         }
 
-        PendingTimelineMutation? mutation = null;
-
         try
         {
+            // Another caller may have completed a request while this caller awaited the gate.
+            if (!CanMakeSyncRequest())
+                return DrainAttemptResult.Skipped;
             await EnsureInitializedAsync();
 
             // Get next pending mutation
-            mutation = await _database!.Table<PendingTimelineMutation>()
+            var mutation = await _database!.Table<PendingTimelineMutation>()
                 .Where(m => !m.IsRejected && m.AuthorityError == null && m.SyncAttempts < PendingTimelineMutation.MaxSyncAttempts)
                 .OrderBy(m => m.CreatedAt)
                 .FirstOrDefaultAsync();
@@ -661,39 +663,31 @@ public sealed partial class TimelineSyncService : ITimelineSyncService
             _logger.LogDebug(
                 "TimelineSync: Processing mutation {Id} for location {LocationId}",
                 mutation.Id, mutation.LocationId);
+
+            // Keep the service gate until delivery and its durable outcome are complete.
+            return await ProcessMutationAsync(mutation, cancellationToken);
         }
         catch (SQLiteException ex)
         {
-            _logger.LogError(ex, "Database error getting pending mutation");
+            _logger.LogError(ex, "Database error processing Timeline mutation");
             return DrainAttemptResult.Failed;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error getting pending mutation");
+            _logger.LogError(ex, "Unexpected error processing Timeline mutation");
             return DrainAttemptResult.Failed;
         }
         finally
         {
             _drainLock.Release();
         }
-
-        // Process mutation outside lock (network call)
-        try
-        {
-            await ProcessMutationAsync(mutation, cancellationToken);
-            return DrainAttemptResult.Processed;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unhandled exception processing mutation {Id}", mutation.Id);
-            return DrainAttemptResult.Failed;
-        }
     }
 
     /// <summary>
     /// Processes a single mutation - syncs to server.
     /// </summary>
-    private async Task ProcessMutationAsync(PendingTimelineMutation mutation, CancellationToken cancellationToken)
+    private async Task<DrainAttemptResult> ProcessMutationAsync(
+        PendingTimelineMutation mutation, CancellationToken cancellationToken, bool immediate = false)
     {
         var authorityError = await GetMutationAuthorityErrorAsync(mutation);
         if (authorityError != null)
@@ -702,7 +696,7 @@ public sealed partial class TimelineSyncService : ITimelineSyncService
             mutation.LastError = authorityError;
             await _database!.UpdateAsync(mutation);
             _logger.LogWarning("Timeline mutation {Id} held: {Reason}", mutation.Id, authorityError);
-            return;
+            return DrainAttemptResult.Processed;
         }
 
         // Record rate limit before API call
@@ -713,14 +707,10 @@ public sealed partial class TimelineSyncService : ITimelineSyncService
             mutation.SyncAttempts++;
             mutation.LastSyncAttempt = DateTime.UtcNow;
 
-            // TODO: Pass cancellation token to API client when it supports cancellation.
-            // For now, timeouts are handled by HttpClient's default timeout.
-            _ = cancellationToken; // Suppress unused parameter warning
-
             bool success;
             if (mutation.OperationType == "Delete")
             {
-                success = await _apiClient.DeleteTimelineLocationAsync(mutation.LocationId);
+                success = await _apiClient.DeleteTimelineLocationAsync(mutation.LocationId, cancellationToken);
             }
             else
             {
@@ -734,7 +724,7 @@ public sealed partial class TimelineSyncService : ITimelineSyncService
                     ClearActivity = mutation.ClearActivity ? true : null
                 };
 
-                var response = await _apiClient.UpdateTimelineLocationAsync(mutation.LocationId, request);
+                var response = await _apiClient.UpdateTimelineLocationAsync(mutation.LocationId, request, cancellationToken);
                 success = response?.Success == true;
             }
 
@@ -747,6 +737,7 @@ public sealed partial class TimelineSyncService : ITimelineSyncService
                     "TimelineSync: Mutation {Id} for location {LocationId} synced successfully",
                     mutation.Id, mutation.LocationId);
                 SyncCompleted?.Invoke(this, new SyncSuccessEventArgs { EntityId = Guid.Empty });
+                return DrainAttemptResult.Processed;
             }
             else
             {
@@ -777,9 +768,15 @@ public sealed partial class TimelineSyncService : ITimelineSyncService
             mutation.IsRejected = true;
             mutation.RejectionReason = $"Server: {ex.Message}";
             mutation.LastError = ex.Message;
-            await _database!.UpdateAsync(mutation);
-
-            await RevertLocalEntryFromMutationAsync(mutation);
+            await _database!.RunInTransactionAsync(connection =>
+            {
+                RevertLocalEntryFromMutation(connection, mutation);
+                // Immediate rejection was reported directly; background rejection remains inspectable.
+                if (immediate)
+                    connection.Delete(mutation);
+                else
+                    connection.Update(mutation);
+            });
 
             Interlocked.Exchange(ref _consecutiveFailures, 0);
             _logger.LogWarning(
@@ -792,6 +789,7 @@ public sealed partial class TimelineSyncService : ITimelineSyncService
                 ErrorMessage = ex.Message,
                 IsClientError = true
             });
+            return DrainAttemptResult.Processed;
         }
         catch (HttpRequestException ex)
         {
@@ -809,6 +807,7 @@ public sealed partial class TimelineSyncService : ITimelineSyncService
             Interlocked.Increment(ref _consecutiveFailures);
             _logger.LogError(ex, "TimelineSync: Unexpected error processing mutation {Id}", mutation.Id);
         }
+        return DrainAttemptResult.Failed;
     }
 
     #endregion

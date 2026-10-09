@@ -1,11 +1,7 @@
 using System.Text.Json;
-using Microsoft.Extensions.Logging;
 using SQLite;
-using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
-using WayfarerMobile.Data.Repositories;
-using WayfarerMobile.Data.Services;
 
 namespace WayfarerMobile.Services;
 
@@ -31,10 +27,18 @@ public sealed partial class TimelineSyncService
     /// <summary>
     /// Requires explicit server confirmation, then verifies every available source binding.
     /// Historical bindings and snapshots may be consistent despite originating from an ID collision.
-    /// A freshly authorized deletion source may validate updates replaced after its optimistic removal.
     /// </summary>
-    private async Task<string?> GetMutationAuthorityErrorAsync(
-        PendingTimelineMutation mutation, LocalTimelineEntry? deletedSource = null)
+    private async Task<string?> GetMutationAuthorityErrorAsync(PendingTimelineMutation mutation)
+    {
+        string? error = null;
+        await _database!.RunInTransactionAsync(connection =>
+            error = GetMutationAuthorityError(connection, mutation));
+        return error;
+    }
+
+    /// <summary>Uses the same fail-closed authority checks for replay and transactional merging.</summary>
+    private static string? GetMutationAuthorityError(
+        SQLiteConnection connection, PendingTimelineMutation mutation)
     {
         if (mutation.LocationId <= 0 || mutation.OperationType is not ("Update" or "Delete"))
             return "Mutation held: invalid server identity or operation.";
@@ -66,9 +70,7 @@ public sealed partial class TimelineSyncService
             if (sourceId <= 0)
                 return "Mutation held: invalid local source binding.";
 
-            var source = await _timelineRepository.GetLocalTimelineEntryAsync(sourceId.Value);
-            if (source == null && deletedSource?.Id == sourceId)
-                source = deletedSource;
+            var source = connection.Find<LocalTimelineEntry>(sourceId.Value);
             if (source != null && (!source.IsSynced || source.ServerId != mutation.LocationId))
                 return "Mutation held: the originating local row is not linked to this server identity.";
             if (source == null && snapshot == null)
@@ -84,13 +86,13 @@ public sealed partial class TimelineSyncService
     }
 
     /// <summary>Finds only deliverable work with the same source binding for merging or replacement.</summary>
-    private async Task<List<PendingTimelineMutation>> GetCompatibleMutationsAsync(
-        int locationId, int? localEntryId, LocalTimelineEntry? deletedSource = null)
+    private static List<PendingTimelineMutation> GetCompatibleMutations(
+        SQLiteConnection connection, int locationId, int? localEntryId)
     {
-        var candidates = await _database!.Table<PendingTimelineMutation>()
+        var candidates = connection.Table<PendingTimelineMutation>()
             .Where(m => m.LocationId == locationId && !m.IsRejected && m.AuthorityError == null)
             .OrderBy(m => m.CreatedAt)
-            .ToListAsync();
+            .ToList();
         var compatible = new List<PendingTimelineMutation>();
         foreach (var candidate in candidates)
         {
@@ -98,13 +100,63 @@ public sealed partial class TimelineSyncService
                 continue;
             if (!localEntryId.HasValue && !candidate.ServerIdentityConfirmed)
                 continue;
-            if (await GetMutationAuthorityErrorAsync(candidate, deletedSource) == null)
+            if (GetMutationAuthorityError(connection, candidate) == null)
                 compatible.Add(candidate);
         }
         return compatible;
     }
 
     #region LocalTimelineEntry Integration (Persisted Rollback)
+
+    /// <summary>
+    /// Revalidates the previously resolved source inside the ownership transaction. Never adopts a replacement.
+    /// A proven API selection without a cache copy needs no local rollback or optimistic change.
+    /// </summary>
+    private static LocalTimelineEntry? RevalidateMutationEntry(
+        SQLiteConnection connection, int locationId, LocalTimelineEntry? resolvedEntry)
+    {
+        if (resolvedEntry == null) return null;
+
+        var source = connection.Find<LocalTimelineEntry>(resolvedEntry.Id);
+        if (source?.IsSynced != true || source.ServerId != locationId)
+            throw new InvalidOperationException("Timeline linkage changed; reload this entry before editing or deleting.");
+        return source;
+    }
+
+    /// <summary>Commits current rollback values, compatible durable intent and optimistic state together.</summary>
+    private async Task<PendingTimelineMutation> PersistUpdateMutationAsync(
+        int locationId, LocalTimelineEntry? resolvedEntry,
+        double? latitude, double? longitude, DateTime? localTimestamp, string? notes, bool includeNotes,
+        int? activityTypeId, bool clearActivity, string? activityTypeName)
+    {
+        PendingTimelineMutation mutation = null!;
+        // This service owns PendingTimelineMutations; use the shared repository connection for both tables.
+        await _database!.RunInTransactionAsync(connection =>
+        {
+            var source = RevalidateMutationEntry(connection, locationId, resolvedEntry);
+            mutation = EnqueueMutationWithRollback(connection, locationId, latitude, longitude, localTimestamp,
+                notes, includeNotes, activityTypeId, clearActivity, GetOriginalValues(source));
+            if (source == null) return;
+
+            ApplyLocalEntryUpdate(source, latitude, longitude, localTimestamp, notes, includeNotes, activityTypeName, clearActivity);
+            connection.Update(source);
+        });
+        return mutation;
+    }
+
+    /// <summary>Commits the confirmed deletion snapshot and its intent atomically with source removal.</summary>
+    private async Task<PendingTimelineMutation> PersistDeleteMutationAsync(int locationId, LocalTimelineEntry? resolvedEntry)
+    {
+        PendingTimelineMutation mutation = null!;
+        await _database!.RunInTransactionAsync(connection =>
+        {
+            var source = RevalidateMutationEntry(connection, locationId, resolvedEntry);
+            mutation = EnqueueDeleteMutationWithRollback(connection, locationId, GetDeletedEntryJson(source), source);
+            if (source != null)
+                connection.Delete<LocalTimelineEntry>(source.Id);
+        });
+        return mutation;
+    }
 
     /// <summary>
     /// Gets original values from LocalTimelineEntry for rollback support.
@@ -120,7 +172,7 @@ public sealed partial class TimelineSyncService
     /// <summary>
     /// Applies an update to the local timeline entry (optimistic update).
     /// </summary>
-    private async Task ApplyLocalEntryUpdateAsync(
+    private static void ApplyLocalEntryUpdate(
         LocalTimelineEntry? localEntry,
         double? latitude,
         double? longitude,
@@ -140,14 +192,13 @@ public sealed partial class TimelineSyncService
         // Activity: set name if provided, clear if requested
         if (!string.IsNullOrEmpty(activityTypeName)) localEntry.ActivityType = activityTypeName;
         if (clearActivity) localEntry.ActivityType = null;
-
-        await _timelineRepository.UpdateLocalTimelineEntryAsync(localEntry);
     }
 
     /// <summary>
     /// Enqueues a mutation with rollback data persisted in the mutation entity.
     /// </summary>
-    private async Task EnqueueMutationWithRollbackAsync(
+    private static PendingTimelineMutation EnqueueMutationWithRollback(
+        SQLiteConnection connection,
         int locationId,
         double? latitude,
         double? longitude,
@@ -158,7 +209,7 @@ public sealed partial class TimelineSyncService
         bool clearActivity,
         (int? localEntryId, double? lat, double? lng, DateTime? timestamp, string? notes, string? activityType) originalValues)
     {
-        var compatible = await GetCompatibleMutationsAsync(locationId, originalValues.localEntryId);
+        var compatible = GetCompatibleMutations(connection, locationId, originalValues.localEntryId);
         var existing = compatible.FirstOrDefault(m => m.OperationType == "Update");
 
         if (existing != null)
@@ -184,7 +235,8 @@ public sealed partial class TimelineSyncService
                 existing.ActivityTypeId = null;
             }
             existing.CreatedAt = DateTime.UtcNow;
-            await _database!.UpdateAsync(existing);
+            connection.Update(existing);
+            return existing;
         }
         else
         {
@@ -209,29 +261,9 @@ public sealed partial class TimelineSyncService
                 OriginalActivityType = originalValues.activityType,
                 CreatedAt = DateTime.UtcNow
             };
-            await _database!.InsertAsync(mutation);
+            connection.Insert(mutation);
+            return mutation;
         }
-    }
-
-    /// <summary>
-    /// Reverts local entry using provided original values.
-    /// </summary>
-    private async Task RevertLocalEntryFromValuesAsync(
-        int locationId,
-        (int? localEntryId, double? lat, double? lng, DateTime? timestamp, string? notes, string? activityType) originalValues)
-    {
-        if (!originalValues.localEntryId.HasValue) return;
-
-        var localEntry = await _timelineRepository.GetLocalTimelineEntryAsync(originalValues.localEntryId.Value);
-        if (localEntry?.IsSynced != true || localEntry.ServerId != locationId) return;
-
-        if (originalValues.lat.HasValue) localEntry.Latitude = originalValues.lat.Value;
-        if (originalValues.lng.HasValue) localEntry.Longitude = originalValues.lng.Value;
-        if (originalValues.timestamp.HasValue) localEntry.Timestamp = originalValues.timestamp.Value;
-        localEntry.Notes = originalValues.notes;
-        localEntry.ActivityType = originalValues.activityType;
-
-        await _timelineRepository.UpdateLocalTimelineEntryAsync(localEntry);
     }
 
     /// <summary>
@@ -241,25 +273,15 @@ public sealed partial class TimelineSyncService
         localEntry == null ? null : JsonSerializer.Serialize(localEntry);
 
     /// <summary>
-    /// Deletes the local timeline entry (optimistic delete).
-    /// </summary>
-    private async Task ApplyLocalEntryDeleteAsync(LocalTimelineEntry? localEntry)
-    {
-        if (localEntry?.IsSynced != true) return;
-
-        await _timelineRepository.DeleteLocalTimelineEntryAsync(localEntry.Id);
-    }
-
-    /// <summary>
     /// Enqueues a delete mutation with rollback data (full entry as JSON).
     /// </summary>
-    private async Task EnqueueDeleteMutationWithRollbackAsync(
-        int locationId, string? deletedEntryJson, LocalTimelineEntry? deletedEntry)
+    private static PendingTimelineMutation EnqueueDeleteMutationWithRollback(
+        SQLiteConnection connection, int locationId, string? deletedEntryJson, LocalTimelineEntry? deletedEntry)
     {
         // Replace only work bound to the same proven source; retain ambiguous and unrelated rows.
-        var compatible = await GetCompatibleMutationsAsync(locationId, deletedEntry?.Id, deletedEntry);
+        var compatible = GetCompatibleMutations(connection, locationId, deletedEntry?.Id);
         foreach (var existing in compatible)
-            await _database!.DeleteAsync(existing);
+            connection.Delete(existing);
 
         var mutation = new PendingTimelineMutation
         {
@@ -270,23 +292,30 @@ public sealed partial class TimelineSyncService
             DeletedEntryJson = deletedEntryJson,
             CreatedAt = DateTime.UtcNow
         };
-        await _database!.InsertAsync(mutation);
+        connection.Insert(mutation);
+        return mutation;
     }
 
     /// <summary>
     /// Restores a deleted entry from JSON.
     /// </summary>
-    private async Task RestoreDeletedEntryAsync(string? deletedEntryJson)
+    private static void RestoreDeletedEntry(SQLiteConnection connection, PendingTimelineMutation mutation)
     {
+        var deletedEntryJson = mutation.DeletedEntryJson;
         if (string.IsNullOrEmpty(deletedEntryJson)) return;
 
         try
         {
             var entry = JsonSerializer.Deserialize<LocalTimelineEntry>(deletedEntryJson);
-            if (entry?.IsSynced != true) return;
+            if (entry?.IsSynced != true || entry.ServerId != mutation.LocationId
+                || (mutation.LocalEntryId.HasValue && entry.Id != mutation.LocalEntryId)) return;
 
-            entry.Id = 0; // Reset ID for new insert
-            await _timelineRepository.InsertLocalTimelineEntryAsync(entry);
+            // Restore only the saved source identity; never overwrite a row that has taken its place.
+            if (connection.Find<LocalTimelineEntry>(entry.Id) == null)
+            {
+                // SQLite-net's ordinary Insert omits auto-increment IDs; this preserves the vacant saved ID.
+                connection.InsertOrReplace(entry);
+            }
         }
         catch (JsonException)
         {
@@ -297,21 +326,19 @@ public sealed partial class TimelineSyncService
     /// <summary>
     /// Reverts local entry using rollback data persisted in the mutation.
     /// </summary>
-    private async Task RevertLocalEntryFromMutationAsync(PendingTimelineMutation mutation)
+    private static void RevertLocalEntryFromMutation(SQLiteConnection connection, PendingTimelineMutation mutation)
     {
         if (mutation.OperationType == "Delete")
         {
             // Restore deleted entry from JSON
-            await RestoreDeletedEntryAsync(mutation.DeletedEntryJson);
+            RestoreDeletedEntry(connection, mutation);
         }
         else
         {
             // Revert updated fields
-            if (!mutation.HasRollbackData) return;
+            if (!mutation.HasRollbackData || !mutation.LocalEntryId.HasValue) return;
 
-            var localEntry = mutation.LocalEntryId.HasValue
-                ? await _timelineRepository.GetLocalTimelineEntryAsync(mutation.LocalEntryId.Value)
-                : await _timelineRepository.GetLocalTimelineEntryByServerIdAsync(mutation.LocationId);
+            var localEntry = connection.Find<LocalTimelineEntry>(mutation.LocalEntryId.Value);
             if (localEntry?.IsSynced != true || localEntry.ServerId != mutation.LocationId) return;
 
             if (mutation.OriginalLatitude.HasValue) localEntry.Latitude = mutation.OriginalLatitude.Value;
@@ -320,7 +347,7 @@ public sealed partial class TimelineSyncService
             localEntry.Notes = mutation.OriginalNotes;
             localEntry.ActivityType = mutation.OriginalActivityType;
 
-            await _timelineRepository.UpdateLocalTimelineEntryAsync(localEntry);
+            connection.Update(localEntry);
         }
     }
 

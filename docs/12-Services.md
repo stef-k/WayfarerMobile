@@ -1094,11 +1094,38 @@ Timeline mutations now sync automatically without requiring the Timeline page to
 
 ### Sync Strategy
 
-1. Validate originating identity before applying optimistic changes
-2. Save to local database (both `PendingTimelineMutation` and `LocalTimelineEntry`)
+1. Validate originating identity and recheck its exact local source within the transaction
+2. Commit rollback data, `PendingTimelineMutation` and the optimistic local change together
 3. Attempt server sync in background (immediately if online, or via timer)
 4. On 4xx error: Server rejected → revert changes, notify caller
-5. On 5xx/network error: Queue for retry (local keeps optimistic values)
+5. On 5xx/network error: Retain committed intent for retry (local keeps optimistic values)
+
+### Atomic Ownership and Delivery
+
+Every Update or Delete persists its intent before contacting the server. The sync service
+owns the mutation table and uses the same SQLite connection as `TimelineRepository`.
+One short transaction reloads the exact originating local ID, verifies confirmed linkage
+and the expected server ID, captures current persisted rollback values, and saves compatible
+intent together with the optimistic local change. Updates retain the earliest rollback
+values when merging; deletes replace only compatible work and save the confirmed deletion
+snapshot before removing the source. A changed/missing source or failed write aborts all
+changes. Cleanup that commits first cannot cause an orphaned intent; creation that commits
+first makes its source visible to the existing enrichment protections.
+
+The service's `_drainLock` covers creation, merging/replacement, remote delivery and its
+durable outcome. Immediate requests and every background drain share this gate, so active
+intent cannot be submitted twice or merged away while awaiting acknowledgement. The SQLite
+transaction is closed before HTTP starts; enrichment and capture callbacks can still run.
+There is no persisted in-flight flag to strand work after interruption. A restart retries
+committed intent using the same authority checks, and drain shutdown cancels its API request.
+
+Success removes only the delivered mutation ID. Transient failures retain intent and
+original rollback values for background retry. Permanent rejection restores only the
+authorized source and acknowledges the outcome in one SQLite transaction: immediate
+rejections remove their intent after reporting it directly; background rejections remain
+marked for inspection/acknowledgement. Delete rollback restores the saved local ID only
+when that ID is absent, without overwriting another row. Independently held historical
+work keeps its payload and rollback data.
 
 ### Rollback Data
 

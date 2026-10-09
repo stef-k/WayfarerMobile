@@ -21,6 +21,9 @@
   Confirmed cache cleanup now prefers and retains rows referenced by persisted mutations,
   including held or exhausted work, so delayed capture callbacks cannot orphan offline
   edits. Enrichment preserves pending Notes clears and activity changes with rollback intact.
+  Commit mutation ownership, rollback data and optimistic updates/deletes atomically before
+  online delivery. Immediate requests and background retries share a processing gate, so
+  enrichment cannot orphan an in-flight edit and competing drains cannot submit it twice.
 
 - SSE (Wayfarer #674): reconnect group and visit streams after remote EOF or body I/O
   failure using the existing 1s/2s/5s backoff. Explicit Stop and caller cancellation

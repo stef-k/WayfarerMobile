@@ -1,11 +1,5 @@
-using System.Text.Json;
-using Microsoft.Extensions.Logging;
-using SQLite;
-using WayfarerMobile.Core.Interfaces;
 using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
-using WayfarerMobile.Data.Repositories;
-using WayfarerMobile.Data.Services;
 
 namespace WayfarerMobile.Services;
 
@@ -29,92 +23,24 @@ public sealed partial class TimelineSyncService
         bool clearActivity = false,
         string? activityTypeName = null)
     {
-        var localEntry = await ResolveMutationEntryAsync(identity);
-        var locationId = identity.ServerId!.Value;
-        await EnsureInitializedAsync();
-
-        // Capture the same authorized row before applying changes.
-        var originalValues = GetOriginalValues(localEntry);
-
-        // Apply optimistic update to LocalTimelineEntry
-        await ApplyLocalEntryUpdateAsync(localEntry, latitude, longitude, localTimestamp, notes, includeNotes, activityTypeName, clearActivity);
-
-        // Build request
-        var request = new TimelineLocationUpdateRequest
-        {
-            Latitude = latitude,
-            Longitude = longitude,
-            LocalTimestamp = localTimestamp,
-            Notes = includeNotes ? notes : null,
-            ActivityTypeId = activityTypeId,
-            ClearActivity = clearActivity ? true : null
-        };
-
-        // Check connectivity first
-        if (!_isOnline)
-        {
-            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, activityTypeId, clearActivity, originalValues);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = Guid.Empty, Message = "Saved offline - will sync when online" });
-            return;
-        }
-
-        // Try server sync
+        // The service gate also excludes merging or replacing work being delivered by the drain.
+        await _drainLock.WaitAsync();
         try
         {
-            var response = await _apiClient.UpdateTimelineLocationAsync(locationId, request);
-
-            if (response != null && response.Success)
+            var localEntry = await ResolveMutationEntryAsync(identity);
+            await EnsureInitializedAsync();
+            var mutation = await PersistUpdateMutationAsync(identity.ServerId!.Value, localEntry,
+                latitude, longitude, localTimestamp, notes, includeNotes, activityTypeId, clearActivity, activityTypeName);
+            if (!_isOnline)
             {
-                // Success - no need to store rollback data
-                SyncCompleted?.Invoke(this, new SyncSuccessEventArgs { EntityId = Guid.Empty });
+                SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = Guid.Empty, Message = "Saved offline - will sync when online" });
                 return;
             }
-
-            // Null or failed response - queue for retry (keep local changes)
-            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, activityTypeId, clearActivity, originalValues);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = Guid.Empty, Message = "Sync failed - will retry" });
+            await DeliverImmediateMutationAsync(mutation);
         }
-        catch (HttpRequestException ex) when (IsClientError(ex))
+        finally
         {
-            // 4xx error - server rejected, revert local changes using original values
-            await RevertLocalEntryFromValuesAsync(locationId, originalValues);
-
-            SyncRejected?.Invoke(this, new SyncFailureEventArgs
-            {
-                EntityId = Guid.Empty,
-                ErrorMessage = $"Server rejected changes: {ex.Message}",
-                IsClientError = true
-            });
-        }
-        catch (HttpRequestException ex)
-        {
-            // Network error - queue for retry (keep local changes)
-            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, activityTypeId, clearActivity, originalValues);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs
-            {
-                EntityId = Guid.Empty,
-                Message = $"Network error: {ex.Message} - will retry"
-            });
-        }
-        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-        {
-            // Timeout - queue for retry (keep local changes)
-            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, activityTypeId, clearActivity, originalValues);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs
-            {
-                EntityId = Guid.Empty,
-                Message = "Request timed out - will retry"
-            });
-        }
-        catch (Exception ex)
-        {
-            // Unexpected error - queue for retry (keep local changes)
-            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, activityTypeId, clearActivity, originalValues);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs
-            {
-                EntityId = Guid.Empty,
-                Message = $"Unexpected error: {ex.Message} - will retry"
-            });
+            _drainLock.Release();
         }
     }
 
@@ -124,74 +50,35 @@ public sealed partial class TimelineSyncService
     /// </summary>
     public async Task DeleteLocationAsync(TimelineEntryIdentity identity)
     {
-        var localEntry = await ResolveMutationEntryAsync(identity);
-        var locationId = identity.ServerId!.Value;
-        await EnsureInitializedAsync();
-
-        // Retain the authorized source for both rollback and queue replacement.
-        var deletedEntryJson = GetDeletedEntryJson(localEntry);
-        await ApplyLocalEntryDeleteAsync(localEntry);
-
-        if (!_isOnline)
-        {
-            await EnqueueDeleteMutationWithRollbackAsync(locationId, deletedEntryJson, localEntry);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = Guid.Empty, Message = "Deleted offline - will sync when online" });
-            return;
-        }
-
+        await _drainLock.WaitAsync();
         try
         {
-            var success = await _apiClient.DeleteTimelineLocationAsync(locationId);
-
-            if (success)
+            var localEntry = await ResolveMutationEntryAsync(identity);
+            await EnsureInitializedAsync();
+            var mutation = await PersistDeleteMutationAsync(identity.ServerId!.Value, localEntry);
+            if (!_isOnline)
             {
-                // Success - no rollback needed
-                SyncCompleted?.Invoke(this, new SyncSuccessEventArgs { EntityId = Guid.Empty });
+                SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = Guid.Empty, Message = "Deleted offline - will sync when online" });
                 return;
             }
+            await DeliverImmediateMutationAsync(mutation);
+        }
+        finally
+        {
+            _drainLock.Release();
+        }
+    }
 
-            await EnqueueDeleteMutationWithRollbackAsync(locationId, deletedEntryJson, localEntry);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = Guid.Empty, Message = "Delete failed - will retry" });
-        }
-        catch (HttpRequestException ex) when (IsClientError(ex))
-        {
-            // 4xx error - server rejected, restore local entry from JSON
-            await RestoreDeletedEntryAsync(deletedEntryJson);
-
-            SyncRejected?.Invoke(this, new SyncFailureEventArgs
-            {
-                EntityId = Guid.Empty,
-                ErrorMessage = $"Server rejected: {ex.Message}",
-                IsClientError = true
-            });
-        }
-        catch (HttpRequestException ex)
-        {
-            await EnqueueDeleteMutationWithRollbackAsync(locationId, deletedEntryJson, localEntry);
+    /// <summary>Delivers committed intent through the same processor as background retries.</summary>
+    private async Task DeliverImmediateMutationAsync(PendingTimelineMutation mutation)
+    {
+        var result = await ProcessMutationAsync(mutation, CancellationToken.None, immediate: true);
+        if (result == DrainAttemptResult.Failed)
             SyncQueued?.Invoke(this, new SyncQueuedEventArgs
             {
                 EntityId = Guid.Empty,
-                Message = $"Network error: {ex.Message} - will retry"
+                Message = $"{mutation.LastError} - will retry"
             });
-        }
-        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-        {
-            await EnqueueDeleteMutationWithRollbackAsync(locationId, deletedEntryJson, localEntry);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs
-            {
-                EntityId = Guid.Empty,
-                Message = "Request timed out - will retry"
-            });
-        }
-        catch (Exception ex)
-        {
-            await EnqueueDeleteMutationWithRollbackAsync(locationId, deletedEntryJson, localEntry);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs
-            {
-                EntityId = Guid.Empty,
-                Message = $"Unexpected error: {ex.Message} - will retry"
-            });
-        }
     }
 
     /// <summary>
