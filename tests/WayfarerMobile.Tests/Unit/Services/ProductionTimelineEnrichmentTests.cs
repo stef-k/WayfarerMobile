@@ -125,4 +125,97 @@ public sealed class ProductionTimelineEnrichmentTests
         enriched.Notes.Should().Be(reject ? original.Notes : server.Notes);
         (await context.Repository.GetLocalTimelineEntryAsync(unrelated.Id)).Should().BeEquivalentTo(unrelated);
     }
+
+    [Fact]
+    public async Task UnreferencedDuplicates_KeepNewestBeforeMutationQueueInitialization()
+    {
+        await using var context = await TimelineMutationContext.CreateAsync(online: false, initializeQueue: false);
+        var timestamp = DateTime.Today.ToUniversalTime().AddHours(1);
+        var older = new LocalTimelineEntry
+        {
+            ServerId = 42, ServerLinkageConfirmed = true, Timestamp = timestamp,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-1)
+        };
+        var newer = new LocalTimelineEntry
+        {
+            ServerId = 42, ServerLinkageConfirmed = true, Timestamp = timestamp, CreatedAt = DateTime.UtcNow
+        };
+        await context.Repository.InsertLocalTimelineEntryAsync(older);
+        await context.Repository.InsertLocalTimelineEntryAsync(newer);
+        context.Api.Setup(x => x.GetTimelineLocationsAsync("day", It.IsAny<int>(), It.IsAny<int?>(),
+            It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(new TimelineResponse
+        {
+            Data = [new TimelineLocation { Id = 42, Timestamp = timestamp, Address = "Server address" }]
+        });
+
+        (await context.Data.EnrichFromServerAsync(timestamp.ToLocalTime().Date)).Should().BeTrue();
+
+        (await context.Repository.GetLocalTimelineEntryAsync(older.Id)).Should().BeNull();
+        (await context.Repository.GetLocalTimelineEntryAsync(newer.Id))!.Address.Should().Be("Server address");
+        (await context.Repository.GetLocalTimelineEntryCountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Cleanup_RetainsIndependentHeldAndExhaustedSourcesAndRemovesOnlyRedundantConfirmedRows()
+    {
+        await using var context = await TimelineMutationContext.CreateAsync(online: false);
+        var (suspicious, heldSource) = await context.SeedCollisionAsync();
+        suspicious.ServerId = 42;
+        await context.Repository.UpdateLocalTimelineEntryAsync(suspicious);
+        heldSource.CreatedAt = DateTime.UtcNow.AddMinutes(-3);
+        await context.Repository.UpdateLocalTimelineEntryAsync(heldSource);
+        var exhaustedSource = new LocalTimelineEntry
+        {
+            ServerId = 42, ServerLinkageConfirmed = true, Timestamp = heldSource.Timestamp,
+            Latitude = 38, Longitude = 24, Notes = "Other original notes", ActivityType = "Walk",
+            CreatedAt = heldSource.CreatedAt.AddMinutes(1)
+        };
+        var redundant = new LocalTimelineEntry
+        {
+            ServerId = 42, ServerLinkageConfirmed = true, Timestamp = heldSource.Timestamp,
+            Latitude = 38, Longitude = 24, CreatedAt = heldSource.CreatedAt.AddMinutes(2)
+        };
+        await context.Repository.InsertLocalTimelineEntryAsync(exhaustedSource);
+        await context.Repository.InsertLocalTimelineEntryAsync(redundant);
+        foreach (var source in new[] { heldSource, exhaustedSource })
+            await context.Service.UpdateLocationAsync(TimelineDataService.ToTimelineLocation(source).Identity,
+                notes: null, includeNotes: true, clearActivity: true);
+        var held = (await context.Database.Table<PendingTimelineMutation>()
+            .Where(m => m.LocalEntryId == heldSource.Id).ToListAsync()).Single();
+        held.AuthorityError = "Held for inspection";
+        held.LastError = held.AuthorityError;
+        await context.Database.UpdateAsync(held);
+        var exhausted = (await context.Database.Table<PendingTimelineMutation>()
+            .Where(m => m.LocalEntryId == exhaustedSource.Id).ToListAsync()).Single();
+        exhausted.SyncAttempts = PendingTimelineMutation.MaxSyncAttempts;
+        exhausted.LastError = "Network unavailable";
+        await context.Database.UpdateAsync(exhausted);
+        context.Api.Setup(x => x.GetTimelineLocationsAsync("day", It.IsAny<int>(), It.IsAny<int?>(),
+            It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(new TimelineResponse
+        {
+            Data = [new TimelineLocation
+            {
+                Id = 42, Timestamp = heldSource.Timestamp, Notes = "Stale server notes",
+                ActivityType = "Stale server activity", Address = "Refreshed server address"
+            }]
+        });
+
+        (await context.Data.EnrichFromServerAsync(heldSource.Timestamp.ToLocalTime().Date)).Should().BeTrue();
+
+        foreach (var source in new[] { heldSource, exhaustedSource })
+        {
+            var retained = (await context.Repository.GetLocalTimelineEntryAsync(source.Id))!;
+            retained.Should().NotBeNull();
+            retained.ServerId.Should().Be(42);
+            retained.Notes.Should().BeNull();
+            retained.ActivityType.Should().BeNull();
+        }
+        (await context.Repository.GetLocalTimelineEntryAsync(exhaustedSource.Id))!.Address
+            .Should().Be("Refreshed server address", "the newest referenced row is the primary cache row");
+        (await context.Repository.GetLocalTimelineEntryAsync(redundant.Id)).Should().BeNull();
+        (await context.Repository.GetLocalTimelineEntryAsync(suspicious.Id)).Should().BeEquivalentTo(suspicious);
+        (await context.Database.Table<PendingTimelineMutation>().ToListAsync())
+            .Should().BeEquivalentTo(new[] { held, exhausted });
+        context.VerifyNoRemoteMutations();
+    }
 }

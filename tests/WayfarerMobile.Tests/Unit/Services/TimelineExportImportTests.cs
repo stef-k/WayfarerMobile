@@ -177,6 +177,10 @@ public class TimelineExportImportTests
         public Task<LocalTimelineEntry?> GetLocalTimelineEntryByServerIdAsync(int serverId) => throw new NotSupportedException();
         public Task<LocalTimelineEntry?> GetMostRecentLocalTimelineEntryAsync() => throw new NotSupportedException();
         public Task<List<LocalTimelineEntry>> GetLocalTimelineEntriesForDateAsync(DateTime date) => throw new NotSupportedException();
+        /// <inheritdoc />
+        public Task<List<LocalTimelineEntry>> PrepareConfirmedTimelineEntriesForEnrichmentAsync(DateTime date) => throw new NotSupportedException();
+        /// <inheritdoc />
+        public Task EnrichLocalTimelineEntryAsync(int id, TimelineLocation serverLocation) => throw new NotSupportedException();
         public Task<int> BulkInsertLocalTimelineEntriesAsync(IEnumerable<LocalTimelineEntry> items) => throw new NotSupportedException();
         public Task<int> ClearAllLocalTimelineEntriesAsync() => throw new NotSupportedException();
         public Task<int> GetLocalTimelineEntryCountAsync() => throw new NotSupportedException();

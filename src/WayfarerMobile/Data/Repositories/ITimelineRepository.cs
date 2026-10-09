@@ -1,3 +1,4 @@
+using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
 
 namespace WayfarerMobile.Data.Repositories;
@@ -73,6 +74,23 @@ public interface ITimelineRepository
     /// <param name="date">The date to retrieve entries for.</param>
     /// <returns>List of entries for that date, ordered by timestamp descending.</returns>
     Task<List<LocalTimelineEntry>> GetLocalTimelineEntriesForDateAsync(DateTime date);
+
+    /// <summary>
+    /// Atomically selects one confirmed cache row per server ID for enrichment, preferring rows
+    /// referenced by retained mutations. Removes only unreferenced confirmed duplicates.
+    /// Held, exhausted and rejected mutation references remain protected; unconfirmed rows are untouched.
+    /// </summary>
+    /// <param name="date">The date whose cache entries should be prepared.</param>
+    /// <returns>The primary confirmed cache rows for enrichment.</returns>
+    Task<List<LocalTimelineEntry>> PrepareConfirmedTimelineEntriesForEnrichmentAsync(DateTime date);
+
+    /// <summary>
+    /// Refreshes only enrichment fields on the current confirmed row in a transaction.
+    /// Preserves optimistic Notes (including a clear) and activity while a retained Update is outstanding.
+    /// </summary>
+    /// <param name="id">The exact local cache row ID.</param>
+    /// <param name="serverLocation">The authenticated server enrichment data.</param>
+    Task EnrichLocalTimelineEntryAsync(int id, TimelineLocation serverLocation);
 
     /// <summary>
     /// Gets all local timeline entries within a date range.

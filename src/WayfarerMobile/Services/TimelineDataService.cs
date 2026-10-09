@@ -187,45 +187,9 @@ public class TimelineDataService
                 "Fetched {Count} server entries for {Date:yyyy-MM-dd}",
                 serverData.Data.Count, date);
 
-            // Load existing local entries for this date
-            var localEntries = await _timelineRepository.GetLocalTimelineEntriesForDateAsync(date);
-
-            // Group by ServerId to handle potential duplicates (data integrity issue)
-            // Keep the most recently created entry and delete duplicates
-            var duplicatesToDelete = new List<int>();
-            var localByServerId = localEntries
-                .Where(e => e.IsSynced)
-                .GroupBy(e => e.ServerId!.Value)
-                .ToDictionary(g => g.Key, g =>
-                {
-                    var entries = g.OrderByDescending(e => e.CreatedAt).ToList();
-                    if (entries.Count > 1)
-                    {
-                        _logger.LogWarning(
-                            "Found {Count} duplicate local entries for ServerId {ServerId} on {Date:yyyy-MM-dd}, cleaning up",
-                            entries.Count, g.Key, date);
-                        // Mark all but the most recent for deletion
-                        duplicatesToDelete.AddRange(entries.Skip(1).Select(e => e.Id));
-                    }
-                    return entries.First();
-                });
-
-            // Clean up duplicates (best effort - don't fail enrichment if cleanup fails)
-            if (duplicatesToDelete.Count > 0)
-            {
-                try
-                {
-                    foreach (var id in duplicatesToDelete)
-                    {
-                        await _timelineRepository.DeleteLocalTimelineEntryAsync(id);
-                    }
-                    _logger.LogInformation("Deleted {Count} duplicate local timeline entries", duplicatesToDelete.Count);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to delete {Count} duplicate entries, will retry next enrichment", duplicatesToDelete.Count);
-                }
-            }
+            // Select and clean up confirmed cache rows atomically with their persisted mutation references.
+            var localEntries = await _timelineRepository.PrepareConfirmedTimelineEntriesForEnrichmentAsync(date);
+            var localByServerId = localEntries.ToDictionary(e => e.ServerId!.Value);
 
             var updatedCount = 0;
             var insertedCount = 0;
@@ -236,23 +200,7 @@ public class TimelineDataService
                     continue;
                 if (localByServerId.TryGetValue(serverLocation.Id, out var existing))
                 {
-                    // EXISTS locally - update enrichment fields
-                    existing.Address = serverLocation.Address;
-                    existing.FullAddress = serverLocation.FullAddress;
-                    existing.Place = serverLocation.Place;
-                    existing.Region = serverLocation.Region;
-                    existing.Country = serverLocation.Country;
-                    existing.PostCode = serverLocation.PostCode;
-                    existing.ActivityType = serverLocation.ActivityType;
-                    existing.TimeZoneId = serverLocation.Timezone;
-
-                    // Preserve local Notes if user edited offline
-                    if (string.IsNullOrEmpty(existing.Notes))
-                        existing.Notes = serverLocation.Notes;
-
-                    existing.LastEnrichedAt = DateTime.UtcNow;
-
-                    await _timelineRepository.UpdateLocalTimelineEntryAsync(existing);
+                    await _timelineRepository.EnrichLocalTimelineEntryAsync(existing.Id, serverLocation);
                     updatedCount++;
                 }
                 else

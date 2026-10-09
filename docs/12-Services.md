@@ -1389,6 +1389,15 @@ unconfirmed row with the same numeric server ID is preserved with all its data;
 the actual API response creates a separate confirmed cache entry. Server-ID equality,
 matching location values and enrichment metadata never confirm historical linkage.
 
+Confirmed duplicate cleanup selects its primary cache row and checks persisted
+`PendingTimelineMutation.LocalEntryId` references in one SQLite transaction. A referenced
+row takes priority over a newer unreferenced copy. Independently referenced duplicates
+remain until their mutations are removed, including held, retry-exhausted and retained
+rejected records; cleanup never retargets mutations or combines rollback data.
+Enrichment reloads the current row in a transaction and preserves optimistic Notes
+(including an offline clear) and activity while a non-rejected Update references it.
+Other enrichment metadata still refreshes, and ordinary enrichment resumes after completion.
+
 ---
 
 ## LocalTimelineStorageService

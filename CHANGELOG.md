@@ -18,6 +18,9 @@
   unconfirmed history and stores genuine API records separately. Android/iOS fallback
   captures now retain their originating queue ID through callbacks and restart recovery,
   with atomic insertion preventing duplicate pending rows during startup overlap.
+  Confirmed cache cleanup now prefers and retains rows referenced by persisted mutations,
+  including held or exhausted work, so delayed capture callbacks cannot orphan offline
+  edits. Enrichment preserves pending Notes clears and activity changes with rollback intact.
 
 - SSE (Wayfarer #674): reconnect group and visit streams after remote EOF or body I/O
   failure using the existing 1s/2s/5s backoff. Explicit Stop and caller cancellation

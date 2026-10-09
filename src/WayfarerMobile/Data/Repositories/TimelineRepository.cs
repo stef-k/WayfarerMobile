@@ -1,4 +1,5 @@
 using SQLite;
+using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
 
 namespace WayfarerMobile.Data.Repositories;
@@ -124,6 +125,70 @@ public class TimelineRepository : RepositoryBase, ITimelineRepository
             .Where(e => e.Timestamp >= startOfDay && e.Timestamp < endOfDay)
             .OrderByDescending(e => e.Timestamp)
             .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<LocalTimelineEntry>> PrepareConfirmedTimelineEntriesForEnrichmentAsync(DateTime date)
+    {
+        var db = await GetConnectionAsync();
+        var startOfDay = date.Date.ToUniversalTime();
+        var endOfDay = date.Date.AddDays(1).ToUniversalTime();
+        var primaryEntries = new List<LocalTimelineEntry>();
+        await db.RunInTransactionAsync(connection =>
+        {
+            // Enrichment can precede sync-service initialization; use its existing additive table setup.
+            connection.CreateTable<PendingTimelineMutation>();
+            var referencedIds = connection.QueryScalars<int>("""
+                SELECT DISTINCT LocalEntryId FROM PendingTimelineMutations WHERE LocalEntryId IS NOT NULL
+                """).ToHashSet();
+            var entries = connection.Table<LocalTimelineEntry>()
+                .Where(e => e.Timestamp >= startOfDay && e.Timestamp < endOfDay
+                    && e.ServerLinkageConfirmed && e.ServerId > 0).ToList();
+            foreach (var group in entries.GroupBy(e => e.ServerId!.Value))
+            {
+                var ordered = group.OrderByDescending(e => referencedIds.Contains(e.Id))
+                    .ThenByDescending(e => e.CreatedAt).ThenByDescending(e => e.Id).ToList();
+                primaryEntries.Add(ordered[0]);
+                foreach (var duplicate in ordered.Skip(1))
+                {
+                    if (!referencedIds.Contains(duplicate.Id))
+                        connection.Delete<LocalTimelineEntry>(duplicate.Id);
+                }
+            }
+            // The reference query and deletion share a transaction, so enqueue cannot invalidate the check.
+        });
+        return primaryEntries;
+    }
+
+    /// <inheritdoc />
+    public async Task EnrichLocalTimelineEntryAsync(int id, TimelineLocation serverLocation)
+    {
+        var db = await GetConnectionAsync();
+        await db.RunInTransactionAsync(connection =>
+        {
+            connection.CreateTable<PendingTimelineMutation>();
+            // Reload within the transaction rather than writing a stale pre-enqueue copy of the whole row.
+            var entry = connection.Find<LocalTimelineEntry>(id);
+            if (entry?.IsSynced != true || entry.ServerId != serverLocation.Id)
+                return;
+            var hasPendingUpdate = connection.Table<PendingTimelineMutation>()
+                .Where(m => m.LocalEntryId == id && m.OperationType == "Update" && !m.IsRejected).Count() > 0;
+            entry.Address = serverLocation.Address;
+            entry.FullAddress = serverLocation.FullAddress;
+            entry.Place = serverLocation.Place;
+            entry.Region = serverLocation.Region;
+            entry.Country = serverLocation.Country;
+            entry.PostCode = serverLocation.PostCode;
+            entry.TimeZoneId = serverLocation.Timezone;
+            if (!hasPendingUpdate)
+            {
+                entry.ActivityType = serverLocation.ActivityType;
+                if (string.IsNullOrEmpty(entry.Notes))
+                    entry.Notes = serverLocation.Notes;
+            }
+            entry.LastEnrichedAt = DateTime.UtcNow;
+            connection.Update(entry);
+        });
     }
 
     /// <inheritdoc />
