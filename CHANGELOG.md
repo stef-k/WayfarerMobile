@@ -2,10 +2,6 @@
 
 ## Unreleased
 
-- SSE (Wayfarer #674): reconnect group and visit streams after remote EOF or body I/O
-  failure using the existing 1s/2s/5s backoff. Explicit Stop and caller cancellation
-  remain terminal; authentication, events, routes and lifecycle ownership are unchanged.
-
 - Segments (#273): match Web's blue line palette and add a separate **Show on map**
   checkbox per Trip drawer row. Hidden Segments stay hidden through selection and map
   refresh; same-Trip refresh retains choices by ID, while unload/Trip switch resets them.
@@ -57,6 +53,30 @@
   context when synchronous settings readers join it. Controlled regression passes;
   physical startup acceptance remains blocked pending a reviewed replacement.
   See [startup ANR investigation](docs/releases/android-startup-anr.md).
+
+## 1.3.1
+
+Android maintenance release, version code 5. Upgrade 1.3.0 in place without
+uninstalling or clearing application data.
+
+- SSE ([PR #284](https://github.com/stef-k/WayfarerMobile/pull/284)): reconnect Group
+  and visit streams after remote EOF or body I/O failure with the existing backoff.
+  Authentication, stream contracts, explicit Stop and caller cancellation are preserved.
+- No database schema change, dependency upgrades or new product features.
+
+### Known unresolved limitations
+
+- Imported/unconfirmed phone Timeline records can be confused with server identities
+  during edit/delete operations. Numeric ID collisions can target a different owned
+  server record in the unchanged 1.3.0 architecture
+  ([#285](https://github.com/stef-k/WayfarerMobile/issues/285)).
+- Persisted pending Timeline mutations retain unresolved server/account-authority and
+  recovery risks, including after changing server or account.
+- The larger correction in [PR #286](https://github.com/stef-k/WayfarerMobile/pull/286)
+  was deliberately not merged; these defects remain unresolved.
+- Docker production/mobile compatibility remains a separate acceptance gate
+  ([Wayfarer #604](https://github.com/stef-k/Wayfarer/issues/604)); validation of all
+  Docker deployment scenarios is not claimed.
 
 ## 1.3.0
 
