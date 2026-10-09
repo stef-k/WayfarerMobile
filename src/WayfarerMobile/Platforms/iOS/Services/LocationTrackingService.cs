@@ -573,12 +573,12 @@ public sealed class LocationTrackingService : NSObject, ICLLocationManagerDelega
             {
                 // Get queue limit from settings (Preferences accessed directly since platform service can't use DI)
                 var maxQueuedLocations = Preferences.Get(SettingsService.QueueLimitMaxLocationsKey, 25000);
-                await _database.QueueLocationAsync(location, maxQueuedLocations);
+                var queuedId = await _database.QueueLocationAsync(location, maxQueuedLocations);
                 Console.WriteLine($"[iOS LocationService] Queued via database: {location}");
 
                 // Notify that location was queued - used by LocalTimelineStorageService
                 // to store with correct coordinates (matches what will be synced)
-                LocationServiceCallbacks.NotifyLocationQueued(location);
+                LocationServiceCallbacks.NotifyLocationQueued(location, queuedId);
 
                 // Start drain loop to process queue while backgrounded
                 StartDrainLoopSafely();

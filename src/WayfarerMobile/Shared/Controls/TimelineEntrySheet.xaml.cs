@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Text.RegularExpressions;
 using System.Windows.Input;
 using Syncfusion.Maui.Toolkit.BottomSheet;
+using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
 using WayfarerMobile.ViewModels;
 
@@ -13,6 +14,8 @@ namespace WayfarerMobile.Shared.Controls;
 /// </summary>
 public partial class TimelineEntrySheet : ContentView
 {
+    private TimelineEntryIdentity? _editingIdentity;
+
     #region Bindable Properties
 
     /// <summary>
@@ -146,6 +149,15 @@ public partial class TimelineEntrySheet : ContentView
     /// Gets the time text.
     /// </summary>
     public string TimeText => Entry?.TimeText ?? string.Empty;
+
+    /// <summary>Gets whether edit actions are available for the originating entry.</summary>
+    public bool CanEdit => Entry?.Identity.CanMutate == true;
+
+    /// <summary>Gets whether a read-only explanation should be visible.</summary>
+    public bool IsReadOnly => !CanEdit;
+
+    /// <summary>Gets the explanation for entries without server linkage.</summary>
+    public string ReadOnlyExplanation => TimelineEntryIdentity.ReadOnlyExplanation;
 
     /// <summary>
     /// Gets the date text.
@@ -361,7 +373,8 @@ public partial class TimelineEntrySheet : ContentView
     /// </summary>
     public void EnterEditMode()
     {
-        if (Entry == null) return;
+        if (Entry?.Identity.CanMutate != true) return;
+        _editingIdentity = Entry.Identity;
 
         var localTimestamp = Entry.Location.Timestamp.ToLocalTime();
         EditDate = localTimestamp.Date;
@@ -395,6 +408,10 @@ public partial class TimelineEntrySheet : ContentView
     {
         if (bindable is TimelineEntrySheet sheet)
         {
+            sheet.IsEditing = false;
+            sheet._editingIdentity = null;
+            sheet.OnPropertyChanged(nameof(CanEdit));
+            sheet.OnPropertyChanged(nameof(IsReadOnly));
             sheet.OnPropertyChanged(nameof(TimeText));
             sheet.OnPropertyChanged(nameof(DateText));
             sheet.OnPropertyChanged(nameof(CoordinatesText));
@@ -449,7 +466,7 @@ public partial class TimelineEntrySheet : ContentView
 
     private async void OnSaveEditClicked(object? sender, EventArgs e)
     {
-        if (Entry == null) return;
+        if (Entry?.Identity.CanMutate != true || _editingIdentity?.MatchesSelection(Entry.Identity) != true) return;
 
         // Validate inputs
         if (!double.TryParse(EditLatitude, out var lat) || lat < -90 || lat > 90)
@@ -476,7 +493,7 @@ public partial class TimelineEntrySheet : ContentView
 
             var updateArgs = new TimelineEntryUpdateEventArgs
             {
-                LocationId = Entry.Location.Id,
+                Identity = Entry.Identity,
                 Latitude = lat,
                 Longitude = lon,
                 LocalTimestamp = newTimestamp,
@@ -487,18 +504,7 @@ public partial class TimelineEntrySheet : ContentView
 
             SaveRequested?.Invoke(this, updateArgs);
 
-            // Update local entry after save event (TimelineLocation stores coords in Coordinates)
-            if (Entry.Location.Coordinates != null)
-            {
-                Entry.Location.Coordinates.Y = updateArgs.Latitude;
-                Entry.Location.Coordinates.X = updateArgs.Longitude;
-            }
-            Entry.Location.Notes = updateArgs.Notes;
-
-            OnPropertyChanged(nameof(CoordinatesText));
-            OnPropertyChanged(nameof(TimeText));
-            OnPropertyChanged(nameof(DateText));
-
+            // The owning ViewModel reloads accepted changes; this view cannot authorize optimistic record writes.
             ExitEditMode();
         }
         finally
@@ -662,45 +668,4 @@ public partial class TimelineEntrySheet : ContentView
     }
 
     #endregion
-}
-
-/// <summary>
-/// Event arguments for timeline entry update requests.
-/// </summary>
-public class TimelineEntryUpdateEventArgs : EventArgs
-{
-    /// <summary>
-    /// Gets or sets the location ID.
-    /// </summary>
-    public int LocationId { get; set; }
-
-    /// <summary>
-    /// Gets or sets the new latitude.
-    /// </summary>
-    public double Latitude { get; set; }
-
-    /// <summary>
-    /// Gets or sets the new longitude.
-    /// </summary>
-    public double Longitude { get; set; }
-
-    /// <summary>
-    /// Gets or sets the new local timestamp.
-    /// </summary>
-    public DateTime LocalTimestamp { get; set; }
-
-    /// <summary>
-    /// Gets or sets the new notes (HTML).
-    /// </summary>
-    public string? Notes { get; set; }
-
-    /// <summary>
-    /// Gets or sets the activity type ID (null if not changed).
-    /// </summary>
-    public int? ActivityTypeId { get; set; }
-
-    /// <summary>
-    /// Gets or sets whether the activity was cleared (true to remove activity).
-    /// </summary>
-    public bool ClearActivity { get; set; }
 }

@@ -299,6 +299,11 @@
                             </Frame>
                         </Grid>
 
+                        <Label Text="{Binding ReadOnlyExplanation, Source={x:Reference Root}}"
+                               IsVisible="{Binding IsReadOnly, Source={x:Reference Root}}"
+                               Style="{StaticResource Caption}"
+                               TextColor="{StaticResource TextSecondary}" />
+
                         <!-- Spacer -->
                         <BoxView HeightRequest="60" Color="Transparent" />
 
@@ -338,7 +343,8 @@
                             Padding="0"
                             CornerRadius="8"
                             BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
-                            Clicked="OnEditClicked" />
+                            Clicked="OnEditClicked"
+                            IsEnabled="{Binding CanEdit, Source={x:Reference Root}}" />
                 </Grid>
 
                 <!-- Edit Mode: Action Buttons -->

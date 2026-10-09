@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Models;
 using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 using WayfarerMobile.Shared.Controls;
@@ -29,12 +30,13 @@ public class TimelineEntryManager : ITimelineEntryManager
     }
 
     /// <inheritdoc/>
-    public async Task<bool> SaveNotesAsync(int locationId, string? notesHtml)
+    public async Task<bool> SaveNotesAsync(TimelineEntryIdentity identity, string? notesHtml)
     {
+        if (!identity.CanMutate) return false;
         try
         {
             await _timelineSyncService.UpdateLocationAsync(
-                locationId,
+                identity,
                 latitude: null,
                 longitude: null,
                 localTimestamp: null,
@@ -45,13 +47,13 @@ public class TimelineEntryManager : ITimelineEntryManager
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogNetworkWarningIfOnline("Network error saving notes for location {LocationId}: {Message}", locationId, ex.Message);
+            _logger.LogNetworkWarningIfOnline("Network error saving notes for location {LocationId}: {Message}", identity.ServerId, ex.Message);
             await _toastService.ShowErrorAsync("Network error. Changes will sync when online.");
             return false;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error saving notes for location {LocationId}", locationId);
+            _logger.LogError(ex, "Unexpected error saving notes for location {LocationId}", identity.ServerId);
             await _toastService.ShowErrorAsync($"Failed to save: {ex.Message}");
             return false;
         }
@@ -60,10 +62,11 @@ public class TimelineEntryManager : ITimelineEntryManager
     /// <inheritdoc/>
     public async Task<bool> SaveEntryChangesAsync(TimelineEntryUpdateEventArgs args)
     {
+        if (!args.Identity.CanMutate) return false;
         try
         {
             await _timelineSyncService.UpdateLocationAsync(
-                args.LocationId,
+                args.Identity,
                 args.Latitude,
                 args.Longitude,
                 args.LocalTimestamp,
@@ -76,13 +79,13 @@ public class TimelineEntryManager : ITimelineEntryManager
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogNetworkWarningIfOnline("Network error saving entry changes for location {LocationId}: {Message}", args.LocationId, ex.Message);
+            _logger.LogNetworkWarningIfOnline("Network error saving entry changes for location {LocationId}: {Message}", args.Identity.ServerId, ex.Message);
             await _toastService.ShowErrorAsync("Network error. Changes will sync when online.");
             return false;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error saving entry changes for location {LocationId}", args.LocationId);
+            _logger.LogError(ex, "Unexpected error saving entry changes for location {LocationId}", args.Identity.ServerId);
             await _toastService.ShowErrorAsync($"Failed to save: {ex.Message}");
             return false;
         }
@@ -93,7 +96,7 @@ public class TimelineEntryManager : ITimelineEntryManager
     {
         try
         {
-            var location = new Microsoft.Maui.Devices.Sensors.Location(latitude, longitude);
+            var location = new Location(latitude, longitude);
             var options = new MapLaunchOptions { Name = locationName };
             await Microsoft.Maui.ApplicationModel.Map.Default.OpenAsync(location, options);
         }
@@ -115,7 +118,7 @@ public class TimelineEntryManager : ITimelineEntryManager
         try
         {
             var url = $"https://en.wikipedia.org/wiki/Special:Nearby#/coord/{latitude},{longitude}";
-            await Launcher.OpenAsync(new Uri(url));
+            await Launcher.Default.OpenAsync(new Uri(url));
         }
         catch (UriFormatException ex)
         {
@@ -135,7 +138,7 @@ public class TimelineEntryManager : ITimelineEntryManager
         try
         {
             var coords = $"{latitude:F6}, {longitude:F6}";
-            await Clipboard.SetTextAsync(coords);
+            await Clipboard.Default.SetTextAsync(coords);
             await _toastService.ShowAsync("Coordinates copied");
         }
         catch (FeatureNotSupportedException ex)

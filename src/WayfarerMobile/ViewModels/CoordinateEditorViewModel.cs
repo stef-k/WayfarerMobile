@@ -6,6 +6,7 @@ using Mapsui.Styles;
 using Microsoft.Extensions.Logging;
 using NetTopologySuite.Geometries;
 using WayfarerMobile.Core.Interfaces;
+using WayfarerMobile.Core.Models;
 using WayfarerMobile.Helpers;
 using WayfarerMobile.Interfaces;
 using Color = Mapsui.Styles.Color;
@@ -24,6 +25,8 @@ public partial class CoordinateEditorViewModel : ObservableObject
     private readonly ITimelineSyncService _timelineSyncService;
     private readonly IToastService _toastService;
     private readonly ILogger<CoordinateEditorViewModel> _logger;
+
+    private TimelineEntryIdentity? _editingIdentity;
 
     #region Observable Properties
 
@@ -105,7 +108,8 @@ public partial class CoordinateEditorViewModel : ObservableObject
     private void EnterCoordinatePickingMode()
     {
         var selectedLocation = _callbacks.SelectedLocation;
-        if (selectedLocation == null) return;
+        if (selectedLocation?.CanEdit != true) return;
+        _editingIdentity = selectedLocation.Identity;
 
         // Set initial pending coordinates to current location
         PendingLatitude = selectedLocation.Latitude;
@@ -137,10 +141,10 @@ public partial class CoordinateEditorViewModel : ObservableObject
     private async Task SaveCoordinatesAsync()
     {
         var selectedLocation = _callbacks.SelectedLocation;
-        if (selectedLocation == null || !HasPendingCoordinates) return;
+        if (selectedLocation?.CanEdit != true || !HasPendingCoordinates || _editingIdentity?.MatchesSelection(selectedLocation.Identity) != true) return;
 
-        // Store locationId before any changes (reference becomes stale after reload)
-        var locationId = selectedLocation.LocationId;
+        // Capture the initiating identity before reload replaces the display object.
+        var identity = selectedLocation.Identity;
 
         // Check online status
         if (!_callbacks.IsOnline)
@@ -153,7 +157,7 @@ public partial class CoordinateEditorViewModel : ObservableObject
             _callbacks.IsBusy = true;
 
             await _timelineSyncService.UpdateLocationAsync(
-                locationId,
+                identity,
                 PendingLatitude,
                 PendingLongitude,
                 localTimestamp: null,
@@ -170,7 +174,7 @@ public partial class CoordinateEditorViewModel : ObservableObject
             await _callbacks.ReloadTimelineAsync();
 
             // Re-select the location to show updated details in bottom sheet
-            _callbacks.ShowLocationDetails(locationId);
+            _callbacks.ShowLocationDetails(identity);
             _callbacks.OpenLocationSheet();
         }
         catch (HttpRequestException ex)

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using SQLite;
 using WayfarerMobile.Core.Interfaces;
@@ -15,9 +14,9 @@ namespace WayfarerMobile.Services;
 /// Provides autonomous background processing via timer and drain loop.
 ///
 /// Sync Strategy:
-/// 1. Apply optimistic UI update immediately (caller responsibility)
-/// 2. Save to local database (both PendingTimelineMutation and LocalTimelineEntry)
-/// 3. Attempt server sync in background
+/// 1. Revalidate the originating local source and capture persisted rollback values
+/// 2. Commit PendingTimelineMutation and the optimistic LocalTimelineEntry change atomically
+/// 3. Attempt immediate or background delivery under the service's processing gate
 /// 4. On 4xx error: Server rejected - revert changes in LocalTimelineEntry, notify caller
 /// 5. On 5xx/network error: Queue for retry when online (LocalTimelineEntry keeps optimistic values)
 ///
@@ -29,7 +28,7 @@ namespace WayfarerMobile.Services;
 ///
 /// Rollback data is persisted in PendingTimelineMutation to survive app restarts.
 /// </summary>
-public sealed class TimelineSyncService : ITimelineSyncService
+public sealed partial class TimelineSyncService : ITimelineSyncService
 {
     #region Constants
 
@@ -99,6 +98,8 @@ public sealed class TimelineSyncService : ITimelineSyncService
     private readonly IConnectivity _connectivity;
     private readonly ILogger<TimelineSyncService> _logger;
 
+    // Covers mutation creation/merging and delivery through acknowledgement or retry persistence.
+    // SQLite transactions remain short; this service gate may span the HTTP request.
     private readonly SemaphoreSlim _drainLock = new(1, 1);
 
     private SQLiteAsyncConnection? _database;
@@ -639,15 +640,16 @@ public sealed class TimelineSyncService : ITimelineSyncService
             return DrainAttemptResult.Skipped;
         }
 
-        PendingTimelineMutation? mutation = null;
-
         try
         {
+            // Another caller may have completed a request while this caller awaited the gate.
+            if (!CanMakeSyncRequest())
+                return DrainAttemptResult.Skipped;
             await EnsureInitializedAsync();
 
             // Get next pending mutation
-            mutation = await _database!.Table<PendingTimelineMutation>()
-                .Where(m => !m.IsRejected && m.SyncAttempts < PendingTimelineMutation.MaxSyncAttempts)
+            var mutation = await _database!.Table<PendingTimelineMutation>()
+                .Where(m => !m.IsRejected && m.AuthorityError == null && m.SyncAttempts < PendingTimelineMutation.MaxSyncAttempts)
                 .OrderBy(m => m.CreatedAt)
                 .FirstOrDefaultAsync();
 
@@ -661,40 +663,42 @@ public sealed class TimelineSyncService : ITimelineSyncService
             _logger.LogDebug(
                 "TimelineSync: Processing mutation {Id} for location {LocationId}",
                 mutation.Id, mutation.LocationId);
+
+            // Keep the service gate until delivery and its durable outcome are complete.
+            return await ProcessMutationAsync(mutation, cancellationToken);
         }
         catch (SQLiteException ex)
         {
-            _logger.LogError(ex, "Database error getting pending mutation");
+            _logger.LogError(ex, "Database error processing Timeline mutation");
             return DrainAttemptResult.Failed;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error getting pending mutation");
+            _logger.LogError(ex, "Unexpected error processing Timeline mutation");
             return DrainAttemptResult.Failed;
         }
         finally
         {
             _drainLock.Release();
         }
-
-        // Process mutation outside lock (network call)
-        try
-        {
-            await ProcessMutationAsync(mutation, cancellationToken);
-            return DrainAttemptResult.Processed;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unhandled exception processing mutation {Id}", mutation.Id);
-            return DrainAttemptResult.Failed;
-        }
     }
 
     /// <summary>
     /// Processes a single mutation - syncs to server.
     /// </summary>
-    private async Task ProcessMutationAsync(PendingTimelineMutation mutation, CancellationToken cancellationToken)
+    private async Task<DrainAttemptResult> ProcessMutationAsync(
+        PendingTimelineMutation mutation, CancellationToken cancellationToken, bool immediate = false)
     {
+        var authorityError = await GetMutationAuthorityErrorAsync(mutation);
+        if (authorityError != null)
+        {
+            mutation.AuthorityError = authorityError;
+            mutation.LastError = authorityError;
+            await _database!.UpdateAsync(mutation);
+            _logger.LogWarning("Timeline mutation {Id} held: {Reason}", mutation.Id, authorityError);
+            return DrainAttemptResult.Processed;
+        }
+
         // Record rate limit before API call
         RecordSyncAttempt();
 
@@ -703,14 +707,10 @@ public sealed class TimelineSyncService : ITimelineSyncService
             mutation.SyncAttempts++;
             mutation.LastSyncAttempt = DateTime.UtcNow;
 
-            // TODO: Pass cancellation token to API client when it supports cancellation.
-            // For now, timeouts are handled by HttpClient's default timeout.
-            _ = cancellationToken; // Suppress unused parameter warning
-
             bool success;
             if (mutation.OperationType == "Delete")
             {
-                success = await _apiClient.DeleteTimelineLocationAsync(mutation.LocationId);
+                success = await _apiClient.DeleteTimelineLocationAsync(mutation.LocationId, cancellationToken);
             }
             else
             {
@@ -724,7 +724,7 @@ public sealed class TimelineSyncService : ITimelineSyncService
                     ClearActivity = mutation.ClearActivity ? true : null
                 };
 
-                var response = await _apiClient.UpdateTimelineLocationAsync(mutation.LocationId, request);
+                var response = await _apiClient.UpdateTimelineLocationAsync(mutation.LocationId, request, cancellationToken);
                 success = response?.Success == true;
             }
 
@@ -737,6 +737,7 @@ public sealed class TimelineSyncService : ITimelineSyncService
                     "TimelineSync: Mutation {Id} for location {LocationId} synced successfully",
                     mutation.Id, mutation.LocationId);
                 SyncCompleted?.Invoke(this, new SyncSuccessEventArgs { EntityId = Guid.Empty });
+                return DrainAttemptResult.Processed;
             }
             else
             {
@@ -767,9 +768,15 @@ public sealed class TimelineSyncService : ITimelineSyncService
             mutation.IsRejected = true;
             mutation.RejectionReason = $"Server: {ex.Message}";
             mutation.LastError = ex.Message;
-            await _database!.UpdateAsync(mutation);
-
-            await RevertLocalEntryFromMutationAsync(mutation);
+            await _database!.RunInTransactionAsync(connection =>
+            {
+                RevertLocalEntryFromMutation(connection, mutation);
+                // Immediate rejection was reported directly; background rejection remains inspectable.
+                if (immediate)
+                    connection.Delete(mutation);
+                else
+                    connection.Update(mutation);
+            });
 
             Interlocked.Exchange(ref _consecutiveFailures, 0);
             _logger.LogWarning(
@@ -782,6 +789,7 @@ public sealed class TimelineSyncService : ITimelineSyncService
                 ErrorMessage = ex.Message,
                 IsClientError = true
             });
+            return DrainAttemptResult.Processed;
         }
         catch (HttpRequestException ex)
         {
@@ -799,6 +807,7 @@ public sealed class TimelineSyncService : ITimelineSyncService
             Interlocked.Increment(ref _consecutiveFailures);
             _logger.LogError(ex, "TimelineSync: Unexpected error processing mutation {Id}", mutation.Id);
         }
+        return DrainAttemptResult.Failed;
     }
 
     #endregion
@@ -815,449 +824,6 @@ public sealed class TimelineSyncService : ITimelineSyncService
         _database = await _databaseService.GetConnectionAsync();
         await _database.CreateTableAsync<PendingTimelineMutation>();
         _initialized = true;
-    }
-
-    #endregion
-
-    #region Public Mutation Methods
-
-    /// <summary>
-    /// Updates a timeline location with optimistic UI pattern.
-    /// Also updates LocalTimelineEntry for offline viewing consistency.
-    /// </summary>
-    public async Task UpdateLocationAsync(
-        int locationId,
-        double? latitude = null,
-        double? longitude = null,
-        DateTime? localTimestamp = null,
-        string? notes = null,
-        bool includeNotes = false,
-        int? activityTypeId = null,
-        bool clearActivity = false,
-        string? activityTypeName = null)
-    {
-        await EnsureInitializedAsync();
-
-        // Get original values for rollback before applying changes
-        var originalValues = await GetOriginalValuesAsync(locationId);
-
-        // Apply optimistic update to LocalTimelineEntry
-        await ApplyLocalEntryUpdateAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, activityTypeName, clearActivity);
-
-        // Build request
-        var request = new TimelineLocationUpdateRequest
-        {
-            Latitude = latitude,
-            Longitude = longitude,
-            LocalTimestamp = localTimestamp,
-            Notes = includeNotes ? notes : null,
-            ActivityTypeId = activityTypeId,
-            ClearActivity = clearActivity ? true : null
-        };
-
-        // Check connectivity first
-        if (!_isOnline)
-        {
-            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, activityTypeId, clearActivity, originalValues);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = Guid.Empty, Message = "Saved offline - will sync when online" });
-            return;
-        }
-
-        // Try server sync
-        try
-        {
-            var response = await _apiClient.UpdateTimelineLocationAsync(locationId, request);
-
-            if (response != null && response.Success)
-            {
-                // Success - no need to store rollback data
-                SyncCompleted?.Invoke(this, new SyncSuccessEventArgs { EntityId = Guid.Empty });
-                return;
-            }
-
-            // Null or failed response - queue for retry (keep local changes)
-            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, activityTypeId, clearActivity, originalValues);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = Guid.Empty, Message = "Sync failed - will retry" });
-        }
-        catch (HttpRequestException ex) when (IsClientError(ex))
-        {
-            // 4xx error - server rejected, revert local changes using original values
-            await RevertLocalEntryFromValuesAsync(locationId, originalValues);
-
-            SyncRejected?.Invoke(this, new SyncFailureEventArgs
-            {
-                EntityId = Guid.Empty,
-                ErrorMessage = $"Server rejected changes: {ex.Message}",
-                IsClientError = true
-            });
-        }
-        catch (HttpRequestException ex)
-        {
-            // Network error - queue for retry (keep local changes)
-            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, activityTypeId, clearActivity, originalValues);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs
-            {
-                EntityId = Guid.Empty,
-                Message = $"Network error: {ex.Message} - will retry"
-            });
-        }
-        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-        {
-            // Timeout - queue for retry (keep local changes)
-            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, activityTypeId, clearActivity, originalValues);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs
-            {
-                EntityId = Guid.Empty,
-                Message = "Request timed out - will retry"
-            });
-        }
-        catch (Exception ex)
-        {
-            // Unexpected error - queue for retry (keep local changes)
-            await EnqueueMutationWithRollbackAsync(locationId, latitude, longitude, localTimestamp, notes, includeNotes, activityTypeId, clearActivity, originalValues);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs
-            {
-                EntityId = Guid.Empty,
-                Message = $"Unexpected error: {ex.Message} - will retry"
-            });
-        }
-    }
-
-    /// <summary>
-    /// Deletes a timeline location with optimistic UI pattern.
-    /// Also deletes from LocalTimelineEntry for offline viewing consistency.
-    /// </summary>
-    public async Task DeleteLocationAsync(int locationId)
-    {
-        await EnsureInitializedAsync();
-
-        // Get the full entry before deleting (for rollback)
-        var deletedEntryJson = await GetDeletedEntryJsonAsync(locationId);
-
-        // Delete from local storage
-        await ApplyLocalEntryDeleteAsync(locationId);
-
-        if (!_isOnline)
-        {
-            await EnqueueDeleteMutationWithRollbackAsync(locationId, deletedEntryJson);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = Guid.Empty, Message = "Deleted offline - will sync when online" });
-            return;
-        }
-
-        try
-        {
-            var success = await _apiClient.DeleteTimelineLocationAsync(locationId);
-
-            if (success)
-            {
-                // Success - no rollback needed
-                SyncCompleted?.Invoke(this, new SyncSuccessEventArgs { EntityId = Guid.Empty });
-                return;
-            }
-
-            await EnqueueDeleteMutationWithRollbackAsync(locationId, deletedEntryJson);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs { EntityId = Guid.Empty, Message = "Delete failed - will retry" });
-        }
-        catch (HttpRequestException ex) when (IsClientError(ex))
-        {
-            // 4xx error - server rejected, restore local entry from JSON
-            await RestoreDeletedEntryAsync(deletedEntryJson);
-
-            SyncRejected?.Invoke(this, new SyncFailureEventArgs
-            {
-                EntityId = Guid.Empty,
-                ErrorMessage = $"Server rejected: {ex.Message}",
-                IsClientError = true
-            });
-        }
-        catch (HttpRequestException ex)
-        {
-            await EnqueueDeleteMutationWithRollbackAsync(locationId, deletedEntryJson);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs
-            {
-                EntityId = Guid.Empty,
-                Message = $"Network error: {ex.Message} - will retry"
-            });
-        }
-        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-        {
-            await EnqueueDeleteMutationWithRollbackAsync(locationId, deletedEntryJson);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs
-            {
-                EntityId = Guid.Empty,
-                Message = "Request timed out - will retry"
-            });
-        }
-        catch (Exception ex)
-        {
-            await EnqueueDeleteMutationWithRollbackAsync(locationId, deletedEntryJson);
-            SyncQueued?.Invoke(this, new SyncQueuedEventArgs
-            {
-                EntityId = Guid.Empty,
-                Message = $"Unexpected error: {ex.Message} - will retry"
-            });
-        }
-    }
-
-    /// <summary>
-    /// Get count of pending mutations.
-    /// </summary>
-    public async Task<int> GetPendingCountAsync()
-    {
-        await EnsureInitializedAsync();
-        // Inline CanSync expression - SQLite-net can't translate computed properties
-        return await _database!.Table<PendingTimelineMutation>()
-            .Where(m => !m.IsRejected && m.SyncAttempts < PendingTimelineMutation.MaxSyncAttempts)
-            .CountAsync();
-    }
-
-    /// <summary>
-    /// Clear rejected mutations (user acknowledged).
-    /// </summary>
-    public async Task ClearRejectedMutationsAsync()
-    {
-        await EnsureInitializedAsync();
-        await _database!.Table<PendingTimelineMutation>()
-            .Where(m => m.IsRejected)
-            .DeleteAsync();
-    }
-
-    #endregion
-
-    #region Helpers
-
-    private static bool IsClientError(HttpRequestException ex)
-    {
-        // Check if it's a 4xx status code
-        return ex.StatusCode.HasValue &&
-               (int)ex.StatusCode.Value >= 400 &&
-               (int)ex.StatusCode.Value < 500;
-    }
-
-    #endregion
-
-    #region LocalTimelineEntry Integration (Persisted Rollback)
-
-    /// <summary>
-    /// Gets original values from LocalTimelineEntry for rollback support.
-    /// </summary>
-    private async Task<(int? localEntryId, double? lat, double? lng, DateTime? timestamp, string? notes, string? activityType)> GetOriginalValuesAsync(int locationId)
-    {
-        var localEntry = await _timelineRepository.GetLocalTimelineEntryByServerIdAsync(locationId);
-        if (localEntry == null)
-            return (null, null, null, null, null, null);
-
-        return (localEntry.Id, localEntry.Latitude, localEntry.Longitude, localEntry.Timestamp, localEntry.Notes, localEntry.ActivityType);
-    }
-
-    /// <summary>
-    /// Applies an update to the local timeline entry (optimistic update).
-    /// </summary>
-    private async Task ApplyLocalEntryUpdateAsync(
-        int locationId,
-        double? latitude,
-        double? longitude,
-        DateTime? localTimestamp,
-        string? notes,
-        bool includeNotes,
-        string? activityTypeName,
-        bool clearActivity)
-    {
-        var localEntry = await _timelineRepository.GetLocalTimelineEntryByServerIdAsync(locationId);
-        if (localEntry == null) return;
-
-        // Apply optimistic update
-        if (latitude.HasValue) localEntry.Latitude = latitude.Value;
-        if (longitude.HasValue) localEntry.Longitude = longitude.Value;
-        if (localTimestamp.HasValue) localEntry.Timestamp = localTimestamp.Value;
-        if (includeNotes) localEntry.Notes = notes;
-        // Activity: set name if provided, clear if requested
-        if (!string.IsNullOrEmpty(activityTypeName)) localEntry.ActivityType = activityTypeName;
-        if (clearActivity) localEntry.ActivityType = null;
-
-        await _timelineRepository.UpdateLocalTimelineEntryAsync(localEntry);
-    }
-
-    /// <summary>
-    /// Enqueues a mutation with rollback data persisted in the mutation entity.
-    /// </summary>
-    private async Task EnqueueMutationWithRollbackAsync(
-        int locationId,
-        double? latitude,
-        double? longitude,
-        DateTime? localTimestamp,
-        string? notes,
-        bool includeNotes,
-        int? activityTypeId,
-        bool clearActivity,
-        (int? localEntryId, double? lat, double? lng, DateTime? timestamp, string? notes, string? activityType) originalValues)
-    {
-        // Check if there's already a pending mutation for this location
-        var existing = await _database!.Table<PendingTimelineMutation>()
-            .Where(m => m.LocationId == locationId && !m.IsRejected)
-            .FirstOrDefaultAsync();
-
-        if (existing != null)
-        {
-            // Merge with existing mutation (latest values win, keep original rollback data)
-            if (latitude.HasValue) existing.Latitude = latitude;
-            if (longitude.HasValue) existing.Longitude = longitude;
-            if (localTimestamp.HasValue) existing.LocalTimestamp = localTimestamp;
-            if (includeNotes)
-            {
-                existing.Notes = notes;
-                existing.IncludeNotes = true;
-            }
-            // Activity: setting an activity clears the clear flag, clearing removes any pending activity
-            if (activityTypeId.HasValue)
-            {
-                existing.ActivityTypeId = activityTypeId;
-                existing.ClearActivity = false;
-            }
-            if (clearActivity)
-            {
-                existing.ClearActivity = true;
-                existing.ActivityTypeId = null;
-            }
-            existing.CreatedAt = DateTime.UtcNow;
-            await _database.UpdateAsync(existing);
-        }
-        else
-        {
-            var mutation = new PendingTimelineMutation
-            {
-                OperationType = "Update",
-                LocationId = locationId,
-                LocalEntryId = originalValues.localEntryId,
-                Latitude = latitude,
-                Longitude = longitude,
-                LocalTimestamp = localTimestamp,
-                Notes = notes,
-                IncludeNotes = includeNotes,
-                ActivityTypeId = activityTypeId,
-                ClearActivity = clearActivity,
-                // Persist original values for rollback
-                OriginalLatitude = originalValues.lat,
-                OriginalLongitude = originalValues.lng,
-                OriginalTimestamp = originalValues.timestamp,
-                OriginalNotes = originalValues.notes,
-                OriginalActivityType = originalValues.activityType,
-                CreatedAt = DateTime.UtcNow
-            };
-            await _database.InsertAsync(mutation);
-        }
-    }
-
-    /// <summary>
-    /// Reverts local entry using provided original values.
-    /// </summary>
-    private async Task RevertLocalEntryFromValuesAsync(
-        int locationId,
-        (int? localEntryId, double? lat, double? lng, DateTime? timestamp, string? notes, string? activityType) originalValues)
-    {
-        if (!originalValues.localEntryId.HasValue) return;
-
-        var localEntry = await _timelineRepository.GetLocalTimelineEntryByServerIdAsync(locationId);
-        if (localEntry == null) return;
-
-        if (originalValues.lat.HasValue) localEntry.Latitude = originalValues.lat.Value;
-        if (originalValues.lng.HasValue) localEntry.Longitude = originalValues.lng.Value;
-        if (originalValues.timestamp.HasValue) localEntry.Timestamp = originalValues.timestamp.Value;
-        localEntry.Notes = originalValues.notes;
-        localEntry.ActivityType = originalValues.activityType;
-
-        await _timelineRepository.UpdateLocalTimelineEntryAsync(localEntry);
-    }
-
-    /// <summary>
-    /// Gets the full entry serialized as JSON for delete rollback.
-    /// </summary>
-    private async Task<string?> GetDeletedEntryJsonAsync(int locationId)
-    {
-        var localEntry = await _timelineRepository.GetLocalTimelineEntryByServerIdAsync(locationId);
-        if (localEntry == null) return null;
-
-        return JsonSerializer.Serialize(localEntry);
-    }
-
-    /// <summary>
-    /// Deletes the local timeline entry (optimistic delete).
-    /// </summary>
-    private async Task ApplyLocalEntryDeleteAsync(int locationId)
-    {
-        var localEntry = await _timelineRepository.GetLocalTimelineEntryByServerIdAsync(locationId);
-        if (localEntry == null) return;
-
-        await _timelineRepository.DeleteLocalTimelineEntryAsync(localEntry.Id);
-    }
-
-    /// <summary>
-    /// Enqueues a delete mutation with rollback data (full entry as JSON).
-    /// </summary>
-    private async Task EnqueueDeleteMutationWithRollbackAsync(int locationId, string? deletedEntryJson)
-    {
-        // Remove any pending updates for this location
-        await _database!.Table<PendingTimelineMutation>()
-            .Where(m => m.LocationId == locationId)
-            .DeleteAsync();
-
-        var mutation = new PendingTimelineMutation
-        {
-            OperationType = "Delete",
-            LocationId = locationId,
-            DeletedEntryJson = deletedEntryJson,
-            CreatedAt = DateTime.UtcNow
-        };
-        await _database.InsertAsync(mutation);
-    }
-
-    /// <summary>
-    /// Restores a deleted entry from JSON.
-    /// </summary>
-    private async Task RestoreDeletedEntryAsync(string? deletedEntryJson)
-    {
-        if (string.IsNullOrEmpty(deletedEntryJson)) return;
-
-        try
-        {
-            var entry = JsonSerializer.Deserialize<LocalTimelineEntry>(deletedEntryJson);
-            if (entry == null) return;
-
-            entry.Id = 0; // Reset ID for new insert
-            await _timelineRepository.InsertLocalTimelineEntryAsync(entry);
-        }
-        catch (JsonException)
-        {
-            // JSON deserialization failed - entry cannot be restored
-        }
-    }
-
-    /// <summary>
-    /// Reverts local entry using rollback data persisted in the mutation.
-    /// </summary>
-    private async Task RevertLocalEntryFromMutationAsync(PendingTimelineMutation mutation)
-    {
-        if (mutation.OperationType == "Delete")
-        {
-            // Restore deleted entry from JSON
-            await RestoreDeletedEntryAsync(mutation.DeletedEntryJson);
-        }
-        else
-        {
-            // Revert updated fields
-            if (!mutation.HasRollbackData) return;
-
-            var localEntry = await _timelineRepository.GetLocalTimelineEntryByServerIdAsync(mutation.LocationId);
-            if (localEntry == null) return;
-
-            if (mutation.OriginalLatitude.HasValue) localEntry.Latitude = mutation.OriginalLatitude.Value;
-            if (mutation.OriginalLongitude.HasValue) localEntry.Longitude = mutation.OriginalLongitude.Value;
-            if (mutation.OriginalTimestamp.HasValue) localEntry.Timestamp = mutation.OriginalTimestamp.Value;
-            localEntry.Notes = mutation.OriginalNotes;
-            localEntry.ActivityType = mutation.OriginalActivityType;
-
-            await _timelineRepository.UpdateLocalTimelineEntryAsync(localEntry);
-        }
     }
 
     #endregion

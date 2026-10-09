@@ -1,3 +1,4 @@
+using WayfarerMobile.Core.Models;
 using Mapsui;
 using Mapsui.Layers;
 
@@ -41,8 +42,8 @@ public interface ICoordinateEditorCallbacks
     /// <summary>
     /// Shows location details sheet for a specific location.
     /// </summary>
-    /// <param name="locationId">The location ID to show.</param>
-    void ShowLocationDetails(int locationId);
+    /// <param name="identity">The originating record identity to show.</param>
+    void ShowLocationDetails(TimelineEntryIdentity identity);
 
     /// <summary>
     /// Opens the location sheet.

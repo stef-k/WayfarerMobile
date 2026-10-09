@@ -52,7 +52,7 @@ public static class LocationServiceCallbacks
     /// Used by LocalTimelineStorageService to store entries with correct coordinates.
     /// This may differ from LocationReceived when Android uses best-wake-sample optimization.
     /// </summary>
-    public static event EventHandler<LocationData>? LocationQueued;
+    public static event EventHandler<LocationQueuedEventArgs>? LocationQueued;
 
     /// <summary>
     /// Event raised when the tracking state changes.
@@ -117,14 +117,17 @@ public static class LocationServiceCallbacks
     /// Called by platform-specific location services after successful queue.
     /// </summary>
     /// <param name="location">The location data that was queued (may differ from broadcast).</param>
-    public static void NotifyLocationQueued(LocationData location)
+    /// <param name="queuedLocationId">The positive ID returned by the originating queue insertion.</param>
+    public static void NotifyLocationQueued(LocationData location, int queuedLocationId)
     {
+        if (queuedLocationId <= 0)
+            return;
         // Ensure we're on the main thread for UI updates
         MainThread.BeginInvokeOnMainThread(() =>
         {
             try
             {
-                LocationQueued?.Invoke(null, location);
+                LocationQueued?.Invoke(null, new LocationQueuedEventArgs(location, queuedLocationId));
             }
             catch (Exception ex)
             {
@@ -255,6 +258,20 @@ public static class LocationServiceCallbacks
             }
         });
     }
+}
+
+/// <summary>
+/// Carries a fallback capture and the exact queue record that will deliver it.
+/// </summary>
+/// <param name="location">The location data passed to queue insertion.</param>
+/// <param name="queuedLocationId">The positive ID returned by queue insertion.</param>
+public sealed class LocationQueuedEventArgs(LocationData location, int queuedLocationId) : EventArgs
+{
+    /// <summary>Gets the queued capture data.</summary>
+    public LocationData Location { get; } = location;
+
+    /// <summary>Gets the exact originating queue record ID.</summary>
+    public int QueuedLocationId { get; } = queuedLocationId;
 }
 
 /// <summary>

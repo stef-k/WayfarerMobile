@@ -1049,6 +1049,39 @@ See [API Integration](13-API.md) for complete endpoint documentation.
 
 Manages optimistic UI updates for timeline mutations with offline queue, rollback support, and background processing.
 
+### Record Identity and Mutation Authority
+
+`TimelineEntryIdentity` carries the originating SQLite `LocalEntryId` and a separate
+nullable `ServerId`. Local conversion supplies a server ID only when that same row's
+persisted `ServerLinkageConfirmed` is true and its server ID is positive. Actual API
+responses supply server identity explicitly. Numeric display IDs grant no authority.
+Markers, details, editor callbacks, notes navigation and reload selection carry this
+identity. A stale identity cannot select a different row with a coincident ID.
+API-origin selections can reselect a newly cached copy of the same proven server
+record; local selections require their original row and unchanged linkage.
+
+`UpdateLocationAsync` and `DeleteLocationAsync` require this identity. They reject
+unlinked/unknown entries and revalidate the same local row's linkage before optimistic
+storage changes, server requests or enqueue. Local-only entries remain read-only;
+the original `QueuedLocations` capture/upload queue continues independently.
+
+New `PendingTimelineMutation` rows persist `ServerIdentityConfirmed`, including
+server-origin selections without a local copy. Replay, update merging and delete
+replacement require this confirmation, then verify every available `LocalEntryId`
+binding and deletion snapshot against the claimed server ID and entry-level confirmation.
+The mutation's flag cannot authorize an unconfirmed row or old deletion snapshot.
+Server-origin mutations use only confirmed local copies for optimistic changes and rollback.
+Unconfirmed legacy
+rows remain held even when bindings or snapshots match: historical ID collisions
+could produce that same evidence. They are never automatically confirmed.
+Unconfirmed or contradictory rows are held with an inspectable `AuthorityError`
+and `LastError`, without a request or retry-attempt increment.
+Held payloads and rollback data remain in SQLite, are excluded from delivery counts,
+and survive `ClearRejectedMutationsAsync`. They do not block subsequent confirmed work.
+Merging/replacement also requires matching source bindings, not numeric ID equality.
+The existing SQLite table initialization adds the two columns without dropping queue
+data; no location-capture queue migration or server API change is involved.
+
 ### Background Processing
 
 Timeline mutations now sync automatically without requiring the Timeline page to be open:
@@ -1061,11 +1094,38 @@ Timeline mutations now sync automatically without requiring the Timeline page to
 
 ### Sync Strategy
 
-1. Apply optimistic UI update immediately
-2. Save to local database (both `PendingTimelineMutation` and `LocalTimelineEntry`)
+1. Validate originating identity and recheck its exact local source within the transaction
+2. Commit rollback data, `PendingTimelineMutation` and the optimistic local change together
 3. Attempt server sync in background (immediately if online, or via timer)
 4. On 4xx error: Server rejected → revert changes, notify caller
-5. On 5xx/network error: Queue for retry (local keeps optimistic values)
+5. On 5xx/network error: Retain committed intent for retry (local keeps optimistic values)
+
+### Atomic Ownership and Delivery
+
+Every Update or Delete persists its intent before contacting the server. The sync service
+owns the mutation table and uses the same SQLite connection as `TimelineRepository`.
+One short transaction reloads the exact originating local ID, verifies confirmed linkage
+and the expected server ID, captures current persisted rollback values, and saves compatible
+intent together with the optimistic local change. Updates retain the earliest rollback
+values when merging; deletes replace only compatible work and save the confirmed deletion
+snapshot before removing the source. A changed/missing source or failed write aborts all
+changes. Cleanup that commits first cannot cause an orphaned intent; creation that commits
+first makes its source visible to the existing enrichment protections.
+
+The service's `_drainLock` covers creation, merging/replacement, remote delivery and its
+durable outcome. Immediate requests and every background drain share this gate, so active
+intent cannot be submitted twice or merged away while awaiting acknowledgement. The SQLite
+transaction is closed before HTTP starts; enrichment and capture callbacks can still run.
+There is no persisted in-flight flag to strand work after interruption. A restart retries
+committed intent using the same authority checks, and drain shutdown cancels its API request.
+
+Success removes only the delivered mutation ID. Transient failures retain intent and
+original rollback values for background retry. Permanent rejection restores only the
+authorized source and acknowledges the outcome in one SQLite transaction: immediate
+rejections remove their intent after reporting it directly; background rejections remain
+marked for inspection/acknowledgement. Delete rollback restores the saved local ID only
+when that ID is absent, without overwriting another row. Independently held historical
+work keeps its payload and rollback data.
 
 ### Rollback Data
 
@@ -1351,6 +1411,20 @@ Task EnrichFromServerAsync(DateOnly date, CancellationToken ct);
 - Offline-first with server enrichment
 - Merges server data into local entries
 
+Enrichment merges and deduplicates only confirmed cached server records. An older
+unconfirmed row with the same numeric server ID is preserved with all its data;
+the actual API response creates a separate confirmed cache entry. Server-ID equality,
+matching location values and enrichment metadata never confirm historical linkage.
+
+Confirmed duplicate cleanup selects its primary cache row and checks persisted
+`PendingTimelineMutation.LocalEntryId` references in one SQLite transaction. A referenced
+row takes priority over a newer unreferenced copy. Independently referenced duplicates
+remain until their mutations are removed, including held, retry-exhausted and retained
+rejected records; cleanup never retargets mutations or combines rollback data.
+Enrichment reloads the current row in a transaction and preserves optimistic Notes
+(including an offline clear) and activity while a non-rejected Update references it.
+Other enrichment metadata still refreshes, and ordinary enrichment resumes after completion.
+
 ---
 
 ## LocalTimelineStorageService
@@ -1364,6 +1438,38 @@ Manages local timeline storage by filtering and persisting location data.
 - Subscribes to location events and sync callbacks
 - Applies AND filter logic (matching server behavior)
 - Both time AND distance thresholds must be exceeded
+
+### Capture Linkage and Recovery
+
+Restart reconciliation and sync completion link only the exact originating Timeline
+row through `LocalTimelineEntry.QueuedLocationId` → `QueuedLocation.Id`, with the same
+positive server ID confirmed on that queue record. The repository applies this as
+one atomic update and requires exactly one originating row. A previously stored
+server ID must agree; conflicting IDs and duplicate bindings remain unchanged.
+Existing rows start unconfirmed when SQLite adds the entry-level
+`ServerLinkageConfirmed` column. Reconciliation can confirm older captured history
+only while its exact, confirmed queue record is retained. It checks all retained
+confirmed queue records, without a timestamp/coordinate association or arbitrary identity repair.
+
+Skip callbacks remove only an unambiguous pending queue-linked row. Imported rows,
+unrelated history, existing server links and confirmed captures are retained.
+Callbacks without an originating queue ID leave entries untouched and read-only;
+legacy captures without that provenance are not automatically promoted.
+
+Backfill creates a separate row from an identified queue record, retains its queue
+ID and copies a server ID only when confirmed. Deduplication uses existing queue or
+confirmed server identities, while the existing time/distance filters still apply.
+It never adopts an imported row with matching location values. Direct accepted
+submissions and actual server responses retain their explicit server authority.
+Capture upload delivery and the held historical mutation policy are unchanged.
+
+Android/iOS bare-database fallbacks carry the positive returned queue ID in
+`LocationQueuedEventArgs`; the callback reuses `AddPendingLocationAsync` and its filters.
+Repository insertion atomically skips any existing queue binding, including when
+callback delivery overlaps startup backfill. Confirmation already persisted on that
+queue record is retained if insertion runs after the sync callback. Filtered captures
+remain independently deliverable by the upload queue. Imports do not read authority
+or queue-link fields from CSV/GeoJSON, and import/export formats remain unchanged.
 
 ---
 

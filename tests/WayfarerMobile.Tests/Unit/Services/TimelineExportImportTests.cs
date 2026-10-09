@@ -173,14 +173,16 @@ public class TimelineExportImportTests
             Task.FromResult(Entries.Where(entry => entry.Timestamp >= fromDate && entry.Timestamp <= toDate).ToList());
 
         public Task DeleteLocalTimelineEntryAsync(int id) => throw new NotSupportedException();
-        public Task<int> DeleteLocalTimelineEntryByTimestampAsync(DateTime timestamp, double latitude, double longitude, int toleranceSeconds = 2) => throw new NotSupportedException();
         public Task<LocalTimelineEntry?> GetLocalTimelineEntryAsync(int id) => throw new NotSupportedException();
         public Task<LocalTimelineEntry?> GetLocalTimelineEntryByServerIdAsync(int serverId) => throw new NotSupportedException();
         public Task<LocalTimelineEntry?> GetMostRecentLocalTimelineEntryAsync() => throw new NotSupportedException();
         public Task<List<LocalTimelineEntry>> GetLocalTimelineEntriesForDateAsync(DateTime date) => throw new NotSupportedException();
+        /// <inheritdoc />
+        public Task<List<LocalTimelineEntry>> PrepareConfirmedTimelineEntriesForEnrichmentAsync(DateTime date) => throw new NotSupportedException();
+        /// <inheritdoc />
+        public Task EnrichLocalTimelineEntryAsync(int id, TimelineLocation serverLocation) => throw new NotSupportedException();
         public Task<int> BulkInsertLocalTimelineEntriesAsync(IEnumerable<LocalTimelineEntry> items) => throw new NotSupportedException();
         public Task<int> ClearAllLocalTimelineEntriesAsync() => throw new NotSupportedException();
-        public Task<bool> UpdateLocalTimelineServerIdAsync(DateTime timestamp, double latitude, double longitude, int serverId, int toleranceSeconds = 2) => throw new NotSupportedException();
         public Task<int> GetLocalTimelineEntryCountAsync() => throw new NotSupportedException();
         public Task<List<LocalTimelineEntry>> GetEntriesMissingServerIdAsync(DateTime? sinceTimestamp = null) => throw new NotSupportedException();
         public Task<bool> UpdateServerIdByQueuedLocationIdAsync(int queuedLocationId, int serverId) => throw new NotSupportedException();

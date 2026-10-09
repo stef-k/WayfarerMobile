@@ -103,6 +103,7 @@ public sealed class ReleasedDatabaseUpgradeTests
             await db.ExecuteAsync($"ALTER TABLE DownloadedTrips ADD COLUMN {definition}");
         await db.ExecuteAsync("ALTER TABLE OfflineSegments DROP COLUMN WaypointsJson");
         await db.ExecuteAsync("ALTER TABLE OfflineSegments DROP COLUMN HasCustomRoute");
+        await db.ExecuteAsync("ALTER TABLE LocalTimelineEntries DROP COLUMN ServerLinkageConfirmed");
         await db.ExecuteAsync("DROP INDEX IF EXISTS LiveTiles_ProviderId");
         foreach (var column in new[] { "ProviderId", "FreshUntilUtc", "CacheControl", "ExpiresUtc", "ETag", "LastModifiedUtc" })
             await db.ExecuteAsync($"ALTER TABLE LiveTiles DROP COLUMN {column}");

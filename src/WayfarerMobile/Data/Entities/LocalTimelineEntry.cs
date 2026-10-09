@@ -27,10 +27,18 @@ public class LocalTimelineEntry
 
     /// <summary>
     /// Gets or sets the server location ID.
-    /// Null indicates a local-only entry not yet synced to server.
+    /// This value alone does not establish server mutation authority, including on older rows.
     /// </summary>
     [Indexed]
     public int? ServerId { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether this row's server linkage was established by an authenticated API response
+    /// or its unique originating capture queue record confirming the same server ID.
+    /// Older rows default to unconfirmed; imported fields and location-value matches cannot confirm linkage.
+    /// This entry-level authority is independent of a pending mutation's confirmation flag.
+    /// </summary>
+    public bool ServerLinkageConfirmed { get; set; }
 
     #region Core Location Data
 
@@ -218,7 +226,7 @@ public class LocalTimelineEntry
     /// Gets whether this entry has been synced to the server.
     /// </summary>
     [Ignore]
-    public bool IsSynced => ServerId.HasValue;
+    public bool IsSynced => ServerLinkageConfirmed && ServerId is > 0;
 
     /// <summary>
     /// Gets whether this entry has been enriched with server data.

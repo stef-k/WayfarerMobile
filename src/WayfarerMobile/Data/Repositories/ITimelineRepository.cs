@@ -1,3 +1,4 @@
+using WayfarerMobile.Core.Models;
 using WayfarerMobile.Data.Entities;
 
 namespace WayfarerMobile.Data.Repositories;
@@ -11,10 +12,10 @@ public interface ITimelineRepository
     #region CRUD Operations
 
     /// <summary>
-    /// Inserts a new local timeline entry.
+    /// Inserts a new local timeline entry, atomically skipping an already-bound originating queue ID.
     /// </summary>
     /// <param name="entry">The entry to insert.</param>
-    /// <returns>The inserted entry's ID.</returns>
+    /// <returns>The inserted entry's ID, or zero when its queue ID is already bound.</returns>
     Task<int> InsertLocalTimelineEntryAsync(LocalTimelineEntry entry);
 
     /// <summary>
@@ -29,21 +30,6 @@ public interface ITimelineRepository
     /// <param name="id">The local ID.</param>
     Task DeleteLocalTimelineEntryAsync(int id);
 
-    /// <summary>
-    /// Deletes a local timeline entry by timestamp and coordinates.
-    /// Uses a tolerance window to handle minor timestamp differences.
-    /// </summary>
-    /// <param name="timestamp">The timestamp to match (UTC).</param>
-    /// <param name="latitude">The latitude to match.</param>
-    /// <param name="longitude">The longitude to match.</param>
-    /// <param name="toleranceSeconds">Tolerance window in seconds (default 2).</param>
-    /// <returns>Number of entries deleted.</returns>
-    Task<int> DeleteLocalTimelineEntryByTimestampAsync(
-        DateTime timestamp,
-        double latitude,
-        double longitude,
-        int toleranceSeconds = 2);
-
     #endregion
 
     #region Query Operations
@@ -56,7 +42,7 @@ public interface ITimelineRepository
     Task<LocalTimelineEntry?> GetLocalTimelineEntryAsync(int id);
 
     /// <summary>
-    /// Gets a local timeline entry by server ID.
+    /// Gets a confirmed local timeline entry by server ID. Unconfirmed historical identities are excluded.
     /// </summary>
     /// <param name="serverId">The server ID.</param>
     /// <returns>The entry or null if not found.</returns>
@@ -88,6 +74,23 @@ public interface ITimelineRepository
     /// <param name="date">The date to retrieve entries for.</param>
     /// <returns>List of entries for that date, ordered by timestamp descending.</returns>
     Task<List<LocalTimelineEntry>> GetLocalTimelineEntriesForDateAsync(DateTime date);
+
+    /// <summary>
+    /// Atomically selects one confirmed cache row per server ID for enrichment, preferring rows
+    /// referenced by retained mutations. Removes only unreferenced confirmed duplicates.
+    /// Held, exhausted and rejected mutation references remain protected; unconfirmed rows are untouched.
+    /// </summary>
+    /// <param name="date">The date whose cache entries should be prepared.</param>
+    /// <returns>The primary confirmed cache rows for enrichment.</returns>
+    Task<List<LocalTimelineEntry>> PrepareConfirmedTimelineEntriesForEnrichmentAsync(DateTime date);
+
+    /// <summary>
+    /// Refreshes only enrichment fields on the current confirmed row in a transaction.
+    /// Preserves optimistic Notes (including a clear) and activity while a retained Update is outstanding.
+    /// </summary>
+    /// <param name="id">The exact local cache row ID.</param>
+    /// <param name="serverLocation">The authenticated server enrichment data.</param>
+    Task EnrichLocalTimelineEntryAsync(int id, TimelineLocation serverLocation);
 
     /// <summary>
     /// Gets all local timeline entries within a date range.
@@ -127,23 +130,6 @@ public interface ITimelineRepository
     #region Sync Operations
 
     /// <summary>
-    /// Updates the ServerId for a local timeline entry matched by timestamp and coordinates.
-    /// Used when sync confirms a location was stored on server.
-    /// </summary>
-    /// <param name="timestamp">The timestamp to match (UTC).</param>
-    /// <param name="latitude">The latitude to match.</param>
-    /// <param name="longitude">The longitude to match.</param>
-    /// <param name="serverId">The server-assigned ID.</param>
-    /// <param name="toleranceSeconds">Tolerance window in seconds (default 2).</param>
-    /// <returns>True if an entry was updated.</returns>
-    Task<bool> UpdateLocalTimelineServerIdAsync(
-        DateTime timestamp,
-        double latitude,
-        double longitude,
-        int serverId,
-        int toleranceSeconds = 2);
-
-    /// <summary>
     /// Gets the total count of local timeline entries.
     /// </summary>
     /// <returns>The count of entries.</returns>
@@ -157,8 +143,9 @@ public interface ITimelineRepository
     Task<List<LocalTimelineEntry>> GetEntriesMissingServerIdAsync(DateTime? sinceTimestamp = null);
 
     /// <summary>
-    /// Updates the ServerId for a local timeline entry by QueuedLocationId.
-    /// Used for stable queue↔timeline mapping on sync completion.
+    /// Confirms exactly one local row through its positive QueuedLocationId.
+    /// Requires that queue record to confirm the same positive server ID.
+    /// An existing server ID must agree. Missing, conflicting or ambiguous provenance is left unchanged.
     /// </summary>
     /// <param name="queuedLocationId">The queued location ID.</param>
     /// <param name="serverId">The server-assigned ID.</param>
@@ -166,8 +153,8 @@ public interface ITimelineRepository
     Task<bool> UpdateServerIdByQueuedLocationIdAsync(int queuedLocationId, int serverId);
 
     /// <summary>
-    /// Deletes a local timeline entry by QueuedLocationId.
-    /// Used for stable queue↔timeline mapping when entry is filtered/rejected.
+    /// Deletes exactly one pending local row through its positive QueuedLocationId.
+    /// Missing or ambiguous bindings, linked rows and confirmed queue records are retained.
     /// </summary>
     /// <param name="queuedLocationId">The queued location ID.</param>
     /// <returns>Number of entries deleted.</returns>

@@ -129,53 +129,27 @@ public class LocalTimelineStorageService : IDisposable
 
     /// <summary>
     /// EDGE-14: Reconciles missing ServerIds on local timeline entries.
-    /// Matches confirmed queue entries (with ServerId) to local entries missing ServerId.
+    /// Uses only the originating queue ID and its confirmed server ID; never infers identity from location values.
     /// </summary>
     private async Task ReconcileMissingServerIdsAsync()
     {
         try
         {
-            var backfillSince = DateTime.UtcNow.AddDays(-BackfillWindowDays);
-
-            // Get local entries missing ServerId
-            var entriesMissingServerId = await _timelineRepository.GetEntriesMissingServerIdAsync(backfillSince);
-            if (entriesMissingServerId.Count == 0)
-            {
-                _logger.LogDebug("No local entries missing ServerId");
-                return;
-            }
-
-            // Get confirmed queue entries with ServerId
-            var confirmedEntries = await _locationQueue.GetConfirmedEntriesWithServerIdAsync(backfillSince);
+            // Recover authority for every retained confirmed queue binding, even older captured rows.
+            var confirmedEntries = await _locationQueue.GetConfirmedEntriesWithServerIdAsync();
             if (confirmedEntries.Count == 0)
             {
                 _logger.LogDebug("No confirmed queue entries with ServerId for reconciliation");
                 return;
             }
 
-            // Build lookup by timestamp+coordinates for efficient matching
-            // Use ToLookup instead of ToDictionary to handle duplicate keys safely
-            var confirmedLookup = confirmedEntries
-                .Where(e => e.ServerId.HasValue)
-                .ToLookup(
-                    e => (e.Timestamp, e.Latitude, e.Longitude),
-                    e => e.ServerId!.Value);
-
             var reconciled = 0;
-            foreach (var entry in entriesMissingServerId)
+            foreach (var queued in confirmedEntries)
             {
-                var key = (entry.Timestamp, entry.Latitude, entry.Longitude);
-                var serverIds = confirmedLookup[key];
-                // Note: Server IDs are always > 0 (auto-increment primary keys)
-                // Use Any() to safely check for matches without assuming ID values
-                if (serverIds.Any())
+                if (queued.Id > 0 && queued.ServerConfirmed && queued.ServerId is > 0)
                 {
-                    var serverId = serverIds.First();
-                    var updated = await _timelineRepository.UpdateLocalTimelineServerIdAsync(
-                        entry.Timestamp,
-                        entry.Latitude,
-                        entry.Longitude,
-                        serverId);
+                    var updated = await _timelineRepository.UpdateServerIdByQueuedLocationIdAsync(
+                        queued.Id, queued.ServerId.Value);
 
                     if (updated)
                     {
@@ -222,9 +196,11 @@ public class LocalTimelineStorageService : IDisposable
             var existingEntries = await _timelineRepository.GetLocalTimelineEntriesInRangeAsync(
                 backfillSince, DateTime.UtcNow);
 
-            // Build lookup for existing entries by timestamp+coordinates
-            var existingLookup = new HashSet<(DateTime Timestamp, double Lat, double Lon)>(
-                existingEntries.Select(e => (e.Timestamp, e.Latitude, e.Longitude)));
+            // Imports can have identical location values without originating from this queue.
+            var existingQueueIds = existingEntries.Where(e => e.QueuedLocationId is > 0)
+                .Select(e => e.QueuedLocationId!.Value).ToHashSet();
+            var existingServerIds = existingEntries.Where(e => e.IsSynced)
+                .Select(e => e.ServerId!.Value).ToHashSet();
 
             // ISOLATED FILTER STATE: Don't modify main filter during backfill
             // Track last backfilled location separately to avoid racing with concurrent events
@@ -241,8 +217,9 @@ public class LocalTimelineStorageService : IDisposable
             // Process in timestamp order (queue entries already sorted by timestamp)
             foreach (var queued in queuedLocations)
             {
-                var key = (queued.Timestamp, queued.Latitude, queued.Longitude);
-                if (existingLookup.Contains(key))
+                var confirmedServerId = queued.ServerConfirmed && queued.ServerId is > 0 ? queued.ServerId : null;
+                if (queued.Id <= 0 || existingQueueIds.Contains(queued.Id)
+                    || (confirmedServerId.HasValue && existingServerIds.Contains(confirmedServerId.Value)))
                 {
                     continue; // Already exists in local timeline
                 }
@@ -278,11 +255,14 @@ public class LocalTimelineStorageService : IDisposable
                     Speed = queued.Speed,
                     Bearing = queued.Bearing,
                     Provider = queued.Provider,
-                    ServerId = queued.ServerId, // May be null for pending entries, that's OK
+                    ServerId = confirmedServerId,
+                    ServerLinkageConfirmed = confirmedServerId.HasValue,
+                    QueuedLocationId = queued.Id,
                     CreatedAt = DateTime.UtcNow
                 };
 
-                await _timelineRepository.InsertLocalTimelineEntryAsync(entry);
+                if (await _timelineRepository.InsertLocalTimelineEntryAsync(entry) == 0)
+                    continue; // A callback already inserted this originating queue record.
 
                 // Update isolated filter state (not main filter)
                 lastBackfillLocation = new LocationData
@@ -297,7 +277,9 @@ public class LocalTimelineStorageService : IDisposable
                     Provider = queued.Provider
                 };
 
-                existingLookup.Add(key); // Prevent duplicates in this batch
+                existingQueueIds.Add(queued.Id);
+                if (confirmedServerId.HasValue)
+                    existingServerIds.Add(confirmedServerId.Value);
                 backfilled++;
             }
 
@@ -373,58 +355,16 @@ public class LocalTimelineStorageService : IDisposable
 
     /// <summary>
     /// Handles queued locations by filtering and storing to local timeline.
-    /// Uses queued coordinates to ensure matching with sync callbacks.
+    /// Retains the exact originating queue ID through the existing pending-storage path.
     /// </summary>
-    private async void OnLocationQueued(object? sender, LocationData location)
+    private async void OnLocationQueued(object? sender, LocationQueuedEventArgs e)
     {
-        try
-        {
-            if (!_filter.ShouldStore(location))
-            {
-                _logger.LogDebug(
-                    "Location at {Timestamp:u} filtered out (thresholds: {TimeMin}min, {DistM}m)",
-                    location.Timestamp,
-                    _filter.TimeThresholdMinutes,
-                    _filter.DistanceThresholdMeters);
-                return;
-            }
-
-            // Create local entry (ServerId = null until sync confirms)
-            var entry = new LocalTimelineEntry
-            {
-                Latitude = location.Latitude,
-                Longitude = location.Longitude,
-                Timestamp = location.Timestamp,
-                Accuracy = location.Accuracy,
-                Altitude = location.Altitude,
-                Speed = location.Speed,
-                Bearing = location.Bearing,
-                Provider = location.Provider,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            await _timelineRepository.InsertLocalTimelineEntryAsync(entry);
-            _filter.MarkAsStored(location);
-
-            _logger.LogDebug(
-                "Stored local timeline entry: ({Lat:F4}, {Lon:F4}) at {Timestamp:u}",
-                location.Latitude,
-                location.Longitude,
-                location.Timestamp);
-        }
-        catch (SQLiteException ex)
-        {
-            _logger.LogError(ex, "Database error storing location to local timeline");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error storing location to local timeline");
-        }
+        await AddPendingLocationAsync(e.Location, e.QueuedLocationId);
     }
 
     /// <summary>
-    /// Handles sync completion by updating the ServerId on the matching local entry.
-    /// Prefers QueuedLocationId for stable mapping, falls back to timestamp matching.
+    /// Handles sync completion by linking only an unambiguous queue-originated local entry.
+    /// Missing provenance leaves entries unlinked and read-only.
     /// </summary>
     /// <remarks>
     /// Uses async void because this is an event handler. Exceptions are caught and logged
@@ -435,27 +375,17 @@ public class LocalTimelineStorageService : IDisposable
     {
         try
         {
+            if (e.QueuedLocationId <= 0)
+            {
+                _logger.LogDebug("Synced location has no queue provenance; Timeline entries remain unlinked");
+                return;
+            }
+
             // Run on background thread to avoid blocking MainThread
             await Task.Run(async () =>
             {
-                bool updated;
-
-                // Prefer QueuedLocationId for stable mapping
-                if (e.QueuedLocationId > 0)
-                {
-                    updated = await _timelineRepository.UpdateServerIdByQueuedLocationIdAsync(
-                        e.QueuedLocationId,
-                        e.ServerId);
-                }
-                else
-                {
-                    // Fallback to timestamp matching (for direct online path or legacy entries)
-                    updated = await _timelineRepository.UpdateLocalTimelineServerIdAsync(
-                        e.Timestamp,
-                        e.Latitude,
-                        e.Longitude,
-                        e.ServerId);
-                }
+                var updated = await _timelineRepository.UpdateServerIdByQueuedLocationIdAsync(
+                    e.QueuedLocationId, e.ServerId);
 
                 if (updated)
                 {
@@ -485,7 +415,7 @@ public class LocalTimelineStorageService : IDisposable
     /// <summary>
     /// Handles sync skip by removing the entry from local timeline.
     /// Server's AND filter is stricter - if server skipped it, we should too.
-    /// Prefers QueuedLocationId for stable mapping, falls back to timestamp matching.
+    /// Only an unambiguous pending queue-originated row may be removed; approximate matches are never deleted.
     /// </summary>
     /// <remarks>
     /// Uses async void because this is an event handler. Exceptions are caught and logged
@@ -496,24 +426,16 @@ public class LocalTimelineStorageService : IDisposable
     {
         try
         {
+            if (e.QueuedLocationId <= 0)
+            {
+                _logger.LogDebug("Skipped location has no queue provenance; Timeline entries are retained");
+                return;
+            }
+
             // Run on background thread to avoid blocking MainThread
             await Task.Run(async () =>
             {
-                int deleted;
-
-                // Prefer QueuedLocationId for stable mapping
-                if (e.QueuedLocationId > 0)
-                {
-                    deleted = await _timelineRepository.DeleteByQueuedLocationIdAsync(e.QueuedLocationId);
-                }
-                else
-                {
-                    // Fallback to timestamp matching
-                    deleted = await _timelineRepository.DeleteLocalTimelineEntryByTimestampAsync(
-                        e.Timestamp,
-                        e.Latitude,
-                        e.Longitude);
-                }
+                var deleted = await _timelineRepository.DeleteByQueuedLocationIdAsync(e.QueuedLocationId);
 
                 if (deleted > 0)
                 {
@@ -566,6 +488,8 @@ public class LocalTimelineStorageService : IDisposable
     /// <param name="serverId">The server-assigned location ID.</param>
     public async Task AddAcceptedLocationAsync(LocationData location, int serverId)
     {
+        if (serverId <= 0)
+            return;
         try
         {
             var entry = new LocalTimelineEntry
@@ -579,6 +503,7 @@ public class LocalTimelineStorageService : IDisposable
                 Bearing = location.Bearing,
                 Provider = location.Provider,
                 ServerId = serverId,
+                ServerLinkageConfirmed = true,
                 QueuedLocationId = null, // Direct online path - not from queue
                 CreatedAt = DateTime.UtcNow
             };
@@ -607,6 +532,8 @@ public class LocalTimelineStorageService : IDisposable
     /// <param name="queuedLocationId">The ID of the queued location for stable mapping.</param>
     public async Task AddPendingLocationAsync(LocationData location, int queuedLocationId)
     {
+        if (queuedLocationId <= 0)
+            return;
         try
         {
             // Apply filter - pending entries also need to meet thresholds
@@ -633,7 +560,11 @@ public class LocalTimelineStorageService : IDisposable
                 CreatedAt = DateTime.UtcNow
             };
 
-            await _timelineRepository.InsertLocalTimelineEntryAsync(entry);
+            if (await _timelineRepository.InsertLocalTimelineEntryAsync(entry) == 0)
+            {
+                _logger.LogDebug("Originating queue record {QueuedId} already stored or skipped", queuedLocationId);
+                return;
+            }
             _filter.MarkAsStored(location);
 
             _logger.LogDebug(
